@@ -16,6 +16,7 @@ var ErrAtomNameExists = errors.New("atomos: atom name exists")
 var ErrAtomNameNotExists = errors.New("atomos: atom name not exists")
 var ErrAtomCallNotExists = errors.New("atomos: atom call not exists")
 var ErrAtomHalt = errors.New("atomos: atom halt")
+var ErrCustomizeAtomType = errors.New("atomos: customize atom type illegal")
 
 // Atom
 // Atomos is atom. Atomos refer in particular to framework name, and Atom is a concrete type.
@@ -151,8 +152,8 @@ func (c *Cosmos) GetAtomCallable(desc *AtomTypeDesc, name string) (Callable, err
 	if t == nil {
 		return nil, ErrAtomTypeNotExists
 	}
-	if t.has(name) {
-		return nil, ErrAtomNameExists
+	if !t.has(name) {
+		return nil, ErrAtomNameNotExists
 	}
 	return desc.NewCallable(c, name), nil
 }

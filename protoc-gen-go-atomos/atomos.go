@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	atomosPackage = protogen.GoImportPath("atomos")
+	atomosPackage = protogen.GoImportPath("github.com/hwangtou/go-atomos")
 	protobufPackage = protogen.GoImportPath("github.com/golang/protobuf/proto")
 )
 
@@ -82,7 +82,7 @@ func genCallable(gen *protogen.Plugin, file *protogen.File, g *protogen.Generate
 	g.P("func Get", callableName, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", callableName, ", error) {")
 	g.P("ca, err := c.GetAtomCallable(&", descName(service.GoName), ", name)")
 	g.P("if err != nil { return nil, err }")
-	g.P("if c, ok := ca.(", callableName, "); ok { return c, nil } else { return nil, ", atomosPackage.Ident("ErrCustomizeAtomosType"), " }")
+	g.P("if c, ok := ca.(", callableName, "); ok { return c, nil } else { return nil, ", atomosPackage.Ident("ErrCustomizeAtomType"), " }")
 	g.P("}")
 	g.P()
 
@@ -92,7 +92,7 @@ func genCallable(gen *protogen.Plugin, file *protogen.File, g *protogen.Generate
 	}
 	g.P()
 	g.P("func (c *", noExport(callableName), ") Close() error {")
-	g.P("return c.world.CloseAtom(\"", service.GoName, "\", c.name)")
+	g.P("return c.world.CloseAtom(", descName(service.GoName), ".Name, c.name)")
 	g.P("}")
 	g.P()
 }
@@ -107,10 +107,10 @@ func genAtomosCall(gen *protogen.Plugin, g *protogen.GeneratedFile, method *prot
 	service := method.Parent
 	callableName := service.GoName + "Callable"
 	g.P("func (c *", noExport(callableName), ") ", callableSignature(g, method), " {")
-	g.P("r, err := c.world.CallAtom(\"", service.GoName, "\", c.name, \"", method.GoName, "\", in)")
+	g.P("r, err := c.world.CallAtom(", descName(service.GoName), ".Name, c.name, \"", method.GoName, "\", in)")
 	g.P("if err != nil { return nil, err }")
 	g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
-	g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomosCallableMethod"), " }")
+	g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomCallNotExists"), " }")
 	g.P("return reply, nil")
 	g.P("}")
 	g.P()
@@ -118,7 +118,7 @@ func genAtomosCall(gen *protogen.Plugin, g *protogen.GeneratedFile, method *prot
 
 func genAtomos(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) {
 	// Server struct.
-	atomosType := service.GoName + "Atomos"
+	atomosType := service.GoName + "Atom"
 	callableName := service.GoName + "Callable"
 	g.P("// ", atomosType, " is the atomos API for ", service.GoName, " atomos.")
 	g.P("//")
@@ -128,7 +128,7 @@ func genAtomos(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedF
 	}
 	g.Annotate(atomosType, service.Location)
 	g.P("type ", atomosType, " interface {")
-	g.P(atomosPackage.Ident("Atomos"))
+	g.P(atomosPackage.Ident("Atom"))
 	for _, method := range service.Methods {
 		g.Annotate(atomosType+"."+method.GoName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
@@ -145,13 +145,13 @@ func genAtomos(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedF
 	g.P("ca, err := c.SpawnAtom(&", descName(service.GoName), ", name, atom)")
 	g.P("if err != nil { return nil, err }")
 	g.P("if c, ok := ca.(", callableName, "); ok { return c, nil }")
-	g.P("return nil, ", atomosPackage.Ident("ErrCustomizeAtomosType"))
+	g.P("return nil, ", atomosPackage.Ident("ErrCustomizeAtomType"))
 	g.P("}")
 }
 
 func genDesc(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) {
 	callableName := service.GoName + "Callable"
-	atomosType := service.GoName + "Atomos"
+	atomosType := service.GoName + "Atom"
 	g.P()
 	g.P("var ", descName(service.GoName), " ", atomosPackage.Ident("AtomTypeDesc"), " = ", atomosPackage.Ident("AtomTypeDesc"), " {")
 	g.P("Name: \"", file.GoPackageName, ".", service.GoName, "\",")
@@ -162,11 +162,11 @@ func genDesc(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFil
 	for _, call := range service.Methods {
 		g.P("{")
 		g.P("Name: \"", call.GoName, "\",")
-		g.P("Func: func(atom ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", error) {")
+		g.P("Func: func(atom ", atomosPackage.Ident("Atom"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", error) {")
 		g.P("req, ok := in.(*", call.Input.GoIdent, ")")
-		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomosTypeNotExists"), " }")
+		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomTypeNotExists"), " }")
 		g.P("a, ok := atom.(", atomosType, ")")
-		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomosTypeNotExists"), " }")
+		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomTypeNotExists"), " }")
 		g.P("return a.", call.GoName, "(req)")
 		g.P("},")
 		g.P("ArgDec: func(buf []byte) (", protobufPackage.Ident("Message"), ", error) {")
@@ -187,4 +187,4 @@ const deprecationComment = "// Deprecated: Do not use."
 
 func noExport(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
-func descName(s string) string { return noExport(s) + "Desc" }
+func descName(s string) string { return s + "Desc" }

@@ -52,7 +52,7 @@ func (a *atomWrap) Log(level LogLevel, format string, args ...interface{}) {
 	a.cosmos.ds.logAtom(a.aType, a.aName, a.data.LogId, level, fmt.Sprintf(format, args...))
 }
 
-type AtomTimerFn func(exeOrCancel bool) uint64
+type AtomTimerFn func(exeOrCancel bool, delay time.Duration) uint64
 
 // WARNING: Timer will not be saved.
 func (a *atomWrap) SetTimer(duration time.Duration, action AtomTimerFn) (uint64, error) {
@@ -106,7 +106,7 @@ func (a *atomWrap) CancelTimer(timerId uint64) error {
 	}
 	a.mutex.Unlock()
 	if has {
-		t.fn(false)
+		t.fn(false, 0)
 	}
 	return nil
 }
@@ -179,7 +179,7 @@ func (a *atomWrap) loop() {
 			}
 			// Clean up remaining timers
 			for id, t := range a.timer.timers {
-				t.fn(false)
+				t.fn(false, 0)
 				delete(a.timer.timers, id)
 			}
 			break
@@ -223,7 +223,7 @@ func (a *atomWrap) loop() {
 				}
 			}()
 		} else if m.timer != nil {
-			m.timer.fn(true)
+			m.timer.fn(true, time.Since(m.sent))
 		}
 		// Elapsed time: end
 		a.mutex.Lock()

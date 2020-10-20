@@ -369,8 +369,6 @@ func (n *nodes) etcdDaemonNode(url string, ttl int64) error {
 		for {
 			if err := n.etcdRegisterNode(url, ttl); err != nil {
 				log.Println("atomos: Daemon err")
-			} else {
-				log.Println("atomos: Daemon")
 			}
 			<-ticker.C
 		}
@@ -404,7 +402,6 @@ func (n *nodes) etcdRegisterNode(url string, ttl int64) error {
 		}
 		go func() {
 			for {
-				log.Println("keepCh")
 				_, more := <-keepCh
 				if !more {
 					log.Println("keepCh stop")
