@@ -1,8 +1,10 @@
 package atomos
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -31,95 +33,207 @@ const (
 type LogLevel string
 
 const (
-	Debug    LogLevel = "DEBUG"
-	Info     LogLevel = "INFO"
-	Warning  LogLevel = "WARNING"
-	Critical LogLevel = "CRITICAL"
+	LogLevelDebug = "[DEBUG]"
+	LogLevelInfo  = "[INFO] "
+	LogLevelWarn  = "<WARN> "
+	LogLevelError = "<ERROR>"
 )
 
 // Atom Controller
 // 原子控制器
 
-type AtomController interface {
-	Log(level LogLevel, format string, args ...interface{})
-	SetTimer(duration time.Duration, action AtomTimerFn) (uint64, error)
-	CancelTimer(timerId uint64) error
-	Close() error
+type AtomLog struct {
+	cos   *Cosmos
+	atom  *atomWrap
+	logId uint64
 }
 
-func (a *atomWrap) Log(level LogLevel, format string, args ...interface{}) {
-	a.data.LogId += 1
-	a.cosmos.ds.logAtom(a.aType, a.aName, a.data.LogId, level, fmt.Sprintf(format, args...))
+func (l *AtomLog) init(c *Cosmos, a *atomWrap) {
+	l.cos = c
+	l.atom = a
 }
 
-type AtomTimerFn func(exeOrCancel bool, delay time.Duration) uint64
+func (l *AtomLog) log(level LogLevel, format string, args ...interface{}) {
+	// Get key & set key
+	l.logId += 1
+	aType := l.atom.aType
+	aName := l.atom.aName
+	ts := time.Now().Format("2006-01-02 15:04:05.000000")
+	msg := fmt.Sprintf(format, args...)
+	key := []byte(fmt.Sprintf("logAtom:%s:%s:%v", aType, aName, l.logId))
+	value := fmt.Sprintf("%s (%s:%s) %s %s", ts, aType, aName, level, msg)
+	//print(key)
+	fmt.Println(value)
+	if err := l.cos.ds.db.Put(key, []byte(value), nil); err != nil {
+		log.Println(err)
+	}
+}
 
-// WARNING: Timer will not be saved.
-func (a *atomWrap) SetTimer(duration time.Duration, action AtomTimerFn) (uint64, error) {
-	a.mutex.Lock()
-	if a.aState == Halt {
-		a.mutex.Unlock()
-		return 0, ErrAtomHalt
+func (l *AtomLog) Debug(format string, args ...interface{}) {
+	l.log(LogLevelDebug, format, args...)
+}
+
+func (l *AtomLog) Info(format string, args ...interface{}) {
+	l.log(LogLevelInfo, format, args...)
+}
+
+func (l *AtomLog) Warn(format string, args ...interface{}) {
+	l.log(LogLevelWarn, format, args...)
+}
+
+func (l *AtomLog) Error(format string, args ...interface{}) {
+	l.log(LogLevelError, format, args...)
+}
+
+type AtomTask struct {
+	cos   *Cosmos
+	atom  *atomWrap
+	mu    sync.Mutex
+	id    uint64
+	tasks map[uint64]*taskWrapper
+}
+
+type taskWrapper struct {
+	id   uint64
+	mail *atomMail
+}
+
+func (t *AtomTask) init(c *Cosmos, a *atomWrap) {
+	t.cos = c
+	t.atom = a
+	t.tasks = map[uint64]*taskWrapper{}
+}
+
+func (t *AtomTask) addTask(fn interface{}, msg proto.Message, d *time.Duration) (id uint64, err error) {
+	id = 0
+	// Type check
+	fnV := reflect.ValueOf(fn)
+	fnT := reflect.TypeOf(fn)
+	if fnV.Kind() != reflect.Func {
+		err = errors.New("")
+		return
+	}
+	if fnT.NumIn() < 1 {
+		err = errors.New("")
+		return
+	}
+	argT := fnT.In(0)
+	if argT.Kind() != reflect.Ptr {
+		err = errors.New("")
+		return
+	}
+
+	msgV := reflect.ValueOf(msg)
+	msgT := reflect.TypeOf(msg)
+	if msgV.Kind() != reflect.Ptr {
+		err = errors.New("")
+		return
+	}
+
+	if argT.String() != msgT.String() {
+		err = errors.New("")
+		return
+	}
+
+	// Schedule and execute
+	// Gen next id
+	t.mu.Lock()
+	if t.atom.aState == Halt {
+		t.mu.Unlock()
+		err = ErrAtomHalt
+		return
 	}
 	for {
-		a.timer.curId += 1
-		_, has := a.timer.timers[a.timer.curId]
+		t.id += 1
+		_, has := t.tasks[t.id]
 		if !has {
 			break
 		}
 		log.Println("timer")
 	}
-	timerId := a.timer.curId
-	a.timer.timers[timerId] = &timerWrap{
-		fn: action,
-	}
-	a.mutex.Unlock()
-	time.AfterFunc(duration, func() {
-		a.mutex.Lock()
-		t, has := a.timer.timers[a.timer.curId]
-		if has {
-			delete(a.timer.timers, a.timer.curId)
-		}
-		a.mutex.Unlock()
-		if has {
-			mail := &atomMail{
-				atom:  a.aIns,
-				timer: t,
-				sent:  time.Now(),
-				next:  nil,
-			}
-			a.pushTimer(mail)
-		}
-	})
-	return timerId, nil
-}
+	id = t.id
+	t.mu.Unlock()
 
-func (a *atomWrap) CancelTimer(timerId uint64) error {
-	a.mutex.Lock()
-	if a.aState == Halt {
-		a.mutex.Unlock()
-		return ErrAtomHalt
-	}
-	t, has := a.timer.timers[timerId]
-	if has {
-		delete(a.timer.timers, timerId)
-	}
-	a.mutex.Unlock()
-	if has {
-		t.fn(false, 0)
-	}
-	return nil
-}
-
-func (a *atomWrap) Close() error {
+	// Construct task
 	mail := &atomMail{
-		atom:  a.aIns,
-		reply: make(chan *replyWrap),
-		halt:  true,
-		sent:  time.Now(),
-		next:  nil,
+		typ:    MailTypeTask,
+		to:     t.atom.aIns,
+		taskId: id,
+		taskFn: fnV,
+		arg:    proto.Clone(msg),
+		sent:   time.Now(),
 	}
-	if ok := a.push(mail); !ok {
+	wrap := &taskWrapper{
+		id:   id,
+		mail: mail,
+	}
+	t.tasks[id] = wrap
+	if d == nil {
+		t.atom.pushTail(mail)
+	} else {
+		time.AfterFunc(*d, func() {
+			t.mu.Lock()
+			w, has := t.tasks[id]
+			t.mu.Unlock()
+			if has {
+				t.atom.pushHead(w.mail)
+			}
+		})
+	}
+	return id, nil
+}
+
+func (t *AtomTask) delTask(id uint64) *taskWrapper {
+	t.mu.Lock()
+	w, has := t.tasks[id]
+	if !has {
+		t.mu.Unlock()
+		return nil
+	}
+	exec := w.mail.executing
+	if exec {
+		t.mu.Unlock()
+		return nil
+	}
+	delete(t.tasks, id)
+	t.mu.Unlock()
+	return w
+}
+
+func (t *AtomTask) Add(fn interface{}, msg proto.Message) (uint64, error) {
+	return t.addTask(fn, msg, nil)
+}
+
+func (t *AtomTask) After(d time.Duration, fn interface{}, msg proto.Message) (uint64, error) {
+	return t.addTask(fn, msg, &d)
+}
+
+func (t *AtomTask) Has(id uint64) (bool, proto.Message) {
+	w, has := t.tasks[id]
+	if !has {
+		return false, nil
+	}
+	if w.mail.executing {
+		return false, nil
+	}
+	return true, w.mail.arg
+}
+
+func (t *AtomTask) Del(id uint64) (bool, proto.Message) {
+	w := t.delTask(id)
+	if w == nil {
+		return false, nil
+	}
+	return true, w.mail.arg
+}
+
+func (a *atomWrap) Kill(from Id) error {
+	mail := &atomMail{
+		typ:  MailTypeClose,
+		to:   a.aIns,
+		sent: time.Now(),
+	}
+	if ok := a.pushHead(mail); !ok {
 		return ErrAtomHalt
 	}
 	return nil
@@ -127,18 +241,16 @@ func (a *atomWrap) Close() error {
 
 type atomWrap struct {
 	cosmos *Cosmos    // Cosmos reference
-	mutex  sync.Mutex // For atomic operation
-	aType  string     // Type of atom
-	aName  string     // Name of atom
-	aIns   Atom       // Instance of atom
+	mu     sync.Mutex // For atomic operation
+	aType  string     // Type of to
+	aName  string     // Name of to
+	aIns   Atom       // Instance of to
 	aState atomState  // State(Halt/Waiting/Busy)
 	// Mailbox, to receive messages
 	mailsCond *sync.Cond
 	mailsHead *atomMail
 	mailsTail *atomMail
 	mailsNum  uint
-	// Timer
-	timer *atomTimer
 	// Data: AtomData & Log
 	data *AtomData
 	// Performance: Memory
@@ -147,10 +259,50 @@ type atomWrap struct {
 	procedureAt time.Time
 	procedureFn string
 	spawnAt     time.Time
+	// Log
+	log  AtomLog
+	task AtomTask
 }
 
-// Looping atom runs
+func (a *atomWrap) Cosmos() CosmosNode {
+	return a.cosmos
+}
+
+func (a *atomWrap) Type() string {
+	return a.aType
+}
+
+func (a *atomWrap) Name() string {
+	return a.aName
+}
+
+func (a *atomWrap) SelfCosmos() *Cosmos {
+	return a.cosmos
+}
+
+func (a *atomWrap) Halt() {
+	mail := &atomMail{
+		typ:  MailTypeClose,
+		to:   a.aIns,
+		sent: time.Now(),
+	}
+	if ok := a.pushHead(mail); !ok {
+		log.Println("not ok") // todo
+	}
+}
+
+func (a *atomWrap) Log() *AtomLog {
+	return &a.log
+}
+
+func (a *atomWrap) Task() *AtomTask {
+	return &a.task
+}
+
+// Looping to runs
 // 让原子循环运行起来
+
+// todo executing
 func (a *atomWrap) loop() {
 	a.aState = Waiting
 	a.spawnAt = time.Now()
@@ -160,61 +312,69 @@ func (a *atomWrap) loop() {
 			a.mailsCond.Wait()
 			a.mailsCond.L.Unlock()
 		}
-		m := a.pop()
+		m := a.popHead(true)
 		// Check exit
-		if m.halt {
-			a.mutex.Lock()
-			a.data.Data = a.aIns.Save()
+		if m.typ == MailTypeClose {
+			a.mu.Lock()
+			// Elapsed time: procedureAt
+			a.aState = Busy
+			// Clean up remaining mails
+			for m := a.popHead(false); m != nil; m = a.popHead(false) {
+				// todo check really has remaining mails
+				if m.reply != nil {
+					m.reply <- &replyWrap{
+						resp: nil,
+						err:  ErrAtomHalt,
+					}
+				}
+			}
+			// Clean up remaining timers
+			remainTasks := map[uint64]proto.Message{}
+			for id, t := range a.task.tasks {
+				remainTasks[id] = t.mail.arg
+				delete(a.task.tasks, id)
+			}
+			a.data.Data = a.aIns.Close(remainTasks)
+			// Save Data
 			err := a.cosmos.ds.saveAtom(a.aType, a.aName, a.data)
 			m.reply <- &replyWrap{
 				resp: nil,
 				err:  err,
 			}
-			// Clean up remaining mails
-			for m := a.pop(); m != nil; m = a.pop() {
-				m.reply <- &replyWrap{
-					resp: nil,
-					err:  ErrAtomHalt,
-				}
-			}
-			// Clean up remaining timers
-			for id, t := range a.timer.timers {
-				t.fn(false, 0)
-				delete(a.timer.timers, id)
-			}
 			break
 		}
-		a.mutex.Lock()
+		//a.task.mu.Lock()
+		//a.task.mu.Unlock()
+		a.mu.Lock()
 		// Elapsed time: procedureAt
-		c, has := a.elapses[m.fn.Name]
-		if !has {
-			c = &elapse{0, 0}
-			a.elapses[m.fn.Name] = c
-		}
 		a.aState = Busy
-		c.times += 1
-		a.procedureAt, a.procedureFn = time.Now(), m.fn.Name
-		a.mutex.Unlock()
-		// Call or Timer
-		if m.fn != nil {
+		a.mu.Unlock()
+		// Call or Task
+		if m.typ == MailTypeCall {
+			m.executing = true
+			name := m.callFn.Name
+			a.procedureAt, a.procedureFn = time.Now(), name
+			c, has := a.elapses[name]
+			if !has {
+				c = &elapse{0, 0}
+				a.elapses[name] = c
+			}
+			c.times += 1
 			result, err := func() (proto.Message, error) {
 				defer func() {
 					if r := recover(); r != nil {
-						a.Log(Critical,
-							"call recovered from panic, stack traceback:\n%s",
+						a.log.Error("call recovered from panic, stack traceback:\n%s",
 							string(debug.Stack()))
 					}
 				}()
-				return m.fn.Func(m.atom, m.arg)
+				return m.callFn.Func(m.from, m.to, m.arg)
 			}()
+
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						if r := recover(); r != nil {
-							a.Log(Critical,
-								"reply recovered from panic, stack traceback:\n%s",
-								string(debug.Stack()))
-						}
+						a.log.Error("reply recovered from panic, stack traceback:\n%s",
+							string(debug.Stack()))
 					}
 				}()
 				m.reply <- &replyWrap{
@@ -222,42 +382,83 @@ func (a *atomWrap) loop() {
 					err:  err,
 				}
 			}()
-		} else if m.timer != nil {
-			m.timer.fn(true, time.Since(m.sent))
+
+			d := time.Since(a.procedureAt)
+			c.duration += d
+			log.Printf("duration %v time %v", d, c.times)
+		} else if m.typ == MailTypeTask {
+			w := a.task.delTask(m.taskId)
+			m.executing = true
+			name := w.mail.taskFn.String()
+			a.procedureAt, a.procedureFn = time.Now(), name // todo: procedure name
+			c, has := a.elapses[name]
+			if !has {
+				c = &elapse{0, 0}
+				a.elapses[name] = c
+			}
+			c.times += 1
+			if w != nil {
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							a.log.Error(
+								"call recovered from panic, stack traceback:\n%s",
+								string(debug.Stack()))
+						}
+					}()
+					in := []reflect.Value{
+						reflect.ValueOf(w.mail.arg),
+					}
+					w.mail.taskFn.Call(in)
+				}()
+			}
+			d := time.Since(a.procedureAt)
+			c.duration += d
+			log.Printf("duration %v time %v", d, c.times)
 		}
-		// Elapsed time: end
-		a.mutex.Lock()
-		c.duration += time.Since(a.procedureAt)
+		// Elapsed time: end todo: right lock
+		a.mu.Lock()
 		a.procedureAt, a.procedureFn = time.Time{}, ""
-		log.Printf("duration %v time %v", c.duration, c.times)
 		a.aState = Waiting
-		a.mutex.Unlock()
+		a.mu.Unlock()
 	}
-	a.mutex.Unlock()
+	a.mu.Unlock()
 	a.aState = Halt
 }
 
 // Atom Mail Message
 // 原子邮件信息
 
+type MailType int
+
+const (
+	MailTypeCall  MailType = 1
+	MailTypeTask  MailType = 2
+	MailTypeClose MailType = 3
+)
+
 type atomMail struct {
-	atom Atom
+	typ  MailType
+	from Id
+	to   Atom
 	// Call
-	fn    *CallDesc
+	callFn *CallDesc
+	// Task
+	taskId uint64
+	taskFn reflect.Value
+	// Arg
 	arg   proto.Message
 	reply chan *replyWrap
-	// Timer
-	timer *timerWrap
-	// Action
-	halt bool
-	sent time.Time
-	next *atomMail
+	// State
+	executing bool
+	sent      time.Time
+	next      *atomMail
 }
 
-func (a *atomWrap) push(m *atomMail) bool {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+func (a *atomWrap) pushTail(m *atomMail) bool {
+	a.mu.Lock()
 	if a.aState == Halt {
+		a.mu.Unlock()
 		return false
 	}
 	a.mailsNum += 1
@@ -269,13 +470,14 @@ func (a *atomWrap) push(m *atomMail) bool {
 		a.mailsTail = m
 	}
 	a.mailsCond.Signal()
+	a.mu.Unlock()
 	return true
 }
 
-func (a *atomWrap) pushTimer(m *atomMail) bool {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+func (a *atomWrap) pushHead(m *atomMail) bool {
+	a.mu.Lock()
 	if a.aState == Halt {
+		a.mu.Unlock()
 		return false
 	}
 	a.mailsNum += 1
@@ -287,13 +489,18 @@ func (a *atomWrap) pushTimer(m *atomMail) bool {
 		a.mailsHead = m
 	}
 	a.mailsCond.Signal()
+	a.mu.Unlock()
 	return true
 }
 
-func (a *atomWrap) pop() *atomMail {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+func (a *atomWrap) popHead(lock bool) *atomMail {
+	if lock {
+		a.mu.Lock()
+	}
 	if a.mailsHead == nil {
+		if lock {
+			a.mu.Unlock()
+		}
 		return nil
 	}
 	a.mailsNum -= 1
@@ -302,13 +509,36 @@ func (a *atomWrap) pop() *atomMail {
 		a.mailsHead = nil
 		a.mailsTail = nil
 		m.next = nil
+		if lock {
+			a.mu.Unlock()
+		}
 		return m
 	} else {
 		m := a.mailsHead
 		a.mailsHead = m.next
 		m.next = nil
+		if lock {
+			a.mu.Unlock()
+		}
 		return m
 	}
+}
+
+func (a *atomWrap) popId(id uint64) *atomMail {
+	a.mu.Lock()
+	mail := a.mailsHead
+	if mail == nil {
+		a.mu.Unlock()
+		return nil
+	}
+	for ; mail != nil; mail = mail.next {
+		if mail.taskId == id {
+			a.mu.Unlock()
+			return mail
+		}
+	}
+	a.mu.Unlock()
+	return nil
 }
 
 // Performance Analyst
@@ -322,21 +552,6 @@ type elapse struct {
 type replyWrap struct {
 	resp proto.Message
 	err  error
-}
-
-// Timer
-// 计时器
-
-type atomTimer struct {
-	curId  uint64
-	timers map[uint64]*timerWrap
-}
-
-type timerWrap struct {
-	fn AtomTimerFn
-}
-
-func (t *atomTimer) add() {
 }
 
 // Atom Type Container
@@ -380,7 +595,7 @@ type atomType struct {
 func (a *atomType) init(c *Cosmos, name string, atom Atom) (aw *atomWrap, err error) {
 	aw = &atomWrap{
 		cosmos:    c,
-		mutex:     sync.Mutex{},
+		mu:        sync.Mutex{},
 		aType:     a.name,
 		aName:     name,
 		aIns:      atom,
@@ -388,18 +603,20 @@ func (a *atomType) init(c *Cosmos, name string, atom Atom) (aw *atomWrap, err er
 		mailsHead: nil,
 		mailsTail: nil,
 		mailsNum:  0,
-		timer: &atomTimer{
-			timers: map[uint64]*timerWrap{},
-		},
-		elapses: map[string]*elapse{},
-		spawnAt: time.Now(),
+		elapses:   map[string]*elapse{},
+		spawnAt:   time.Now(),
 	}
-	aw.mailsCond = sync.NewCond(&aw.mutex)
+	aw.log.init(c, aw)
+	aw.task.init(c, aw)
+	aw.mailsCond = sync.NewCond(&aw.mu)
 	aw.data, err = c.ds.loadAtom(a.name, name)
 	if err != nil {
 		return nil, err
 	}
-	aw.aIns.Spawn(aw, aw.data.Data)
+	err = aw.aIns.Spawn(aw, aw.data.Data)
+	if err != nil {
+		return nil, err
+	}
 	a.atoms[name] = aw
 	return aw, nil
 }
@@ -409,7 +626,7 @@ func (a *atomType) has(name string) bool {
 	return has
 }
 
-func (a *atomType) call(name, call string, arg proto.Message) (reply proto.Message, err error) {
+func (a *atomType) call(from Id, name, call string, arg proto.Message) (reply proto.Message, err error) {
 	atom, has := a.atoms[name]
 	if !has {
 		return nil, ErrAtomNameNotExists
@@ -419,14 +636,15 @@ func (a *atomType) call(name, call string, arg proto.Message) (reply proto.Messa
 		return nil, ErrAtomCallNotExists
 	}
 	mail := &atomMail{
-		atom:  atom.aIns,
-		fn:    fnInfo,
-		arg:   arg,
-		reply: make(chan *replyWrap),
-		sent:  time.Now(),
-		next:  nil,
+		typ:    MailTypeCall,
+		from:   from,
+		to:     atom.aIns,
+		callFn: fnInfo,
+		arg:    proto.Clone(arg),
+		reply:  make(chan *replyWrap),
+		sent:   time.Now(),
 	}
-	if ok := atom.push(mail); !ok {
+	if ok := atom.pushTail(mail); !ok {
 		return nil, ErrAtomHalt
 	}
 
@@ -434,19 +652,19 @@ func (a *atomType) call(name, call string, arg proto.Message) (reply proto.Messa
 	return wait.resp, wait.err
 }
 
-func (a *atomType) close(name string) error {
+func (a *atomType) close(from Id, name string) error {
 	atom, has := a.atoms[name]
 	if !has {
 		return ErrAtomNameNotExists
 	}
 	mail := &atomMail{
-		atom:  atom.aIns,
+		typ:   MailTypeClose,
+		from:  from,
+		to:    atom.aIns,
 		reply: make(chan *replyWrap),
-		halt:  true,
 		sent:  time.Now(),
-		next:  nil,
 	}
-	if ok := atom.push(mail); !ok {
+	if ok := atom.pushHead(mail); !ok {
 		return ErrAtomHalt
 	}
 
@@ -457,8 +675,8 @@ func (a *atomType) close(name string) error {
 // Atom调用描述
 // Atom Call Description
 
-type CallFn func(atom Atom, in proto.Message) (proto.Message, error)
-type CallableNewFn func(CosmosNode, string) Callable
+type CallFn func(from Id, to Atom, in proto.Message) (proto.Message, error)
+type IdConstructFn func(CosmosNode, string) Id
 type CallArgDecode func(buf []byte) (proto.Message, error)
 type CallReplyDecode func(buf []byte) (proto.Message, error)
 
@@ -470,7 +688,7 @@ type CallDesc struct {
 }
 
 type AtomTypeDesc struct {
-	Name        string
-	NewCallable CallableNewFn
-	Calls       []CallDesc
+	Name  string
+	NewId IdConstructFn
+	Calls []CallDesc
 }
