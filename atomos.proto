@@ -3,12 +3,34 @@ syntax = "proto3";
 
 package atomos;
 
+// Configuration
+
+message CosmosConfig {
+  string cosmos_id = 1;
+  string node_id = 2;
+  string data_file_path = 3;
+  CosmosClusterConfig cluster = 4;
+  bool debug_mode = 5;
+  bool bench_mode = 6;
+}
+
+message CosmosClusterConfig {
+  string listen_network = 1;
+  string listen_address = 2;
+  int32 conn_heartbeat = 3;
+  int32 conn_header_size = 4;
+  repeated string etcd_endpoints = 5;
+  string etcd_username = 6;
+  string etcd_password = 7;
+  int32 etcd_dial_timeout = 8;
+  int64 etcd_ttl = 9;
+}
+
 // Cosmos Data
 
 message AtomData {
   uint64 log_id = 1;
   bytes data = 2;
-  repeated uint64 timers = 3;
 }
 
 message AtomType {
@@ -26,10 +48,10 @@ message CosmosData {
 
 // Remote
 
-service Remote {
-  rpc GetAtom (RemoteGetAtomRequest) returns (RemoteGetAtomResponse) {}
-  rpc CallAtom (RemoteCallAtomRequest) returns (RemoteCallAtomResponse) {}
-}
+//service Remote {
+//  rpc GetAtom (RemoteGetAtomRequest) returns (RemoteGetAtomResponse) {}
+//  rpc CallAtom (RemoteCallAtomRequest) returns (RemoteCallAtomResponse) {}
+//}
 
 message RemoteGetAtomRequest {
   string from_node = 1;
