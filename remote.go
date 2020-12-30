@@ -42,7 +42,7 @@ type etcd struct {
 }
 
 func (n *nodes) cosmosPrefix() string {
-	return fmt.Sprintf("/cosmos/%s/node/", n.cosmos.cfg.CosmosId)
+	return fmt.Sprintf("/cosmos/%s/node/", n.cosmos.conf.CosmosId)
 }
 
 func (n *nodes) init(c *Cosmos, typeDesc ...*AtomTypeDesc) (err error) {
@@ -53,17 +53,17 @@ func (n *nodes) init(c *Cosmos, typeDesc ...*AtomTypeDesc) (err error) {
 		sessionId: 0,
 	}
 	n.context, n.cancel = context.WithCancel(context.Background())
-	n.cosmos.url = fmt.Sprintf("%s%s", n.cosmosPrefix(), n.cosmos.cfg.Node)
-	if len(c.cfg.EtcdEndpoints) == 0 {
-		c.cfg.EtcdEndpoints = []string{
+	n.cosmos.url = fmt.Sprintf("%s%s", n.cosmosPrefix(), n.cosmos.conf.NodeId)
+	if len(c.conf.Cluster.EtcdEndpoints) == 0 {
+		c.conf.Cluster.EtcdEndpoints = []string{
 			"http://127.0.0.1:2379",
 		}
 	}
 	n.client, err = clientv3.New(clientv3.Config{
-		Endpoints:   c.cfg.EtcdEndpoints,
-		DialTimeout: time.Duration(c.cfg.EtcdDialTimeout) * time.Second,
-		Username:    c.cfg.EtcdUsername,
-		Password:    c.cfg.EtcdPassword,
+		Endpoints:   c.conf.Cluster.EtcdEndpoints,
+		DialTimeout: time.Duration(c.conf.Cluster.EtcdDialTimeout) * time.Second,
+		Username:    c.conf.Cluster.EtcdUsername,
+		Password:    c.conf.Cluster.EtcdPassword,
 	})
 	if err != nil {
 		return err
@@ -73,17 +73,17 @@ func (n *nodes) init(c *Cosmos, typeDesc ...*AtomTypeDesc) (err error) {
 	}
 	// Listen
 	n.hub, err = tcpacket.NewHub(tcpacket.Config{
-		HeaderSize: n.cosmos.cfg.ConnHeadSize,
-		Network:    n.cosmos.cfg.ListenNetwork,
-		Address:    n.cosmos.cfg.ListenAddress,
-		HeartBeat:  n.cosmos.cfg.ConnHeartBeat,
+		HeaderSize: int(n.cosmos.conf.Cluster.ConnHeaderSize),
+		Network:    n.cosmos.conf.Cluster.ListenNetwork,
+		Address:    n.cosmos.conf.Cluster.ListenAddress,
+		HeartBeat:  uint(n.cosmos.conf.Cluster.ConnHeartbeat),
 	}, n.acceptedConn)
 	if err != nil {
 		return err
 	}
 	go n.hub.Listen()
 	// Etcd cluster
-	if err = n.etcdDaemonNode(n.cosmos.url, n.cosmos.cfg.EtcdTTL); err != nil {
+	if err = n.etcdDaemonNode(n.cosmos.url, n.cosmos.conf.Cluster.EtcdTtl); err != nil {
 		return err
 	}
 	if err = n.etcdWatchNodes(n.cosmosPrefix()); err != nil {
@@ -121,7 +121,8 @@ func (r *remoteConn) RecvPacket(nonCopiedBuf []byte) {
 		case RemotePacket_GetAtomReq:
 			err = r.handleGetAtomReq(in, out)
 		case RemotePacket_CallAtomReq:
-			err = r.handleCallAtomReq(in, out)
+			var from Id
+			err = r.handleCallAtomReq(from, in, out)
 		default:
 			err = ErrIllegal
 		}
@@ -149,7 +150,7 @@ func (r *remoteConn) handleGetAtomReq(in, out *RemotePacket) error {
 		return ErrPacket
 	}
 	req, resp := in.GetAtomReq, out.GetAtomResp
-	if req.ToNode != r.nodes.cosmos.cfg.Node {
+	if req.ToNode != r.nodes.cosmos.conf.NodeId {
 		return ErrDiffNode
 	}
 	t := r.cosmos.ats.getType(req.AtomType)
@@ -161,7 +162,7 @@ func (r *remoteConn) handleGetAtomReq(in, out *RemotePacket) error {
 	return nil
 }
 
-func (r *remoteConn) handleCallAtomReq(in, out *RemotePacket) error {
+func (r *remoteConn) handleCallAtomReq(from Id, in, out *RemotePacket) error {
 	out.SessionId = in.SessionId
 	out.Type = RemotePacket_CallAtomResp
 	out.CallAtomResp = &RemoteCallAtomResponse{}
@@ -170,7 +171,7 @@ func (r *remoteConn) handleCallAtomReq(in, out *RemotePacket) error {
 		return ErrPacket
 	}
 	req, resp := in.CallAtomReq, out.CallAtomResp
-	if req.ToNode != r.nodes.cosmos.cfg.Node {
+	if req.ToNode != r.nodes.cosmos.conf.NodeId {
 		return ErrDiffNode
 	}
 	t := r.cosmos.ats.getType(req.AtomType)
@@ -190,7 +191,7 @@ func (r *remoteConn) handleCallAtomReq(in, out *RemotePacket) error {
 	if err != nil {
 		return ErrArgCodec
 	}
-	res, err := c.Func(aw.aIns, pb)
+	res, err := c.Func(from, aw.aIns, pb)
 	if err != nil {
 		resp.Error = err.Error()
 	}
@@ -242,7 +243,7 @@ type remoteNode struct {
 	*CosmosData
 }
 
-func (r *remoteNode) CloseAtom(aType, aName string) error {
+func (r *remoteNode) CloseAtom(from Id, aType, aName string) error {
 	return ErrClosingRemote
 }
 
@@ -303,7 +304,7 @@ func (r *remoteNode) sendGetAtomReq(node, aType, aName string) (bool, error) {
 		SessionId: sId,
 		Type:      RemotePacket_GetAtomReq,
 		GetAtomReq: &RemoteGetAtomRequest{
-			FromNode: r.nodes.cosmos.cfg.Node,
+			FromNode: r.nodes.cosmos.conf.NodeId,
 			ToNode:   node,
 			AtomType: aType,
 			AtomName: aName,
@@ -334,7 +335,7 @@ func (r *remoteNode) sendCallAtomReq(node, aType, aName, cName string, arg proto
 		SessionId: sId,
 		Type:      RemotePacket_CallAtomReq,
 		CallAtomReq: &RemoteCallAtomRequest{
-			FromNode: r.nodes.cosmos.cfg.Node,
+			FromNode: r.nodes.cosmos.conf.NodeId,
 			ToNode:   node,
 			AtomType: aType,
 			AtomName: aName,
@@ -434,11 +435,11 @@ func (n *nodes) etcdWatchNodes(urlPrefix string) error {
 			log.Println("a01", err)
 			continue
 		}
-		if a.CosmosId != n.cosmos.cfg.CosmosId {
-			log.Println("a02", ErrDiffCosmos, a.CosmosId, n.cosmos.cfg.CosmosId)
+		if a.CosmosId != n.cosmos.conf.CosmosId {
+			log.Println("a02", ErrDiffCosmos, a.CosmosId, n.cosmos.conf.CosmosId)
 			continue
 		}
-		if a.Node == n.cosmos.cfg.Node || a.Node != node {
+		if a.Node == n.cosmos.conf.NodeId || a.Node != node {
 			log.Println("a03")
 			continue
 		}
@@ -461,11 +462,11 @@ func (n *nodes) etcdWatchNodes(urlPrefix string) error {
 						log.Println("a1", err)
 						continue
 					}
-					if a.CosmosId != n.cosmos.cfg.CosmosId {
-						log.Println("a2", ErrDiffCosmos, a.CosmosId, n.cosmos.cfg.CosmosId)
+					if a.CosmosId != n.cosmos.conf.CosmosId {
+						log.Println("a2", ErrDiffCosmos, a.CosmosId, n.cosmos.conf.CosmosId)
 						continue
 					}
-					if a.Node == n.cosmos.cfg.Node || a.Node != node {
+					if a.Node == n.cosmos.conf.NodeId || a.Node != node {
 						continue
 					}
 					n.outgoingConn(node, a)
