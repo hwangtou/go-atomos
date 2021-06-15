@@ -1,97 +1,52 @@
-
 syntax = "proto3";
 
-package atomos;
+import "google/protobuf/timestamp.proto";
+
+package go_atomos;
+
+message AtomId {
+  string node = 1;
+  string element = 2;
+  string name = 3;
+}
+
+enum LogLevel {
+  Debug = 0;
+  Info = 1;
+  Warn = 2;
+  Error = 3;
+  Fatal = 4;
+}
+
+message LogMail {
+  AtomId id = 1;
+  google.protobuf.Timestamp time = 2;
+  LogLevel level = 3;
+  string message = 4;
+}
+
+message Nil {
+}
 
 // Configuration
 
-message CosmosConfig {
-  string cosmos_id = 1;
-  string node_id = 2;
-  string data_file_path = 3;
-  CosmosClusterConfig cluster = 4;
-  bool debug_mode = 5;
-  bool bench_mode = 6;
+message Config {
+  string node = 1;
+  string log_path = 2;
+  CosmosLocalConfig cosmos_local = 3;
 }
 
-message CosmosClusterConfig {
-  string listen_network = 1;
-  string listen_address = 2;
-  int32 conn_heartbeat = 3;
-  int32 conn_header_size = 4;
-  repeated string etcd_endpoints = 5;
-  string etcd_username = 6;
-  string etcd_password = 7;
-  int32 etcd_dial_timeout = 8;
-  int64 etcd_ttl = 9;
+message CosmosLocalConfig {
+  map<string, ElementConfig> elements = 1;
 }
 
-// Cosmos Data
-
-message AtomData {
-  uint64 log_id = 1;
-  bytes data = 2;
-}
-
-message AtomType {
+message ElementConfig {
   string name = 1;
-  repeated string func = 2;
+  uint64 version = 2;
+  LogLevel log_level = 3;
+  int32 atom_init_num = 4;
+  map<string, AtomosCallConfig> calls = 5;
 }
 
-message CosmosData {
-  string cosmos_id = 1;
-  string node = 2;
-  string network = 3;
-  string addr = 4;
-  map<string, AtomType> types = 5;
-}
-
-// Remote
-
-//service Remote {
-//  rpc GetAtom (RemoteGetAtomRequest) returns (RemoteGetAtomResponse) {}
-//  rpc CallAtom (RemoteCallAtomRequest) returns (RemoteCallAtomResponse) {}
-//}
-
-message RemoteGetAtomRequest {
-  string from_node = 1;
-  string to_node = 2;
-  string atom_type = 3;
-  string atom_name = 4;
-}
-
-message RemoteGetAtomResponse {
-  bool has = 1;
-}
-
-message RemoteCallAtomRequest {
-  string from_node = 1;
-  string to_node = 2;
-  string atom_type = 3;
-  string atom_name = 4;
-  string call_name = 5;
-  bytes call_args = 6;
-}
-
-message RemoteCallAtomResponse {
-  string error = 1;
-  bytes call_reply = 2;
-}
-
-message RemotePacket {
-  enum Type {
-    NA = 0;
-    HeartBeast = 1;
-    GetAtomReq = 3;
-    GetAtomResp = 4;
-    CallAtomReq = 5;
-    CallAtomResp = 6;
-  }
-  uint64 session_id = 1;
-  Type type = 2;
-  string error = 3;
-  RemoteGetAtomRequest get_atom_req = 4;
-  RemoteGetAtomResponse get_atom_resp = 5;
-  RemoteCallAtomRequest call_atom_req = 6;
-  RemoteCallAtomResponse call_atom_resp = 7;
+message AtomosCallConfig {
 }
