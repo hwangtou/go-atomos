@@ -1,7 +1,7 @@
 package go_atomos
 
 import (
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"sync"
 )
 
@@ -9,36 +9,42 @@ type ElementLocal struct {
 	mutex  sync.RWMutex
 	cosmos *CosmosSelf
 	define *ElementDefine
-	log    *MailBox
 	atoms  map[string]*AtomCore
 	loaded bool
 }
 
-func (x *ElementConfig) createElement(cosmosSelf *CosmosSelf, define *ElementDefine) (*ElementLocal, error) {
+func createElement(cosmosSelf *CosmosSelf, define *ElementDefine) (*ElementLocal, error) {
 	elem := &ElementLocal{}
 	elem.cosmos = cosmosSelf
 	elem.define = define
-	elem.log = NewMailBox(MailBoxHandler{
-		OnReceive: elem.onLogMessage,
-		OnPanic:   elem.onLogPanic,
-		OnStop:    elem.onLogStop,
-	})
-	elem.atoms = make(map[string]*AtomCore, x.AtomInitNum)
+	elem.atoms = make(map[string]*AtomCore, define.Config.AtomInitNum)
 	return elem, nil
 }
 
 func (e *ElementLocal) load() error {
-	e.log.Start()
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.loaded = true
 	return nil
 }
 
 func (e *ElementLocal) unload() error {
-	e.log.Stop()
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.loaded = false
+	for atomName, atom := range e.atoms {
+		if atom.GetState() != Halt {
+			// todo: Exit and store and tell user.
+		}
+		delete(e.atoms, atomName)
+	}
+	e.cosmos = nil
+	e.define = nil
 	return nil
 }
 
 func (e *ElementLocal) GetName() string {
-	return e.define.Name
+	return e.define.Config.Name
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {

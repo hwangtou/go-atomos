@@ -1,12 +1,9 @@
 package go_atomos
 
-import "github.com/golang/protobuf/proto"
+import "google.golang.org/protobuf/proto"
 
 type ElementDefine struct {
-	Name          string
-	Version       uint64
-	LogLevel      LogLevel
-	AtomInitNum   int
+	Config *ElementConfig
 	AtomIdFactory ElementIdFactory
 	AtomCreator   ElementAtomNewer
 	AtomSaver     ElementAtomSaver
@@ -14,7 +11,7 @@ type ElementDefine struct {
 	AtomCalls     map[string]*ElementAtomCall
 }
 
-type ElementLordScheduler func(CosmosManager)
+type ElementLordScheduler func(CosmosClusterHelper)
 type ElementIdFactory func(c CosmosNode, atomName string) (Id, error)
 type ElementAtomNewer func() Atom
 type ElementAtomSaver func(Id, AtomStateful) error
@@ -22,8 +19,8 @@ type ElementAtomCanKill func(Id) bool
 
 type ElementImplement interface {
 	//Check() error
-	//Info() (name string, version uint64, logLevel LogLevel, initNum int)
-	LordScheduler(CosmosManager)
+	Info() (name string, version uint64, logLevel LogLevel, initNum int)
+	LordScheduler(CosmosClusterHelper)
 	//AtomIdFactory(*CosmosSelf, string, *AtomCore) Id
 	AtomCreator() Atom
 	AtomSaver(Id, AtomStateful) error

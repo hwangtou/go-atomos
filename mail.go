@@ -269,7 +269,7 @@ func (mb *MailBox) loop() {
 					// throws exception to here, otherwise it must be a bug of framework.
 					traceMsg := string(debug.Stack())
 					log.Printf("recovering from 3rd-part logic\nreason=%s\ntrace=%s", r, traceMsg)
-					//curMail.sendReply(nil, errors.Add(traceMsg))
+					//curMail.sendReply(nil, errors.AddElement(traceMsg))
 					// todo
 					mb.handler.OnPanic(curMail, traceMsg)
 				}

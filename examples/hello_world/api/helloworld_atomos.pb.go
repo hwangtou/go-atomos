@@ -3,8 +3,8 @@
 package api
 
 import (
-	proto "github.com/golang/protobuf/proto"
-	go_atomos "github.com/hwangtou/go-atomos"
+	atomos "github.com/hwangtou/go-atomos"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -17,39 +17,31 @@ import (
 // GreeterId is the interface of Greeter atomos.
 //
 type GreeterId interface {
-	go_atomos.Id
-	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
+	atomos.Id
+	SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
-func GetGreeterId(c go_atomos.CosmosNode, elem, name string) (GreeterId, error) {
+func GetGreeterId(c atomos.CosmosNode, elem, name string) (GreeterId, error) {
 	ca, err := c.GetAtomId(elem, name)
-	if err != nil {
-		return nil, err
-	}
-	if c, ok := ca.(GreeterId); ok {
-		return c, nil
-	} else {
-		return nil, go_atomos.ErrAtomType
-	}
+	if err != nil { return nil, err }
+	if c, ok := ca.(GreeterId); ok { return c, nil } else { return nil, atomos.ErrAtomType }
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.
 //
 type GreeterAtom interface {
-	go_atomos.Atom
-	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
+	atomos.Atom
+	SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
 // TODO: Customize argument type.
-func SpawnGreeter(c go_atomos.CosmosNode, elem, name string, atom GreeterAtom, arg proto.Message) (GreeterId, error) {
-	ca, err := c.SpawnAtom(elem, name, arg)
-	if err != nil {
-		return nil, err
-	}
-	if c, ok := ca.(GreeterId); ok {
-		return c, nil
-	}
-	return nil, go_atomos.ErrAtomType
+func SpawnGreeter(c atomos.CosmosNode, actorName string, arg proto.Message) (GreeterId, error) {
+	_, err := c.SpawnAtom("Greeter", actorName, arg)
+	if err != nil { return nil, err }
+	id, err := c.GetAtomId("Greeter", actorName)
+	if err != nil { return nil, err }
+	if i, ok := id.(GreeterId); ok { return i, nil }
+	return nil, atomos.ErrAtomType
 }
 
 //
@@ -57,52 +49,40 @@ func SpawnGreeter(c go_atomos.CosmosNode, elem, name string, atom GreeterAtom, a
 //
 
 type greeterId struct {
-	go_atomos.Id
+	atomos.Id
 }
 
-func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error) {
+func (c *greeterId) SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error) {
 	r, err := c.Cosmos().CallAtom(from, c, "SayHello", in)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	reply, ok := r.(*HelloReply)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
+	if !ok { return nil, atomos.ErrAtomMessageReplyType }
 	return reply, nil
 }
 
-func GetGreeterDefine(implement go_atomos.ElementImplement) *go_atomos.ElementDefine {
-	return &go_atomos.ElementDefine{
-		Name:          "Greeter",
-		Version:       1,
-		LogLevel:      go_atomos.LogLevel_Debug,
-		AtomInitNum:   100,
-		AtomIdFactory: func(c go_atomos.CosmosNode, atomName string) (go_atomos.Id, error) {
-			id, err := go_atomos.NewAtomId(c, "Greeter", atomName)
-			if err != nil { return nil, err } else { return &greeterId{id}, nil }
+func GetGreeterDefine(implement atomos.ElementImplement) *atomos.ElementDefine {
+	elem := atomos.ElementFromImplement(implement)
+	elem.Config.Calls = map[string]*atomos.AtomosCallConfig{
+		"SayHello": atomos.ElementAtomCallConfig(&HelloRequest{}, &HelloReply{}),
+	}
+	elem.AtomIdFactory = func(c atomos.CosmosNode, atomName string) (atomos.Id, error) {
+		id, err := atomos.NewAtomId(c, "Greeter", atomName)
+		if err != nil { return nil, err } else { return &greeterId{id}, nil }
+	}
+	elem.AtomCalls = map[string]*atomos.ElementAtomCall{
+		"Spawn": {// TODO
 		},
-		AtomCreator: implement.AtomCreator,
-		AtomSaver:     implement.AtomSaver,
-		AtomCanKill:   implement.AtomCanKill,
-		AtomCalls: map[string]*go_atomos.ElementAtomCall{
-			"SayHello": {
-				Handler: func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-					req, ok := in.(*HelloRequest)
-					if !ok { return nil, go_atomos.ErrAtomMessageArgType }
-					a, ok := to.(GreeterAtom)
-					if !ok { return nil, go_atomos.ErrAtomMessageAtomType }
-					return a.SayHello(from, req)
-				},
-				InDec: func(buf []byte) (proto.Message, error) {
-					r := &HelloRequest{}
-					return r, proto.Unmarshal(buf, r)
-				},
-				OutDec: func(buf []byte) (proto.Message, error) {
-					r := &HelloReply{}
-					return r, proto.Unmarshal(buf, r)
-				},
+		"SayHello": {
+			Handler: func(from atomos.Id, to atomos.Atom, in proto.Message) (proto.Message, error) {
+				req, ok := in.(*HelloRequest)
+				if !ok { return nil, atomos.ErrAtomMessageArgType }
+				a, ok := to.(GreeterAtom)
+				if !ok { return nil, atomos.ErrAtomMessageAtomType }
+				return a.SayHello(from, req)
 			},
+			InDec: func(b []byte) (proto.Message, error) { return atomos.CallUnmarshal(b, &HelloRequest{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return atomos.CallUnmarshal(b, &HelloReply{}) },
 		},
 	}
+	return elem
 }

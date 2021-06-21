@@ -1,13 +1,23 @@
 package go_atomos
 
 import (
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"sync"
 )
 
-type CosmosManager struct {
+type CosmosClusterHelper struct {
 	remotes map[string]*CosmosRemote
 	//Scheduler   ElementLordScheduler
+}
+
+func (h CosmosClusterHelper) close() {
+	// todo
+}
+
+func newCosmosClusterHelper() *CosmosClusterHelper {
+	return &CosmosClusterHelper{
+		remotes: map[string]*CosmosRemote{},
+	}
 }
 
 type CosmosRemote struct {

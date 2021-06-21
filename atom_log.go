@@ -2,7 +2,7 @@ package go_atomos
 
 import (
 	"fmt"
-	"github.com/golang/protobuf/ptypes"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"sync"
 )
@@ -28,13 +28,13 @@ func releaseAtomLog(l *atomLogsManager) {
 func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	lm := logMailsPool.Get().(*LogMail)
 	lm.Id = id
-	lm.Time = ptypes.TimestampNow()
+	lm.Time = timestamppb.Now()
 	lm.Level = level
 	lm.Message = msg
 	m := NewMail(defaultLogMailId, lm)
-	if ok := l.AtomCore.element.log.PushTail(m); !ok {
+	if ok := l.AtomCore.element.cosmos.log.PushTail(m); !ok {
 		// todo
-		log.Println("Add Atom Log Mail failed", id, level, msg)
+		log.Println("Atom Log Mail failed", id, level, msg)
 	}
 }
 
@@ -45,35 +45,35 @@ var logMailsPool = sync.Pool{
 }
 
 func (l *atomLogsManager) Debug(format string, args ...interface{}) {
-	if l.element.define.LogLevel > LogLevel_Debug {
+	if l.element.define.Config.LogLevel > LogLevel_Debug {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Info(format string, args ...interface{}) {
-	if l.element.define.LogLevel > LogLevel_Info {
+	if l.element.define.Config.LogLevel > LogLevel_Info {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Warn(format string, args ...interface{}) {
-	if l.element.define.LogLevel > LogLevel_Warn {
+	if l.element.define.Config.LogLevel > LogLevel_Warn {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Error(format string, args ...interface{}) {
-	if l.element.define.LogLevel > LogLevel_Error {
+	if l.element.define.Config.LogLevel > LogLevel_Error {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Error, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Fatal(format string, args ...interface{}) {
-	if l.element.define.LogLevel > LogLevel_Fatal {
+	if l.element.define.Config.LogLevel > LogLevel_Fatal {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Fatal, fmt.Sprintf(format, args...))
@@ -81,16 +81,16 @@ func (l *atomLogsManager) Fatal(format string, args ...interface{}) {
 
 // Element defines MailBoxHandler to support logging.
 
-func (e *ElementLocal) onLogMessage(mail *Mail) {
+func (c *CosmosSelf) onLogMessage(mail *Mail) {
 	lm := mail.Content.(*LogMail)
-	e.logging(lm)
+	c.logging(lm)
 	logMailsPool.Put(lm)
 	DelMail(mail)
 }
 
-func (e *ElementLocal) onLogPanic(mail *Mail, trace string) {
+func (c *CosmosSelf) onLogPanic(mail *Mail, trace string) {
 	lm := mail.Content.(*LogMail)
-	e.logging(&LogMail{
+	c.logging(&LogMail{
 		Id:      lm.Id,
 		Time:    lm.Time,
 		Level:   LogLevel_Fatal,
@@ -98,28 +98,31 @@ func (e *ElementLocal) onLogPanic(mail *Mail, trace string) {
 	})
 }
 
-func (e *ElementLocal) onLogStop(killMail, remainMails *Mail, num uint32) {
+func (c *CosmosSelf) onLogStop(killMail, remainMails *Mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = remainMails.next {
-		e.onLogMessage(curMail)
+		c.onLogMessage(curMail)
 	}
 }
 
-func (e *ElementLocal) logging(lm *LogMail) {
-	var t, l string
-	t = lm.Time.AsTime().Format("2006-01-02 15:04:05.999")
+func (c *CosmosSelf) logging(lm *LogMail) {
+	var msg string
+	if lm.Id != nil {
+		msg = fmt.Sprintf("%s::%s::%s => %s", lm.Id.Node, lm.Id.Element, lm.Id.Name, lm.Message)
+	} else {
+		msg = fmt.Sprintf("%s", lm.Message)
+	}
 	switch lm.Level {
 	case LogLevel_Debug:
-		l = "[DEBUG]"
+		logDebug(lm.Time.AsTime(), msg)
 	case LogLevel_Info:
-		l = "[INFO ]"
+		logInfo(lm.Time.AsTime(), msg)
 	case LogLevel_Warn:
-		l = "[WARN ]"
+		logWarn(lm.Time.AsTime(), msg)
 	case LogLevel_Error:
-		l = "[ERROR]"
+		logErr(lm.Time.AsTime(), msg)
 	case LogLevel_Fatal:
-		l = "[FATAL]"
+		logFatal(lm.Time.AsTime(), msg)
+	default:
+		logWarn(lm.Time.AsTime(), msg)
 	}
-	// todo: write buffer to where
-	fmt.Printf("%s %s %s::%s::%s\t%s\n",
-		t, l, lm.Id.Node, lm.Id.Element, lm.Id.Name, lm.Message)
 }

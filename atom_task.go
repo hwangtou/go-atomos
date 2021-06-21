@@ -1,7 +1,7 @@
 package go_atomos
 
 import (
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"reflect"
 	"runtime"
@@ -69,7 +69,7 @@ func (at *atomTasksManager) Add(fn interface{}, msg proto.Message) error {
 	// Increment
 	at.curId += 1
 
-	// Add mail
+	// AddElement mail
 	am := allocAtomMail()
 	initTaskMail(am, at.curId, fnName, msg)
 	if ok := at.mailbox.PushTail(am.Mail); !ok {
@@ -95,7 +95,7 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 	at.curId += 1
 	curId := at.curId
 
-	// Add mail
+	// AddElement mail
 	am := allocAtomMail()
 	initTaskMail(am, at.curId, fnName, msg)
 

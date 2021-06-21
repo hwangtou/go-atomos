@@ -49,3 +49,27 @@ func (c *IdLocal) Core() *AtomCore {
 func (c *IdLocal) Kill(from Id) error {
 	return c.atom.Kill(from)
 }
+
+type idMain struct {
+}
+
+func (i idMain) Cosmos() CosmosNode {
+	panic("implement me")
+}
+
+func (i idMain) Element() Element {
+	panic("implement me")
+}
+
+func (i idMain) Name() string {
+	panic("implement me")
+}
+
+func (i idMain) Kill(from Id) error {
+	panic("implement me")
+}
+
+func (i idMain) getLocalAtom() *AtomCore {
+	panic("implement me")
+}
+
