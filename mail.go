@@ -24,9 +24,8 @@ type Mail struct {
 type MailAction int
 
 const (
-	MailActionRun     = 0
-	MailActionExit    = 1
-	MailActionRestart = 2
+	MailActionRun  = 0
+	MailActionExit = 1
 )
 
 var mailsPool = sync.Pool{
@@ -49,12 +48,6 @@ func NewExitMail() *Mail {
 	return m
 }
 
-func NewRestartMail() *Mail {
-	m := NewMail(0, nil)
-	m.action = MailActionRestart
-	return m
-}
-
 func DelMail(m *Mail) {
 	mailsPool.Put(m)
 }
@@ -71,13 +64,11 @@ func (m *Mail) Reset() {
 type MailBoxOnReceiveFn func(mail *Mail)
 type MailBoxOnPanicFn func(mail *Mail, trace string)
 type MailBoxOnStopFn func(stopMail, remainMails *Mail, num uint32)
-type MailBoxOnRestartFn func(mail *Mail)
 
 type MailBoxHandler struct {
 	OnReceive MailBoxOnReceiveFn
 	OnPanic   MailBoxOnPanicFn
 	OnStop    MailBoxOnStopFn
-	OnRestart MailBoxOnRestartFn
 }
 
 type MailBox struct {
@@ -109,7 +100,6 @@ func initMailBox(a *AtomCore) {
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,
 		OnStop:    a.onStop,
-		//OnRestart: a.onRestart, // TODO
 	})
 }
 
@@ -265,7 +255,7 @@ func (mb *MailBox) loop() {
 			var curMail *Mail
 			defer func() {
 				if r := recover(); r != nil {
-					// Only should MailTypeMessage and MailTypeTask 3rd-part logic
+					// Only should AtomMailMessage and AtomMailTask 3rd-part logic
 					// throws exception to here, otherwise it must be a bug of framework.
 					traceMsg := string(debug.Stack())
 					log.Printf("recovering from 3rd-part logic\nreason=%s\ntrace=%s", r, traceMsg)
@@ -292,9 +282,6 @@ func (mb *MailBox) loop() {
 					mails, num := mb.PopAll()
 					mb.handler.OnStop(curMail, mails, num)
 					break
-				case MailActionRestart:
-					// Hot reload mailbox.
-					mb.handler.OnRestart(curMail)
 				}
 			}
 		}(); exit {
@@ -310,6 +297,10 @@ func (mb *MailBox) Reset() {
 	mb.head = nil
 	mb.tail = nil
 	mb.num = 0
+}
+
+func (mb *MailBox) sharedLock() *sync.Mutex {
+	return &mb.mutex
 }
 
 //goos: darwin

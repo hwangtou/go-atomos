@@ -48,10 +48,10 @@ message ElementConfig {
   uint64 version = 2;
   LogLevel log_level = 3;
   int32 atom_init_num = 4;
-  map<string, AtomosCallConfig> calls = 5;
+  map<string, AtomMessageConfig> messages = 5;
 }
 
-message AtomosCallConfig {
+message AtomMessageConfig {
   google.protobuf.Any in = 1;
   google.protobuf.Any out = 2;
 }

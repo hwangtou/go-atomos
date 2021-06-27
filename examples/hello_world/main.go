@@ -6,8 +6,8 @@ import (
 
 func main() {
 	config := &atomos.Config{
-		Node:    "hello_world",
-		LogPath: "/tmp/cosmos_log/",
+		Node:     "hello_world",
+		LogPath:  "/tmp/cosmos_log/",
 		LogLevel: atomos.LogLevel_Debug,
 	}
 	// Cycle

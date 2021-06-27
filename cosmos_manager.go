@@ -5,6 +5,9 @@ import (
 	"sync"
 )
 
+// TODO: 远程Cosmos管理助手，在未来版本实现。
+// TODO: Remote Cosmos Helper.
+
 type CosmosClusterHelper struct {
 	remotes map[string]*CosmosRemote
 	//Scheduler   ElementLordScheduler
@@ -12,6 +15,10 @@ type CosmosClusterHelper struct {
 
 func (h CosmosClusterHelper) close() {
 	// todo
+}
+
+func (h CosmosClusterHelper) init() {
+
 }
 
 func newCosmosClusterHelper() *CosmosClusterHelper {

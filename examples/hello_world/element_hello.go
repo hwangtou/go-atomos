@@ -13,15 +13,15 @@ func init() {
 type helloElement struct {
 }
 
+func (h *helloElement) Check() error {
+	return nil
+}
+
 func (h *helloElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
 	return "Greeter", 1, atomos.LogLevel_Debug, 100
 }
 
-func (h *helloElement) LordScheduler(manager atomos.CosmosClusterHelper) {
-	panic("implement me")
-}
-
-func (h *helloElement) AtomCreator() atomos.Atom {
+func (h *helloElement) AtomConstructor() atomos.Atom {
 	return &helloAtom{}
 }
 
@@ -47,7 +47,7 @@ func (h *helloAtom) Spawn(self atomos.AtomSelf, arg proto.Message) error {
 }
 
 func (h *helloAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) {
-	h.self.Log().Info("Halt")
+	h.self.Log().Info("AtomHalt")
 }
 
 func (h *helloAtom) SayHello(from atomos.Id, in *api.HelloRequest) (*api.HelloReply, error) {

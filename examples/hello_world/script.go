@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	atomos "github.com/hwangtou/go-atomos"
 	"github.com/hwangtou/go-atomos/examples/hello_world/api"
 )
@@ -11,16 +12,11 @@ func init()  {
 	runnable.SetScript(Script)
 }
 
-func Script(cosmos *atomos.CosmosSelf, mainId atomos.Id, killNoticeChannel chan bool) {
-	select {
-	case <-killNoticeChannel:
-		return
-	case <-startScript(cosmos, mainId):
-		return
-	}
+func Script(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
+	startScript(cosmos, mainId)
 }
 
-func startScript(cosmos *atomos.CosmosSelf, mainId atomos.Id) <-chan bool {
+func startScript(cosmos *atomos.CosmosSelf, mainId atomos.MainId) {
 	greeterId, err := api.SpawnGreeter(cosmos.Local(), "a", nil)
 	if err != nil {
 		panic(err)
@@ -36,9 +32,6 @@ func startScript(cosmos *atomos.CosmosSelf, mainId atomos.Id) <-chan bool {
 		//// Try to make a crash
 		//fmt.Println(hello.Message)
 		// todo: use mainId to log.
-		cosmos.Info("%+v", hello)
+		fmt.Printf("%v\n", hello)
 	}
-	ch := make(chan bool, 1)
-	ch <- true
-	return ch
 }

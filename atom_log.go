@@ -7,24 +7,32 @@ import (
 	"sync"
 )
 
-// TODO: Config & write file
 const defaultLogMailId = 0
 
-// AtomLog
+// Atom日志管理器
+// Atom Logs Manager
+
 type atomLogsManager struct {
 	*AtomCore
 }
 
-// No New and Delete because atomLogsManager is struct in AtomCore.
-
+// 初始化atomLogsManager的内容。
+// 没有构造和释构函数，因为atomLogsManager是AtomCore内部使用的。
+//
+// Initialization of atomLogsManager.
+// No New and Delete function because atomLogsManager is struct inner AtomCore.
 func initAtomLog(l *atomLogsManager, a *AtomCore) {
 	l.AtomCore = a
 }
 
+// 释放atomTasksManager对象的内容。
+// Releasing atomTasksManager.
 func releaseAtomLog(l *atomLogsManager) {
 	l.AtomCore = nil
 }
 
+// 把Log以邮件的方式发送到Cosmos的Log实例处理。
+// Send Logs as Mails to Cosmos Log instance.
 func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	lm := logMailsPool.Get().(*LogMail)
 	lm.Id = id
@@ -38,91 +46,48 @@ func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	}
 }
 
+// Log内存池
+// Log Mails Pool
 var logMailsPool = sync.Pool{
 	New: func() interface{} {
 		return &LogMail{}
 	},
 }
 
+// 各种级别的日志函数。
+// Log functions in difference levels.
+
 func (l *atomLogsManager) Debug(format string, args ...interface{}) {
-	if l.element.define.Config.LogLevel > LogLevel_Debug {
+	if l.element.current.Config.LogLevel > LogLevel_Debug {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Info(format string, args ...interface{}) {
-	if l.element.define.Config.LogLevel > LogLevel_Info {
+	if l.element.current.Config.LogLevel > LogLevel_Info {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Warn(format string, args ...interface{}) {
-	if l.element.define.Config.LogLevel > LogLevel_Warn {
+	if l.element.current.Config.LogLevel > LogLevel_Warn {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Error(format string, args ...interface{}) {
-	if l.element.define.Config.LogLevel > LogLevel_Error {
+	if l.element.current.Config.LogLevel > LogLevel_Error {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Error, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Fatal(format string, args ...interface{}) {
-	if l.element.define.Config.LogLevel > LogLevel_Fatal {
+	if l.element.current.Config.LogLevel > LogLevel_Fatal {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Fatal, fmt.Sprintf(format, args...))
-}
-
-// Element defines MailBoxHandler to support logging.
-
-func (c *CosmosSelf) onLogMessage(mail *Mail) {
-	lm := mail.Content.(*LogMail)
-	c.logging(lm)
-	logMailsPool.Put(lm)
-	DelMail(mail)
-}
-
-func (c *CosmosSelf) onLogPanic(mail *Mail, trace string) {
-	lm := mail.Content.(*LogMail)
-	c.logging(&LogMail{
-		Id:      lm.Id,
-		Time:    lm.Time,
-		Level:   LogLevel_Fatal,
-		Message: trace,
-	})
-}
-
-func (c *CosmosSelf) onLogStop(killMail, remainMails *Mail, num uint32) {
-	for curMail := remainMails; curMail != nil; curMail = remainMails.next {
-		c.onLogMessage(curMail)
-	}
-}
-
-func (c *CosmosSelf) logging(lm *LogMail) {
-	var msg string
-	if lm.Id != nil {
-		msg = fmt.Sprintf("%s::%s::%s => %s", lm.Id.Node, lm.Id.Element, lm.Id.Name, lm.Message)
-	} else {
-		msg = fmt.Sprintf("%s", lm.Message)
-	}
-	switch lm.Level {
-	case LogLevel_Debug:
-		logDebug(lm.Time.AsTime(), msg)
-	case LogLevel_Info:
-		logInfo(lm.Time.AsTime(), msg)
-	case LogLevel_Warn:
-		logWarn(lm.Time.AsTime(), msg)
-	case LogLevel_Error:
-		logErr(lm.Time.AsTime(), msg)
-	case LogLevel_Fatal:
-		logFatal(lm.Time.AsTime(), msg)
-	default:
-		logWarn(lm.Time.AsTime(), msg)
-	}
 }

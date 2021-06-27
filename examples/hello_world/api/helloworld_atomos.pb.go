@@ -53,7 +53,7 @@ type greeterId struct {
 }
 
 func (c *greeterId) SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error) {
-	r, err := c.Cosmos().CallAtom(from, c, "SayHello", in)
+	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
 	if err != nil { return nil, err }
 	reply, ok := r.(*HelloReply)
 	if !ok { return nil, atomos.ErrAtomMessageReplyType }
@@ -61,15 +61,15 @@ func (c *greeterId) SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, err
 }
 
 func GetGreeterDefine(implement atomos.ElementImplement) *atomos.ElementDefine {
-	elem := atomos.ElementFromImplement(implement)
-	elem.Config.Calls = map[string]*atomos.AtomosCallConfig{
-		"SayHello": atomos.ElementAtomCallConfig(&HelloRequest{}, &HelloReply{}),
+	elem := atomos.NewDefineFromImplement(implement)
+	elem.Config.Messages = map[string]*atomos.AtomMessageConfig{
+		"SayHello": atomos.NewAtomCallConfig(&HelloRequest{}, &HelloReply{}),
 	}
-	elem.AtomIdFactory = func(c atomos.CosmosNode, atomName string) (atomos.Id, error) {
+	elem.AtomIdConstructor = func(c atomos.CosmosNode, atomName string) (atomos.Id, error) {
 		id, err := atomos.NewAtomId(c, "Greeter", atomName)
 		if err != nil { return nil, err } else { return &greeterId{id}, nil }
 	}
-	elem.AtomCalls = map[string]*atomos.ElementAtomCall{
+	elem.AtomCalls = map[string]*atomos.ElementAtomMessage{
 		"Spawn": {// TODO
 		},
 		"SayHello": {
@@ -80,8 +80,8 @@ func GetGreeterDefine(implement atomos.ElementImplement) *atomos.ElementDefine {
 				if !ok { return nil, atomos.ErrAtomMessageAtomType }
 				return a.SayHello(from, req)
 			},
-			InDec: func(b []byte) (proto.Message, error) { return atomos.CallUnmarshal(b, &HelloRequest{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return atomos.CallUnmarshal(b, &HelloReply{}) },
+			InDec: func(b []byte) (proto.Message, error) { return atomos.MessageUnmarshal(b, &HelloRequest{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return atomos.MessageUnmarshal(b, &HelloReply{}) },
 		},
 	}
 	return elem
