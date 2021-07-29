@@ -16,12 +16,12 @@ type ElementLocal struct {
 	cosmos *CosmosSelf
 
 	// 当前ElementDefine的引用。
-	// Reference to current in use ElementDefine.
-	current *ElementDefine
+	// Reference to current in use ElementInterface.
+	current *ElementImplementation
 
 	// 所有添加过的不同版本的ElementDefine的容器。
-	// Container of all added versions of ElementDefine.
-	define map[uint64]*ElementDefine
+	// Container of all added versions of ElementInterface.
+	define map[uint64]*ElementImplementation
 
 	// 该Element所有Atom的容器。
 	// Container of all atoms.
@@ -33,24 +33,24 @@ type ElementLocal struct {
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(cosmosSelf *CosmosSelf, define *ElementDefine) (*ElementLocal, error) {
+func newElementLocal(cosmosSelf *CosmosSelf, define *ElementImplementation) (*ElementLocal, error) {
 	elem := &ElementLocal{}
 	elem.cosmos = cosmosSelf
 	elem.current = define
-	elem.define = map[uint64]*ElementDefine{
-		define.Config.Version: define,
+	elem.define = map[uint64]*ElementImplementation{
+		define.ElementInterface.Config.Version: define,
 	}
-	elem.atoms = make(map[string]*AtomCore, define.Config.AtomInitNum)
+	elem.atoms = make(map[string]*AtomCore, define.ElementInterface.Config.AtomInitNum)
 	return elem, nil
 }
 
 // 重载Element，需要指定一个版本的ElementDefine。
-// Reload element, specific version of ElementDefine is needed.
-func (e *ElementLocal) reload(newDefine *ElementDefine) error {
+// Reload element, specific version of ElementInterface is needed.
+func (e *ElementLocal) reload(newDefine *ElementImplementation) error {
 	e.current = newDefine
-	e.define[newDefine.Config.Version] = newDefine
+	e.define[newDefine.ElementInterface.Config.Version] = newDefine
 	for _, atom := range e.atoms {
-		err := atom.pushReloadMail(newDefine.Config.Version)
+		err := atom.pushReloadMail(newDefine.ElementInterface.Config.Version)
 		if err != nil {
 			// TODO
 		}
@@ -81,14 +81,14 @@ func (e *ElementLocal) unload() error {
 	return nil
 }
 
-// Local implementation of Element type.
+// Local implementations of Element type.
 
 func (e *ElementLocal) GetName() string {
-	return e.current.Config.Name
+	return e.current.ElementInterface.Config.Name
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {
-	return e.current.AtomIdConstructor(e.cosmos.local, name)
+	return e.current.ElementInterface.AtomIdConstructor(e.cosmos.local, name)
 }
 
 func (e *ElementLocal) SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error) {
@@ -158,13 +158,13 @@ func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, 
 	return a, nil
 }
 
-func (e *ElementLocal) getCall(name string, version uint64) *ElementAtomMessage {
+func (e *ElementLocal) getMessageHandler(name string, version uint64) MessageHandler {
 	e.mutex.RLock()
 	if !e.loaded {
 		e.mutex.RUnlock()
 		return nil
 	}
-	c, has := e.define[version].AtomCalls[name]
+	c, has := e.define[version].AtomHandlers[name]
 	e.mutex.RUnlock()
 	if !has {
 		return nil

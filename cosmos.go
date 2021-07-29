@@ -10,9 +10,11 @@ import (
 // 仅供生成器内部使用
 
 type CosmosNode interface {
+	GetNodeName() string
+
 	IsLocal() bool
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
-	// Get the AtomId of an Atom by Element name and Atom name.
+	// Get the AtomId of an Atom by Element nodeName and Atom nodeName.
 	GetAtomId(elem, name string) (Id, error)
 
 	// 启动某个Atom类型并命名和传入参数。
@@ -39,7 +41,7 @@ type CosmosSelf struct {
 
 	// 集群助手，帮助访问远程的Cosmos。
 	// Cluster helper helps access to remote Cosmos.
-	cluster *CosmosClusterHelper
+	remotes *cosmosRemotesHelper
 
 	// 关注Daemon命令的管道。
 	// A channel focus on Daemon Command.
@@ -59,7 +61,7 @@ func newCosmosSelf() *CosmosSelf {
 	c := &CosmosSelf{
 		config:      nil,
 		local:       nil,
-		cluster:     nil,
+		remotes:     nil,
 		daemonCmdCh: nil,
 		signCh:      nil,
 		log:         nil,
@@ -82,4 +84,8 @@ func (c *CosmosSelf) Local() *CosmosLocal {
 
 func (c *CosmosSelf) GetName() string {
 	return c.config.Node
+}
+
+func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosWatchRemote, error) {
+	return c.remotes.getOrConnectRemote(nodeName, nodeAddr, c.config.EnableRemoteServer.CertPath)
 }

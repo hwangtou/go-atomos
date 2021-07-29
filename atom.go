@@ -4,6 +4,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const debugMode = false
+
 // 开发者需要实现的Atom的接口定义。
 // Atom Interface Definition that developers have to implement.
 
@@ -65,11 +67,11 @@ type Id interface {
 	Name() string
 
 	// ElementDefine的版本。
-	// Version of ElementDefine.
+	// Version of ElementInterface.
 	Version() uint64
 
 	// 从其它Atom或者main发送Kill消息。
-	// Send Kill signal from other Atom or main.
+	// write Kill signal from other Atom or main.
 	Kill(from Id) error
 
 	// 内部使用，如果是本地Atom，会返回本地Atom的引用。

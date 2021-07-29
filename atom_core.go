@@ -35,7 +35,7 @@ const (
 )
 
 // Actual Atom
-// The implementation of a local Atom type.
+// The implementations of a local Atom type.
 
 type AtomCore struct {
 	// 对目前ElementLocal实例的引用。
@@ -48,7 +48,7 @@ type AtomCore struct {
 	element *ElementLocal
 
 	// ElementDefine的版本
-	// Version of ElementDefine.
+	// Version of ElementInterface.
 	version uint64
 
 	// ElementLocal中的唯一Name。
@@ -115,8 +115,13 @@ func (a *AtomCore) Version() uint64 {
 	return a.version
 }
 
+func (a *AtomCore) Command(message proto.Message) (proto.Message, error) {
+	// TODO
+	panic("Implement")
+}
+
 // 从另一个AtomCore，或者从Main Script发送Kill消息给Atom。
-// Send Kill signal from other AtomCore or from Main Script.
+// write Kill signal from other AtomCore or from Main Script.
 func (a *AtomCore) Kill(from Id) error {
 	if ok := a.element.define[a.version].AtomCanKill(from); !ok {
 		return ErrAtomCannotKill
@@ -175,7 +180,7 @@ func allocAtom() *AtomCore {
 
 func initAtom(a *AtomCore, es *ElementLocal, name string, inst Atom) {
 	a.element = es
-	a.version = es.current.Config.Version
+	a.version = es.current.ElementInterface.Config.Version
 	a.name = name
 	a.instance = inst
 	a.state = AtomHalt
@@ -323,11 +328,11 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out proto.Message, err error) {
 	a.setBusy()
 	defer a.setWaiting()
-	call := a.element.getCall(name, a.version)
-	if call == nil {
+	handler := a.element.getMessageHandler(name, a.version)
+	if handler == nil {
 		return nil, ErrAtomMessageNotFound
 	}
-	return call.Handler(from, a.instance, in)
+	return handler(from, a.instance, in)
 }
 
 // Kill Mail

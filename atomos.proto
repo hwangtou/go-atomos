@@ -36,11 +36,19 @@ message Config {
   string node = 1;
   string log_path = 2;
   LogLevel log_level = 3;
-  //CosmosLocalConfig cosmos_local = 3;
+  RemoteServerConfig enable_remote_server = 4;
+}
+
+message RemoteServerConfig {
+  int32 port = 1;
+  string cert_path = 2;
+  string key_path = 3;
 }
 
 message CosmosLocalConfig {
-  map<string, ElementConfig> elements = 1;
+  string node_name = 1;
+  bool enable_remote = 2;
+  map<string, ElementConfig> elements = 3;
 }
 
 message ElementConfig {
@@ -54,4 +62,43 @@ message ElementConfig {
 message AtomMessageConfig {
   google.protobuf.Any in = 1;
   google.protobuf.Any out = 2;
+}
+
+// Cosmos Watch
+
+enum CosmosWatchMessageType {
+  Init = 0;
+}
+
+message CosmosWatch {
+  CosmosWatchMessageType message_type = 1;
+  CosmosRemoteConnectInit init_message = 2;
+}
+
+message CosmosRemoteConnectInit {
+  CosmosLocalConfig config = 1;
+}
+
+// Cosmos Requester
+
+message CosmosRemoteGetAtomIdReq {
+  string element = 1;
+  string name = 2;
+}
+
+message CosmosRemoteGetAtomIdResp {
+  bool has = 1;
+}
+
+message CosmosRemoteMessagingReq {
+  AtomId from = 1;
+  AtomId to = 2;
+  string message = 3;
+  google.protobuf.Any args = 4;
+}
+
+message CosmosRemoteMessagingResp {
+  bool has = 1;
+  google.protobuf.Any reply = 2;
+  string error = 3;
 }

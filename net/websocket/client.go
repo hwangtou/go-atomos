@@ -8,31 +8,36 @@ import (
 
 type Client struct {
 	*Conn
-	delegate ClientDelegate
+	ClientDelegate ClientDelegate
 }
 
-func (c *Client) Init(delegate *clientDelegate) (err error) {
+func (c *Client) Init(delegate ClientDelegate) (err error) {
 	if delegate == nil {
 		return ErrDelegateIsNil
 	}
-	c.delegate = delegate
 	c.Conn = &Conn{
-		delegate: delegate,
+		Delegate: delegate,
 		sender:   make(chan *msg),
 	}
+	c.ClientDelegate = delegate
 	return nil
 }
 
 func (c *Client) Connect() error {
-	c.delegate.GetLogger().Printf("Client.Connect: Info, name=%v,addr=%s",
-		c.delegate.GetName(), c.delegate.GetAddr())
+	if c.running {
+		c.Delegate.GetLogger().Printf("Client.Connect: Connected, name=%v,addr=%s",
+			c.Delegate.GetName(), c.Delegate.GetAddr())
+		return nil
+	}
+	c.Delegate.GetLogger().Printf("Client.Connect: Info, name=%v,addr=%s",
+		c.Delegate.GetName(), c.Delegate.GetAddr())
 	// Connect.
 	u := url.URL{
 		Scheme: WatchSchema,
-		Host:   c.delegate.GetAddr(),
+		Host:   c.Delegate.GetAddr(),
 		Path:   WatchUri,
 	}
-	tlsConfig, err := c.delegate.GetTLSConfig()
+	tlsConfig, err := c.ClientDelegate.GetTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -40,7 +45,7 @@ func (c *Client) Connect() error {
 		TLSClientConfig: tlsConfig,
 	}
 	c.conn, _, err = dialer.Dial(u.String(), http.Header{
-		watchHeader: []string{c.delegate.GetName()},
+		watchHeader: []string{c.Delegate.GetName()},
 	})
 	if err != nil {
 		return err
@@ -48,9 +53,9 @@ func (c *Client) Connect() error {
 
 	c.run()
 
-	if err = c.delegate.Connected(); err != nil {
+	if err = c.Delegate.Connected(); err != nil {
 		if err := c.Stop(); err != nil {
-			c.delegate.GetLogger().Printf("Client.Connect: Stop connect error, err=%v", err)
+			c.Delegate.GetLogger().Printf("Client.Connect: Stop connect error, err=%v", err)
 		}
 		return err
 	}

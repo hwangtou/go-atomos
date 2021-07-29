@@ -14,50 +14,61 @@ type ClientDelegate interface {
 	ShouldSkipVerify() bool
 }
 
-type clientDelegate struct {
+type ClientDelegateBase struct {
 	name     string
 	addr     string
 	certFile string
 	logger   *log.Logger
 }
 
+func NewClientDelegate(name, addr, certFile string, logger *log.Logger) *ClientDelegateBase {
+	return &ClientDelegateBase{
+		name:     name,
+		addr:     addr,
+		certFile: certFile,
+		logger:   logger,
+	}
+}
+
 // Implementation of ConnDelegate.
 
-func (c *clientDelegate) GetName() string {
+func (c *ClientDelegateBase) GetName() string {
 	return c.name
 }
 
-func (c *clientDelegate) GetAddr() string {
+func (c *ClientDelegateBase) GetAddr() string {
 	return c.addr
 }
 
-func (c *clientDelegate) GetLogger() *log.Logger {
+func (c *ClientDelegateBase) GetLogger() *log.Logger {
 	return c.logger
 }
 
-func (c *clientDelegate) WriteTimeout() time.Duration {
+func (c *ClientDelegateBase) WriteTimeout() time.Duration {
 	return writeWait
 }
 
-func (c *clientDelegate) PingPeriod() time.Duration {
+func (c *ClientDelegateBase) PingPeriod() time.Duration {
 	return connPingPeriod
 }
 
-func (c *clientDelegate) Receive(msg []byte) error {
+func (c *ClientDelegateBase) Receive(msg []byte) error {
 	c.GetLogger().Printf("ClientDelegate: Receive, msg=%s", string(msg))
 	return nil
 }
 
-func (c *clientDelegate) Connected() error {
+func (c *ClientDelegateBase) Connected() error {
 	c.GetLogger().Printf("ClientDelegate: Connected")
 	return nil
 }
 
-func (c *clientDelegate) Disconnected() {
+func (c *ClientDelegateBase) Disconnected() {
 	c.GetLogger().Printf("ClientDelegate: Disconnected")
 }
 
-func (c *clientDelegate) GetTLSConfig() (conf *tls.Config, err error) {
+// Implementation of ClientDelegate.
+
+func (c *ClientDelegateBase) GetTLSConfig() (conf *tls.Config, err error) {
 	if c.certFile == "" {
 		return nil, nil
 	}
@@ -77,6 +88,6 @@ func (c *clientDelegate) GetTLSConfig() (conf *tls.Config, err error) {
 	return tlsConfig, nil
 }
 
-func (c *clientDelegate) ShouldSkipVerify() bool {
+func (c *ClientDelegateBase) ShouldSkipVerify() bool {
 	return true
 }

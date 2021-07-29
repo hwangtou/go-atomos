@@ -22,7 +22,7 @@ type Element interface {
 	GetName() string
 
 	// 通过Atom名称获取指定的Atom的Id。
-	// Get AtomId by name of Atom.
+	// Get AtomId by nodeName of Atom.
 	GetAtomId(atomName string) (Id, error)
 
 	// 启动一个Atom。
@@ -30,17 +30,17 @@ type Element interface {
 	SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error)
 
 	// 向一个Atom发送消息。
-	// Send Message to an Atom.
+	// write Message to an Atom.
 	MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error)
 
 	// 向一个Atom发送Kill消息。
-	// Send Kill to an Atom.
+	// write Kill to an Atom.
 	KillAtom(fromId, toId Id) error
 }
 
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementDefine对象。
-// ElementDefine in *_atomos.pb.go, which is generated from developer defined *.proto file.
-type ElementDefine struct {
+// ElementInterface in *_atomos.pb.go, which is generated from developer defined *.proto file.
+type ElementInterface struct {
 	// Element的配置。
 	// Configuration of the Element.
 	Config *ElementConfig
@@ -49,38 +49,45 @@ type ElementDefine struct {
 	// Constructor of AtomId.
 	AtomIdConstructor AtomIdConstructor
 
-	// Atom的构造器。
-	// Constructor of Atom.
-	AtomConstructor AtomConstructor
-
-	// 一个用于保存Atom数据的函数。
-	// A method to save Atom data.
-	AtomSaver AtomSaver
-
-	// 一个鉴别Kill信号是否合法的函数。
-	// A method to authorize the Kill signal is allowed or not.
-	AtomCanKill AtomCanKill
-
 	// 一个存储Atom的Call方法的容器。
 	// A container to store all the Call method of Atom.
 	AtomCalls map[string]*ElementAtomMessage
+}
+
+type ElementImplementation struct {
+	ElementDevelop
+
+	ElementInterface *ElementInterface
+	//// Atom的构造器。
+	//// Constructor of Atom.
+	//AtomConstructor AtomConstructor
+	//
+	//// 一个用于保存Atom数据的函数。
+	//// A method to save Atom data.
+	//AtomSaver AtomSaver
+	//
+	//// 一个鉴别Kill信号是否合法的函数。
+	//// A method to authorize the Kill signal is allowed or not.
+	//AtomCanKill AtomCanKill
+
+	AtomHandlers map[string]MessageHandler
 }
 
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
 // Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
 type AtomIdConstructor func(c CosmosNode, atomName string) (Id, error)
 
-// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
-// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
-type AtomConstructor func() Atom
-
-// Atom保存函数的函数类型，只有有状态的Atom会被保存。
-// Saver Function Type of Atom, only stateful Atom will be saved.
-type AtomSaver func(Id, AtomStateful) error
-
-// Atom鉴别Kill信号合法的函数。
-// Kill Signal Authorization Function Type.
-type AtomCanKill func(Id) bool
+//// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
+//// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
+//type AtomConstructor func() Atom
+//
+//// Atom保存函数的函数类型，只有有状态的Atom会被保存。
+//// Saver Function Type of Atom, only stateful Atom will be saved.
+//type AtomSaver func(Id, AtomStateful) error
+//
+//// Atom鉴别Kill信号合法的函数。
+//// Kill Signal Authorization Function Type.
+//type AtomCanKill func(Id) bool
 
 // TODO:
 // 未来版本需要考虑支持Atom的负载均衡支持。
@@ -89,13 +96,13 @@ type AtomCanKill func(Id) bool
 
 // 从*.proto文件生成到*_atomos.pb.go文件中的，具体的Element对象。
 // Concrete Element instance in *_atomos.pb.go, which is generated from developer defined *.proto file.
-type ElementImplement interface {
+type ElementDevelop interface {
 	// 检查ElementImplement是否合法。
-	// Check whether ElementImplement is legal or not.
+	// Check whether ElementDevelop is legal or not.
 	Check() error
 
 	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
-	// Information of ElementImplement, such as name of Element, version, Log level and initial atom quantity.
+	// Information of ElementDevelop, such as nodeName of Element, version, Log level and initial atom quantity.
 	Info() (name string, version uint64, logLevel LogLevel, initNum int)
 
 	// Atom构造器
@@ -124,28 +131,29 @@ type MessageDecoder func(buf []byte) (proto.Message, error)
 // Element的Atom的调用信息。
 // Element Atom Message Info.
 type ElementAtomMessage struct {
-	Handler MessageHandler
-	InDec   MessageDecoder
-	OutDec  MessageDecoder
+	InDec  MessageDecoder
+	OutDec MessageDecoder
 }
 
-// For creating ElementDefine instance in *_atomos.pb.go.
-func NewDefineFromImplement(implement ElementImplement) *ElementDefine {
-	name, version, logLevel, initNum := implement.Info()
-	return &ElementDefine{
+// For creating ElementInterface instance in *_atomos.pb.go.
+func NewInterfaceFromDevelop(implement ElementDevelop) *ElementInterface {
+	name, version, _, _ := implement.Info()
+	return &ElementInterface{
 		Config: &ElementConfig{
-			Name:        name,
-			Version:     version,
-			LogLevel:    logLevel,
-			AtomInitNum: int32(initNum),
+			Name:     name,
+			Version:  version,
+			Messages: map[string]*AtomMessageConfig{},
 		},
-		AtomConstructor: implement.AtomConstructor,
-		AtomSaver:       implement.AtomSaver,
-		AtomCanKill:     implement.AtomCanKill,
 	}
 }
 
-// For creating AtomMessageConfig instance in ElementDefine of *_atomos.pb.go.
+func NewImplementationFromDevelop(implement ElementDevelop) *ElementImplementation {
+	return &ElementImplementation{
+		ElementDevelop: implement,
+	}
+}
+
+// For creating AtomMessageConfig instance in ElementInterface of *_atomos.pb.go.
 func NewAtomCallConfig(in, out proto.Message) *AtomMessageConfig {
 	return &AtomMessageConfig{
 		In:  MessageToAny(in),

@@ -9,7 +9,7 @@ import (
 )
 
 type Conn struct {
-	delegate ConnDelegate
+	Delegate ConnDelegate
 
 	conn         *websocket.Conn
 	sender       chan *msg
@@ -17,6 +17,10 @@ type Conn struct {
 	running      bool
 	reconnecting bool
 	reconnectCh  chan bool
+}
+
+type Connection interface {
+	Stop() error
 }
 
 type ConnDelegate interface {
@@ -52,7 +56,7 @@ func (c *Conn) run() {
 }
 
 func (c *Conn) logger(format string, args ...interface{}) {
-	c.delegate.GetLogger().Printf(format, args...)
+	c.Delegate.GetLogger().Printf(format, args...)
 }
 
 // write content.
@@ -125,8 +129,11 @@ func (c *Conn) writePump() {
 			}
 			if !ok {
 				c.logger("Conn.writePump: Closing Begin")
-				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					c.logger("Conn.writePump: Write CloseMessage failed, err=%v", err)
+				if c.running {
+					c.logger("Conn.writePump: Close Message")
+					if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+						c.logger("Conn.writePump: Write CloseMessage failed, err=%v", err)
+					}
 				}
 				c.runningMutex.Lock()
 				c.sender = nil
@@ -189,7 +196,7 @@ func (c *Conn) readPump() {
 		}
 	}()
 	now := time.Now()
-	pongWait := c.delegate.PingPeriod() + c.delegate.WriteTimeout()
+	pongWait := c.Delegate.PingPeriod() + c.Delegate.WriteTimeout()
 	if err := c.conn.SetReadDeadline(now.Add(pongWait)); err != nil {
 		c.logger("Conn.readPump: SetReadDeadline failed, err=%v", err)
 	}
@@ -198,15 +205,12 @@ func (c *Conn) readPump() {
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
-			//if websocket.IsUnexpectedCloseError(err,
-			//	websocket.CloseGoingAway,
-			//	websocket.CloseAbnormalClosure) {
-			//	c.logger("Conn.readPump: ReadMessage failed, err=%v", err)
-			//}
-			c.logger("Conn.readPump: Read failed, err=%v", err)
+			if !websocket.IsCloseError(err) {
+				c.logger("Conn.readPump: Read failed, err=%v", err)
+			}
 			break
 		}
-		err = c.delegate.Receive(msg)
+		err = c.Delegate.Receive(msg)
 		if err != nil {
 			c.logger("Conn.readPump: Handle read failed, err=%v", err)
 			break
@@ -215,16 +219,16 @@ func (c *Conn) readPump() {
 }
 
 func (c *Conn) pingHandler(data string) error {
-	c.logger("Conn.pingHandler: name=%s", c.delegate.GetName())
+	c.logger("Conn.pingHandler: name=%s", c.Delegate.GetName())
 	now := time.Now()
-	pongWait := c.delegate.PingPeriod() + c.delegate.WriteTimeout()
+	pongWait := c.Delegate.PingPeriod() + c.Delegate.WriteTimeout()
 	if err := c.conn.SetReadDeadline(now.Add(pongWait)); err != nil {
-		c.logger("Conn.pingHandler: SetReadDeadline failed, name=%s,err=%v", c.delegate.GetName(), err)
+		c.logger("Conn.pingHandler: SetReadDeadline failed, name=%s,err=%v", c.Delegate.GetName(), err)
 	}
 	return c.write(&msg{websocket.PongMessage, []byte{}})
 }
 
 func (c *Conn) pongHandler(data string) error {
-	c.logger("Conn.pongHandler: name=%s", c.delegate.GetName())
+	c.logger("Conn.pongHandler: name=%s", c.Delegate.GetName())
 	return nil
 }

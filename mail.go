@@ -38,13 +38,15 @@ func NewMail(id uint64, content interface{}) *Mail {
 	m := mailsPool.Get().(*Mail)
 	m.Reset()
 	m.id = id
+	m.action = MailActionRun
 	m.Content = content
 	return m
 }
 
-func NewExitMail() *Mail {
+func NewExitMail(waitCh chan struct{}) *Mail {
 	m := NewMail(0, nil)
 	m.action = MailActionExit
+	m.Content = waitCh
 	return m
 }
 
@@ -118,8 +120,16 @@ func (mb *MailBox) Start() {
 	go mb.loop()
 }
 
+func (mb *MailBox) WaitStop() {
+	ch := make(chan struct{}, 1)
+	m := NewExitMail(ch)
+	mb.PushHead(m)
+	<-ch
+}
+
 func (mb *MailBox) Stop() {
-	mb.PushHead(NewExitMail())
+	m := NewExitMail(nil)
+	mb.PushHead(m)
 }
 
 func (mb *MailBox) WaitPop() *Mail {
@@ -259,7 +269,7 @@ func (mb *MailBox) loop() {
 					// throws exception to here, otherwise it must be a bug of framework.
 					traceMsg := string(debug.Stack())
 					log.Printf("recovering from 3rd-part logic\nreason=%s\ntrace=%s", r, traceMsg)
-					//curMail.sendReply(nil, errors.AddElement(traceMsg))
+					//curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
 					// todo
 					mb.handler.OnPanic(curMail, traceMsg)
 				}
@@ -281,7 +291,14 @@ func (mb *MailBox) loop() {
 					// Reject all mails backward.
 					mails, num := mb.PopAll()
 					mb.handler.OnStop(curMail, mails, num)
-					break
+					// Wait channel.
+					if curMail.Content != nil {
+						ch, ok := curMail.Content.(chan struct{})
+						if ok {
+							ch <- struct{}{}
+						}
+					}
+					return
 				}
 			}
 		}(); exit {

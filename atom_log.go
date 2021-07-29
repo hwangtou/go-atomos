@@ -32,7 +32,7 @@ func releaseAtomLog(l *atomLogsManager) {
 }
 
 // 把Log以邮件的方式发送到Cosmos的Log实例处理。
-// Send Logs as Mails to Cosmos Log instance.
+// write Logs as Mails to Cosmos Log instance.
 func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	lm := logMailsPool.Get().(*LogMail)
 	lm.Id = id
@@ -58,35 +58,35 @@ var logMailsPool = sync.Pool{
 // Log functions in difference levels.
 
 func (l *atomLogsManager) Debug(format string, args ...interface{}) {
-	if l.element.current.Config.LogLevel > LogLevel_Debug {
+	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Debug {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Info(format string, args ...interface{}) {
-	if l.element.current.Config.LogLevel > LogLevel_Info {
+	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Info {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Warn(format string, args ...interface{}) {
-	if l.element.current.Config.LogLevel > LogLevel_Warn {
+	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Warn {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Error(format string, args ...interface{}) {
-	if l.element.current.Config.LogLevel > LogLevel_Error {
+	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Error {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Error, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Fatal(format string, args ...interface{}) {
-	if l.element.current.Config.LogLevel > LogLevel_Fatal {
+	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Fatal {
 		return
 	}
 	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Fatal, fmt.Sprintf(format, args...))

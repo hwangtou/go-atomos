@@ -37,6 +37,7 @@ func TestClientDuplicated(t *testing.T) {
 func TestServerRun(t *testing.T) {
 	go newServer(t)
 
+	<-time.After(1 * time.Second)
 	newConn(t, "client1")
 	<-time.After(2 * time.Second)
 	newConn(t, "client2")
@@ -48,13 +49,14 @@ func TestServerRun(t *testing.T) {
 
 func newServer(t *testing.T) {
 	s := &Server{}
-	sD := serverDelegate{
-		addr:     ":12345",
-		name:     "server",
-		certFile: "server.crt",
-		keyFile:  "server.key",
-		mux:      map[string]func(http.ResponseWriter, *http.Request){},
-		logger:   log.New(&logger{t}, "", log.LstdFlags),
+	sD := ServerDelegateBase{
+		Addr:     ":12345",
+		Name:     "server",
+		CertFile: "server.crt",
+		KeyFile:  "server.key",
+		Mux:      map[string]func(http.ResponseWriter, *http.Request){},
+		Logger:   log.New(&logger{t}, "", log.LstdFlags),
+		Conn:     map[string]Connection{},
 	}
 	if err := s.Init(&sD); err != nil {
 		t.Fatal(err)
@@ -65,18 +67,13 @@ func newServer(t *testing.T) {
 		s.Stop()
 		<-time.After(1 * time.Second)
 	}()
-	<-time.After(10 * time.Minute)
+	<-time.After(1 * time.Minute)
 }
 
 func newConn(t *testing.T, name string) {
 	c := &Client{}
-	cD := clientDelegate{
-		name:     name,
-		addr:     "127.0.0.1:12345",
-		certFile: "server.crt",
-		logger:   log.New(&logger{t}, "", log.LstdFlags),
-	}
-	if err := c.Init(&cD); err != nil {
+	cD := NewClientDelegate(name, "127.0.0.1:12345", "server.crt", log.New(&logger{t}, "", log.LstdFlags))
+	if err := c.Init(cD); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Connect(); err != nil {

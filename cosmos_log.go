@@ -66,7 +66,7 @@ func (c *CosmosSelf) onLogPanic(mail *Mail, trace string) {
 }
 
 func (c *CosmosSelf) onLogStop(killMail, remainMails *Mail, num uint32) {
-	for curMail := remainMails; curMail != nil; curMail = remainMails.next {
+	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.onLogMessage(curMail)
 	}
 }
@@ -103,7 +103,6 @@ func (c *CosmosSelf) pushCosmosLog(level LogLevel, msg string) {
 	lm.Message = msg
 	m := NewMail(defaultLogMailId, lm)
 	if ok := c.log.PushTail(m); !ok {
-		// todo
 		log.Println("Cosmos Log Mail failed", level, msg)
 	}
 }

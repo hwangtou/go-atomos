@@ -6,22 +6,19 @@ import (
 	"github.com/hwangtou/go-atomos/examples/hello_world/api"
 )
 
-var runnable atomos.CosmosRunnable
+var runnableA atomos.CosmosRunnable
 
 func init()  {
-	runnable.SetScript(Script)
+	runnableA.SetScript(ScriptA)
 }
 
-func Script(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
-	startScript(cosmos, mainId)
-}
-
-func startScript(cosmos *atomos.CosmosSelf, mainId atomos.MainId) {
+func ScriptA(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
 	greeterId, err := api.SpawnGreeter(cosmos.Local(), "a", nil)
 	if err != nil {
 		panic(err)
 	}
 	defer func() {
+		fmt.Println("script exit")
 		if err := greeterId.Kill(mainId); err != nil {
 		}
 	}()
@@ -29,9 +26,8 @@ func startScript(cosmos *atomos.CosmosSelf, mainId atomos.MainId) {
 	if err != nil {
 		panic(err)
 	} else {
-		//// Try to make a crash
-		//fmt.Println(hello.Message)
 		// todo: use mainId to log.
-		fmt.Printf("%v\n", hello)
+		fmt.Println("script", hello)
 	}
+	<-killNoticeChannel
 }

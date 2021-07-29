@@ -7,7 +7,10 @@ import (
 )
 
 func init() {
-	runnable.AddElement(api.GetGreeterDefine(&helloElement{}))
+	runnableA.AddElementImplementation(api.GetGreeterImplement(&helloElement{}))
+	runnableA.AddElementInterface(api.GetGreeterInterface(&helloElement{}))
+	runnableB.AddElementImplementation(api.GetGreeterImplement(&helloElement{}))
+	runnableB.AddElementInterface(api.GetGreeterInterface(&helloElement{}))
 }
 
 type helloElement struct {
@@ -52,5 +55,5 @@ func (h *helloAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask
 
 func (h *helloAtom) SayHello(from atomos.Id, in *api.HelloRequest) (*api.HelloReply, error) {
 	h.self.Log().Info("SayHello")
-	return nil, nil
+	return &api.HelloReply{ Message: "Ok" }, nil
 }

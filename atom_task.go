@@ -273,7 +273,7 @@ func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
 	if fnRuntime == nil {
 		return "", ErrAtomAddTaskNotFunc
 	}
-	// Get func name
+	// Get func nodeName
 	fnRawName := fnRuntime.Name()
 	fnName := getTaskFnName(fnRawName)
 	fnRunes := []rune(fnName)
@@ -420,7 +420,7 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	}
 	method := reflect.ValueOf(at.instance).MethodByName(am.name)
 	if !method.IsValid() {
-		at.log.Error("Method invalid, name=%s", am.name)
+		at.log.Error("Method invalid, nodeName=%s", am.name)
 		return
 	}
 	method.Call([]reflect.Value{
