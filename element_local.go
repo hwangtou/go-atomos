@@ -1,8 +1,11 @@
 package go_atomos
 
+// CHECKED!
+
 import (
-	"google.golang.org/protobuf/proto"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // 本地Element实现。
@@ -15,13 +18,13 @@ type ElementLocal struct {
 	// Reference to CosmosSelf.
 	cosmos *CosmosSelf
 
-	// 当前ElementDefine的引用。
-	// Reference to current in use ElementInterface.
+	// 当前ElementImplementation的引用。
+	// Reference to current in use ElementImplementation.
 	current *ElementImplementation
 
-	// 所有添加过的不同版本的ElementDefine的容器。
-	// Container of all added versions of ElementInterface.
-	define map[uint64]*ElementImplementation
+	// 所有添加过的不同版本的ElementImplementation的容器。
+	// Container of all added versions of ElementImplementation.
+	implements map[uint64]*ElementImplementation
 
 	// 该Element所有Atom的容器。
 	// Container of all atoms.
@@ -33,26 +36,26 @@ type ElementLocal struct {
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(cosmosSelf *CosmosSelf, define *ElementImplementation) (*ElementLocal, error) {
+func newElementLocal(cosmosSelf *CosmosSelf, define *ElementImplementation) *ElementLocal {
 	elem := &ElementLocal{}
 	elem.cosmos = cosmosSelf
 	elem.current = define
-	elem.define = map[uint64]*ElementImplementation{
-		define.ElementInterface.Config.Version: define,
+	elem.implements = map[uint64]*ElementImplementation{
+		define.Interface.Config.Version: define,
 	}
-	elem.atoms = make(map[string]*AtomCore, define.ElementInterface.Config.AtomInitNum)
-	return elem, nil
+	elem.atoms = make(map[string]*AtomCore, define.Interface.Config.AtomInitNum)
+	return elem
 }
 
-// 重载Element，需要指定一个版本的ElementDefine。
-// Reload element, specific version of ElementInterface is needed.
+// 重载Element，需要指定一个版本的ElementImplementation。
+// Reload element, specific version of ElementImplementation is needed.
 func (e *ElementLocal) reload(newDefine *ElementImplementation) error {
 	e.current = newDefine
-	e.define[newDefine.ElementInterface.Config.Version] = newDefine
-	for _, atom := range e.atoms {
-		err := atom.pushReloadMail(newDefine.ElementInterface.Config.Version)
+	e.implements[newDefine.Interface.Config.Version] = newDefine
+	for name, atom := range e.atoms {
+		err := atom.pushReloadMail(newDefine.Interface.Config.Version)
 		if err != nil {
-			// TODO
+			e.cosmos.logError("ElementLocal.reload: Push reload failed, name=%s,err=%v", name, err)
 		}
 	}
 	return nil
@@ -62,6 +65,7 @@ func (e *ElementLocal) reload(newDefine *ElementImplementation) error {
 func (e *ElementLocal) load() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
+
 	e.loaded = true
 	return nil
 }
@@ -69,30 +73,49 @@ func (e *ElementLocal) load() error {
 func (e *ElementLocal) unload() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
+
 	e.loaded = false
+	wg := sync.WaitGroup{}
 	for atomName, atom := range e.atoms {
-		if atom.getState() != AtomHalt {
-			// todo: Exit and store and tell user.
-		}
-		delete(e.atoms, atomName)
+		go func(atomName string, atom *AtomCore) {
+			wg.Add(1)
+			e.cosmos.logInfo("ElementLocal.unload: Kill atom, name=%s", atomName)
+			err := atom.Kill(e.cosmos.local.mainAtom)
+			if err != nil {
+				e.cosmos.logError("ElementLocal.unload: Kill atom error, name=%s,err=%v", atomName, err)
+			}
+			wg.Done()
+		}(atomName, atom)
 	}
+	wg.Wait()
+
 	e.cosmos = nil
-	e.define = nil
+	e.implements = nil
 	return nil
 }
 
 // Local implementations of Element type.
 
 func (e *ElementLocal) GetName() string {
-	return e.current.ElementInterface.Config.Name
+	return e.current.Interface.Config.Name
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {
-	return e.current.ElementInterface.AtomIdConstructor(e.cosmos.local, name)
+	e.mutex.RLock()
+	if !e.loaded {
+		e.mutex.RUnlock()
+		return nil, ErrElementNotLoaded
+	}
+	a, has := e.atoms[name]
+	e.mutex.RUnlock()
+	if !has {
+		return nil, ErrAtomNotFound
+	}
+	return e.implements[a.version].Interface.AtomIdConstructor(a), nil
 }
 
 func (e *ElementLocal) SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error) {
-	inst := e.current.AtomConstructor()
+	inst := e.current.Developer.AtomConstructor()
 	// Alloc an atom and try setting.
 	a := allocAtom()
 	initAtom(a, e, atomName, inst)
@@ -144,7 +167,6 @@ func (e *ElementLocal) KillAtom(fromId, toId Id) error {
 
 // Internal
 
-// NOTICE: No concurrency of element.
 func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, error) {
 	initMailBox(a)
 	a.mailbox.Start()
@@ -164,24 +186,10 @@ func (e *ElementLocal) getMessageHandler(name string, version uint64) MessageHan
 		e.mutex.RUnlock()
 		return nil
 	}
-	c, has := e.define[version].AtomHandlers[name]
+	c, has := e.implements[version].AtomHandlers[name]
 	e.mutex.RUnlock()
 	if !has {
 		return nil
 	}
 	return c
-}
-
-func (e *ElementLocal) getAtomId(name string) (Id, error) {
-	e.mutex.RLock()
-	if !e.loaded {
-		e.mutex.RUnlock()
-		return nil, ErrElementNotLoaded
-	}
-	a, has := e.atoms[name]
-	e.mutex.RUnlock()
-	if !has {
-		return nil, ErrAtomNotFound
-	}
-	return a, nil
 }

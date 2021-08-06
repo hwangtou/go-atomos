@@ -9,7 +9,6 @@ import (
 
 var (
 	ErrMailBoxClosed = errors.New("MailBox: Closed")
-	ErrMailBoxPanic  = errors.New("MailBox: Panic")
 )
 
 // Mail

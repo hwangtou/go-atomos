@@ -1,10 +1,13 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"fmt"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Cosmos的Log接口。
@@ -94,7 +97,6 @@ func (c *CosmosSelf) logging(lm *LogMail) {
 	}
 }
 
-// TODO: Log optimize.
 func (c *CosmosSelf) pushCosmosLog(level LogLevel, msg string) {
 	lm := logMailsPool.Get().(*LogMail)
 	lm.Id = nil

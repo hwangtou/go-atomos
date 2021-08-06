@@ -1,51 +1,65 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"errors"
-	"google.golang.org/protobuf/proto"
 	"sync"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
-// TODO: 远程Cosmos管理助手，在未来版本实现。
-// TODO: Remote Cosmos Helper.
-
+// 远程Element实现。
+// Implementation of remote Element.
 type ElementRemote struct {
+	// Lock.
 	sync.RWMutex
-	*ElementInterface
-	cosmos   *cosmosWatchRemote
-	name     string
-	version  uint64
+
+	// cosmosWatchRemote引用。
+	// Reference to cosmosWatchRemote.
+	cosmos *cosmosWatchRemote
+
+	// 当前ElementInterface的引用。
+	// Reference to current in use ElementInterface.
+	elemInter *ElementInterface
+
+	// 该Element所有Id的缓存容器。
+	// Container of all cached Id.
 	cachedId map[string]*atomIdRemote
 }
 
+// Remote implementations of Element type.
+
 func (e *ElementRemote) GetName() string {
-	return e.name
+	return e.elemInter.Config.Name
 }
 
 func (e *ElementRemote) GetAtomId(name string) (Id, error) {
-	return e.ElementInterface.AtomIdConstructor(e.cosmos, name)
-}
-
-func (e *ElementRemote) getAtomId(name string) (Id, error) {
 	e.RLock()
 	id, has := e.cachedId[name]
 	e.RUnlock()
 	if !has {
 		req := &CosmosRemoteGetAtomIdReq{
-			Element: e.name,
+			Element: e.elemInter.Config.Name,
 			Name:    name,
 		}
 		resp := &CosmosRemoteGetAtomIdResp{}
 		reqBuf, err := proto.Marshal(req)
 		if err != nil {
-			// TODO
+			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Protobuf marshal error, req=%+v,err=%v",
+				req, err)
 			return nil, err
 		}
-		respBuf, err := e.cosmos.request("atom_id", reqBuf)
-		err = proto.Unmarshal(respBuf, resp)
+		respBuf, err := e.cosmos.request(RemoteUriAtomId, reqBuf)
 		if err != nil {
-			// TODO
+			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Request error, req=%+v,err=%v",
+				req, err)
+			return nil, err
+		}
+		if err = proto.Unmarshal(respBuf, resp); err != nil {
+			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Protobuf unmarshal error, req=%+v,err=%v",
+				req, err)
 			return nil, err
 		}
 		if !resp.Has {
@@ -55,13 +69,14 @@ func (e *ElementRemote) getAtomId(name string) (Id, error) {
 			cosmosNode: e.cosmos,
 			element:    e,
 			name:       name,
-			version:    e.version,
+			version:    e.elemInter.Config.Version,
+			created:    time.Now(),
 		}
 		e.Lock()
 		e.cachedId[name] = id
 		e.Unlock()
 	}
-	return id, nil
+	return e.elemInter.AtomIdConstructor(id), nil
 }
 
 func (e *ElementRemote) SpawnAtom(_ string, _ proto.Message) (*AtomCore, error) {
@@ -69,11 +84,10 @@ func (e *ElementRemote) SpawnAtom(_ string, _ proto.Message) (*AtomCore, error) 
 }
 
 func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
-	// TODO: Check remote is nil
 	req := &CosmosRemoteMessagingReq{
 		From: &AtomId{
 			Node:    fromId.Cosmos().GetNodeName(),
-			Element: "element", // TODO fromId.Element().GetName(),
+			Element: fromId.Element().GetName(),
 			Name:    fromId.Name(),
 		},
 		To: &AtomId{
@@ -87,13 +101,18 @@ func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args prot
 	resp := &CosmosRemoteMessagingResp{}
 	reqBuf, err := proto.Marshal(req)
 	if err != nil {
-		// TODO
+		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Protobuf marshal error, req=%+v,err=%v",
+			req, err)
 		return nil, err
 	}
-	respBuf, err := e.cosmos.request("atom_msg", reqBuf)
-	err = proto.Unmarshal(respBuf, resp)
+	respBuf, err := e.cosmos.request(RemoteUriAtomMessage, reqBuf)
 	if err != nil {
-		// TODO
+		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Request error, req=%+v,err=%v",
+			req, err)
+	}
+	if err = proto.Unmarshal(respBuf, resp); err != nil {
+		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Protobuf unmarshal error, req=%+v,err=%v",
+			req, err)
 		return nil, err
 	}
 	if resp.Error != "" {
@@ -104,11 +123,28 @@ func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args prot
 }
 
 func (e *ElementRemote) KillAtom(_, _ Id) error {
-	// TODO
 	return ErrAtomCannotKill
 }
 
-// Id
+func (e *ElementRemote) getOrCreateAtomId(from *AtomId) *atomIdRemote {
+	e.Lock()
+	defer e.Unlock()
+	id, has := e.cachedId[from.Name]
+	if has {
+		return id
+	}
+	id = &atomIdRemote{
+		cosmosNode: e.cosmos,
+		element:    e,
+		name:       from.Name,
+		version:    e.elemInter.Config.Version,
+		created:    time.Now(),
+	}
+	e.cachedId[from.Name] = id
+	return id
+}
+
+// Remote implementations of Id type.
 
 type atomIdRemote struct {
 	cosmosNode *cosmosWatchRemote

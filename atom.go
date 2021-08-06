@@ -1,10 +1,14 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"google.golang.org/protobuf/proto"
 )
 
-const debugMode = false
+//
+// Atom
+//
 
 // 开发者需要实现的Atom的接口定义。
 // Atom Interface Definition that developers have to implement.
@@ -51,6 +55,10 @@ type AtomStateless interface {
 // 暴露给Atom开发者使用的Atom接口。
 // Some methods of Atom interface that expose Atom developers to use.
 
+//
+// Id
+//
+
 // Id，是Atom的类似句柄的对象。
 // Id, an instance that similar to file descriptor of the Atom.
 type Id interface {
@@ -66,7 +74,7 @@ type Id interface {
 	// Name of the Atom.
 	Name() string
 
-	// ElementDefine的版本。
+	// ElementInterface的版本。
 	// Version of ElementInterface.
 	Version() uint64
 
@@ -79,9 +87,9 @@ type Id interface {
 	getLocalAtom() *AtomCore
 }
 
-type MainId interface {
-	Id
-}
+//
+// AtomSelf
+//
 
 // AtomSelf，是Atom内部可以访问的Atom资源的概念。
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。

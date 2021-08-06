@@ -1,4 +1,4 @@
-package main
+package element
 
 import (
 	atomos "github.com/hwangtou/go-atomos"
@@ -6,33 +6,26 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func init() {
-	runnableA.AddElementImplementation(api.GetGreeterImplement(&helloElement{}))
-	runnableA.AddElementInterface(api.GetGreeterInterface(&helloElement{}))
-	runnableB.AddElementImplementation(api.GetGreeterImplement(&helloElement{}))
-	runnableB.AddElementInterface(api.GetGreeterInterface(&helloElement{}))
+type GreeterElement struct {
 }
 
-type helloElement struct {
-}
-
-func (h *helloElement) Check() error {
+func (h *GreeterElement) Check() error {
 	return nil
 }
 
-func (h *helloElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
+func (h *GreeterElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
 	return "Greeter", 1, atomos.LogLevel_Debug, 100
 }
 
-func (h *helloElement) AtomConstructor() atomos.Atom {
+func (h *GreeterElement) AtomConstructor() atomos.Atom {
 	return &helloAtom{}
 }
 
-func (h *helloElement) AtomSaver(id atomos.Id, stateful atomos.AtomStateful) error {
+func (h *GreeterElement) AtomSaver(id atomos.Id, stateful atomos.AtomStateful) error {
 	panic("implement me")
 }
 
-func (h *helloElement) AtomCanKill(id atomos.Id) bool {
+func (h *GreeterElement) AtomCanKill(id atomos.Id) bool {
 	// todo
 	return true
 }

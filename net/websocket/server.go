@@ -16,8 +16,9 @@ type Server struct {
 }
 
 const (
-	WatchSchema = "wss"
-	WatchUri    = "/watch"
+	WatchWsSchema  = "ws"
+	WatchWssSchema = "wss"
+	WatchUri       = "/watch"
 )
 
 var (
@@ -64,6 +65,9 @@ func (s *Server) Init(delegate ServerDelegate) (err error) {
 		TLSConfig: tlsConfig,
 		ErrorLog:  logger,
 	}
+	//if err := http2.ConfigureServer(s.server, &http2.Server{}); err != nil {
+	//	s.ServerDelegate.GetLogger().Printf("Server.Init: Configure http2 failed, err=%v", err)
+	//}
 	s.ServerDelegate = delegate
 	// Listen the local port.
 	s.listener, err = net.Listen("tcp", s.server.Addr)
@@ -74,16 +78,24 @@ func (s *Server) Init(delegate ServerDelegate) (err error) {
 }
 
 func (s *Server) Start() {
-	go s.server.ServeTLS(s.listener, "", "")
+	if s.server.TLSConfig != nil {
+		go s.server.ServeTLS(s.listener, "", "")
+	} else {
+		go s.server.Serve(s.listener)
+	}
 	s.ServerDelegate.Started()
 }
 
 func (s *Server) Stop() {
-	if err := s.listener.Close(); err != nil {
-		s.ServerDelegate.GetLogger().Printf("Server.Stop: Close listener failed, err=%v", err)
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			s.ServerDelegate.GetLogger().Printf("Server.Stop: Close listener failed, err=%v", err)
+		}
 	}
-	if err := s.server.Close(); err != nil {
-		s.ServerDelegate.GetLogger().Printf("Server.Stop: Close server failed, err=%v", err)
+	if s.server != nil {
+		if err := s.server.Close(); err != nil {
+			s.ServerDelegate.GetLogger().Printf("Server.Stop: Close server failed, err=%v", err)
+		}
 	}
 	s.ServerDelegate.Stopped()
 }
@@ -177,6 +189,7 @@ func (s *Server) acceptHeaderInfo(header http.Header) (string, error) {
 func (s *Server) acceptNewConnect(name string, sc *ServerConn) error {
 	sc.run()
 
+	s.ServerDelegate.GetLogger().Printf("ServerDelegate.acceptNewConnect")
 	if err := sc.ServerConnDelegate.Connected(); err != nil {
 		if err := sc.Stop(); err != nil {
 			s.ServerDelegate.GetLogger().Printf("Server: Stop accept error, err=%v", err)
@@ -192,12 +205,15 @@ func (s *Server) acceptReconnect(info string, sc *ServerConn, conn *websocket.Co
 	sc.runningMutex.Unlock()
 	if err := sc.Stop(); err != nil {
 		s.ServerDelegate.GetLogger().Printf("ServerDelegate: Accept reconnect stop old connect error, err=%v", err)
+	} else {
+		<-sc.reconnectCh
 	}
-	<-sc.reconnectCh
 
 	sc.conn = conn
 	sc.sender = make(chan *msg)
 	sc.run()
+
+	s.ServerDelegate.GetLogger().Printf("ServerDelegate.acceptReconnect")
 	if err := sc.ServerConnDelegate.Reconnected(); err != nil {
 		if err := sc.Stop(); err != nil {
 			s.ServerDelegate.GetLogger().Printf("ServerDelegate: Accept reconnect error, err=%v", err)

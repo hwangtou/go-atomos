@@ -6,14 +6,14 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/hwangtou/go-atomos/net/websocket"
-	"golang.org/x/net/http2"
-	"google.golang.org/protobuf/proto"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/hwangtou/go-atomos/net/websocket"
+	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -22,30 +22,16 @@ const (
 
 // Websocket Server
 
-type cosmosRemotesHelper struct {
-	self *CosmosSelf
-	// Server
-	server websocket.Server
-}
-
-func newCosmosRemoteHelper(s *CosmosSelf) *cosmosRemotesHelper {
-	return &cosmosRemotesHelper{
-		self:   s,
-		server: websocket.Server{},
-	}
-}
-
-type cosmosServerDelegate struct {
-	helper *cosmosRemotesHelper
-	*websocket.ServerDelegateBase
-}
-
 type cosmosServerConnDelegate struct {
 	websocket.ServerConnDelegate
 	remote *cosmosWatchRemote
 }
 
 func (c *cosmosServerConnDelegate) Connected() error {
+	return c.remote.Connected()
+}
+
+func (c *cosmosServerConnDelegate) Reconnected() error {
 	return c.remote.Connected()
 }
 
@@ -64,126 +50,6 @@ func (c *cosmosClientDelegate) Connected() error {
 
 func (c *cosmosClientDelegate) Receive(buf []byte) error {
 	return c.remote.Receive(buf)
-}
-
-// ServerDelegate Subclass
-
-func (h *cosmosServerDelegate) NewServerConn(name string, conn *websocket.ServerConn) *websocket.ServerConn {
-	conn.ServerConnDelegate = &cosmosServerConnDelegate{
-		ServerConnDelegate: conn.ServerConnDelegate,
-		remote: &cosmosWatchRemote{
-			name:         name,
-			helper:       h.helper,
-			elements:     map[string]*ElementRemote{},
-			initCh:       make(chan error, 1),
-			isServerConn: true,
-			ServerConn:   conn,
-		},
-	}
-	return conn
-}
-
-func (h *cosmosServerDelegate) Started() {
-}
-
-func (h *cosmosServerDelegate) Stopped() {
-	h.helper.self.logInfo("CosmosServer.Stopped: Stopping server, name=%s", h.helper.self.config.Node)
-	for name, conn := range h.ServerDelegateBase.Conn {
-		var err error
-		h.helper.self.logInfo("CosmosServer.Stopped: Stop conn, name=%s", name)
-		switch c := conn.(type) {
-		case *websocket.ServerConn:
-			err = c.Conn.Stop()
-		case *websocket.Client:
-			err = c.Conn.Stop()
-		}
-		if err != nil {
-			h.helper.self.logInfo("CosmosServer.Stopped: Stop conn, name=%s,err=%v", name, err)
-		}
-	}
-}
-
-func (h *cosmosRemotesHelper) init() error {
-	config := h.self.config
-	delegate := &cosmosServerDelegate{
-		helper: h,
-		ServerDelegateBase: &websocket.ServerDelegateBase{
-			Addr:     fmt.Sprintf(":%d", config.EnableRemoteServer.Port),
-			Name:     config.Node,
-			CertFile: config.EnableRemoteServer.CertPath,
-			KeyFile:  config.EnableRemoteServer.KeyPath,
-			Mux: map[string]func(http.ResponseWriter, *http.Request){
-				"/atom_id":  h.handleAtomId,
-				"/atom_msg": h.handleAtomMsg,
-				"/":         h.handle404,
-			},
-			Logger: log.New(h, "", 0),
-			Conn:   map[string]websocket.Connection{},
-		},
-	}
-	if err := h.server.Init(delegate); err != nil {
-		return err
-	}
-	h.server.Start()
-	return nil
-}
-
-func (h *cosmosRemotesHelper) close() {
-	h.server.Stop()
-}
-
-func (h *cosmosRemotesHelper) Write(l []byte) (int, error) {
-	var msg string
-	if len(l) > 0 {
-		msg = string(l[:len(l)-1])
-	}
-	h.self.pushCosmosLog(LogLevel_Info, msg)
-	return 0, nil
-}
-
-// Client
-
-func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr, certFile string) (*cosmosWatchRemote, error) {
-	h.server.ServerDelegate.Lock()
-	c, has := h.server.ServerDelegate.GetConn(name)
-	if !has {
-		r := &cosmosWatchRemote{
-			name:         name,
-			helper:       h,
-			elements:     map[string]*ElementRemote{},
-			initCh:       make(chan error, 1),
-			isServerConn: false,
-		}
-		// Connect
-		client := &websocket.Client{}
-		delegate := &cosmosClientDelegate{
-			remote:             r,
-			ClientDelegateBase: websocket.NewClientDelegate(name, addr, certFile, h.server.ServerDelegate.GetLogger()),
-		}
-		client.Init(delegate)
-		r.Client = client
-		h.server.ServerDelegate.SetConn(name, r)
-		h.server.ServerDelegate.Unlock()
-		// Try connect if offline
-		if err := client.Connect(); err != nil {
-			h.server.ServerDelegate.GetLogger().Printf("cosmosRemotesHelper.getOrConnectRemote: Connect failed, err=%v", err)
-			return nil, err
-		}
-		return r, nil
-	} else {
-		h.server.ServerDelegate.Unlock()
-		return c.(*cosmosWatchRemote), nil
-	}
-}
-
-func (h *cosmosRemotesHelper) getRemote(name string) *cosmosWatchRemote {
-	h.server.ServerDelegate.Lock()
-	defer h.server.ServerDelegate.Unlock()
-	c, has := h.server.ServerDelegate.GetConn(name)
-	if !has {
-		return nil
-	}
-	return c.(*cosmosWatchRemote)
 }
 
 // Http Handlers.
@@ -230,16 +96,19 @@ func (h *cosmosRemotesHelper) handleAtomId(writer http.ResponseWriter, request *
 // Handle message connections.
 func (h *cosmosRemotesHelper) handleAtomMsg(writer http.ResponseWriter, request *http.Request) {
 	h.server.ServerDelegate.GetLogger().Printf("handleAtomMsg")
+	// Decode request message.
 	defer request.Body.Close()
 	body, err := ioutil.ReadAll(request.Body)
 	if err != nil {
-		// TODO
+		h.self.logError("cosmosRemotesHelper.handleAtomMsg: Cannot read request, body=%v,err=%v",
+			request.Body, err)
 		return
 	}
 	req := &CosmosRemoteMessagingReq{}
 	resp := &CosmosRemoteMessagingResp{}
 	if err = proto.Unmarshal(body, req); err != nil {
-		// TODO
+		h.self.logError("cosmosRemotesHelper.handleAtomMsg: Cannot unmarshal request, body=%v,err=%v",
+			body, err)
 		return
 	}
 	arg, err := req.Args.UnmarshalNew()
@@ -247,19 +116,16 @@ func (h *cosmosRemotesHelper) handleAtomMsg(writer http.ResponseWriter, request 
 		// TODO
 		return
 	}
+	// Get to atom.
 	element, has := h.self.local.elements[req.To.Element]
 	if has {
 		a, has := element.atoms[req.To.Name]
 		if has {
+			// Got to atom.
 			resp.Has = true
-			// TODO: Get from id
-			fromId := &atomIdRemote{
-				cosmosNode: nil,
-				element:    nil,
-				name:       "",
-				version:    0,
-				created:    time.Time{},
-			}
+			// Get from atom, create if not exists.
+			fromId := h.getFromId(req.From)
+			// Messaging to atom.
 			reply, err := h.self.local.MessageAtom(fromId, a, req.Message, arg)
 			resp.Reply = MessageToAny(reply)
 			if err != nil {
@@ -277,6 +143,18 @@ func (h *cosmosRemotesHelper) handleAtomMsg(writer http.ResponseWriter, request 
 		// TODO
 		return
 	}
+}
+
+func (h *cosmosRemotesHelper) getFromId(from *AtomId) (id *atomIdRemote) {
+	remoteCosmos := h.self.remotes.getRemote(from.Node)
+	if remoteCosmos == nil {
+		return nil
+	}
+	remoteElement, err := remoteCosmos.getElement(from.Element)
+	if remoteElement == nil || err != nil {
+		return nil
+	}
+	return remoteElement.getOrCreateAtomId(from)
 }
 
 // Cosmos Watch Remote
@@ -314,19 +192,18 @@ func (r *cosmosWatchRemote) Receive(buf []byte) error {
 				return err
 			}
 		}
-		for name, elem := range msg.InitMessage.Config.Elements {
-			ei, has := r.helper.self.local.elementInterfaces[name]
+		for _, name := range msg.InitMessage.Config.Elements {
+			ei, has := r.helper.self.local.interfaces[name]
 			if !has {
 				r.helper.self.logFatal("cosmosRemote.watchConnReadAllInfo: Element not supported, element=%s", name)
 				continue
 			}
 			r.elements[name] = &ElementRemote{
-				ElementInterface: ei,
-				cosmos:           r,
-				name:             name,
-				version:          elem.Version,
-				cachedId:         map[string]*atomIdRemote{},
+				cosmos:    r,
+				elemInter: ei,
+				cachedId:  map[string]*atomIdRemote{},
 			}
+			r.helper.self.logInfo("cosmosRemote.watchConnReadAllInfo: Element added, element=%s", name)
 		}
 		r.initCh <- nil
 	default:
@@ -336,6 +213,7 @@ func (r *cosmosWatchRemote) Receive(buf []byte) error {
 }
 
 func (r *cosmosWatchRemote) Connected() error {
+	r.helper.self.logInfo("cosmosWatchRemote.Connected")
 	// Send local info.
 	buf, err := r.encodeInitMessage()
 	if err != nil {
@@ -355,21 +233,35 @@ func (r *cosmosWatchRemote) Connected() error {
 	select {
 	case err = <-r.initCh:
 		if err != nil {
+			r.helper.self.logInfo("cosmosWatchRemote.Connected: Init error, err=%v", err)
 			return err
 		}
+		r.helper.self.logInfo("cosmosWatchRemote.Connected: Init succeed")
 	case <-time.After(cosmosRemoteInitWait):
+		r.helper.self.logInfo("cosmosWatchRemote.Connected: Init timeout")
 		return errors.New("request timeout")
 	}
 
+	r.helper.self.logInfo("cosmosWatchRemote.Connected: Creating requester")
 	// Init http2 requester.
 	tlsConfig, err := r.GetTLSConfig()
 	if err != nil {
 		return err
 	}
-	r.requester = &http.Client{
-		Transport: &http2.Transport{
+	r.requester = &http.Client{}
+	if tlsConfig != nil {
+		r.requester.Transport = &http2.Transport{
 			TLSClientConfig: tlsConfig,
-		},
+		}
+	} else {
+		// TODO: If it's not using certification, request will send via http1.1.
+		r.requester.Transport = &http.Transport{}
+		//r.requester.Transport = &http2.Transport{
+		//	AllowHTTP: true,
+		//	DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+		//		return net.Dial(network, addr)
+		//	},
+		//}
 	}
 	return nil
 }
@@ -389,10 +281,10 @@ func (r *cosmosWatchRemote) Reconnected() error {
 // ClientDelegate
 
 func (r *cosmosWatchRemote) GetTLSConfig() (*tls.Config, error) {
-	certPath := r.helper.self.config.EnableRemoteServer.CertPath
-	if certPath == "" {
+	if r.helper.self.config.EnableCert == nil {
 		return nil, nil
 	}
+	certPath := r.helper.self.config.EnableCert.CertPath
 	caCert, err := ioutil.ReadFile(certPath)
 	if err != nil {
 		return nil, err
@@ -421,7 +313,7 @@ func (r *cosmosWatchRemote) getElement(name string) (*ElementRemote, error) {
 
 	elem, has := r.elements[name]
 	if !has {
-		err := fmt.Errorf(lCRGENotFound, name)
+		err := fmt.Errorf("cosmosRemote.getElement: Element not found, nodeName=%s", name)
 		r.helper.self.logFatal("%s", err.Error())
 		return nil, err
 	}
@@ -434,10 +326,10 @@ func (r *cosmosWatchRemote) setElement(name string, elem *ElementRemote) error {
 
 	if _, has := r.elements[name]; has {
 		// Update.
-		r.helper.self.logInfo(lCRSElementUpdate, name)
+		r.helper.self.logInfo("cosmosRemote.setElement: Update exists element, nodeName=%s", name)
 	} else {
 		// Add.
-		r.helper.self.logInfo(lCRSElementAdd, name)
+		r.helper.self.logInfo("cosmosRemote.setElement: Add element, nodeName=%s", name)
 	}
 	r.elements[name] = elem
 	return nil
@@ -450,12 +342,12 @@ func (r *cosmosWatchRemote) delElement(name string) error {
 	// Check exists.
 	_, has := r.elements[name]
 	if !has {
-		err := fmt.Errorf(lCRDElementNotFound, name)
+		err := fmt.Errorf("cosmosRemote.delElement: Element not found, nodeName=%s", name)
 		r.helper.self.logFatal("%s", err.Error())
 		return err
 	}
 	// Try unload and unset.
-	r.helper.self.logFatal(lCRDElementDel, name)
+	r.helper.self.logFatal("cosmosRemote.delElement: Delete element, nodeName=%s", name)
 	delete(r.elements, name)
 	return nil
 }
@@ -482,7 +374,7 @@ func (r *cosmosWatchRemote) GetAtomId(elemName, atomName string) (Id, error) {
 
 // 暂时不支持从remote启动一个Atom。
 func (r *cosmosWatchRemote) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
-	return nil, errors.New(lCRSAFailed)
+	return nil, errors.New("cosmosRemote.SpawnAtom: Cannot spawn remote atom")
 }
 
 func (r *cosmosWatchRemote) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
@@ -509,18 +401,15 @@ func (r *cosmosWatchRemote) encodeInitMessage() ([]byte, error) {
 		MessageType: CosmosWatchMessageType_Init,
 		InitMessage: &CosmosRemoteConnectInit{
 			Config: &CosmosLocalConfig{
-				EnableRemote: config.EnableRemoteServer != nil,
+				EnableRemote: config.EnableServer != nil,
 				NodeName:     config.Node,
-				Elements:     map[string]*ElementConfig{},
+				Elements:     make([]string, 0, len(r.helper.self.local.elements)),
 			},
 		},
 	}
 	if msg.InitMessage.Config.EnableRemote {
-		for name, elem := range r.helper.self.local.elements {
-			msg.InitMessage.Config.Elements[name] = &ElementConfig{
-				Name:    name,
-				Version: elem.current.ElementInterface.Config.Version,
-			}
+		for name := range r.helper.self.local.elements {
+			msg.InitMessage.Config.Elements = append(msg.InitMessage.Config.Elements, name)
 		}
 	}
 	buf, err := proto.Marshal(msg)
@@ -536,13 +425,18 @@ func (r *cosmosWatchRemote) encodeInitMessage() ([]byte, error) {
 func (r *cosmosWatchRemote) request(uri string, buf []byte) (body []byte, err error) {
 	reader := bytes.NewBuffer(buf)
 	// Connect.
-	var addr string
+	var schema, addr string
+	if r.helper.self.config.EnableCert != nil {
+		schema = "https://"
+	} else {
+		schema = "http://"
+	}
 	if r.isServerConn {
 		addr = r.ServerConnDelegate.GetAddr()
 	} else {
 		addr = r.ClientDelegate.GetAddr()
 	}
-	resp, err := r.requester.Post("https://"+addr+"/"+uri, "application/protobuf", reader)
+	resp, err := r.requester.Post(schema+addr+uri, "application/protobuf", reader)
 	if err != nil {
 		return nil, err
 	}

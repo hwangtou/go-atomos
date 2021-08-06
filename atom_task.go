@@ -1,14 +1,17 @@
 package go_atomos
 
+// CHECKED!
+
 import (
-	"google.golang.org/protobuf/proto"
-	"log"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	"google.golang.org/protobuf/proto"
 )
 
 //
@@ -95,7 +98,7 @@ type CancelledTask struct {
 type atomTasksManager struct {
 	// AtomCore实例的引用。
 	// Reference to AtomCore instance.
-	*AtomCore
+	atom *AtomCore
 
 	// 被用于ID自增和任务增删的锁。
 	// A mutex-lock uses for id increment and tasks management.
@@ -119,7 +122,7 @@ type atomTasksManager struct {
 // Initialization of atomTasksManager.
 // No New and Delete function because atomTasksManager is struct inner AtomCore.
 func initAtomTasksManager(at *atomTasksManager, a *AtomCore) {
-	at.AtomCore = a
+	at.atom = a
 	at.curId = 0
 	at.tasks = make(map[uint64]*atomTask, defaultTasksSize)
 }
@@ -132,7 +135,7 @@ func initAtomTasksManager(at *atomTasksManager, a *AtomCore) {
 // or not.
 func releaseAtomTask(at *atomTasksManager) {
 	at.tasks = nil
-	at.AtomCore = nil
+	at.atom = nil
 }
 
 // 在Atom开始退出的时候上锁，以避免新的任务请求。
@@ -160,8 +163,8 @@ func (at *atomTasksManager) Add(fn interface{}, msg proto.Message) (id uint64, e
 	defer at.mutex.Unlock()
 
 	// If AtomCore is nil, Atom has been stopped, add failed.
-	if at.AtomCore == nil {
-		return 0, ErrAtomIsNotSpawning
+	if at.atom == nil {
+		return 0, ErrAtomIsNotRunning
 	}
 
 	// Id increment.
@@ -171,8 +174,8 @@ func (at *atomTasksManager) Add(fn interface{}, msg proto.Message) (id uint64, e
 	am := allocAtomMail()
 	initTaskMail(am, at.curId, fnName, msg)
 	// Append to the tail of Atom mailbox immediately.
-	if ok := at.mailbox.PushTail(am.Mail); !ok {
-		return 0, ErrAtomIsNotSpawning
+	if ok := at.atom.mailbox.PushTail(am.Mail); !ok {
+		return 0, ErrAtomIsNotRunning
 	}
 	return at.curId, nil
 }
@@ -190,8 +193,8 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 	defer at.mutex.Unlock()
 
 	// If AtomCore is nil, Atom has been stopped, add failed.
-	if at.AtomCore == nil {
-		return 0, ErrAtomIsNotSpawning
+	if at.atom == nil {
+		return 0, ErrAtomIsNotRunning
 	}
 
 	// Increment
@@ -227,10 +230,10 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 			if ta, has := at.tasks[it.id]; has {
 				delete(at.tasks, it.id)
 				deallocAtomMail(ta.mail)
-				// TODO: FRAMEWORK LEVEL ERROR
+				// FRAMEWORK LEVEL ERROR
 				// Because it should not happen, once a TimerTask has been cancelled,
 				// it will be removed, thread-safely, immediately.
-				panic("ErrTimerCancelled")
+				at.atom.element.cosmos.logFatal("atomTasks.AddAfter: FRAMEWORK ERROR, timer cancel")
 			}
 			return
 
@@ -241,15 +244,15 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 		case TaskScheduling:
 			it.timerState = TaskMailing
 			delete(at.tasks, it.id)
-			if ok := at.mailbox.PushHead(am.Mail); !ok {
-				log.Println(ErrAtomIsNotSpawning)
+			if ok := at.atom.mailbox.PushHead(am.Mail); !ok {
+				at.atom.element.cosmos.logFatal("atomTasks.AddAfter: atom is not running")
 			}
 
-		// TODO: FRAMEWORK LEVEL ERROR
+		// FRAMEWORK LEVEL ERROR
 		// Because it should not happen, once a TimerTask has been executed,
 		// it will be removed, thread-safely, immediately.
 		default:
-			panic("ErrTimerExecuting") // todo
+			at.atom.element.cosmos.logFatal("atomTasks.AddAfter: FRAMEWORK ERROR, timer executing")
 		}
 	})
 	return curId, nil
@@ -258,35 +261,39 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 // 用于Add和AddAfter的检查任务合法性逻辑。
 // Uses in Add and AddAfter for checking task legal.
 func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
-	// Check func type
+	// Check func type.
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
 	if fnValue.Kind() != reflect.Func {
-		return "", ErrAtomAddTaskNotFunc
+		return "", fmt.Errorf("atomTasks: Add invalid function, type=%T,fn=%+v", fn, fn)
 	}
-	if fnType.NumIn() != 1 {
-		return "", ErrAtomAddTaskIllegalArg
-	}
-	argType := fnType.In(0)
-	msgType := reflect.TypeOf(msg)
+	fnNumIn := fnType.NumIn()
 	fnRuntime := runtime.FuncForPC(fnValue.Pointer())
 	if fnRuntime == nil {
-		return "", ErrAtomAddTaskNotFunc
+		return "", fmt.Errorf("atomTasks: Add invalid function runtime, type=%T,fn=%+v", fn, fn)
 	}
-	// Get func nodeName
+	// Get func name.
 	fnRawName := fnRuntime.Name()
 	fnName := getTaskFnName(fnRawName)
 	fnRunes := []rune(fnName)
 	if len(fnRunes) == 0 || unicode.IsLower(fnRunes[0]) {
-		return "", ErrAtomAddTaskNotFunc
+		return "", fmt.Errorf("atomTasks: Add invalid function name, type=%T,fn=%+v", fn, fn)
 	}
-	if argType.String() == msgType.String() {
+	switch fnNumIn {
+	case 0:
 		return fnName, nil
+	case 1:
+		argType := fnType.In(0)
+		msgType := reflect.TypeOf(msg)
+		if argType.String() == msgType.String() {
+			return fnName, nil
+		}
+		if msgType.AssignableTo(argType) {
+			return fnName, nil
+		}
+		return "", fmt.Errorf("atomTasks: Add illegal message, fn=%s,msg=%+v", fnName, msg)
 	}
-	if msgType.AssignableTo(argType) {
-		return fnName, nil
-	}
-	return "", ErrAtomAddTaskIllegalMsg
+	return "", fmt.Errorf("atomTasks: Add illegal function, fn=%v", fn)
 }
 
 func getTaskFnName(fnRawName string) string {
@@ -333,7 +340,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 	if t == nil {
 		ta, has := at.tasks[id]
 		if !has {
-			return cancel, ErrAtomTaskNotFound
+			return cancel, fmt.Errorf("atomTasks: Cancel task that not exists")
 		}
 		t = ta
 	}
@@ -347,10 +354,11 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 		case TaskCancelled:
 			delete(at.tasks, t.id)
 			deallocAtomMail(t.mail)
-			// TODO: FRAMEWORK LEVEL ERROR
+			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
-			panic("ErrTimerCancelled")
-			return cancel, ErrAtomTaskCannotDelete
+			err = fmt.Errorf("cannot delete timer that not exists")
+			at.atom.element.cosmos.logFatal("atomTasks.cancelTask: FRAMEWORK ERROR, err=%v", err)
+			return cancel, err
 
 		// 排程的任务准备执行。
 		// 这段代码符合正常功能的期待。
@@ -362,10 +370,10 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 			delete(at.tasks, t.id)
 			deallocAtomMail(t.mail)
 			if !ok {
-				log.Println("Edge")
-				// Might only happen on the edge of scheduled time reached,
+				// Might only happen on the edge of scheduled time has reached,
 				// the period between time.AfterFunc has execute the function,
 				// and the function still have acquired the mutex.
+				at.atom.element.cosmos.logInfo("atomTasks.cancelTask: Cancel on the edge")
 			}
 			cancel.Id = t.mail.id
 			cancel.Name = t.mail.name
@@ -375,23 +383,26 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 		// 定时任务已经在Atom mailbox中。
 		// Timer task is already in Atom mailbox.
 		case TaskMailing:
-			m := at.mailbox.PopById(t.id)
-			log.Println("Cancelling Executing Task")
+			m := at.atom.mailbox.PopById(t.id)
 			if m == nil {
-				return cancel, ErrAtomTaskCannotDelete
+				err = fmt.Errorf("cannot delete timer that not exists")
+				return cancel, err
 			}
 			cancel.Id = t.mail.id
 			cancel.Name = t.mail.name
 			cancel.Arg = t.mail.arg
 			return cancel, nil
 		default:
-			// TODO: FRAMEWORK LEVEL ERROR
-			panic("FRAMEWORK LEVEL ERROR")
+			// FRAMEWORK LEVEL ERROR
+			at.atom.element.cosmos.logFatal("atomTasks.cancelTask: FRAMEWORK ERROR, unknown timer state, state=%v",
+				t.timerState)
+			return cancel, fmt.Errorf("unknown timer state")
 		}
 	} else {
-		m := at.mailbox.PopById(t.id)
+		m := at.atom.mailbox.PopById(t.id)
 		if m == nil {
-			return cancel, ErrAtomTaskCannotDelete
+			err = fmt.Errorf("cannot delete timer that not exists")
+			return cancel, err
 		}
 		cancel.Id = t.mail.id
 		cancel.Name = t.mail.name
@@ -403,24 +414,24 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 // Atom正式开始处理任务。
 // Atom is beginning to handle a task.
 func (at *atomTasksManager) handleTask(am *atomMail) {
-	at.setBusy()
+	at.atom.setBusy()
 	defer func() {
 		// 只有任务执行完毕，Atom状态仍然为AtomBusy时，才会把状态设置为AtomWaiting，因为执行的任务可能会把Atom终止。
 		// Only after the task executed and atom state is still AtomBusy, will this "setWaiting" method call,
 		// because the task may stop the Atom.
-		if at.getState() == AtomBusy {
-			at.setWaiting()
+		if at.atom.getState() == AtomBusy {
+			at.atom.setWaiting()
 		}
 	}()
 	defer deallocAtomMail(am)
 	// 用反射来执行任务函数。
 	// Executing task method using reflect.
-	instType := reflect.ValueOf(at.instance).Type()
+	instType := reflect.ValueOf(at.atom.instance).Type()
 	for i := 0; i < instType.NumMethod(); i++ {
 	}
-	method := reflect.ValueOf(at.instance).MethodByName(am.name)
+	method := reflect.ValueOf(at.atom.instance).MethodByName(am.name)
 	if !method.IsValid() {
-		at.log.Error("Method invalid, nodeName=%s", am.name)
+		at.atom.log.Error("atomTasks.handleTask: Method invalid, name=%s", am.name)
 		return
 	}
 	method.Call([]reflect.Value{

@@ -1,10 +1,13 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"fmt"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"sync"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const defaultLogMailId = 0
@@ -13,7 +16,7 @@ const defaultLogMailId = 0
 // Atom Logs Manager
 
 type atomLogsManager struct {
-	*AtomCore
+	atom *AtomCore
 }
 
 // 初始化atomLogsManager的内容。
@@ -22,13 +25,12 @@ type atomLogsManager struct {
 // Initialization of atomLogsManager.
 // No New and Delete function because atomLogsManager is struct inner AtomCore.
 func initAtomLog(l *atomLogsManager, a *AtomCore) {
-	l.AtomCore = a
+	l.atom = a
 }
 
 // 释放atomTasksManager对象的内容。
 // Releasing atomTasksManager.
-func releaseAtomLog(l *atomLogsManager) {
-	l.AtomCore = nil
+func releaseAtomLog(_ *atomLogsManager) {
 }
 
 // 把Log以邮件的方式发送到Cosmos的Log实例处理。
@@ -40,9 +42,8 @@ func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	lm.Level = level
 	lm.Message = msg
 	m := NewMail(defaultLogMailId, lm)
-	if ok := l.AtomCore.element.cosmos.log.PushTail(m); !ok {
-		// todo
-		log.Println("Atom Log Mail failed", id, level, msg)
+	if ok := l.atom.element.cosmos.log.PushTail(m); !ok {
+		log.Printf("atomLogs: Add log mail failed, id=%+v,level=%v,msg=%s", id, level, msg)
 	}
 }
 
@@ -58,36 +59,36 @@ var logMailsPool = sync.Pool{
 // Log functions in difference levels.
 
 func (l *atomLogsManager) Debug(format string, args ...interface{}) {
-	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Debug {
+	if l.atom.element.current.Interface.Config.LogLevel > LogLevel_Debug {
 		return
 	}
-	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Debug, fmt.Sprintf(format, args...))
+	l.pushAtomLog(l.atom.atomId, LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Info(format string, args ...interface{}) {
-	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Info {
+	if l.atom.element.current.Interface.Config.LogLevel > LogLevel_Info {
 		return
 	}
-	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Info, fmt.Sprintf(format, args...))
+	l.pushAtomLog(l.atom.atomId, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Warn(format string, args ...interface{}) {
-	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Warn {
+	if l.atom.element.current.Interface.Config.LogLevel > LogLevel_Warn {
 		return
 	}
-	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Warn, fmt.Sprintf(format, args...))
+	l.pushAtomLog(l.atom.atomId, LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Error(format string, args ...interface{}) {
-	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Error {
+	if l.atom.element.current.Interface.Config.LogLevel > LogLevel_Error {
 		return
 	}
-	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Error, fmt.Sprintf(format, args...))
+	l.pushAtomLog(l.atom.atomId, LogLevel_Error, fmt.Sprintf(format, args...))
 }
 
 func (l *atomLogsManager) Fatal(format string, args ...interface{}) {
-	if l.element.current.ElementInterface.Config.LogLevel > LogLevel_Fatal {
+	if l.atom.element.current.Interface.Config.LogLevel > LogLevel_Fatal {
 		return
 	}
-	l.pushAtomLog(l.AtomCore.atomId, LogLevel_Fatal, fmt.Sprintf(format, args...))
+	l.pushAtomLog(l.atom.atomId, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }

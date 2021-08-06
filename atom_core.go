@@ -1,10 +1,13 @@
 package go_atomos
 
+// CHECKED!
+
 import (
+	"errors"
 	"fmt"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Atom状态
@@ -34,6 +37,22 @@ const (
 	AtomStopping AtomState = 4
 )
 
+// Atom Error
+
+var (
+	ErrFromNotFound     = errors.New("atom fromId not found")
+	ErrAtomNotFound     = errors.New("atom not found")
+	ErrAtomExists       = errors.New("atom exists")
+	ErrAtomCannotSpawn  = errors.New("atom cannot spawn")
+	ErrAtomIsNotRunning = errors.New("atom is not running")
+	ErrAtomCannotKill   = errors.New("atom cannot be killed")
+
+	ErrAtomType             = errors.New("atom type error")
+	ErrAtomMessageAtomType  = errors.New("atom message atom type error")
+	ErrAtomMessageArgType   = errors.New("atom message arg type error")
+	ErrAtomMessageReplyType = errors.New("atom message reply type error")
+)
+
 // Actual Atom
 // The implementations of a local Atom type.
 
@@ -47,7 +66,7 @@ type AtomCore struct {
 	// The reference only be set when atom load and cosmos upgrade.
 	element *ElementLocal
 
-	// ElementDefine的版本
+	// ElementInterface的版本
 	// Version of ElementInterface.
 	version uint64
 
@@ -90,6 +109,9 @@ var atomsPool = sync.Pool{
 	},
 }
 
+//
+// Implementation of Id
+//
 // Id，相当于Atom的句柄的概念。
 // 通过Id，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
 // 直接用AtomCore继承Id，因此本地的Id直接使用AtomCore的引用即可。
@@ -115,15 +137,10 @@ func (a *AtomCore) Version() uint64 {
 	return a.version
 }
 
-func (a *AtomCore) Command(message proto.Message) (proto.Message, error) {
-	// TODO
-	panic("Implement")
-}
-
 // 从另一个AtomCore，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomCore or from Main Script.
 func (a *AtomCore) Kill(from Id) error {
-	if ok := a.element.define[a.version].AtomCanKill(from); !ok {
+	if ok := a.element.implements[a.version].Developer.AtomCanKill(from); !ok {
 		return ErrAtomCannotKill
 	}
 	return a.pushKillMail(from)
@@ -133,6 +150,9 @@ func (a *AtomCore) getLocalAtom() *AtomCore {
 	return a
 }
 
+//
+// Implementation of AtomSelf
+//
 // AtomSelf，是Atom内部可以访问的Atom资源的概念。
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
@@ -146,17 +166,12 @@ func (a *AtomCore) CosmosSelf() *CosmosSelf {
 
 // Atom kill itself from inner
 func (a *AtomCore) KillSelf() {
-	if err := a.pushKillMail(nil); err != nil {
-		lm := logMailsPool.Get().(*LogMail)
-		lm.Id = a.atomId
-		lm.Time = timestamppb.Now()
-		lm.Level = LogLevel_Error
-		lm.Message = fmt.Sprintf("KillSelf failed, err=%s", err)
-		m := NewMail(defaultLogMailId, lm)
-		a.element.cosmos.log.PushTail(m)
-	} else {
-		a.log.Info("KillSelf sent")
+	id, elem := a.atomId, a.element
+	if err := a.pushKillMail(a); err != nil {
+		elem.cosmos.logInfo("AtomCore: Kill self error, id=%+v,err=%s", id, err)
+		return
 	}
+	elem.cosmos.logInfo("AtomCore: Kill self, id=%+v", id)
 }
 
 func (a *AtomCore) Log() *atomLogsManager {
@@ -180,7 +195,7 @@ func allocAtom() *AtomCore {
 
 func initAtom(a *AtomCore, es *ElementLocal, name string, inst Atom) {
 	a.element = es
-	a.version = es.current.ElementInterface.Config.Version
+	a.version = es.current.Interface.Config.Version
 	a.name = name
 	a.instance = inst
 	a.state = AtomHalt
@@ -207,7 +222,7 @@ func deallocAtom(a *AtomCore) {
 // TODO: Performance tracer.
 
 // 处理邮箱消息。
-// Handle mailbox message.
+// Handle mailbox messages.
 func (a *AtomCore) onReceive(mail *Mail) {
 	am := mail.Content.(*atomMail)
 	switch am.mailType {
@@ -223,36 +238,31 @@ func (a *AtomCore) onReceive(mail *Mail) {
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushReloadMail.
 	default:
-		lm := logMailsPool.Get().(*LogMail)
-		lm.Id = a.atomId
-		lm.Time = timestamppb.Now()
-		lm.Level = LogLevel_Fatal
-		lm.Message = fmt.Sprintf("Received unknown message type, type=%v", am.mailType)
-		m := NewMail(defaultLogMailId, lm)
-		a.element.cosmos.log.PushTail(m)
+		a.element.cosmos.logFatal("AtomCore.onReceive: Unknown message type, type=%v,mail=%+v", am.mailType, am)
 	}
 }
 
 // 处理邮箱消息时发生的异常。
-// Handle mailbox panic while processing Mail.
+// Handle mailbox panic while it is processing Mail.
 func (a *AtomCore) onPanic(mail *Mail, trace string) {
 	am := mail.Content.(*atomMail)
 	// Try to reply here, to prevent mail non-reply, and stub.
-	// TODO: Error instance bring more detail of panic.
+	errMsg := fmt.Errorf("AtomCore.onPanic: PANIC, name=%s,trace=%s", a.name, trace)
 	switch am.mailType {
 	case AtomMailMessage:
-		am.sendReply(nil, ErrMailBoxPanic)
-		// Mail dealloc in AtomCore.pushMessageMail.
+		am.sendReply(nil, errMsg)
+		// Mail then will be dealloc in AtomCore.pushMessageMail.
 	case AtomMailHalt:
-		am.sendReply(nil, ErrMailBoxPanic)
-		// Mail dealloc in AtomCore.pushKillMail.
+		am.sendReply(nil, errMsg)
+		// Mail then will be dealloc in AtomCore.pushKillMail.
 	case AtomMailReload:
-		am.sendReply(nil, ErrMailBoxPanic)
-		// Mail dealloc in AtomCore.pushReloadMail.
+		am.sendReply(nil, errMsg)
+		// Mail then will be dealloc in AtomCore.pushReloadMail.
 	}
 }
 
-// TODO: Think about Panic happens during stopping, the remaining mails might not be reply, the callers might stub.
+// 处理邮箱退出。
+// Handle mailbox stops.
 func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
@@ -272,8 +282,9 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
 			// Mail dealloc in AtomCore.pushMessageMail.
 		case AtomMailTask:
-			// TODO: Is it needed? Just for preventing new mails receive after cancelAllSchedulingTasks,
+			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 			// but it's impossible to add task after locking.
+			a.element.cosmos.logFatal("AtomCore.onStop: FRAMEWORK ERROR, some task mails have not been deleted yet.")
 			t, err := a.task.cancelTask(remainMails.id, nil)
 			if err != nil {
 				cancels[remainMails.id] = t
@@ -283,20 +294,18 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
 			// Mail dealloc in AtomCore.pushReloadMail.
 		default:
-			// TODO: This should not be executed.
-			lm := logMailsPool.Get().(*LogMail)
-			lm.Id = a.atomId
-			lm.Time = timestamppb.Now()
-			lm.Level = LogLevel_Fatal
-			lm.Message = fmt.Sprintf("Received unknown message type, type=%v", remainAtomMail.mailType)
-			m := NewMail(defaultLogMailId, lm)
-			a.element.cosmos.log.PushTail(m)
+			a.element.cosmos.logFatal("AtomCore.onStop: Unknown message type, type=%v,mail=%+v",
+				remainAtomMail.mailType, remainAtomMail)
 		}
 	}
+
 	// Handle Kill and Reply Kill.
 	err := a.handleKill(killAtomMail, cancels)
 	killAtomMail.sendReply(nil, err)
 	// Mail dealloc in Element.killingAtom
+	a.element.mutex.Lock()
+	delete(a.element.atoms, a.name)
+	a.element.mutex.Unlock()
 	releaseAtom(a)
 	deallocAtom(a)
 }
@@ -314,13 +323,14 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 	am := allocAtomMail()
 	initMessageMail(am, from, message, args)
 	if ok := a.mailbox.PushTail(am.Mail); !ok {
-		return reply, ErrAtomIsNotSpawning
+		return reply, ErrAtomIsNotRunning
 	}
 	replyInterface, err := am.waitReply()
 	deallocAtomMail(am)
 	reply, ok := replyInterface.(proto.Message)
 	if !ok {
-		return reply, ErrAtomReplyType
+		return reply, fmt.Errorf("AtomCore.pushMessageMail: Reply type error, message=%s,args=%+v,reply=%+v",
+			message, args, replyInterface)
 	}
 	return reply, err
 }
@@ -330,7 +340,7 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 	defer a.setWaiting()
 	handler := a.element.getMessageHandler(name, a.version)
 	if handler == nil {
-		return nil, ErrAtomMessageNotFound
+		return nil, fmt.Errorf("AtomCore.handleMessage: Handler not found, name=%s", name)
 	}
 	return handler(from, a.instance, in)
 }
@@ -341,7 +351,7 @@ func (a *AtomCore) pushKillMail(from Id) error {
 	am := allocAtomMail()
 	initKillMail(am, from)
 	if ok := a.mailbox.PushHead(am.Mail); !ok {
-		return ErrAtomIsNotSpawning
+		return ErrAtomIsNotRunning
 	}
 	_, err := am.waitReply()
 	deallocAtomMail(am)
@@ -354,8 +364,9 @@ func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]Cancell
 	a.setStopping()
 	a.instance.Halt(killAtomMail.from, cancels)
 	if inst, ok := a.instance.(AtomStateful); ok {
-		if err := a.element.define[a.version].AtomSaver(a, inst); err != nil {
-			// todo
+		if err := a.element.implements[a.version].Developer.AtomSaver(a, inst); err != nil {
+			a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v",
+				a.atomId, a.version, a.instance)
 			return err
 		}
 	}
@@ -370,13 +381,14 @@ func (a *AtomCore) pushReloadMail(version uint64) error {
 	am := allocAtomMail()
 	initReloadMail(am, version)
 	if ok := a.mailbox.PushHead(am.Mail); !ok {
-		return ErrAtomIsNotSpawning
+		return ErrAtomIsNotRunning
 	}
 	_, err := am.waitReply()
 	deallocAtomMail(am)
 	return err
 }
 
+// TODO: Test.
 // 注意：Reload伴随着整个Element的Reload，而且即使reload失败，但也不停止Atom的运行。
 // Notice: Atom reload goes with the Element reload, even an Atom reload failed, it doesn't stop Atom from running.
 func (a *AtomCore) handleReload(am *atomMail) error {
@@ -387,14 +399,14 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 	// Check if the Atom can be reloaded.
 	reloadableAtom, ok := a.instance.(AtomReloadable)
 	if !ok {
-		return ErrAtomNotReloadable
+		return errors.New("atom cannot be reloaded")
 	}
 
 	// 如果没有新的Element，就用旧的Element。
 	// Use old Element if there is no new Element.
-	reloadElementDefine, has := a.element.define[am.upgradeVersion]
+	reloadElementImplement, has := a.element.implements[am.upgradeVersion]
 	if !has {
-		return ErrElementUpgradeVersion
+		return errors.New("atom upgrade version invalid")
 	}
 	// 释放邮件。
 	// Dealloc Atom Mail.
@@ -414,7 +426,7 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 	reloadableAtom.WillReload()
 	// Restoring data and replace instance.
 	a.version = am.upgradeVersion
-	a.instance = reloadElementDefine.AtomConstructor()
+	a.instance = reloadElementImplement.Developer.AtomConstructor()
 	switch inst := a.instance.(type) {
 	case AtomStateful:
 		err = proto.Unmarshal(oldBuf, inst)

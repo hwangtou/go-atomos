@@ -1,37 +1,25 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
 )
 
-const (
-	lCLICreateElementFailed     = "CosmosLocal.watcherInit: Create element failed, nodeName=%s,err=%s"
-	lCLILoadElementFailed       = "CosmosLocal.watcherInit: Load element failed, nodeName=%s,err=%s"
-	lCLILoadElement             = "CosmosLocal.watcherInit: Load element succeed, nodeName=%s"
-	lCLILoadElementFailedUnload = "CosmosLocal.watcherInit: Unload loaded element, nodeName=%s,err=%v"
-	lCLIHasInitialized          = "CosmosLocal.watcherInit: Has initialized"
-	lCLIClusterInitFailed       = "CosmosLocal.watcherInit: Cluster watcherInit failed"
-	lCLRCosmosRunning           = "CosmosLocal.runRunnable: Cosmos running"
-	lCLRCosmosInvalid           = "CosmosLocal.runRunnable: Cosmos is invalid"
-	lCLCInfo                    = "CosmosLocal.close: Unload element, nodeName=%s,err=%v"
-	lCLEInfo                    = "CosmosLocal.exitRunnable: Exiting"
-	lCLGENotFound               = "CosmosLocal.getElement: Element not found, nodeName=%s"
-	lCLAElementExists           = "CosmosLocal.addElement: Element exists, nodeName=%s"
-	lCLAElementLoadFailed       = "CosmosLocal.addElement: Element load failed, nodeName=%s,err=%v"
-	lCLDElementNotFound         = "CosmosLocal.delElement: Element not found, nodeName=%s"
-	lCLDElementUnloadFailed     = "CosmosLocal.delElement: Element unload failed, nodeName=%s,err=%v"
-)
+// Local Cosmos Instance
 
 type CosmosLocal struct {
-	mutex             sync.RWMutex
-	config            *Config
-	cosmos            *CosmosSelf
-	mainId            *idMain
-	elements          map[string]*ElementLocal
-	killNoticeCh      chan bool
-	elementInterfaces map[string]*ElementInterface
+	mutex      sync.RWMutex
+	config     *Config
+	cosmosSelf *CosmosSelf
+	elements   map[string]*ElementLocal
+	interfaces map[string]*ElementInterface
+	mainElem   *ElementLocal
+	mainAtom   *AtomCore
+	mainKillCh chan bool
 }
 
 // Life cycle
@@ -43,59 +31,62 @@ func newCosmosLocal() *CosmosLocal {
 // 初始化Runnable。
 // Initial Runnable.
 func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) error {
+	self.logInfo("CosmosLocal.initRunnable")
+
+	// Check runnable.
 	if err := runnable.Check(); err != nil {
 		return err
 	}
-	// 初始化Runnable中所有的本地Elements。
-	// Initial all locals elements in the Runnable. TODO: Parallels loading.
-	loaded := map[string]*ElementLocal{}
+
+	// Pre-initialize all local elements in the Runnable.
+	loadedElements := map[string]*ElementLocal{}
 	elements := make(map[string]*ElementLocal, len(runnable.implementations))
 	for name, define := range runnable.implementations {
-		// Create the element.
-		elem, err := newElementLocal(self, define)
-		if err != nil {
-			err = fmt.Errorf(lCLICreateElementFailed, name, err)
-			self.logFatal("%s", err.Error())
-			return err
-		}
+		// Create local element .
+		elem := newElementLocal(self, define)
 		// Load the element.
-		if err = elem.load(); err != nil {
-			err = fmt.Errorf(lCLILoadElementFailed, name, err)
-			self.logFatal("%s", err.Error())
-			for loadedName, loadedElem := range loaded {
+		if err := elem.load(); err != nil {
+			self.logFatal("CosmosLocal.initRunnable: Load local element failed, element=%s,err=%s", name, err)
+			for loadedName, loadedElem := range loadedElements {
 				err = loadedElem.unload()
-				err = fmt.Errorf(lCLILoadElementFailedUnload, loadedName, err)
+				if err != nil {
+					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s,err=%v",
+						loadedName, err)
+				} else {
+					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s", loadedName)
+				}
 			}
 			return err
 		}
 		// Add the element.
 		elements[name] = elem
-		self.logInfo(lCLILoadElement, name)
+		self.logInfo("CosmosLocal.initRunnable: Load local element succeed, element=%s", name)
 	}
+	// Pre-initialize all elements interface in the runnable.
 	elementInterfaces := make(map[string]*ElementInterface)
-	for name, i := range runnable.interfaces {
-		elementInterfaces[name] = i
+	for elementName, elementInterface := range runnable.interfaces {
+		elementInterfaces[elementName] = elementInterface
 	}
 
 	// Lock, set elements, and unlock.
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.config != nil || c.elements != nil {
-		err := fmt.Errorf(lCLIHasInitialized)
-		self.logFatal("%s", err.Error())
+		err := fmt.Errorf("local cosmos has been initialized")
+		self.logFatal("CosmosLocal.initRunnable: Init runtime error, err=%v", err)
 		return err
 	}
 	c.config = self.config
-	c.cosmos = self
+	c.cosmosSelf = self
 	c.elements = elements
-	c.elementInterfaces = elementInterfaces
-	c.mainId = &idMain{
-		cosmosLocal: c,
-	}
-	c.killNoticeCh = make(chan bool)
+	c.interfaces = elementInterfaces
+	c.mainElem = newMainElement(self)
+	c.mainAtom = newMainAtom(c.mainElem)
+	c.mainKillCh = make(chan bool)
+
+	// Init remote to support remote.
 	if err := self.remotes.init(); err != nil {
-		err = fmt.Errorf(lCLIClusterInitFailed)
-		self.logFatal("%s", err.Error())
+		self.logFatal("CosmosLocal.initRunnable: Init remote error, err=%v", err)
 		return err
 	}
 
@@ -106,57 +97,60 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 // Run runnable.
 func (c *CosmosLocal) runRunnable(runnable CosmosRunnable) error {
 	c.mutex.Lock()
-	cosmos := c.cosmos
+	cosmos := c.cosmosSelf
 	c.mutex.Unlock()
 	if cosmos == nil {
-		err := fmt.Errorf(lCLRCosmosInvalid)
-		c.cosmos.logFatal("%s", err.Error())
+		err := fmt.Errorf("local cosmos has not been initialized")
+		c.cosmosSelf.logFatal("CosmosLocal.runRunnable: Framework PANIC, err=%v", err.Error())
 		return err
 	}
-	c.cosmos.logInfo(lCLRCosmosRunning)
-	runnable.script(cosmos, c.mainId, c.killNoticeCh)
+
+	ma := c.mainAtom.instance.(MainId)
+	c.cosmosSelf.logInfo("CosmosLocal.runRunnable: Runnable is now RUNNING")
+	runnable.script(cosmos, ma, c.mainKillCh)
+
+	// Close main.
+	if err := c.mainAtom.Kill(c.mainAtom); err != nil {
+		c.cosmosSelf.logError("CosmosLocal.runRunnable: Kill main atom error, err=%v", err)
+	}
 	return nil
 }
 
 // 退出Runnable。
 // Exit runnable.
 func (c *CosmosLocal) exitRunnable() {
-	c.cosmos.logInfo(lCLEInfo)
-	// todo: remove all actors of elements, then remove all element. Save actor data and warning if actor still run.
+	c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Runnable is now EXITING")
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	c.cosmos.remotes.close()
-	c.close()
-}
 
-func (c *CosmosLocal) close() {
-	// TODO: Parallels unloading
-	for elemName, elem := range c.elements {
-		err := elem.unload()
-		c.cosmos.logInfo(lCLCInfo, elemName, err)
+	// Close remote.
+	c.cosmosSelf.remotes.close()
+	// Unload local element interfaces.
+	for elemName := range c.interfaces {
 		delete(c.elements, elemName)
 	}
-	c.config = nil
-	c.cosmos = nil
-	c.mainId = nil
-	c.elements = nil
-	c.elementInterfaces = nil
-}
-
-// Element
-
-func (c *CosmosLocal) getElement(name string) (*ElementLocal, error) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	elem, has := c.elements[name]
-	if !has {
-		err := fmt.Errorf(lCLGENotFound, name)
-		c.cosmos.logFatal("%s", err.Error())
-		return nil, err
+	// Unload local elements.
+	for elemName, elem := range c.elements {
+		err := elem.unload()
+		if err != nil {
+			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s,err=%v",
+				elemName, err)
+		} else {
+			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s", elemName)
+		}
+		delete(c.elements, elemName)
 	}
-	return elem, nil
+	c.mainKillCh = nil
+	c.mainAtom = nil
+	c.mainElem = nil
+	c.interfaces = nil
+	c.elements = nil
+	c.cosmosSelf = nil
+	c.config = nil
 }
+
+// Element Interface.
 
 func (c *CosmosLocal) addElement(name string, elem *ElementLocal) error {
 	c.mutex.Lock()
@@ -164,20 +158,33 @@ func (c *CosmosLocal) addElement(name string, elem *ElementLocal) error {
 
 	// Check exists
 	if _, has := c.elements[name]; has {
-		err := fmt.Errorf(lCLAElementExists, name)
-		c.cosmos.logFatal("%s", err.Error())
+		err := fmt.Errorf("local element exists, name=%s", name)
+		c.cosmosSelf.logFatal("CosmosLocal.addElement: Element exists, name=%s", name)
 		return err
 	}
 	// Try load and set
 	if err := elem.load(); err != nil {
-		err := fmt.Errorf(lCLAElementLoadFailed, name, err)
-		c.cosmos.logFatal("%s", err.Error())
+		err = fmt.Errorf("local element loads failed, name=%s", name)
+		c.cosmosSelf.logFatal("CosmosLocal.addElement: Element loads failed, err=%v", err.Error())
 		return err
 	}
 	c.elements[name] = elem
-	inf := fmt.Sprintf(lCLILoadElement, name)
-	c.cosmos.logInfo("%s", inf)
+
+	c.cosmosSelf.logInfo("CosmosLocal.addElement: Load local element succeed, element=%s", name)
 	return nil
+}
+
+func (c *CosmosLocal) getElement(name string) (*ElementLocal, error) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	elem, has := c.elements[name]
+	if !has {
+		err := fmt.Errorf("local element not found, name=%s", name)
+		c.cosmosSelf.logError("CosmosLocal.getElement: Cannot get element, name=%s", name)
+		return nil, err
+	}
+	return elem, nil
 }
 
 func (c *CosmosLocal) delElement(name string) error {
@@ -187,21 +194,21 @@ func (c *CosmosLocal) delElement(name string) error {
 	// Check exists
 	elem, has := c.elements[name]
 	if !has {
-		err := fmt.Errorf(lCLDElementNotFound, name)
-		c.cosmos.logFatal("%s", err.Error())
+		err := fmt.Errorf("local element not found, name=%s", name)
+		c.cosmosSelf.logFatal("CosmosLocal.delElement: Cannot delete element, err=%s", err.Error())
 		return err
 	}
 	// Try unload and unset
 	if err := elem.unload(); err != nil {
-		err := fmt.Errorf(lCLDElementUnloadFailed, name, err)
-		c.cosmos.logFatal("%s", err.Error())
+		err = fmt.Errorf("local element unloads failed, name=%s,err=%v", name, err)
+		c.cosmosSelf.logFatal("CosmosLocal.delElement: Cannot unload element, err=%s", err.Error())
 		return err
 	}
 	delete(c.elements, name)
 	return nil
 }
 
-// Atom
+// Atom Interface.
 
 func (c *CosmosLocal) GetNodeName() string {
 	return c.config.Node
@@ -227,6 +234,7 @@ func (c *CosmosLocal) SpawnAtom(elemName, atomName string, arg proto.Message) (I
 	if err != nil {
 		return nil, err
 	}
+
 	// Try spawning.
 	i, err := e.SpawnAtom(atomName, arg)
 	if err != nil {
@@ -241,41 +249,4 @@ func (c *CosmosLocal) MessageAtom(fromId, toId Id, message string, args proto.Me
 
 func (c *CosmosLocal) KillAtom(fromId, toId Id) error {
 	return toId.Element().KillAtom(fromId, toId)
-}
-
-// idMain, uses in Script entrance.
-
-type idMain struct {
-	cosmosLocal *CosmosLocal
-}
-
-func (c *CosmosLocal) initIdMain() MainId {
-	id := &idMain{
-		cosmosLocal: c,
-	}
-	return id
-}
-
-func (i *idMain) Cosmos() CosmosNode {
-	return i.cosmosLocal
-}
-
-func (i *idMain) Element() Element {
-	return nil
-}
-
-func (i *idMain) Name() string {
-	return "main"
-}
-
-func (i *idMain) Version() uint64 {
-	return 0
-}
-
-func (i *idMain) Kill(from Id) error {
-	return ErrAtomCannotKill
-}
-
-func (i *idMain) getLocalAtom() *AtomCore {
-	return nil
 }

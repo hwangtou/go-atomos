@@ -1,44 +1,23 @@
 package go_atomos
 
+// CHECKED!
+
 import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// 给Atom的ElementDefine生成器使用。
-// For Atom Element Define Generator use.
+// 从*.proto文件生成到*_atomos.pb.go文件中的，ElementImplementation对象。
+// ElementImplementation in *_atomos.pb.go, which is generated from developer defined *.proto file.
+type ElementImplementation struct {
+	Developer ElementDeveloper
 
-// Element类型
-// Element type
-//
-// 我们可以把Element理解成Atom的类型和管理器容器，类似面向对象的class和对应实例的容器管理器的概念。
-// 两种Element类型，本地Element和远程Element。
-//
-// A specific Element is the type and container of an Atom, it's similar to concept "class" of OOP and it contains its
-// instance. There are two kinds of Element, Local Element and Remote Element.
-type Element interface {
-	// Element和其相关的Atom的名称。
-	// Name of the Element and its Atoms.
-	GetName() string
+	Interface *ElementInterface
 
-	// 通过Atom名称获取指定的Atom的Id。
-	// Get AtomId by nodeName of Atom.
-	GetAtomId(atomName string) (Id, error)
-
-	// 启动一个Atom。
-	// Spawn an Atom.
-	SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error)
-
-	// 向一个Atom发送消息。
-	// write Message to an Atom.
-	MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error)
-
-	// 向一个Atom发送Kill消息。
-	// write Kill to an Atom.
-	KillAtom(fromId, toId Id) error
+	AtomHandlers map[string]MessageHandler
 }
 
-// 从*.proto文件生成到*_atomos.pb.go文件中的，ElementDefine对象。
+// 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
 // ElementInterface in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementInterface struct {
 	// Element的配置。
@@ -50,77 +29,13 @@ type ElementInterface struct {
 	AtomIdConstructor AtomIdConstructor
 
 	// 一个存储Atom的Call方法的容器。
-	// A container to store all the Call method of Atom.
-	AtomCalls map[string]*ElementAtomMessage
-}
-
-type ElementImplementation struct {
-	ElementDevelop
-
-	ElementInterface *ElementInterface
-	//// Atom的构造器。
-	//// Constructor of Atom.
-	//AtomConstructor AtomConstructor
-	//
-	//// 一个用于保存Atom数据的函数。
-	//// A method to save Atom data.
-	//AtomSaver AtomSaver
-	//
-	//// 一个鉴别Kill信号是否合法的函数。
-	//// A method to authorize the Kill signal is allowed or not.
-	//AtomCanKill AtomCanKill
-
-	AtomHandlers map[string]MessageHandler
+	// A container to store all the Message method of Atom.
+	AtomMessages map[string]*ElementAtomMessage
 }
 
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
 // Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
-type AtomIdConstructor func(c CosmosNode, atomName string) (Id, error)
-
-//// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
-//// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
-//type AtomConstructor func() Atom
-//
-//// Atom保存函数的函数类型，只有有状态的Atom会被保存。
-//// Saver Function Type of Atom, only stateful Atom will be saved.
-//type AtomSaver func(Id, AtomStateful) error
-//
-//// Atom鉴别Kill信号合法的函数。
-//// Kill Signal Authorization Function Type.
-//type AtomCanKill func(Id) bool
-
-// TODO:
-// 未来版本需要考虑支持Atom的负载均衡支持。
-// Support in the future version, this function is used for load balance of Atom.
-// type ElementLordScheduler func(CosmosClusterHelper)
-
-// 从*.proto文件生成到*_atomos.pb.go文件中的，具体的Element对象。
-// Concrete Element instance in *_atomos.pb.go, which is generated from developer defined *.proto file.
-type ElementDevelop interface {
-	// 检查ElementImplement是否合法。
-	// Check whether ElementDevelop is legal or not.
-	Check() error
-
-	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
-	// Information of ElementDevelop, such as nodeName of Element, version, Log level and initial atom quantity.
-	Info() (name string, version uint64, logLevel LogLevel, initNum int)
-
-	// Atom构造器
-	// Atom Constructor.
-	AtomConstructor() Atom
-
-	// Atom保存器
-	// Atom Saver.
-	AtomSaver(Id, AtomStateful) error
-
-	// Atom是否可以被该Id的Atom终止。
-	// Whether the Atom can be killed by the Id or not.
-	AtomCanKill(Id) bool
-
-	// TODO: Load balance
-	// LordScheduler(CosmosClusterHelper)
-	//AtomIdConstructor(*CosmosSelf, string, *AtomCore) Id
-}
+type AtomIdConstructor func(Id) Id
 
 // Message处理器
 type MessageHandler func(from Id, to Atom, in proto.Message) (out proto.Message, err error)
@@ -136,7 +51,7 @@ type ElementAtomMessage struct {
 }
 
 // For creating ElementInterface instance in *_atomos.pb.go.
-func NewInterfaceFromDevelop(implement ElementDevelop) *ElementInterface {
+func NewInterfaceFromDeveloper(implement ElementDeveloper) *ElementInterface {
 	name, version, _, _ := implement.Info()
 	return &ElementInterface{
 		Config: &ElementConfig{
@@ -147,9 +62,9 @@ func NewInterfaceFromDevelop(implement ElementDevelop) *ElementInterface {
 	}
 }
 
-func NewImplementationFromDevelop(implement ElementDevelop) *ElementImplementation {
+func NewImplementationFromDeveloper(developer ElementDeveloper) *ElementImplementation {
 	return &ElementImplementation{
-		ElementDevelop: implement,
+		Developer: developer,
 	}
 }
 

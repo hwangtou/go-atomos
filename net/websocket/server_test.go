@@ -50,13 +50,13 @@ func TestServerRun(t *testing.T) {
 func newServer(t *testing.T) {
 	s := &Server{}
 	sD := ServerDelegateBase{
-		Addr:     ":12345",
-		Name:     "server",
-		CertFile: "server.crt",
-		KeyFile:  "server.key",
-		Mux:      map[string]func(http.ResponseWriter, *http.Request){},
-		Logger:   log.New(&logger{t}, "", log.LstdFlags),
-		Conn:     map[string]Connection{},
+		Addr: ":12345",
+		Name: "server",
+		//CertFile: "server.crt",
+		//KeyFile:  "server.key",
+		Mux:    map[string]func(http.ResponseWriter, *http.Request){},
+		Logger: log.New(&logger{t}, "", log.LstdFlags),
+		Conn:   map[string]Connection{},
 	}
 	if err := s.Init(&sD); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func newServer(t *testing.T) {
 
 func newConn(t *testing.T, name string) {
 	c := &Client{}
-	cD := NewClientDelegate(name, "127.0.0.1:12345", "server.crt", log.New(&logger{t}, "", log.LstdFlags))
+	cD := NewClientDelegate(name, "127.0.0.1:12345", "", log.New(&logger{t}, "", log.LstdFlags))
 	if err := c.Init(cD); err != nil {
 		t.Fatal(err)
 	}

@@ -8,23 +8,6 @@ import (
 	"runtime/debug"
 )
 
-const (
-	lCCSCrash           = "CosmosSelf.deferRunnable: SCRIPT CRASH! reason=%s,stack=%s"
-	lCCDRExecuteFailed  = "CosmosSelf.Daemon: Execute failed, err=%v"
-	lCCDRExecuteSucceed = "CosmosSelf.Daemon: Execute succeed"
-	lCCDRNotice         = "CosmosSelf.Daemon: Caught notice, exit=%v,message=%s"
-	lCCDRExit           = "CosmosSelf.Daemon: Exit, err=%v"
-)
-
-const (
-	errNoConfig            = "no configuration"
-	errConfigInvalid       = "config invalid, err=%v"
-	errConfigRegistered    = "config registered"
-	errDaemonCmdExecutor   = "unknown daemon command, cmd=%+v"
-	errInvalidCosmosLocal  = "invalid CosmosLocal"
-	errInvalidCosmosRemote = "invalid cosmosRemote"
-)
-
 // Cosmos生命周期，开发者定义和使用的部分。
 // Cosmos Life Cycle, part for developer customize and use.
 
@@ -87,20 +70,18 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 					func() {
 						defer func() {
 							if r := recover(); r != nil {
-								// TODO
+								c.logInfo("CosmosSelf.Daemon: Exit error, err=%s", r)
 							}
 						}()
-						c.local.killNoticeCh <- true
+						c.local.mainKillCh <- true
 					}()
 				case DaemonCommandExecuteRunnable:
 					go func() {
 						err := c.daemonCommandExecutor(cmd)
 						if err != nil {
-							// todo
-							c.logFatal(lCCDRExecuteFailed, err)
+							c.logFatal("CosmosSelf.Daemon: Execute failed, err=%v", err)
 						} else {
-							// todo
-							c.logInfo(lCCDRExecuteSucceed)
+							c.logInfo("CosmosSelf.Daemon: Execute succeed")
 						}
 						daemonCh <- err
 					}()
@@ -108,11 +89,11 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 			case s := <-c.signCh:
 				exit, message := c.daemonSignalWatcher(s)
 				if exit {
-					c.logInfo(lCCDRNotice, exit, message)
-					c.local.killNoticeCh <- true
+					c.logInfo("CosmosSelf.Daemon: Caught notice, exit=%v,message=%s", exit, message)
+					c.local.mainKillCh <- true
 				}
 			case err := <-daemonCh:
-				c.logInfo(lCCDRExit, err)
+				c.logInfo("CosmosSelf.Daemon: Exit, err=%v", err)
 				return
 			}
 		}
@@ -134,17 +115,17 @@ func (c *CosmosSelf) Close() {
 func (c *CosmosSelf) daemonInit(conf *Config) error {
 	// Check
 	if conf == nil {
-		return errors.New(errNoConfig)
+		return errors.New("no configuration")
 	}
 	if err := conf.check(c); err != nil {
-		return fmt.Errorf(errConfigInvalid, err)
+		return fmt.Errorf("config invalid, err=%v", err)
 	}
 
 	// Init
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.config != nil {
-		return errors.New(errConfigRegistered)
+		return errors.New("config registered")
 	}
 	c.config = conf
 	c.local = newCosmosLocal()
@@ -192,13 +173,12 @@ func (c *CosmosSelf) daemonCommandExecutor(cmd *DaemonCommand) error {
 	case DaemonCommandExecuteDynamicRunnable:
 		return errors.New("not supported")
 	}
-	// todo
-	return fmt.Errorf(errDaemonCmdExecutor, cmd)
+	return fmt.Errorf("unknown daemon command, cmd=%+v", cmd)
 }
 
 func (c *CosmosSelf) deferRunnable() {
 	if r := recover(); r != nil {
-		c.logFatal(lCCSCrash, r, string(debug.Stack()))
+		c.logFatal("CosmosSelf.deferRunnable: SCRIPT CRASH! reason=%s,stack=%s", r, string(debug.Stack()))
 	}
 }
 
@@ -261,7 +241,7 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 	if r.implementations == nil {
 		r.implementations = map[string]*ElementImplementation{}
 	}
-	r.implementations[i.ElementInterface.Config.Name] = i
+	r.implementations[i.Interface.Config.Name] = i
 	return r
 }
 
@@ -276,7 +256,7 @@ func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {
 // CosmosRunnable legal checker.
 func (r *CosmosRunnable) Check() error {
 	if r.implementations == nil {
-		return errors.New("config has no ElementInterface yet")
+		return errors.New("config has no Interface yet")
 	}
 	if r.script == nil {
 		return errors.New("config has no Script yet")
@@ -285,35 +265,8 @@ func (r *CosmosRunnable) Check() error {
 }
 
 //// Dynamic Runnable
-//// TODO: Not implemented yet.
 //type CosmosDynamicRunnable struct {
 //	path     string
 //	loaded   bool
 //	runnable CosmosRunnable
 //}
-
-// Public
-
-func NewAtomId(c CosmosNode, elemName, atomName string) (Id, error) {
-	if c.IsLocal() {
-		l, ok := c.(*CosmosLocal)
-		if !ok {
-			return nil, errors.New(errInvalidCosmosLocal)
-		}
-		element, err := l.getElement(elemName)
-		if err != nil {
-			return nil, err
-		}
-		return element.getAtomId(atomName)
-	} else {
-		r, ok := c.(*cosmosWatchRemote)
-		if !ok {
-			return nil, errors.New(errInvalidCosmosRemote)
-		}
-		element, err := r.getElement(elemName)
-		if err != nil {
-			return nil, err
-		}
-		return element.getAtomId(atomName)
-	}
-}

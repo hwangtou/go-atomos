@@ -31,15 +31,19 @@ func (c *Client) Connect() error {
 	}
 	c.Delegate.GetLogger().Printf("Client.Connect: Info, name=%v,addr=%s",
 		c.Delegate.GetName(), c.Delegate.GetAddr())
-	// Connect.
-	u := url.URL{
-		Scheme: WatchSchema,
-		Host:   c.Delegate.GetAddr(),
-		Path:   WatchUri,
-	}
 	tlsConfig, err := c.ClientDelegate.GetTLSConfig()
 	if err != nil {
 		return err
+	}
+	// Connect.
+	u := url.URL{
+		Host: c.Delegate.GetAddr(),
+		Path: WatchUri,
+	}
+	if tlsConfig == nil {
+		u.Scheme = WatchWsSchema
+	} else {
+		u.Scheme = WatchWssSchema
 	}
 	dialer := websocket.Dialer{
 		TLSClientConfig: tlsConfig,

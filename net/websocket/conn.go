@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
@@ -69,8 +70,9 @@ func (c *Conn) write(sc *msg) (err error) {
 	}()
 
 	c.runningMutex.Lock()
-	defer c.runningMutex.Unlock()
-	c.sender <- sc
+	sender := c.sender
+	c.runningMutex.Unlock()
+	sender <- sc
 	return
 }
 
@@ -91,12 +93,15 @@ func (c *Conn) Stop() (err error) {
 		}
 	}()
 	c.runningMutex.Lock()
-	defer c.runningMutex.Unlock()
-	if c.sender != nil {
-		close(c.sender)
-		c.sender = nil
+	sender := c.sender
+	c.sender = nil
+	c.runningMutex.Unlock()
+	if sender != nil {
+		close(sender)
+		return
+	} else {
+		return errors.New("conn stopped")
 	}
-	return
 }
 
 func (c *Conn) writePump() {

@@ -1,9 +1,10 @@
 package go_atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"os"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Cosmos节点需要支持的接口内容
@@ -58,14 +59,7 @@ type CosmosSelf struct {
 }
 
 func newCosmosSelf() *CosmosSelf {
-	c := &CosmosSelf{
-		config:      nil,
-		local:       nil,
-		remotes:     nil,
-		daemonCmdCh: nil,
-		signCh:      nil,
-		log:         nil,
-	}
+	c := &CosmosSelf{}
 	// Cosmos log is initialized once and available all the time.
 	c.log = NewMailBox(MailBoxHandler{
 		OnReceive: c.onLogMessage,
@@ -87,5 +81,5 @@ func (c *CosmosSelf) GetName() string {
 }
 
 func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosWatchRemote, error) {
-	return c.remotes.getOrConnectRemote(nodeName, nodeAddr, c.config.EnableRemoteServer.CertPath)
+	return c.remotes.getOrConnectRemote(nodeName, nodeAddr, c.config.EnableCert)
 }
