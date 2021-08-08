@@ -3,8 +3,8 @@
 package api
 
 import (
-	atomos "github.com/hwangtou/go-atomos"
-	"google.golang.org/protobuf/proto"
+	go_atomos "github.com/hwangtou/go-atomos"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -17,30 +17,42 @@ import (
 // GreeterId is the interface of Greeter atomos.
 //
 type GreeterId interface {
-	atomos.Id
-	SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error)
+	go_atomos.Id
+	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
-func GetGreeterId(c atomos.CosmosNode, name string) (GreeterId, error) {
+func GetGreeterId(c go_atomos.CosmosNode, name string) (GreeterId, error) {
 	ca, err := c.GetAtomId("Greeter", name)
-	if err != nil { return nil, err }
-	if c, ok := ca.(GreeterId); ok { return c, nil } else { return nil, atomos.ErrAtomType }
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(GreeterId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.
 //
 type GreeterAtom interface {
-	atomos.Atom
-	SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error)
+	go_atomos.Atom
+	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
-func SpawnGreeter(c atomos.CosmosNode, atomName string, arg proto.Message) (GreeterId, error) {
-	_, err := c.SpawnAtom("Greeter", atomName, arg)
-	if err != nil { return nil, err }
-	id, err := c.GetAtomId("Greeter", atomName)
-	if err != nil { return nil, err }
-	if i, ok := id.(GreeterId); ok { return i, nil }
-	return nil, atomos.ErrAtomType
+func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (GreeterId, error) {
+	_, err := c.SpawnAtom("Greeter", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("Greeter", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(GreeterId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
 }
 
 //
@@ -48,41 +60,49 @@ func SpawnGreeter(c atomos.CosmosNode, atomName string, arg proto.Message) (Gree
 //
 
 type greeterId struct {
-	atomos.Id
+	go_atomos.Id
 }
 
-func (c *greeterId) SayHello(from atomos.Id, in *HelloRequest) (*HelloReply, error) {
+func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error) {
 	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	reply, ok := r.(*HelloReply)
-	if !ok { return nil, atomos.ErrAtomMessageReplyType }
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
 	return reply, nil
 }
 
-func GetGreeterInterface(dev atomos.ElementDeveloper) *atomos.ElementInterface {
-	elem := atomos.NewInterfaceFromDeveloper(dev)
-	elem.AtomIdConstructor = func(id atomos.Id) atomos.Id { return &greeterId{id} }
-	elem.Config.Messages = map[string]*atomos.AtomMessageConfig{
-		"SayHello": atomos.NewAtomCallConfig(&HelloRequest{}, &HelloReply{}),
+func GetGreeterInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &greeterId{id} }
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"SayHello": go_atomos.NewAtomCallConfig(&HelloRequest{}, &HelloReply{}),
 	}
-	elem.AtomMessages = map[string]*atomos.ElementAtomMessage{
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
 		"SayHello": {
-			InDec: func(b []byte) (proto.Message, error) { return atomos.MessageUnmarshal(b, &HelloRequest{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return atomos.MessageUnmarshal(b, &HelloReply{}) },
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloRequest{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloReply{}) },
 		},
 	}
 	return elem
 }
 
-func GetGreeterImplement(dev atomos.ElementDeveloper) *atomos.ElementImplementation {
-	elem := atomos.NewImplementationFromDeveloper(dev)
+func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetGreeterInterface(dev)
-	elem.AtomHandlers = map[string]atomos.MessageHandler{
-		"SayHello": func(from atomos.Id, to atomos.Atom, in proto.Message) (proto.Message, error) {
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"SayHello": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*HelloRequest)
-			if !ok { return nil, atomos.ErrAtomMessageArgType }
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
 			a, ok := to.(GreeterAtom)
-			if !ok { return nil, atomos.ErrAtomMessageAtomType }
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
 			return a.SayHello(from, req)
 		},
 	}
