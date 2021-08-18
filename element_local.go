@@ -162,21 +162,26 @@ func (e *ElementLocal) KillAtom(fromId, toId Id) error {
 	if a == nil {
 		return ErrAtomNotFound
 	}
-	return a.pushKillMail(fromId)
+	return a.pushKillMail(fromId, true)
 }
 
 // Internal
 
 func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, error) {
-	initMailBox(a)
-	a.mailbox.Start()
-	if err := a.instance.Spawn(a, arg); err != nil {
-		a.state = AtomHalt
-		a.mailbox.Stop()
-		DelMailBox(a.mailbox)
+	impl := a.element.implements[a.version]
+	data, err := impl.Developer.AtomDataLoader(a.name)
+	if err != nil {
 		return nil, err
 	}
-	a.state = AtomWaiting
+	initMailBox(a)
+	a.mailbox.Start()
+	if err = impl.Interface.AtomSpawner(a, a.instance, arg, data); err != nil {
+		a.setHalt()
+		DelMailBox(a.mailbox)
+		a.mailbox.Stop()
+		return nil, err
+	}
+	a.setWaiting()
 	return a, nil
 }
 

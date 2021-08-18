@@ -42,11 +42,13 @@ func newMainElement(self *CosmosSelf) *ElementLocal {
 	m := &mainElement{
 		self: self,
 	}
-	return newElementLocal(self, &ElementImplementation{
+	e := newElementLocal(self, &ElementImplementation{
 		Developer:    m,
 		Interface:    NewInterfaceFromDeveloper(m),
 		AtomHandlers: map[string]MessageHandler{},
 	})
+	e.current.Interface.AtomSpawner = m.AtomSpawner
+	return e
 }
 
 type mainElement struct {
@@ -73,16 +75,30 @@ func (m *mainElement) Info() (name string, version uint64, logLevel LogLevel, in
 	return "Main", 1, m.self.config.LogLevel, 1
 }
 
+func (m *mainElement) Loaded(mainId Id) {
+}
+
+func (m *mainElement) Unloaded() {
+}
+
 func (m *mainElement) AtomConstructor() Atom {
 	return &mainAtom{}
 }
 
-func (m *mainElement) AtomSaver(id Id, stateful AtomStateful) error {
+func (m *mainElement) AtomDataLoader(name string) (proto.Message, error) {
+	return nil, nil
+}
+
+func (m *mainElement) AtomDataSaver(name string, data proto.Message) error {
 	return nil
 }
 
 func (m *mainElement) AtomCanKill(id Id) bool {
 	return true
+}
+
+func (m *mainElement) AtomSpawner(s AtomSelf, a Atom, arg, data proto.Message) error {
+	return nil
 }
 
 // Main Atom
@@ -101,7 +117,7 @@ func (m *mainAtom) Spawn(self AtomSelf, arg proto.Message) error {
 	return nil
 }
 
-func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) {
+func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
 	m.CosmosSelf().logInfo("mainAtom.Halt: Start halting")
-	return
+	return nil
 }

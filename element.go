@@ -54,6 +54,11 @@ type ElementDeveloper interface {
 	// Check whether ElementDeveloper is legal or not.
 	Check() error
 
+	// 加载完毕&卸载完毕
+	// Loaded & Unloaded
+	Loaded(mainId Id)
+	Unloaded()
+
 	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
 	// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atom quantity.
 	Info() (name string, version uint64, logLevel LogLevel, initNum int)
@@ -64,9 +69,11 @@ type ElementDeveloper interface {
 	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
 	AtomConstructor() Atom
 
+	AtomDataLoader(name string) (proto.Message, error)
+
 	// Atom保存器
 	// Atom Saver.
-	AtomSaver(Id, AtomStateful) error
+	AtomDataSaver(name string, data proto.Message) error
 
 	// Atom是否可以被该Id的Atom终止。
 	// Atom保存函数的函数类型，只有有状态的Atom会被保存。

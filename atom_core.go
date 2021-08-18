@@ -143,7 +143,7 @@ func (a *AtomCore) Kill(from Id) error {
 	if ok := a.element.implements[a.version].Developer.AtomCanKill(from); !ok {
 		return ErrAtomCannotKill
 	}
-	return a.pushKillMail(from)
+	return a.pushKillMail(from, true)
 }
 
 func (a *AtomCore) getLocalAtom() *AtomCore {
@@ -167,7 +167,7 @@ func (a *AtomCore) CosmosSelf() *CosmosSelf {
 // Atom kill itself from inner
 func (a *AtomCore) KillSelf() {
 	id, elem := a.atomId, a.element
-	if err := a.pushKillMail(a); err != nil {
+	if err := a.pushKillMail(a, false); err != nil {
 		elem.cosmos.logInfo("AtomCore: Kill self error, id=%+v,err=%s", id, err)
 		return
 	}
@@ -282,11 +282,13 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
 			// Mail dealloc in AtomCore.pushMessageMail.
 		case AtomMailTask:
+			// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 			// but it's impossible to add task after locking.
-			a.element.cosmos.logFatal("AtomCore.onStop: FRAMEWORK ERROR, some task mails have not been deleted yet.")
+			a.element.cosmos.logFatal("AtomCore.onStop: Task mails have been sent after start closing, mail=%+v",
+				remainMails)
 			t, err := a.task.cancelTask(remainMails.id, nil)
-			if err != nil {
+			if err == nil {
 				cancels[remainMails.id] = t
 			}
 			// Mail dealloc in atomTasksManager.cancelTask.
@@ -327,6 +329,9 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 	}
 	replyInterface, err := am.waitReply()
 	deallocAtomMail(am)
+	if err == ErrMailBoxClosed {
+		return nil, ErrAtomIsNotRunning
+	}
 	reply, ok := replyInterface.(proto.Message)
 	if !ok {
 		return reply, fmt.Errorf("AtomCore.pushMessageMail: Reply type error, message=%s,args=%+v,reply=%+v",
@@ -347,28 +352,29 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 
 // Kill Mail
 
-func (a *AtomCore) pushKillMail(from Id) error {
+func (a *AtomCore) pushKillMail(from Id, wait bool) error {
 	am := allocAtomMail()
 	initKillMail(am, from)
 	if ok := a.mailbox.PushHead(am.Mail); !ok {
 		return ErrAtomIsNotRunning
 	}
-	_, err := am.waitReply()
-	deallocAtomMail(am)
-	return err
+	if wait {
+		_, err := am.waitReply()
+		deallocAtomMail(am)
+		return err
+	}
+	return nil
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Halt method has been called, while is doing this, Atom is set to Stopping.
 func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]CancelledTask) error {
 	a.setStopping()
-	a.instance.Halt(killAtomMail.from, cancels)
-	if inst, ok := a.instance.(AtomStateful); ok {
-		if err := a.element.implements[a.version].Developer.AtomSaver(a, inst); err != nil {
-			a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v",
-				a.atomId, a.version, a.instance)
-			return err
-		}
+	data := a.instance.Halt(killAtomMail.from, cancels)
+	if err := a.element.implements[a.version].Developer.AtomDataSaver(a.name, data); err != nil {
+		a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
+			a.atomId, a.version, a.instance, data)
+		return err
 	}
 	return nil
 }
@@ -389,18 +395,11 @@ func (a *AtomCore) pushReloadMail(version uint64) error {
 }
 
 // TODO: Test.
-// 注意：Reload伴随着整个Element的Reload，而且即使reload失败，但也不停止Atom的运行。
-// Notice: Atom reload goes with the Element reload, even an Atom reload failed, it doesn't stop Atom from running.
+// 注意：Reload伴随着整个Element的Reload，会先调用Atom的Halt，再Spawn。但不会删除正在执行的任务。
+// Notice: Atom reload goes with the Element reload, Halt and Spawn will be called in order. It won't delete tasks.
 func (a *AtomCore) handleReload(am *atomMail) error {
 	a.setBusy()
 	defer a.setWaiting()
-
-	// 检查Atom是否可以被重载。
-	// Check if the Atom can be reloaded.
-	reloadableAtom, ok := a.instance.(AtomReloadable)
-	if !ok {
-		return errors.New("atom cannot be reloaded")
-	}
 
 	// 如果没有新的Element，就用旧的Element。
 	// Use old Element if there is no new Element.
@@ -413,32 +412,14 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 	deallocAtomMail(am)
 
 	// Save old data.
-	var err error
-	var oldBuf []byte
-	switch oldInst := a.instance.(type) {
-	case AtomStateful:
-		oldBuf, err = proto.Marshal(oldInst)
-		if err != nil {
-			return err
-		}
-	}
-	// Notice reloading.
-	reloadableAtom.WillReload()
+	data := a.instance.Halt(a.element.cosmos.local.mainAtom, map[uint64]CancelledTask{})
 	// Restoring data and replace instance.
 	a.version = am.upgradeVersion
 	a.instance = reloadElementImplement.Developer.AtomConstructor()
-	switch inst := a.instance.(type) {
-	case AtomStateful:
-		err = proto.Unmarshal(oldBuf, inst)
-		if err != nil {
-			return err
-		}
-	}
-	// 通知新的Atom已经Reload。（但如果新的Atom不支持Reload呢？）
-	// Notifying the new Atom reloaded. But how about the new Atom not supports Reloadable?
-	newAtom, ok := a.instance.(AtomReloadable)
-	if ok {
-		newAtom.DoReload()
+	if err := reloadElementImplement.Interface.AtomSpawner(a, a.instance, nil, data); err != nil {
+		a.element.cosmos.logInfo("AtomCore.handleReload: Reload spawn failed, id=%+v,version=%d,inst=%+v,data=%+v",
+			a.atomId, a.version, a.instance, data)
+		return err
 	}
 	return nil
 }

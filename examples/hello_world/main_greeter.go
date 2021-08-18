@@ -46,6 +46,7 @@ func scriptGreetingRoom(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNot
 	}()
 	hello, err := greeterId.SayHello(mainId, &api.HelloRequest{Name: "Atomos"})
 	if err != nil {
+		mainId.Log().Error("Hello, hello=%v,err=%v", hello, err)
 		panic(err)
 	} else {
 		mainId.Log().Info("Hello, %v", hello)

@@ -16,41 +16,41 @@ import (
 // Atom类型
 // Atom type.
 type Atom interface {
-	Spawn(self AtomSelf, arg proto.Message) error
-	Halt(from Id, cancels map[uint64]CancelledTask)
+	//Spawn(self AtomSelf, arg proto.Message) error
+	Halt(from Id, cancels map[uint64]CancelledTask) (saveData proto.Message)
 }
 
-// 可以被重载的Atom类型
-// Reloadable Atom type.
-type AtomReloadable interface {
-	// 旧的Atom实例在Reload前被调用，通知Atom准备重载。
-	// Calls the old Atom before it is going to be reloaded.
-	WillReload()
-
-	// 新的Atom实例在Reload后被调用，通知Atom已经重载。
-	// Calls the new Atom after it has already been reloaded.
-	DoReload()
-}
-
-// 有状态的Atom
-// 充分发挥protobuf的优势，在Atom非运行时，可以能够保存和恢复所有数据，所以千万不要把数据放在闭包中。
+//// 可以被重载的Atom类型
+//// Reloadable Atom type.
+//type AtomReloadable interface {
+//	// 旧的Atom实例在Reload前被调用，通知Atom准备重载。
+//	// Calls the old Atom before it is going to be reloaded.
+//	WillReload()
 //
-// Stateful Atom
-// Take advantage of protobuf, Atom can save and recovery all data of itself, so never to take data
-// reference into closure.
-type AtomStateful interface {
-	Atom
-	proto.Message
-}
-
-// 无状态的Atom
-// 这种Atom没有需要保存和恢复的东西。
+//	// 新的Atom实例在Reload后被调用，通知Atom已经重载。
+//	// Calls the new Atom after it has already been reloaded.
+//	DoReload()
+//}
 //
-// Stateless Atom
-// Such a type of Atom, is no need to save or recovery anything.
-type AtomStateless interface {
-	Atom
-}
+//// 有状态的Atom
+//// 充分发挥protobuf的优势，在Atom非运行时，可以能够保存和恢复所有数据，所以千万不要把数据放在闭包中。
+////
+//// Stateful Atom
+//// Take advantage of protobuf, Atom can save and recovery all data of itself, so never to take data
+//// reference into closure.
+//type AtomStateful interface {
+//	Atom
+//	proto.Message
+//}
+//
+//// 无状态的Atom
+//// 这种Atom没有需要保存和恢复的东西。
+////
+//// Stateless Atom
+//// Such a type of Atom, is no need to save or recovery anything.
+//type AtomStateless interface {
+//	Atom
+//}
 
 // 暴露给Atom开发者使用的Atom接口。
 // Some methods of Atom interface that expose Atom developers to use.

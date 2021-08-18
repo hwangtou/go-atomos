@@ -84,6 +84,10 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
 
+	for _, define := range c.elements {
+		define.current.Developer.Loaded(c.mainAtom)
+	}
+
 	// Init remote to support remote.
 	if err := self.remotes.init(); err != nil {
 		self.logFatal("CosmosLocal.initRunnable: Init remote error, err=%v", err)
@@ -139,6 +143,7 @@ func (c *CosmosLocal) exitRunnable() {
 		} else {
 			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s", elemName)
 		}
+		elem.current.Developer.Unloaded()
 		delete(c.elements, elemName)
 	}
 	c.mainKillCh = nil
@@ -232,6 +237,7 @@ func (c *CosmosLocal) SpawnAtom(elemName, atomName string, arg proto.Message) (I
 	// Get element.
 	e, err := c.getElement(elemName)
 	if err != nil {
+		err = fmt.Errorf("element has not registered, name=%s", elemName)
 		return nil, err
 	}
 

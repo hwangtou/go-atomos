@@ -66,6 +66,7 @@ func newCosmosSelf() *CosmosSelf {
 		OnPanic:   c.onLogPanic,
 		OnStop:    c.onLogStop,
 	})
+	c.log.Name = "logger"
 	c.log.Start()
 	return c
 }

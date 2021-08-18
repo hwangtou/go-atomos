@@ -10,14 +10,24 @@ import (
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the atomos package it is being compiled against.
 
+//////
+//// INTERFACES
 //
-// Interface
+
+//////////////////////////////////////
+////////// Element: Greeter //////////
+//////////////////////////////////////
+//
+// The greeting service definition.
+// New line
 //
 
 // GreeterId is the interface of Greeter atomos.
-//
+
 type GreeterId interface {
 	go_atomos.Id
+
+	// Sends a greeting
 	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
@@ -33,10 +43,11 @@ func GetGreeterId(c go_atomos.CosmosNode, name string) (GreeterId, error) {
 	}
 }
 
-// GreeterAtom is the atomos implements of Greeter atomos.
-//
-type GreeterAtom interface {
+// Greeter is the atomos implements of Greeter atomos.
+
+type Greeter interface {
 	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *HelloSpawnArg, data *HelloData) error
 	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
@@ -55,8 +66,16 @@ func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (Greet
 	return nil, go_atomos.ErrAtomType
 }
 
+//////
+//// IMPLEMENTATIONS
 //
-// Implementation
+
+//////////////////////////////////////
+////////// Element: Greeter //////////
+//////////////////////////////////////
+//
+// The greeting service definition.
+// New line
 //
 
 type greeterId struct {
@@ -78,6 +97,11 @@ func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, 
 func GetGreeterInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &greeterId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*HelloSpawnArg)
+		dataT, _ := data.(*HelloData)
+		return a.(Greeter).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
 		"SayHello": go_atomos.NewAtomCallConfig(&HelloRequest{}, &HelloReply{}),
 	}
@@ -99,7 +123,7 @@ func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImple
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(GreeterAtom)
+			a, ok := to.(Greeter)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}

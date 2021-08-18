@@ -73,6 +73,7 @@ type MailBoxHandler struct {
 }
 
 type MailBox struct {
+	Name string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
@@ -102,6 +103,7 @@ func initMailBox(a *AtomCore) {
 		OnPanic:   a.onPanic,
 		OnStop:    a.onStop,
 	})
+	a.mailbox.Name = a.name
 }
 
 func DelMailBox(b *MailBox) {

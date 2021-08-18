@@ -18,9 +18,22 @@ package api;
 option go_package = "examples/hello_world/api";
 
 // The greeting service definition.
+// New line
 service Greeter {
+  // Spawn
+  rpc Spawn (HelloSpawnArg) returns (HelloData) {}
   // Sends a greeting
   rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+message HelloData {
+}
+
+message HelloSpawnArg {
+}
+
+message HelloTimer {
+  string info = 1;
 }
 
 // The request message containing the user's name.

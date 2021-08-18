@@ -267,7 +267,6 @@ func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
 	if fnValue.Kind() != reflect.Func {
 		return "", fmt.Errorf("atomTasks: Add invalid function, type=%T,fn=%+v", fn, fn)
 	}
-	fnNumIn := fnType.NumIn()
 	fnRuntime := runtime.FuncForPC(fnValue.Pointer())
 	if fnRuntime == nil {
 		return "", fmt.Errorf("atomTasks: Add invalid function runtime, type=%T,fn=%+v", fn, fn)
@@ -279,21 +278,45 @@ func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
 	if len(fnRunes) == 0 || unicode.IsLower(fnRunes[0]) {
 		return "", fmt.Errorf("atomTasks: Add invalid function name, type=%T,fn=%+v", fn, fn)
 	}
+	_, err := checkFnArgs(fnType, fnName, msg)
+	return fnName, err
+}
+
+func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, error) {
+	fnNumIn := fnType.NumIn()
 	switch fnNumIn {
 	case 0:
-		return fnName, nil
+		// Call without argument.
+		return 0, nil
 	case 1:
-		argType := fnType.In(0)
+		// Call with only a task id argument.
+		if msg != nil {
+			return 0, fmt.Errorf("atomTasks: Add func not support message, fn=%s", fnName)
+		}
+		fn0Type := fnType.In(0)
+		// Check task id.
+		if fn0Type.Kind() != reflect.Uint64 {
+			return 0, fmt.Errorf("atomTasks: Add illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+		}
+		return 1, nil
+	case 2:
+		// Call with task id as first argument and message as second argument.
+		if msg == nil {
+			return 0, fmt.Errorf("atomTasks: Add nil message, fn=%s", fnName)
+		}
+		fn0Type, fn1Type := fnType.In(0), fnType.In(1)
+		// Check task id.
+		if fn0Type.Kind() != reflect.Uint64 {
+			return 0, fmt.Errorf("atomTasks: Add illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+		}
+		// Check message.
 		msgType := reflect.TypeOf(msg)
-		if argType.String() == msgType.String() {
-			return fnName, nil
+		if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
+			return 0, fmt.Errorf("atomTasks: Add illegal message receiver, fn=%s,msg=%+v", fnName, msg)
 		}
-		if msgType.AssignableTo(argType) {
-			return fnName, nil
-		}
-		return "", fmt.Errorf("atomTasks: Add illegal message, fn=%s,msg=%+v", fnName, msg)
+		return 2, nil
 	}
-	return "", fmt.Errorf("atomTasks: Add illegal function, fn=%v", fn)
+	return 0, fmt.Errorf("atomTasks: Add illegal function, fn=%v", fnType)
 }
 
 func getTaskFnName(fnRawName string) string {
@@ -318,7 +341,7 @@ func (at *atomTasksManager) cancelAllSchedulingTasks() map[uint64]CancelledTask 
 	cancels := make(map[uint64]CancelledTask, len(at.tasks))
 	for id, t := range at.tasks {
 		cancel, err := at.cancelTask(id, t)
-		if err != nil {
+		if err == nil {
 			cancels[id] = cancel
 		}
 	}
@@ -338,21 +361,18 @@ func (at *atomTasksManager) cancelAllSchedulingTasks() map[uint64]CancelledTask 
 // 2. delete timer atomTask
 func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel CancelledTask, err error) {
 	if t == nil {
-		ta, has := at.tasks[id]
-		if !has {
-			return cancel, fmt.Errorf("atomTasks: Cancel task that not exists")
-		}
+		ta := at.tasks[id]
 		t = ta
 	}
 	// If it has a timer, it's a timer task.
-	if t.timer != nil {
+	if t != nil && t.timer != nil {
 		switch t.timerState {
 		// 任务已被取消。
 		// 正常来说这段代码不会触发到，除非框架逻辑有问题。
 		// Task has been cancelled.
 		// This switch-case is unreachable unless framework has bug.
 		case TaskCancelled:
-			delete(at.tasks, t.id)
+			delete(at.tasks, id)
 			deallocAtomMail(t.mail)
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
@@ -367,7 +387,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 		case TaskScheduling:
 			ok := t.timer.Stop()
 			t.timerState = TaskCancelled
-			delete(at.tasks, t.id)
+			delete(at.tasks, id)
 			deallocAtomMail(t.mail)
 			if !ok {
 				// Might only happen on the edge of scheduled time has reached,
@@ -375,7 +395,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 				// and the function still have acquired the mutex.
 				at.atom.element.cosmos.logInfo("atomTasks.cancelTask: Cancel on the edge")
 			}
-			cancel.Id = t.mail.id
+			cancel.Id = id
 			cancel.Name = t.mail.name
 			cancel.Arg = t.mail.arg
 			return cancel, nil
@@ -383,12 +403,12 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 		// 定时任务已经在Atom mailbox中。
 		// Timer task is already in Atom mailbox.
 		case TaskMailing:
-			m := at.atom.mailbox.PopById(t.id)
+			m := at.atom.mailbox.PopById(id)
 			if m == nil {
 				err = fmt.Errorf("cannot delete timer that not exists")
 				return cancel, err
 			}
-			cancel.Id = t.mail.id
+			cancel.Id = id
 			cancel.Name = t.mail.name
 			cancel.Arg = t.mail.arg
 			return cancel, nil
@@ -398,17 +418,21 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 				t.timerState)
 			return cancel, fmt.Errorf("unknown timer state")
 		}
-	} else {
-		m := at.atom.mailbox.PopById(t.id)
-		if m == nil {
-			err = fmt.Errorf("cannot delete timer that not exists")
-			return cancel, err
-		}
-		cancel.Id = t.mail.id
-		cancel.Name = t.mail.name
-		cancel.Arg = t.mail.arg
-		return cancel, nil
 	}
+	m := at.atom.mailbox.PopById(id)
+	if m == nil {
+		err = fmt.Errorf("cannot delete timer that not exists")
+		return cancel, err
+	}
+	am, ok := m.Content.(*atomMail)
+	if !ok {
+		err = fmt.Errorf("cannot delete timer that atom mail is invalid")
+		return cancel, err
+	}
+	cancel.Id = id
+	cancel.Name = am.name
+	cancel.Arg = am.arg
+	return cancel, nil
 }
 
 // Atom正式开始处理任务。
@@ -426,15 +450,32 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	defer deallocAtomMail(am)
 	// 用反射来执行任务函数。
 	// Executing task method using reflect.
-	instType := reflect.ValueOf(at.atom.instance).Type()
-	for i := 0; i < instType.NumMethod(); i++ {
-	}
-	method := reflect.ValueOf(at.atom.instance).MethodByName(am.name)
+	instValue := reflect.ValueOf(at.atom.instance)
+	method := instValue.MethodByName(am.name)
 	if !method.IsValid() {
-		at.atom.log.Error("atomTasks.handleTask: Method invalid, name=%s", am.name)
+		at.atom.log.Error("atomTasks.handleTask: Method invalid, id=%d,name=%s,arg=%+v",
+			am.Mail.id, am.name, am.arg)
 		return
 	}
-	method.Call([]reflect.Value{
-		reflect.ValueOf(am.arg),
-	})
+	inNum, err := checkFnArgs(method.Type(), am.name, am.arg)
+	if err != nil {
+		at.atom.log.Error("atomTasks.handleTask: Argument invalid, id=%d,name=%s,arg=%+v,err=%v",
+			am.Mail.id, am.name, am.arg, err)
+		return
+	}
+	var val []reflect.Value
+	var id = reflect.ValueOf(am.id)
+	var arg reflect.Value
+	if am.arg != nil {
+		arg = reflect.ValueOf(am.arg)
+	} else {
+		arg = reflect.ValueOf((proto.Message) (nil))
+	}
+	switch inNum {
+	case 1:
+		val = append(val, id)
+	case 2:
+		val = append(val, id, arg)
+	}
+	method.Call(val)
 }
