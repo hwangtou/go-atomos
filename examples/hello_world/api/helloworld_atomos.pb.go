@@ -10,24 +10,15 @@ import (
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the atomos package it is being compiled against.
 
-//////
-//// INTERFACES
 //
-
-//////////////////////////////////////
-////////// Element: Greeter //////////
-//////////////////////////////////////
-//
-// The greeting service definition.
-// New line
+// Interface
 //
 
 // GreeterId is the interface of Greeter atomos.
-
+//
 type GreeterId interface {
 	go_atomos.Id
-
-	// Sends a greeting
+	Spawn(from go_atomos.Id, in *HelloSpawnArg) (*HelloData, error)
 	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
@@ -43,11 +34,11 @@ func GetGreeterId(c go_atomos.CosmosNode, name string) (GreeterId, error) {
 	}
 }
 
-// Greeter is the atomos implements of Greeter atomos.
-
-type Greeter interface {
+// GreeterAtom is the atomos implements of Greeter atomos.
+//
+type GreeterAtom interface {
 	go_atomos.Atom
-	Spawn(self go_atomos.AtomSelf, arg *HelloSpawnArg, data *HelloData) error
+	Spawn(from go_atomos.Id, in *HelloSpawnArg) (*HelloData, error)
 	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
@@ -66,20 +57,67 @@ func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (Greet
 	return nil, go_atomos.ErrAtomType
 }
 
-//////
-//// IMPLEMENTATIONS
+// TaskBoothId is the interface of TaskBooth atomos.
 //
+type TaskBoothId interface {
+	go_atomos.Id
+	Spawn(from go_atomos.Id, in *TaskBoothSpawnArg) (*TaskBoothData, error)
+	StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error)
+}
 
-//////////////////////////////////////
-////////// Element: Greeter //////////
-//////////////////////////////////////
+func GetTaskBoothId(c go_atomos.CosmosNode, name string) (TaskBoothId, error) {
+	ca, err := c.GetAtomId("TaskBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(TaskBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// TaskBoothAtom is the atomos implements of TaskBooth atomos.
 //
-// The greeting service definition.
-// New line
+type TaskBoothAtom interface {
+	go_atomos.Atom
+	Spawn(from go_atomos.Id, in *TaskBoothSpawnArg) (*TaskBoothData, error)
+	StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error)
+}
+
+func SpawnTaskBooth(c go_atomos.CosmosNode, name string, arg proto.Message) (TaskBoothId, error) {
+	_, err := c.SpawnAtom("TaskBooth", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("TaskBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(TaskBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+//
+// Implementation
 //
 
 type greeterId struct {
 	go_atomos.Id
+}
+
+func (c *greeterId) Spawn(from go_atomos.Id, in *HelloSpawnArg) (*HelloData, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
+	if err != nil {
+		return nil, err
+	}
+	reply, ok := r.(*HelloData)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
 }
 
 func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error) {
@@ -97,15 +135,15 @@ func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, 
 func GetGreeterInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &greeterId{id} }
-	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
-		argT, _ := arg.(*HelloSpawnArg)
-		dataT, _ := data.(*HelloData)
-		return a.(Greeter).Spawn(s, argT, dataT)
-	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"Spawn":    go_atomos.NewAtomCallConfig(&HelloSpawnArg{}, &HelloData{}),
 		"SayHello": go_atomos.NewAtomCallConfig(&HelloRequest{}, &HelloReply{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"Spawn": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloSpawnArg{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloData{}) },
+		},
 		"SayHello": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloRequest{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloReply{}) },
@@ -118,16 +156,105 @@ func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImple
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetGreeterInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*HelloSpawnArg)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(GreeterAtom)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.Spawn(from, req)
+		},
 		"SayHello": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*HelloRequest)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(Greeter)
+			a, ok := to.(GreeterAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
 			return a.SayHello(from, req)
+		},
+	}
+	return elem
+}
+
+type taskBoothId struct {
+	go_atomos.Id
+}
+
+func (c *taskBoothId) Spawn(from go_atomos.Id, in *TaskBoothSpawnArg) (*TaskBoothData, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
+	if err != nil {
+		return nil, err
+	}
+	reply, ok := r.(*TaskBoothData)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func (c *taskBoothId) StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "StartTask", in)
+	if err != nil {
+		return nil, err
+	}
+	reply, ok := r.(*StartTaskResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetTaskBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &taskBoothId{id} }
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"Spawn":     go_atomos.NewAtomCallConfig(&TaskBoothSpawnArg{}, &TaskBoothData{}),
+		"StartTask": go_atomos.NewAtomCallConfig(&StartTaskReq{}, &StartTaskResp{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"Spawn": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &TaskBoothSpawnArg{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &TaskBoothData{}) },
+		},
+		"StartTask": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &StartTaskReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &StartTaskResp{}) },
+		},
+	}
+	return elem
+}
+
+func GetTaskBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetTaskBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*TaskBoothSpawnArg)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(TaskBoothAtom)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.Spawn(from, req)
+		},
+		"StartTask": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*StartTaskReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(TaskBoothAtom)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.StartTask(from, req)
 		},
 	}
 	return elem

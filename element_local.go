@@ -66,6 +66,9 @@ func (e *ElementLocal) load() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
+	if err := e.current.Developer.Load(e.cosmos.local.mainAtom); err != nil {
+		return err
+	}
 	e.loaded = true
 	return nil
 }
@@ -168,8 +171,12 @@ func (e *ElementLocal) KillAtom(fromId, toId Id) error {
 // Internal
 
 func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, error) {
+	var data proto.Message
+	var err error
 	impl := a.element.implements[a.version]
-	data, err := impl.Developer.AtomDataLoader(a.name)
+	if p := impl.Developer.Persistence(); p != nil {
+		data, err = p.GetAtomData(a.name)
+	}
 	if err != nil {
 		return nil, err
 	}

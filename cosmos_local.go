@@ -18,7 +18,7 @@ type CosmosLocal struct {
 	elements   map[string]*ElementLocal
 	interfaces map[string]*ElementInterface
 	mainElem   *ElementLocal
-	mainAtom   *AtomCore
+	mainAtom   *mainAtom
 	mainKillCh chan bool
 }
 
@@ -85,7 +85,7 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	c.mainKillCh = make(chan bool)
 
 	for _, define := range c.elements {
-		define.current.Developer.Loaded(c.mainAtom)
+		define.current.Developer.Load(c.mainAtom)
 	}
 
 	// Init remote to support remote.
@@ -143,7 +143,7 @@ func (c *CosmosLocal) exitRunnable() {
 		} else {
 			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s", elemName)
 		}
-		elem.current.Developer.Unloaded()
+		elem.current.Developer.Unload()
 		delete(c.elements, elemName)
 	}
 	c.mainKillCh = nil

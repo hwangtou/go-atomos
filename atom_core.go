@@ -168,10 +168,11 @@ func (a *AtomCore) CosmosSelf() *CosmosSelf {
 func (a *AtomCore) KillSelf() {
 	id, elem := a.atomId, a.element
 	if err := a.pushKillMail(a, false); err != nil {
-		elem.cosmos.logInfo("AtomCore: Kill self error, id=%+v,err=%s", id, err)
+		elem.cosmos.logInfo(fmt.Sprintf("%s::%s::%s => Kill self error, err=%v",
+			id.Node, id.Element, id.Name, err))
 		return
 	}
-	elem.cosmos.logInfo("AtomCore: Kill self, id=%+v", id)
+	elem.cosmos.logInfo(fmt.Sprintf("%s::%s::%s => Kill self.", id.Node, id.Element, id.Name))
 }
 
 func (a *AtomCore) Log() *atomLogsManager {
@@ -371,10 +372,14 @@ func (a *AtomCore) pushKillMail(from Id, wait bool) error {
 func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]CancelledTask) error {
 	a.setStopping()
 	data := a.instance.Halt(killAtomMail.from, cancels)
-	if err := a.element.implements[a.version].Developer.AtomDataSaver(a.name, data); err != nil {
-		a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
-			a.atomId, a.version, a.instance, data)
-		return err
+	if impl := a.element.implements[a.version]; impl != nil {
+		if p := impl.Developer.Persistence(); p != nil {
+			if err := p.SetAtomData(a.name, data); err != nil {
+				a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
+					a.atomId, a.version, a.instance, data)
+				return err
+			}
+		}
 	}
 	return nil
 }

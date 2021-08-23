@@ -49,15 +49,11 @@ type Element interface {
 
 // 从*.proto文件生成到*_atomos.pb.go文件中的，具体的Element对象。
 // Concrete Element instance in *_atomos.pb.go, which is generated from developer defined *.proto file.
-type ElementDeveloper interface {
-	// 检查ElementImplement是否合法。
-	// Check whether ElementDeveloper is legal or not.
-	Check() error
-
-	// 加载完毕&卸载完毕
+type  ElementDeveloper interface {
+	// 加载&卸载
 	// Loaded & Unloaded
-	Loaded(mainId Id)
-	Unloaded()
+	Load(mainId MainId) error
+	Unload()
 
 	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
 	// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atom quantity.
@@ -69,17 +65,26 @@ type ElementDeveloper interface {
 	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
 	AtomConstructor() Atom
 
-	AtomDataLoader(name string) (proto.Message, error)
-
-	// Atom保存器
-	// Atom Saver.
-	AtomDataSaver(name string, data proto.Message) error
+	// 数据持久化助手
+	// Data Persistence Helper
+	// If returns nil, that means the element is not under control of helper.
+	Persistence() ElementPersistence
 
 	// Atom是否可以被该Id的Atom终止。
 	// Atom保存函数的函数类型，只有有状态的Atom会被保存。
 	// Whether the Atom can be killed by the Id or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
 	AtomCanKill(Id) bool
+}
+
+type ElementPersistence interface {
+	// Atom读取
+	// Get Atom.
+	GetAtomData(name string) (proto.Message, error)
+
+	// Atom保存
+	// Save Atom.
+	SetAtomData(name string, data proto.Message) error
 }
 
 // TODO:

@@ -28,12 +28,8 @@ func (h *GreeterElement) AtomConstructor() atomos.Atom {
 	return &helloAtom{}
 }
 
-func (h *GreeterElement) AtomDataLoader(name string) (proto.Message, error) {
-	return nil, nil
-}
-
-func (h *GreeterElement) AtomDataSaver(name string, data proto.Message) error {
-	return nil
+func (h *GreeterElement) Persistence() atomos.ElementPersistence {
+	panic("implement me")
 }
 
 func (h *GreeterElement) AtomCanKill(id atomos.Id) bool {
@@ -54,7 +50,7 @@ func (h *helloAtom) Spawn(self atomos.AtomSelf, arg *api.HelloSpawnArg, data *ap
 	}
 	h.HelloData = data
 	tid, err := h.self.Task().AddAfter(5 * time.Second, h.TimerKiller1, nil)
-	//tid, err := h.self.Task().Add(h.TimerKiller, nil)
+	//tid, err := h.self.Task().Append(h.TimerKiller, nil)
 	h.self.Log().Info("Spawn Kill, tid=%d,err=%v", tid, err)
 	return nil
 }
@@ -70,65 +66,65 @@ func (h *helloAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask
 func (h *helloAtom) SayHello(from atomos.Id, in *api.HelloRequest) (*api.HelloReply, error) {
 	h.self.Log().Info("SayHello")
 
-	// Add Immediately task.
+	// Append Immediately task.
 	h.self.Log().Info("")
-	h.self.Log().Info("Add Immediately task.")
-	// Add Task with no argument.
-	tid, err := h.self.Task().Add(h.TimerTest2, nil)
-	h.self.Log().Info("Task.Add TimerTest, tid=%d,err=%v", tid, err)
-	// Add Task with task id argument.
-	tid, err = h.self.Task().Add(h.TimerTestTaskId3, nil)
-	h.self.Log().Info("Task.Add TimerTestTaskId, tid=%d,err=%v", tid, err)
-	// Add Task with task id and message argument.
-	tid, err = h.self.Task().Add(h.TimerTestTaskIdAndArg4, &api.HelloTimer{Info: "Hi:4"})
-	h.self.Log().Info("Task.Add TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
+	h.self.Log().Info("Append Immediately task.")
+	// Append Task with no argument.
+	tid, err := h.self.Task().Append(h.TimerTest2, nil)
+	h.self.Log().Info("Task.Append TimerTest, tid=%d,err=%v", tid, err)
+	// Append Task with task id argument.
+	tid, err = h.self.Task().Append(h.TimerTestTaskId3, nil)
+	h.self.Log().Info("Task.Append TimerTestTaskId, tid=%d,err=%v", tid, err)
+	// Append Task with task id and message argument.
+	tid, err = h.self.Task().Append(h.TimerTestTaskIdAndArg4, &api.HelloTimer{Info: "Hi:4"})
+	h.self.Log().Info("Task.Append TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 
-	// Add Timer task.
+	// Append Timer task.
 	h.self.Log().Info("")
-	h.self.Log().Info("Add Timer task.")
-	// Add Timer Task with no argument.
+	h.self.Log().Info("Append Timer task.")
+	// Append Timer Task with no argument.
 	tid, err = h.self.Task().AddAfter(0 * time.Second, h.TimerTest5, nil)
 	h.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
-	// Add Timer Task with task id argument.
+	// Append Timer Task with task id argument.
 	tid, err = h.self.Task().AddAfter(1 * time.Second, h.TimerTestTaskId6, nil)
 	h.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
-	// Add Timer Task with task id and message argument.
+	// Append Timer Task with task id and message argument.
 	tid, err = h.self.Task().AddAfter(2 * time.Second, h.TimerTestTaskIdAndArg7, &api.HelloTimer{Info: "Hi:7"})
 	h.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 
-	// Add Immediately task then cancel.
+	// Append Immediately task then cancel.
 	h.self.Log().Info("")
-	h.self.Log().Info("Add Immediately task then cancel.")
-	// Add Task with no argument.
-	tid, err = h.self.Task().Add(h.TimerTest8, nil)
-	h.self.Log().Info("Task.Add TimerTest1, tid=%d,err=%v", tid, err)
+	h.self.Log().Info("Append Immediately task then cancel.")
+	// Append Task with no argument.
+	tid, err = h.self.Task().Append(h.TimerTest8, nil)
+	h.self.Log().Info("Task.Append TimerTest1, tid=%d,err=%v", tid, err)
 	cancel, err := h.self.Task().Cancel(tid)
 	h.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Add Task with task id argument.
-	tid, err = h.self.Task().Add(h.TimerTestTaskId9, nil)
-	h.self.Log().Info("Task.Add TimerTestTaskId, tid=%d,err=%v", tid, err)
+	// Append Task with task id argument.
+	tid, err = h.self.Task().Append(h.TimerTestTaskId9, nil)
+	h.self.Log().Info("Task.Append TimerTestTaskId, tid=%d,err=%v", tid, err)
 	cancel, err = h.self.Task().Cancel(tid)
 	h.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Add Task with task id and message argument.
-	tid, err = h.self.Task().Add(h.TimerTestTaskIdAndArg10, &api.HelloTimer{Info: "Hi:10"})
-	h.self.Log().Info("Task.Add TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
+	// Append Task with task id and message argument.
+	tid, err = h.self.Task().Append(h.TimerTestTaskIdAndArg10, &api.HelloTimer{Info: "Hi:10"})
+	h.self.Log().Info("Task.Append TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 	cancel, err = h.self.Task().Cancel(tid)
 	h.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
 
-	// Add Timer task then cancel.
+	// Append Timer task then cancel.
 	h.self.Log().Info("")
-	h.self.Log().Info("Add Timer task then cancel.")
-	// Add Timer Task with no argument.
+	h.self.Log().Info("Append Timer task then cancel.")
+	// Append Timer Task with no argument.
 	tid, err = h.self.Task().AddAfter(0 * time.Second, h.TimerTest11, nil)
 	h.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
 	cancel, err = h.self.Task().Cancel(tid)
 	h.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Add Timer Task with task id argument.
+	// Append Timer Task with task id argument.
 	tid, err = h.self.Task().AddAfter(1 * time.Second, h.TimerTestTaskId12, nil)
 	h.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
 	cancel, err = h.self.Task().Cancel(tid)
 	h.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Add Timer Task with task id and message argument.
+	// Append Timer Task with task id and message argument.
 	tid, err = h.self.Task().AddAfter(2 * time.Second, h.TimerTestTaskIdAndArg13, &api.HelloTimer{Info: "Hi:13"})
 	h.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 	cancel, err = h.self.Task().Cancel(tid)
@@ -136,16 +132,16 @@ func (h *helloAtom) SayHello(from atomos.Id, in *api.HelloRequest) (*api.HelloRe
 
 	h.self.Log().Info("")
 
-	// Add Timer task after kill.
+	// Append Timer task after kill.
 	h.self.Log().Info("")
-	h.self.Log().Info("Add Timer task.")
-	// Add Timer Task with no argument.
+	h.self.Log().Info("Append Timer task.")
+	// Append Timer Task with no argument.
 	tid, err = h.self.Task().AddAfter(6 * time.Second, h.TimerTest14, nil)
 	h.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
-	// Add Timer Task with task id argument.
+	// Append Timer Task with task id argument.
 	tid, err = h.self.Task().AddAfter(6 * time.Second, h.TimerTestTaskId15, nil)
 	h.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
-	// Add Timer Task with task id and message argument.
+	// Append Timer Task with task id and message argument.
 	tid, err = h.self.Task().AddAfter(6 * time.Second, h.TimerTestTaskIdAndArg16, &api.HelloTimer{Info: "Hi:16"})
 	h.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 

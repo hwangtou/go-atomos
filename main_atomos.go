@@ -27,6 +27,9 @@ type MainId interface {
 
 	// Connect to remote CosmosNode.
 	Connect(name, addr string) (CosmosNode, error)
+
+	// Clone of Config
+	Config() *Config
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.
@@ -55,19 +58,27 @@ type mainElement struct {
 	self *CosmosSelf
 }
 
-func newMainAtom(e *ElementLocal) *AtomCore {
+func newMainAtom(e *ElementLocal) *mainAtom {
 	a := allocAtom()
-	initAtom(a, e, MainAtomName, &mainAtom{
+	ma := &mainAtom{
 		self:     e.cosmos,
 		AtomCore: a,
-	})
+	}
+	initAtom(a, e, MainAtomName, ma)
 	a.state = AtomSpawning
 	e.atoms[MainAtomName] = a
-	ac, _ := e.spawningAtom(a, nil)
-	return ac
+	e.spawningAtom(a, nil)
+	return ma
 }
 
-func (m *mainElement) Check() error {
+func (m *mainElement) Load(mainId MainId) error {
+	return nil
+}
+
+func (m *mainElement) Unload() {
+}
+
+func (m *mainElement) Persistence() ElementPersistence {
 	return nil
 }
 
@@ -75,22 +86,8 @@ func (m *mainElement) Info() (name string, version uint64, logLevel LogLevel, in
 	return "Main", 1, m.self.config.LogLevel, 1
 }
 
-func (m *mainElement) Loaded(mainId Id) {
-}
-
-func (m *mainElement) Unloaded() {
-}
-
 func (m *mainElement) AtomConstructor() Atom {
 	return &mainAtom{}
-}
-
-func (m *mainElement) AtomDataLoader(name string) (proto.Message, error) {
-	return nil, nil
-}
-
-func (m *mainElement) AtomDataSaver(name string, data proto.Message) error {
-	return nil
 }
 
 func (m *mainElement) AtomCanKill(id Id) bool {
@@ -110,6 +107,10 @@ type mainAtom struct {
 
 func (m *mainAtom) Connect(name, addr string) (CosmosNode, error) {
 	return m.self.Connect(name, addr)
+}
+
+func (m *mainAtom) Config() *Config {
+	return proto.Clone(m.self.config).(*Config)
 }
 
 func (m *mainAtom) Spawn(self AtomSelf, arg proto.Message) error {
