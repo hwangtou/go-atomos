@@ -10,16 +10,26 @@ import (
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the atomos package it is being compiled against.
 
+//////
+//// INTERFACES
 //
-// Interface
+
+//////////////////////////////////////////////
+////////// Element: UserManagerAtom //////////
+//////////////////////////////////////////////
+//
+// 用户管理器Atom
 //
 
 // UserManagerAtomId is the interface of UserManagerAtom atomos.
-//
+
 type UserManagerAtomId interface {
 	go_atomos.Id
-	Spawn(from go_atomos.Id, in *UserManagerSpawnArg) (*UserManager, error)
+
+	// 注册用户
 	RegisterUser(from go_atomos.Id, in *RegisterUserReq) (*RegisterUserResp, error)
+
+	// 查找用户
 	FindUser(from go_atomos.Id, in *FindUserReq) (*FindUserResp, error)
 }
 
@@ -35,11 +45,11 @@ func GetUserManagerAtomId(c go_atomos.CosmosNode, name string) (UserManagerAtomI
 	}
 }
 
-// UserManagerAtomAtom is the atomos implements of UserManagerAtom atomos.
-//
-type UserManagerAtomAtom interface {
+// UserManagerAtom is the atomos implements of UserManagerAtom atomos.
+
+type UserManagerAtom interface {
 	go_atomos.Atom
-	Spawn(from go_atomos.Id, in *UserManagerSpawnArg) (*UserManager, error)
+	Spawn(self go_atomos.AtomSelf, arg *UserManagerSpawnArg, data *UserManager) error
 	RegisterUser(from go_atomos.Id, in *RegisterUserReq) (*RegisterUserResp, error)
 	FindUser(from go_atomos.Id, in *FindUserReq) (*FindUserResp, error)
 }
@@ -59,14 +69,29 @@ func SpawnUserManagerAtom(c go_atomos.CosmosNode, name string, arg proto.Message
 	return nil, go_atomos.ErrAtomType
 }
 
-// UserAtomId is the interface of UserAtom atomos.
+///////////////////////////////////////
+////////// Element: UserAtom //////////
+///////////////////////////////////////
 //
+// 用户Atom
+//
+
+// UserAtomId is the interface of UserAtom atomos.
+
 type UserAtomId interface {
 	go_atomos.Id
-	Spawn(from go_atomos.Id, in *UserSpawnArg) (*User, error)
+
+	// 用户信息
 	UserInfo(from go_atomos.Id, in *UserInfoReq) (*UserInfoResp, error)
+
+	// 所有好友
 	GetFriends(from go_atomos.Id, in *GetFriendsReq) (*GetFriendsResp, error)
+
+	// 添加好友
 	AddFriend(from go_atomos.Id, in *AddFriendReq) (*AddFriendResp, error)
+
+	// 房间信息
+	// 房间消息推送
 	RoomMessage(from go_atomos.Id, in *RoomMessagePush) (*RoomMessagePushResp, error)
 }
 
@@ -82,11 +107,11 @@ func GetUserAtomId(c go_atomos.CosmosNode, name string) (UserAtomId, error) {
 	}
 }
 
-// UserAtomAtom is the atomos implements of UserAtom atomos.
-//
-type UserAtomAtom interface {
+// UserAtom is the atomos implements of UserAtom atomos.
+
+type UserAtom interface {
 	go_atomos.Atom
-	Spawn(from go_atomos.Id, in *UserSpawnArg) (*User, error)
+	Spawn(self go_atomos.AtomSelf, arg *UserSpawnArg, data *User) error
 	UserInfo(from go_atomos.Id, in *UserInfoReq) (*UserInfoResp, error)
 	GetFriends(from go_atomos.Id, in *GetFriendsReq) (*GetFriendsResp, error)
 	AddFriend(from go_atomos.Id, in *AddFriendReq) (*AddFriendResp, error)
@@ -108,12 +133,22 @@ func SpawnUserAtom(c go_atomos.CosmosNode, name string, arg proto.Message) (User
 	return nil, go_atomos.ErrAtomType
 }
 
-// ChatRoomManagerAtomId is the interface of ChatRoomManagerAtom atomos.
+//////////////////////////////////////////////////
+////////// Element: ChatRoomManagerAtom //////////
+//////////////////////////////////////////////////
 //
+// 房间管理器Atom
+//
+
+// ChatRoomManagerAtomId is the interface of ChatRoomManagerAtom atomos.
+
 type ChatRoomManagerAtomId interface {
 	go_atomos.Id
-	Spawn(from go_atomos.Id, in *ChatRoomManagerSpawnArg) (*ChatRoomManager, error)
+
+	// 创建房间
 	CreateRoom(from go_atomos.Id, in *CreateRoomReq) (*CreateRoomResp, error)
+
+	// 查找房间
 	FindRoom(from go_atomos.Id, in *FindRoomReq) (*FindRoomResp, error)
 }
 
@@ -129,11 +164,11 @@ func GetChatRoomManagerAtomId(c go_atomos.CosmosNode, name string) (ChatRoomMana
 	}
 }
 
-// ChatRoomManagerAtomAtom is the atomos implements of ChatRoomManagerAtom atomos.
-//
-type ChatRoomManagerAtomAtom interface {
+// ChatRoomManagerAtom is the atomos implements of ChatRoomManagerAtom atomos.
+
+type ChatRoomManagerAtom interface {
 	go_atomos.Atom
-	Spawn(from go_atomos.Id, in *ChatRoomManagerSpawnArg) (*ChatRoomManager, error)
+	Spawn(self go_atomos.AtomSelf, arg *ChatRoomManagerSpawnArg, data *ChatRoomManager) error
 	CreateRoom(from go_atomos.Id, in *CreateRoomReq) (*CreateRoomResp, error)
 	FindRoom(from go_atomos.Id, in *FindRoomReq) (*FindRoomResp, error)
 }
@@ -153,14 +188,28 @@ func SpawnChatRoomManagerAtom(c go_atomos.CosmosNode, name string, arg proto.Mes
 	return nil, go_atomos.ErrAtomType
 }
 
-// ChatRoomAtomId is the interface of ChatRoomAtom atomos.
+///////////////////////////////////////////
+////////// Element: ChatRoomAtom //////////
+///////////////////////////////////////////
 //
+// 房间Atom
+//
+
+// ChatRoomAtomId is the interface of ChatRoomAtom atomos.
+
 type ChatRoomAtomId interface {
 	go_atomos.Id
-	Spawn(from go_atomos.Id, in *ChatRoomSpawnArg) (*ChatRoom, error)
+
+	// 房间信息
 	Info(from go_atomos.Id, in *ChatRoomInfoReq) (*ChatRoomInfoResp, error)
+
+	// 添加房间成员
 	AddMember(from go_atomos.Id, in *AddMemberReq) (*AddMemberResp, error)
+
+	// 删除房间成员
 	DelMember(from go_atomos.Id, in *DelMemberReq) (*DelMemberResp, error)
+
+	// 发送消息
 	SendMessage(from go_atomos.Id, in *SendMessageReq) (*SendMessageResp, error)
 }
 
@@ -176,11 +225,11 @@ func GetChatRoomAtomId(c go_atomos.CosmosNode, name string) (ChatRoomAtomId, err
 	}
 }
 
-// ChatRoomAtomAtom is the atomos implements of ChatRoomAtom atomos.
-//
-type ChatRoomAtomAtom interface {
+// ChatRoomAtom is the atomos implements of ChatRoomAtom atomos.
+
+type ChatRoomAtom interface {
 	go_atomos.Atom
-	Spawn(from go_atomos.Id, in *ChatRoomSpawnArg) (*ChatRoom, error)
+	Spawn(self go_atomos.AtomSelf, arg *ChatRoomSpawnArg, data *ChatRoom) error
 	Info(from go_atomos.Id, in *ChatRoomInfoReq) (*ChatRoomInfoResp, error)
 	AddMember(from go_atomos.Id, in *AddMemberReq) (*AddMemberResp, error)
 	DelMember(from go_atomos.Id, in *DelMemberReq) (*DelMemberResp, error)
@@ -202,13 +251,22 @@ func SpawnChatRoomAtom(c go_atomos.CosmosNode, name string, arg proto.Message) (
 	return nil, go_atomos.ErrAtomType
 }
 
-// KvDbAtomId is the interface of KvDbAtom atomos.
+///////////////////////////////////////
+////////// Element: KvDbAtom //////////
+///////////////////////////////////////
 //
+// KvDb Atom
+//
+
+// KvDbAtomId is the interface of KvDbAtom atomos.
+
 type KvDbAtomId interface {
 	go_atomos.Id
-	Spawn(from go_atomos.Id, in *KvDbSpawnArg) (*KvDb, error)
+
 	Get(from go_atomos.Id, in *DbGetReq) (*DbGetResp, error)
+
 	Set(from go_atomos.Id, in *DbSetReq) (*DbSetResp, error)
+
 	Del(from go_atomos.Id, in *DbDelReq) (*DbDelResp, error)
 }
 
@@ -224,11 +282,11 @@ func GetKvDbAtomId(c go_atomos.CosmosNode, name string) (KvDbAtomId, error) {
 	}
 }
 
-// KvDbAtomAtom is the atomos implements of KvDbAtom atomos.
-//
-type KvDbAtomAtom interface {
+// KvDbAtom is the atomos implements of KvDbAtom atomos.
+
+type KvDbAtom interface {
 	go_atomos.Atom
-	Spawn(from go_atomos.Id, in *KvDbSpawnArg) (*KvDb, error)
+	Spawn(self go_atomos.AtomSelf, arg *KvDbSpawnArg, data *KvDb) error
 	Get(from go_atomos.Id, in *DbGetReq) (*DbGetResp, error)
 	Set(from go_atomos.Id, in *DbSetReq) (*DbSetResp, error)
 	Del(from go_atomos.Id, in *DbDelReq) (*DbDelResp, error)
@@ -249,24 +307,19 @@ func SpawnKvDbAtom(c go_atomos.CosmosNode, name string, arg proto.Message) (KvDb
 	return nil, go_atomos.ErrAtomType
 }
 
+//////
+//// IMPLEMENTATIONS
 //
-// Implementation
+
+//////////////////////////////////////////////
+////////// Element: UserManagerAtom //////////
+//////////////////////////////////////////////
+//
+// 用户管理器Atom
 //
 
 type userManagerAtomId struct {
 	go_atomos.Id
-}
-
-func (c *userManagerAtomId) Spawn(from go_atomos.Id, in *UserManagerSpawnArg) (*UserManager, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
-	if err != nil {
-		return nil, err
-	}
-	reply, ok := r.(*UserManager)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
 }
 
 func (c *userManagerAtomId) RegisterUser(from go_atomos.Id, in *RegisterUserReq) (*RegisterUserResp, error) {
@@ -296,16 +349,16 @@ func (c *userManagerAtomId) FindUser(from go_atomos.Id, in *FindUserReq) (*FindU
 func GetUserManagerAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &userManagerAtomId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*UserManagerSpawnArg)
+		dataT, _ := data.(*UserManager)
+		return a.(UserManagerAtom).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"Spawn":        go_atomos.NewAtomCallConfig(&UserManagerSpawnArg{}, &UserManager{}),
 		"RegisterUser": go_atomos.NewAtomCallConfig(&RegisterUserReq{}, &RegisterUserResp{}),
 		"FindUser":     go_atomos.NewAtomCallConfig(&FindUserReq{}, &FindUserResp{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"Spawn": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &UserManagerSpawnArg{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &UserManager{}) },
-		},
 		"RegisterUser": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RegisterUserReq{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RegisterUserResp{}) },
@@ -322,23 +375,12 @@ func GetUserManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Elem
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetUserManagerAtomInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-			req, ok := in.(*UserManagerSpawnArg)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
-			}
-			a, ok := to.(UserManagerAtomAtom)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
-			}
-			return a.Spawn(from, req)
-		},
 		"RegisterUser": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*RegisterUserReq)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserManagerAtomAtom)
+			a, ok := to.(UserManagerAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -349,7 +391,7 @@ func GetUserManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Elem
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserManagerAtomAtom)
+			a, ok := to.(UserManagerAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -359,20 +401,15 @@ func GetUserManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Elem
 	return elem
 }
 
+///////////////////////////////////////
+////////// Element: UserAtom //////////
+///////////////////////////////////////
+//
+// 用户Atom
+//
+
 type userAtomId struct {
 	go_atomos.Id
-}
-
-func (c *userAtomId) Spawn(from go_atomos.Id, in *UserSpawnArg) (*User, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
-	if err != nil {
-		return nil, err
-	}
-	reply, ok := r.(*User)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
 }
 
 func (c *userAtomId) UserInfo(from go_atomos.Id, in *UserInfoReq) (*UserInfoResp, error) {
@@ -426,18 +463,18 @@ func (c *userAtomId) RoomMessage(from go_atomos.Id, in *RoomMessagePush) (*RoomM
 func GetUserAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &userAtomId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*UserSpawnArg)
+		dataT, _ := data.(*User)
+		return a.(UserAtom).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"Spawn":       go_atomos.NewAtomCallConfig(&UserSpawnArg{}, &User{}),
 		"UserInfo":    go_atomos.NewAtomCallConfig(&UserInfoReq{}, &UserInfoResp{}),
 		"GetFriends":  go_atomos.NewAtomCallConfig(&GetFriendsReq{}, &GetFriendsResp{}),
 		"AddFriend":   go_atomos.NewAtomCallConfig(&AddFriendReq{}, &AddFriendResp{}),
 		"RoomMessage": go_atomos.NewAtomCallConfig(&RoomMessagePush{}, &RoomMessagePushResp{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"Spawn": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &UserSpawnArg{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &User{}) },
-		},
 		"UserInfo": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &UserInfoReq{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &UserInfoResp{}) },
@@ -462,23 +499,12 @@ func GetUserAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetUserAtomInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-			req, ok := in.(*UserSpawnArg)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
-			}
-			a, ok := to.(UserAtomAtom)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
-			}
-			return a.Spawn(from, req)
-		},
 		"UserInfo": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*UserInfoReq)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserAtomAtom)
+			a, ok := to.(UserAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -489,7 +515,7 @@ func GetUserAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserAtomAtom)
+			a, ok := to.(UserAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -500,7 +526,7 @@ func GetUserAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserAtomAtom)
+			a, ok := to.(UserAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -511,7 +537,7 @@ func GetUserAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(UserAtomAtom)
+			a, ok := to.(UserAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -521,20 +547,15 @@ func GetUserAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 	return elem
 }
 
+//////////////////////////////////////////////////
+////////// Element: ChatRoomManagerAtom //////////
+//////////////////////////////////////////////////
+//
+// 房间管理器Atom
+//
+
 type chatRoomManagerAtomId struct {
 	go_atomos.Id
-}
-
-func (c *chatRoomManagerAtomId) Spawn(from go_atomos.Id, in *ChatRoomManagerSpawnArg) (*ChatRoomManager, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
-	if err != nil {
-		return nil, err
-	}
-	reply, ok := r.(*ChatRoomManager)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
 }
 
 func (c *chatRoomManagerAtomId) CreateRoom(from go_atomos.Id, in *CreateRoomReq) (*CreateRoomResp, error) {
@@ -564,18 +585,16 @@ func (c *chatRoomManagerAtomId) FindRoom(from go_atomos.Id, in *FindRoomReq) (*F
 func GetChatRoomManagerAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &chatRoomManagerAtomId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*ChatRoomManagerSpawnArg)
+		dataT, _ := data.(*ChatRoomManager)
+		return a.(ChatRoomManagerAtom).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"Spawn":      go_atomos.NewAtomCallConfig(&ChatRoomManagerSpawnArg{}, &ChatRoomManager{}),
 		"CreateRoom": go_atomos.NewAtomCallConfig(&CreateRoomReq{}, &CreateRoomResp{}),
 		"FindRoom":   go_atomos.NewAtomCallConfig(&FindRoomReq{}, &FindRoomResp{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"Spawn": {
-			InDec: func(b []byte) (proto.Message, error) {
-				return go_atomos.MessageUnmarshal(b, &ChatRoomManagerSpawnArg{})
-			},
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &ChatRoomManager{}) },
-		},
 		"CreateRoom": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &CreateRoomReq{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &CreateRoomResp{}) },
@@ -592,23 +611,12 @@ func GetChatRoomManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetChatRoomManagerAtomInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-			req, ok := in.(*ChatRoomManagerSpawnArg)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
-			}
-			a, ok := to.(ChatRoomManagerAtomAtom)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
-			}
-			return a.Spawn(from, req)
-		},
 		"CreateRoom": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*CreateRoomReq)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomManagerAtomAtom)
+			a, ok := to.(ChatRoomManagerAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -619,7 +627,7 @@ func GetChatRoomManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomManagerAtomAtom)
+			a, ok := to.(ChatRoomManagerAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -629,20 +637,15 @@ func GetChatRoomManagerAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.
 	return elem
 }
 
+///////////////////////////////////////////
+////////// Element: ChatRoomAtom //////////
+///////////////////////////////////////////
+//
+// 房间Atom
+//
+
 type chatRoomAtomId struct {
 	go_atomos.Id
-}
-
-func (c *chatRoomAtomId) Spawn(from go_atomos.Id, in *ChatRoomSpawnArg) (*ChatRoom, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
-	if err != nil {
-		return nil, err
-	}
-	reply, ok := r.(*ChatRoom)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
 }
 
 func (c *chatRoomAtomId) Info(from go_atomos.Id, in *ChatRoomInfoReq) (*ChatRoomInfoResp, error) {
@@ -696,18 +699,18 @@ func (c *chatRoomAtomId) SendMessage(from go_atomos.Id, in *SendMessageReq) (*Se
 func GetChatRoomAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &chatRoomAtomId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*ChatRoomSpawnArg)
+		dataT, _ := data.(*ChatRoom)
+		return a.(ChatRoomAtom).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"Spawn":       go_atomos.NewAtomCallConfig(&ChatRoomSpawnArg{}, &ChatRoom{}),
 		"Info":        go_atomos.NewAtomCallConfig(&ChatRoomInfoReq{}, &ChatRoomInfoResp{}),
 		"AddMember":   go_atomos.NewAtomCallConfig(&AddMemberReq{}, &AddMemberResp{}),
 		"DelMember":   go_atomos.NewAtomCallConfig(&DelMemberReq{}, &DelMemberResp{}),
 		"SendMessage": go_atomos.NewAtomCallConfig(&SendMessageReq{}, &SendMessageResp{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"Spawn": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &ChatRoomSpawnArg{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &ChatRoom{}) },
-		},
 		"Info": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &ChatRoomInfoReq{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &ChatRoomInfoResp{}) },
@@ -732,23 +735,12 @@ func GetChatRoomAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetChatRoomAtomInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-			req, ok := in.(*ChatRoomSpawnArg)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
-			}
-			a, ok := to.(ChatRoomAtomAtom)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
-			}
-			return a.Spawn(from, req)
-		},
 		"Info": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*ChatRoomInfoReq)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomAtomAtom)
+			a, ok := to.(ChatRoomAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -759,7 +751,7 @@ func GetChatRoomAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomAtomAtom)
+			a, ok := to.(ChatRoomAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -770,7 +762,7 @@ func GetChatRoomAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomAtomAtom)
+			a, ok := to.(ChatRoomAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -781,7 +773,7 @@ func GetChatRoomAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(ChatRoomAtomAtom)
+			a, ok := to.(ChatRoomAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -791,20 +783,15 @@ func GetChatRoomAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 	return elem
 }
 
+///////////////////////////////////////
+////////// Element: KvDbAtom //////////
+///////////////////////////////////////
+//
+// KvDb Atom
+//
+
 type kvDbAtomId struct {
 	go_atomos.Id
-}
-
-func (c *kvDbAtomId) Spawn(from go_atomos.Id, in *KvDbSpawnArg) (*KvDb, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "Spawn", in)
-	if err != nil {
-		return nil, err
-	}
-	reply, ok := r.(*KvDb)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
 }
 
 func (c *kvDbAtomId) Get(from go_atomos.Id, in *DbGetReq) (*DbGetResp, error) {
@@ -846,17 +833,17 @@ func (c *kvDbAtomId) Del(from go_atomos.Id, in *DbDelReq) (*DbDelResp, error) {
 func GetKvDbAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &kvDbAtomId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*KvDbSpawnArg)
+		dataT, _ := data.(*KvDb)
+		return a.(KvDbAtom).Spawn(s, argT, dataT)
+	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"Spawn": go_atomos.NewAtomCallConfig(&KvDbSpawnArg{}, &KvDb{}),
-		"Get":   go_atomos.NewAtomCallConfig(&DbGetReq{}, &DbGetResp{}),
-		"Set":   go_atomos.NewAtomCallConfig(&DbSetReq{}, &DbSetResp{}),
-		"Del":   go_atomos.NewAtomCallConfig(&DbDelReq{}, &DbDelResp{}),
+		"Get": go_atomos.NewAtomCallConfig(&DbGetReq{}, &DbGetResp{}),
+		"Set": go_atomos.NewAtomCallConfig(&DbSetReq{}, &DbSetResp{}),
+		"Del": go_atomos.NewAtomCallConfig(&DbDelReq{}, &DbDelResp{}),
 	}
 	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"Spawn": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &KvDbSpawnArg{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &KvDb{}) },
-		},
 		"Get": {
 			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &DbGetReq{}) },
 			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &DbGetResp{}) },
@@ -877,23 +864,12 @@ func GetKvDbAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetKvDbAtomInterface(dev)
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"Spawn": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
-			req, ok := in.(*KvDbSpawnArg)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
-			}
-			a, ok := to.(KvDbAtomAtom)
-			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
-			}
-			return a.Spawn(from, req)
-		},
 		"Get": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
 			req, ok := in.(*DbGetReq)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(KvDbAtomAtom)
+			a, ok := to.(KvDbAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -904,7 +880,7 @@ func GetKvDbAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(KvDbAtomAtom)
+			a, ok := to.(KvDbAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
@@ -915,7 +891,7 @@ func GetKvDbAtomImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpl
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageArgType
 			}
-			a, ok := to.(KvDbAtomAtom)
+			a, ok := to.(KvDbAtom)
 			if !ok {
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}

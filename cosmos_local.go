@@ -38,6 +38,10 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 		return err
 	}
 
+	c.config = self.config
+	c.mainElem = newMainElement(self)
+	c.mainAtom = newMainAtom(c.mainElem)
+	c.cosmosSelf = self
 	// Pre-initialize all local elements in the Runnable.
 	loadedElements := map[string]*ElementLocal{}
 	elements := make(map[string]*ElementLocal, len(runnable.implementations))
@@ -56,6 +60,10 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s", loadedName)
 				}
 			}
+			c.config = nil
+			c.mainElem = nil
+			c.mainAtom = nil
+			c.cosmosSelf = nil
 			return err
 		}
 		// Add the element.
@@ -71,17 +79,13 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	// Lock, set elements, and unlock.
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	if c.config != nil || c.elements != nil {
+	if c.elements != nil {
 		err := fmt.Errorf("local cosmos has been initialized")
 		self.logFatal("CosmosLocal.initRunnable: Init runtime error, err=%v", err)
 		return err
 	}
-	c.config = self.config
-	c.cosmosSelf = self
 	c.elements = elements
 	c.interfaces = elementInterfaces
-	c.mainElem = newMainElement(self)
-	c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
 
 	for _, define := range c.elements {

@@ -78,16 +78,16 @@ func (t *TaskBoothAtom) StartTask(from atomos.Id, in *api.StartTaskReq) (*api.St
 	tid, err = t.self.Task().Append(t.TimerTestTaskIdAndArg4, &api.HelloTimer{Info: "Hi:4"})
 	t.self.Log().Info("Task.Append TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 
-	// Append Timer task.
+	// Add Timer task.
 	t.self.Log().Info("")
-	t.self.Log().Info("Append Timer task.")
-	// Append Timer Task with no argument.
+	t.self.Log().Info("Add Timer task.")
+	// Add Timer Task with no argument.
 	tid, err = t.self.Task().AddAfter(0 * time.Second, t.TimerTest5, nil)
 	t.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
-	// Append Timer Task with task id argument.
+	// Add Timer Task with task id argument.
 	tid, err = t.self.Task().AddAfter(1 * time.Second, t.TimerTestTaskId6, nil)
 	t.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
-	// Append Timer Task with task id and message argument.
+	// Add Timer Task with task id and message argument.
 	tid, err = t.self.Task().AddAfter(2 * time.Second, t.TimerTestTaskIdAndArg7, &api.HelloTimer{Info: "Hi:7"})
 	t.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 
@@ -110,35 +110,35 @@ func (t *TaskBoothAtom) StartTask(from atomos.Id, in *api.StartTaskReq) (*api.St
 	cancel, err = t.self.Task().Cancel(tid)
 	t.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
 
-	// Append Timer task then cancel.
+	// Add Timer task then cancel.
 	t.self.Log().Info("")
-	t.self.Log().Info("Append Timer task then cancel.")
-	// Append Timer Task with no argument.
+	t.self.Log().Info("Add Timer task then cancel.")
+	// Add Timer Task with no argument.
 	tid, err = t.self.Task().AddAfter(0 * time.Second, t.TimerTest11, nil)
 	t.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
 	cancel, err = t.self.Task().Cancel(tid)
 	t.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Append Timer Task with task id argument.
+	// Add Timer Task with task id argument.
 	tid, err = t.self.Task().AddAfter(1 * time.Second, t.TimerTestTaskId12, nil)
 	t.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
 	cancel, err = t.self.Task().Cancel(tid)
 	t.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
-	// Append Timer Task with task id and message argument.
+	// Add Timer Task with task id and message argument.
 	tid, err = t.self.Task().AddAfter(2 * time.Second, t.TimerTestTaskIdAndArg13, &api.HelloTimer{Info: "Hi:13"})
 	t.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 	cancel, err = t.self.Task().Cancel(tid)
 	t.self.Log().Info("Cancel Task, cancel=%+v,err=%v", cancel, err)
 
-	// Append Timer task after kill.
+	// Add Timer task after kill.
 	t.self.Log().Info("")
-	t.self.Log().Info("Append Timer task.")
-	// Append Timer Task with no argument.
+	t.self.Log().Info("Add Timer task.")
+	// Add Timer Task with no argument.
 	tid, err = t.self.Task().AddAfter(6 * time.Second, t.TimerTest14, nil)
 	t.self.Log().Info("AddAfter TimerTest, tid=%d,err=%v", tid, err)
-	// Append Timer Task with task id argument.
+	// Add Timer Task with task id argument.
 	tid, err = t.self.Task().AddAfter(6 * time.Second, t.TimerTestTaskId15, nil)
 	t.self.Log().Info("AddAfter TimerTestTaskId, tid=%d,err=%v", tid, err)
-	// Append Timer Task with task id and message argument.
+	// Add Timer Task with task id and message argument.
 	tid, err = t.self.Task().AddAfter(6 * time.Second, t.TimerTestTaskIdAndArg16, &api.HelloTimer{Info: "Hi:16"})
 	t.self.Log().Info("AddAfter TimerTestTaskIdAndArg, tid=%d,err=%v", tid, err)
 
@@ -200,13 +200,13 @@ func (t *TaskBoothAtom) TimerTestTaskIdAndArg13(taskId uint64, arg *api.HelloTim
 }
 
 func (t *TaskBoothAtom) TimerTest14() {
-	t.self.Log().Info("TimerTest 14 should execute")
+	t.self.Log().Info("TimerTest 14 should not execute")
 }
 
 func (t *TaskBoothAtom) TimerTestTaskId15(taskId uint64) {
-	t.self.Log().Info("TimerTestTaskId 15 should execute: taskId=%d", taskId)
+	t.self.Log().Info("TimerTestTaskId 15 should not execute: taskId=%d", taskId)
 }
 
 func (t *TaskBoothAtom) TimerTestTaskIdAndArg16(taskId uint64, arg *api.HelloTimer) {
-	t.self.Log().Info("TimerTestTaskIdAndArg 16 should execute: taskId=%d,arg=%+v", taskId, arg)
+	t.self.Log().Info("TimerTestTaskIdAndArg 16 should not execute: taskId=%d,arg=%+v", taskId, arg)
 }

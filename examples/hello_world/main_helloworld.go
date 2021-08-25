@@ -8,6 +8,7 @@ import (
 
 func main() {
 	runnable := atomos.CosmosRunnable{}
+	// TaskBooth
 	runnable.AddElementInterface(api.GetTaskBoothInterface(&element.TaskBoothElement{}))
 	runnable.AddElementImplementation(api.GetTaskBoothImplement(&element.TaskBoothElement{}))
 	runnable.SetScript(scriptHelloWorld)
@@ -28,6 +29,7 @@ func main() {
 		return
 	}
 	cosmos.SendRunnable(runnable)
+	// Exit
 	<-exitCh
 }
 
@@ -36,6 +38,7 @@ func scriptHelloWorld(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNotic
 	<-killNoticeChannel
 }
 
+// TaskBooth
 func demoTaskBooth(cosmos *atomos.CosmosSelf, mainId atomos.MainId) {
 	// Try to spawn a TaskBooth atom.
 	taskBoothId, err := api.SpawnTaskBooth(cosmos.Local(), "Demo", nil)
