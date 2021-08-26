@@ -44,14 +44,29 @@ message HelloReply {
 }
 
 // 展示如何使用任务
-
 service TaskBooth {
   rpc Spawn (TaskBoothSpawnArg) returns (TaskBoothData) {}
+  // 开始演示各种任务的使用方式
   rpc StartTask (StartTaskReq) returns (StartTaskResp) {}
 }
-
 message TaskBoothSpawnArg {}
 message TaskBoothData {}
-
+// Start Task
 message StartTaskReq {}
 message StartTaskResp {}
+
+// 展示如何使用远端
+service RemoteBooth {
+  rpc Spawn (RemoteBoothSpawnArg) returns (RemoteBoothData) {}
+  rpc SayHello (RemoteSayHelloReq) returns (RemoteSayHelloResp) {}
+}
+message RemoteBoothSpawnArg {}
+message RemoteBoothData {}
+// Remote Send
+message RemoteSayHelloReq {
+  int32 id = 1;
+  string message = 2;
+}
+message RemoteSayHelloResp {
+  int32 id = 1;
+}

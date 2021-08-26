@@ -69,12 +69,16 @@ func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (Greet
 ////////////////////////////////////////
 ////////// Element: TaskBooth //////////
 ////////////////////////////////////////
+//
+// 展示如何使用任务
+//
 
 // TaskBoothId is the interface of TaskBooth atomos.
 
 type TaskBoothId interface {
 	go_atomos.Id
 
+	// 开始演示各种任务的使用方式
 	StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error)
 }
 
@@ -108,6 +112,56 @@ func SpawnTaskBooth(c go_atomos.CosmosNode, name string, arg proto.Message) (Tas
 		return nil, err
 	}
 	if i, ok := id.(TaskBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+//////////////////////////////////////////
+////////// Element: RemoteBooth //////////
+//////////////////////////////////////////
+//
+// 展示如何使用远端
+//
+
+// RemoteBoothId is the interface of RemoteBooth atomos.
+
+type RemoteBoothId interface {
+	go_atomos.Id
+
+	SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error)
+}
+
+func GetRemoteBoothId(c go_atomos.CosmosNode, name string) (RemoteBoothId, error) {
+	ca, err := c.GetAtomId("RemoteBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(RemoteBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// RemoteBooth is the atomos implements of RemoteBooth atomos.
+
+type RemoteBooth interface {
+	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *RemoteBoothSpawnArg, data *RemoteBoothData) error
+	SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error)
+}
+
+func SpawnRemoteBooth(c go_atomos.CosmosNode, name string, arg proto.Message) (RemoteBoothId, error) {
+	_, err := c.SpawnAtom("RemoteBooth", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("RemoteBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(RemoteBoothId); ok {
 		return i, nil
 	}
 	return nil, go_atomos.ErrAtomType
@@ -183,6 +237,9 @@ func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImple
 ////////////////////////////////////////
 ////////// Element: TaskBooth //////////
 ////////////////////////////////////////
+//
+// 展示如何使用任务
+//
 
 type taskBoothId struct {
 	go_atomos.Id
@@ -234,6 +291,68 @@ func GetTaskBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImp
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
 			return a.StartTask(from, req)
+		},
+	}
+	return elem
+}
+
+//////////////////////////////////////////
+////////// Element: RemoteBooth //////////
+//////////////////////////////////////////
+//
+// 展示如何使用远端
+//
+
+type remoteBoothId struct {
+	go_atomos.Id
+}
+
+func (c *remoteBoothId) SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
+	if err != nil {
+		return nil, err
+	}
+	reply, ok := r.(*RemoteSayHelloResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetRemoteBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &remoteBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*RemoteBoothSpawnArg)
+		dataT, _ := data.(*RemoteBoothData)
+		return a.(RemoteBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"SayHello": go_atomos.NewAtomCallConfig(&RemoteSayHelloReq{}, &RemoteSayHelloResp{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"SayHello": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteSayHelloReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteSayHelloResp{}) },
+		},
+	}
+	return elem
+}
+
+func GetRemoteBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetRemoteBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"SayHello": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*RemoteSayHelloReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(RemoteBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.SayHello(from, req)
 		},
 	}
 	return elem

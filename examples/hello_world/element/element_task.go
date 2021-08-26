@@ -14,8 +14,8 @@ type TaskBoothElement struct {
 }
 
 func (t TaskBoothElement) Load(mainId atomos.MainId) error {
-	mainId.Log().Info("TaskBoothElement is loading")
 	t.mainId = mainId
+	t.mainId.Log().Info("TaskBoothElement is loading")
 	return nil
 }
 
