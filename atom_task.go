@@ -151,8 +151,8 @@ func (at *atomTasksManager) stopUnlock() {
 }
 
 // 添加任务，并返回可以用于取消的任务id。
-// Add task, and return an cancellable task id.
-func (at *atomTasksManager) Add(fn interface{}, msg proto.Message) (id uint64, err error) {
+// Append task, and return an cancellable task id.
+func (at *atomTasksManager) Append(fn interface{}, msg proto.Message) (id uint64, err error) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(fn, msg)
 	if err != nil {
@@ -181,7 +181,7 @@ func (at *atomTasksManager) Add(fn interface{}, msg proto.Message) (id uint64, e
 }
 
 // 指定时间后添加任务，并返回可以用于取消的任务id。
-// Add task after duration, and return an cancellable task id.
+// Append task after duration, and return an cancellable task id.
 func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.Message) (id uint64, err error) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(fn, msg)
@@ -259,24 +259,24 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 }
 
 // 用于Add和AddAfter的检查任务合法性逻辑。
-// Uses in Add and AddAfter for checking task legal.
+// Uses in Append and AddAfter for checking task legal.
 func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
 	// Check func type.
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
 	if fnValue.Kind() != reflect.Func {
-		return "", fmt.Errorf("atomTasks: Add invalid function, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("atomTasks: Append invalid function, type=%T,fn=%+v", fn, fn)
 	}
 	fnRuntime := runtime.FuncForPC(fnValue.Pointer())
 	if fnRuntime == nil {
-		return "", fmt.Errorf("atomTasks: Add invalid function runtime, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("atomTasks: Append invalid function runtime, type=%T,fn=%+v", fn, fn)
 	}
 	// Get func name.
 	fnRawName := fnRuntime.Name()
 	fnName := getTaskFnName(fnRawName)
 	fnRunes := []rune(fnName)
 	if len(fnRunes) == 0 || unicode.IsLower(fnRunes[0]) {
-		return "", fmt.Errorf("atomTasks: Add invalid function name, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("atomTasks: Append invalid function name, type=%T,fn=%+v", fn, fn)
 	}
 	_, err := checkFnArgs(fnType, fnName, msg)
 	return fnName, err
@@ -291,32 +291,32 @@ func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, er
 	case 1:
 		// Call with only a task id argument.
 		if msg != nil {
-			return 0, fmt.Errorf("atomTasks: Add func not support message, fn=%s", fnName)
+			return 0, fmt.Errorf("atomTasks: Append func not support message, fn=%s", fnName)
 		}
 		fn0Type := fnType.In(0)
 		// Check task id.
 		if fn0Type.Kind() != reflect.Uint64 {
-			return 0, fmt.Errorf("atomTasks: Add illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("atomTasks: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		return 1, nil
 	case 2:
 		// Call with task id as first argument and message as second argument.
 		if msg == nil {
-			return 0, fmt.Errorf("atomTasks: Add nil message, fn=%s", fnName)
+			return 0, fmt.Errorf("atomTasks: Append nil message, fn=%s", fnName)
 		}
 		fn0Type, fn1Type := fnType.In(0), fnType.In(1)
 		// Check task id.
 		if fn0Type.Kind() != reflect.Uint64 {
-			return 0, fmt.Errorf("atomTasks: Add illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("atomTasks: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		// Check message.
 		msgType := reflect.TypeOf(msg)
 		if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
-			return 0, fmt.Errorf("atomTasks: Add illegal message receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("atomTasks: Append illegal message receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		return 2, nil
 	}
-	return 0, fmt.Errorf("atomTasks: Add illegal function, fn=%v", fnType)
+	return 0, fmt.Errorf("atomTasks: Append illegal function, fn=%v", fnType)
 }
 
 func getTaskFnName(fnRawName string) string {
@@ -469,7 +469,7 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	if am.arg != nil {
 		arg = reflect.ValueOf(am.arg)
 	} else {
-		arg = reflect.ValueOf((proto.Message) (nil))
+		arg = reflect.ValueOf((proto.Message)(nil))
 	}
 	switch inNum {
 	case 1:

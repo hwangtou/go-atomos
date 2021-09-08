@@ -51,7 +51,7 @@ type Greeter interface {
 	SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error)
 }
 
-func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (GreeterId, error) {
+func SpawnGreeter(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (GreeterId, error) {
 	_, err := c.SpawnAtom("Greeter", name, arg)
 	if err != nil {
 		return nil, err
@@ -61,6 +61,163 @@ func SpawnGreeter(c go_atomos.CosmosNode, name string, arg proto.Message) (Greet
 		return nil, err
 	}
 	if i, ok := id.(GreeterId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+////////////////////////////////////////
+////////// Element: TaskBooth //////////
+////////////////////////////////////////
+//
+// 展示如何使用任务
+//
+
+// TaskBoothId is the interface of TaskBooth atomos.
+
+type TaskBoothId interface {
+	go_atomos.Id
+
+	// 开始演示各种任务的使用方式
+	StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error)
+}
+
+func GetTaskBoothId(c go_atomos.CosmosNode, name string) (TaskBoothId, error) {
+	ca, err := c.GetAtomId("TaskBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(TaskBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// TaskBooth is the atomos implements of TaskBooth atomos.
+
+type TaskBooth interface {
+	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *TaskBoothSpawnArg, data *TaskBoothData) error
+	StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error)
+}
+
+func SpawnTaskBooth(c go_atomos.CosmosNode, name string, arg *TaskBoothSpawnArg) (TaskBoothId, error) {
+	_, err := c.SpawnAtom("TaskBooth", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("TaskBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(TaskBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+//////////////////////////////////////////
+////////// Element: RemoteBooth //////////
+//////////////////////////////////////////
+//
+// 展示如何使用远端
+//
+
+// RemoteBoothId is the interface of RemoteBooth atomos.
+
+type RemoteBoothId interface {
+	go_atomos.Id
+
+	SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error)
+
+	Watch(from go_atomos.Id, in *RemoteWatchReq) (*RemoteWatchResp, error)
+
+	Unwatch(from go_atomos.Id, in *RemoteUnwatchReq) (*RemoteUnwatchResp, error)
+}
+
+func GetRemoteBoothId(c go_atomos.CosmosNode, name string) (RemoteBoothId, error) {
+	ca, err := c.GetAtomId("RemoteBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(RemoteBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// RemoteBooth is the atomos implements of RemoteBooth atomos.
+
+type RemoteBooth interface {
+	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *RemoteBoothSpawnArg, data *RemoteBoothData) error
+	SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error)
+	Watch(from go_atomos.Id, in *RemoteWatchReq) (*RemoteWatchResp, error)
+	Unwatch(from go_atomos.Id, in *RemoteUnwatchReq) (*RemoteUnwatchResp, error)
+}
+
+func SpawnRemoteBooth(c go_atomos.CosmosNode, name string, arg *RemoteBoothSpawnArg) (RemoteBoothId, error) {
+	_, err := c.SpawnAtom("RemoteBooth", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("RemoteBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(RemoteBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+/////////////////////////////////////////
+////////// Element: LocalBooth //////////
+/////////////////////////////////////////
+//
+// 远端的本地调用
+//
+
+// LocalBoothId is the interface of LocalBooth atomos.
+
+type LocalBoothId interface {
+	go_atomos.Id
+
+	RemoteNotice(from go_atomos.Id, in *LocalRemoteNoticeReq) (*LocalRemoteNoticeResp, error)
+}
+
+func GetLocalBoothId(c go_atomos.CosmosNode, name string) (LocalBoothId, error) {
+	ca, err := c.GetAtomId("LocalBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(LocalBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// LocalBooth is the atomos implements of LocalBooth atomos.
+
+type LocalBooth interface {
+	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *LocalBoothSpawnArg, data *LocalBoothSpawnData) error
+	RemoteNotice(from go_atomos.Id, in *LocalRemoteNoticeReq) (*LocalRemoteNoticeResp, error)
+}
+
+func SpawnLocalBooth(c go_atomos.CosmosNode, name string, arg *LocalBoothSpawnArg) (LocalBoothId, error) {
+	_, err := c.SpawnAtom("LocalBooth", name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId("LocalBooth", name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(LocalBoothId); ok {
 		return i, nil
 	}
 	return nil, go_atomos.ErrAtomType
@@ -84,7 +241,7 @@ type greeterId struct {
 
 func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, error) {
 	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
-	if err != nil {
+	if r == nil {
 		return nil, err
 	}
 	reply, ok := r.(*HelloReply)
@@ -128,6 +285,248 @@ func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImple
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
 			return a.SayHello(from, req)
+		},
+	}
+	return elem
+}
+
+////////////////////////////////////////
+////////// Element: TaskBooth //////////
+////////////////////////////////////////
+//
+// 展示如何使用任务
+//
+
+type taskBoothId struct {
+	go_atomos.Id
+}
+
+func (c *taskBoothId) StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTaskResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "StartTask", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*StartTaskResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetTaskBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &taskBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*TaskBoothSpawnArg)
+		dataT, _ := data.(*TaskBoothData)
+		return a.(TaskBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"StartTask": go_atomos.NewAtomCallConfig(&StartTaskReq{}, &StartTaskResp{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"StartTask": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &StartTaskReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &StartTaskResp{}) },
+		},
+	}
+	return elem
+}
+
+func GetTaskBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetTaskBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"StartTask": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*StartTaskReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(TaskBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.StartTask(from, req)
+		},
+	}
+	return elem
+}
+
+//////////////////////////////////////////
+////////// Element: RemoteBooth //////////
+//////////////////////////////////////////
+//
+// 展示如何使用远端
+//
+
+type remoteBoothId struct {
+	go_atomos.Id
+}
+
+func (c *remoteBoothId) SayHello(from go_atomos.Id, in *RemoteSayHelloReq) (*RemoteSayHelloResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*RemoteSayHelloResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func (c *remoteBoothId) Watch(from go_atomos.Id, in *RemoteWatchReq) (*RemoteWatchResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "Watch", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*RemoteWatchResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func (c *remoteBoothId) Unwatch(from go_atomos.Id, in *RemoteUnwatchReq) (*RemoteUnwatchResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "Unwatch", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*RemoteUnwatchResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetRemoteBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &remoteBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*RemoteBoothSpawnArg)
+		dataT, _ := data.(*RemoteBoothData)
+		return a.(RemoteBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"SayHello": go_atomos.NewAtomCallConfig(&RemoteSayHelloReq{}, &RemoteSayHelloResp{}),
+		"Watch":    go_atomos.NewAtomCallConfig(&RemoteWatchReq{}, &RemoteWatchResp{}),
+		"Unwatch":  go_atomos.NewAtomCallConfig(&RemoteUnwatchReq{}, &RemoteUnwatchResp{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"SayHello": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteSayHelloReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteSayHelloResp{}) },
+		},
+		"Watch": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteWatchReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteWatchResp{}) },
+		},
+		"Unwatch": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteUnwatchReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &RemoteUnwatchResp{}) },
+		},
+	}
+	return elem
+}
+
+func GetRemoteBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetRemoteBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"SayHello": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*RemoteSayHelloReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(RemoteBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.SayHello(from, req)
+		},
+		"Watch": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*RemoteWatchReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(RemoteBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.Watch(from, req)
+		},
+		"Unwatch": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*RemoteUnwatchReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(RemoteBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.Unwatch(from, req)
+		},
+	}
+	return elem
+}
+
+/////////////////////////////////////////
+////////// Element: LocalBooth //////////
+/////////////////////////////////////////
+//
+// 远端的本地调用
+//
+
+type localBoothId struct {
+	go_atomos.Id
+}
+
+func (c *localBoothId) RemoteNotice(from go_atomos.Id, in *LocalRemoteNoticeReq) (*LocalRemoteNoticeResp, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "RemoteNotice", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*LocalRemoteNoticeResp)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetLocalBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &localBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*LocalBoothSpawnArg)
+		dataT, _ := data.(*LocalBoothSpawnData)
+		return a.(LocalBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"RemoteNotice": go_atomos.NewAtomCallConfig(&LocalRemoteNoticeReq{}, &LocalRemoteNoticeResp{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"RemoteNotice": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &LocalRemoteNoticeReq{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &LocalRemoteNoticeResp{}) },
+		},
+	}
+	return elem
+}
+
+func GetLocalBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetLocalBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"RemoteNotice": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*LocalRemoteNoticeReq)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(LocalBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.RemoteNotice(from, req)
 		},
 	}
 	return elem

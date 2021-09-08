@@ -253,6 +253,645 @@ func (x *HelloReply) GetMessage() string {
 	return ""
 }
 
+type TaskBoothSpawnArg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *TaskBoothSpawnArg) Reset() {
+	*x = TaskBoothSpawnArg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TaskBoothSpawnArg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskBoothSpawnArg) ProtoMessage() {}
+
+func (x *TaskBoothSpawnArg) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskBoothSpawnArg.ProtoReflect.Descriptor instead.
+func (*TaskBoothSpawnArg) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{5}
+}
+
+type TaskBoothData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *TaskBoothData) Reset() {
+	*x = TaskBoothData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TaskBoothData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskBoothData) ProtoMessage() {}
+
+func (x *TaskBoothData) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskBoothData.ProtoReflect.Descriptor instead.
+func (*TaskBoothData) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{6}
+}
+
+// Start Task
+type StartTaskReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *StartTaskReq) Reset() {
+	*x = StartTaskReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StartTaskReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartTaskReq) ProtoMessage() {}
+
+func (x *StartTaskReq) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartTaskReq.ProtoReflect.Descriptor instead.
+func (*StartTaskReq) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{7}
+}
+
+type StartTaskResp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *StartTaskResp) Reset() {
+	*x = StartTaskResp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *StartTaskResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartTaskResp) ProtoMessage() {}
+
+func (x *StartTaskResp) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartTaskResp.ProtoReflect.Descriptor instead.
+func (*StartTaskResp) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{8}
+}
+
+type RemoteBoothSpawnArg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteBoothSpawnArg) Reset() {
+	*x = RemoteBoothSpawnArg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteBoothSpawnArg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteBoothSpawnArg) ProtoMessage() {}
+
+func (x *RemoteBoothSpawnArg) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteBoothSpawnArg.ProtoReflect.Descriptor instead.
+func (*RemoteBoothSpawnArg) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{9}
+}
+
+type RemoteBoothData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteBoothData) Reset() {
+	*x = RemoteBoothData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteBoothData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteBoothData) ProtoMessage() {}
+
+func (x *RemoteBoothData) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteBoothData.ProtoReflect.Descriptor instead.
+func (*RemoteBoothData) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{10}
+}
+
+// Remote Send
+type RemoteSayHelloReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id      int32  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+func (x *RemoteSayHelloReq) Reset() {
+	*x = RemoteSayHelloReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteSayHelloReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteSayHelloReq) ProtoMessage() {}
+
+func (x *RemoteSayHelloReq) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteSayHelloReq.ProtoReflect.Descriptor instead.
+func (*RemoteSayHelloReq) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RemoteSayHelloReq) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *RemoteSayHelloReq) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type RemoteSayHelloResp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id int32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *RemoteSayHelloResp) Reset() {
+	*x = RemoteSayHelloResp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteSayHelloResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteSayHelloResp) ProtoMessage() {}
+
+func (x *RemoteSayHelloResp) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteSayHelloResp.ProtoReflect.Descriptor instead.
+func (*RemoteSayHelloResp) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RemoteSayHelloResp) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+// Remote Watch
+type RemoteWatchReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteWatchReq) Reset() {
+	*x = RemoteWatchReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteWatchReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteWatchReq) ProtoMessage() {}
+
+func (x *RemoteWatchReq) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteWatchReq.ProtoReflect.Descriptor instead.
+func (*RemoteWatchReq) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{13}
+}
+
+type RemoteWatchResp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteWatchResp) Reset() {
+	*x = RemoteWatchResp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteWatchResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteWatchResp) ProtoMessage() {}
+
+func (x *RemoteWatchResp) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteWatchResp.ProtoReflect.Descriptor instead.
+func (*RemoteWatchResp) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{14}
+}
+
+// Remote Unwatch
+type RemoteUnwatchReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteUnwatchReq) Reset() {
+	*x = RemoteUnwatchReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteUnwatchReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteUnwatchReq) ProtoMessage() {}
+
+func (x *RemoteUnwatchReq) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteUnwatchReq.ProtoReflect.Descriptor instead.
+func (*RemoteUnwatchReq) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{15}
+}
+
+type RemoteUnwatchResp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *RemoteUnwatchResp) Reset() {
+	*x = RemoteUnwatchResp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[16]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoteUnwatchResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteUnwatchResp) ProtoMessage() {}
+
+func (x *RemoteUnwatchResp) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[16]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteUnwatchResp.ProtoReflect.Descriptor instead.
+func (*RemoteUnwatchResp) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{16}
+}
+
+type LocalBoothSpawnArg struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *LocalBoothSpawnArg) Reset() {
+	*x = LocalBoothSpawnArg{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LocalBoothSpawnArg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LocalBoothSpawnArg) ProtoMessage() {}
+
+func (x *LocalBoothSpawnArg) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LocalBoothSpawnArg.ProtoReflect.Descriptor instead.
+func (*LocalBoothSpawnArg) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{17}
+}
+
+type LocalBoothSpawnData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *LocalBoothSpawnData) Reset() {
+	*x = LocalBoothSpawnData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LocalBoothSpawnData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LocalBoothSpawnData) ProtoMessage() {}
+
+func (x *LocalBoothSpawnData) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LocalBoothSpawnData.ProtoReflect.Descriptor instead.
+func (*LocalBoothSpawnData) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{18}
+}
+
+// Local Remote Notice
+type LocalRemoteNoticeReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *LocalRemoteNoticeReq) Reset() {
+	*x = LocalRemoteNoticeReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LocalRemoteNoticeReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LocalRemoteNoticeReq) ProtoMessage() {}
+
+func (x *LocalRemoteNoticeReq) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LocalRemoteNoticeReq.ProtoReflect.Descriptor instead.
+func (*LocalRemoteNoticeReq) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{19}
+}
+
+type LocalRemoteNoticeResp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *LocalRemoteNoticeResp) Reset() {
+	*x = LocalRemoteNoticeResp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *LocalRemoteNoticeResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LocalRemoteNoticeResp) ProtoMessage() {}
+
+func (x *LocalRemoteNoticeResp) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_hello_world_api_helloworld_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LocalRemoteNoticeResp.ProtoReflect.Descriptor instead.
+func (*LocalRemoteNoticeResp) Descriptor() ([]byte, []int) {
+	return file_examples_hello_world_api_helloworld_proto_rawDescGZIP(), []int{20}
+}
+
 var File_examples_hello_world_api_helloworld_proto protoreflect.FileDescriptor
 
 var file_examples_hello_world_api_helloworld_proto_rawDesc = []byte{
@@ -267,16 +906,73 @@ var file_examples_hello_world_api_helloworld_proto_rawDesc = []byte{
 	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
 	0x6e, 0x61, 0x6d, 0x65, 0x22, 0x26, 0x0a, 0x0a, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x70,
 	0x6c, 0x79, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x32, 0x6a, 0x0a, 0x07,
-	0x47, 0x72, 0x65, 0x65, 0x74, 0x65, 0x72, 0x12, 0x2d, 0x0a, 0x05, 0x53, 0x70, 0x61, 0x77, 0x6e,
-	0x12, 0x12, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x53, 0x70, 0x61, 0x77,
-	0x6e, 0x41, 0x72, 0x67, 0x1a, 0x0e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
-	0x44, 0x61, 0x74, 0x61, 0x22, 0x00, 0x12, 0x30, 0x0a, 0x08, 0x53, 0x61, 0x79, 0x48, 0x65, 0x6c,
-	0x6c, 0x6f, 0x12, 0x11, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x0f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c,
-	0x6f, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x42, 0x1a, 0x5a, 0x18, 0x65, 0x78, 0x61, 0x6d,
-	0x70, 0x6c, 0x65, 0x73, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x5f, 0x77, 0x6f, 0x72, 0x6c, 0x64,
-	0x2f, 0x61, 0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x13, 0x0a, 0x11,
+	0x54, 0x61, 0x73, 0x6b, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x41, 0x72,
+	0x67, 0x22, 0x0f, 0x0a, 0x0d, 0x54, 0x61, 0x73, 0x6b, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x44, 0x61,
+	0x74, 0x61, 0x22, 0x0e, 0x0a, 0x0c, 0x53, 0x74, 0x61, 0x72, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x52,
+	0x65, 0x71, 0x22, 0x0f, 0x0a, 0x0d, 0x53, 0x74, 0x61, 0x72, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x52,
+	0x65, 0x73, 0x70, 0x22, 0x15, 0x0a, 0x13, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x42, 0x6f, 0x6f,
+	0x74, 0x68, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x22, 0x11, 0x0a, 0x0f, 0x52, 0x65,
+	0x6d, 0x6f, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x44, 0x61, 0x74, 0x61, 0x22, 0x3d, 0x0a,
+	0x11, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x53, 0x61, 0x79, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52,
+	0x65, 0x71, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x02,
+	0x69, 0x64, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x24, 0x0a, 0x12,
+	0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x53, 0x61, 0x79, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65,
+	0x73, 0x70, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x02,
+	0x69, 0x64, 0x22, 0x10, 0x0a, 0x0e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x57, 0x61, 0x74, 0x63,
+	0x68, 0x52, 0x65, 0x71, 0x22, 0x11, 0x0a, 0x0f, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x57, 0x61,
+	0x74, 0x63, 0x68, 0x52, 0x65, 0x73, 0x70, 0x22, 0x12, 0x0a, 0x10, 0x52, 0x65, 0x6d, 0x6f, 0x74,
+	0x65, 0x55, 0x6e, 0x77, 0x61, 0x74, 0x63, 0x68, 0x52, 0x65, 0x71, 0x22, 0x13, 0x0a, 0x11, 0x52,
+	0x65, 0x6d, 0x6f, 0x74, 0x65, 0x55, 0x6e, 0x77, 0x61, 0x74, 0x63, 0x68, 0x52, 0x65, 0x73, 0x70,
+	0x22, 0x14, 0x0a, 0x12, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x53, 0x70,
+	0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x22, 0x15, 0x0a, 0x13, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x42,
+	0x6f, 0x6f, 0x74, 0x68, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x44, 0x61, 0x74, 0x61, 0x22, 0x16, 0x0a,
+	0x14, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x4e, 0x6f, 0x74, 0x69,
+	0x63, 0x65, 0x52, 0x65, 0x71, 0x22, 0x17, 0x0a, 0x15, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x52, 0x65,
+	0x6d, 0x6f, 0x74, 0x65, 0x4e, 0x6f, 0x74, 0x69, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x32, 0x6a,
+	0x0a, 0x07, 0x47, 0x72, 0x65, 0x65, 0x74, 0x65, 0x72, 0x12, 0x2d, 0x0a, 0x05, 0x53, 0x70, 0x61,
+	0x77, 0x6e, 0x12, 0x12, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x53, 0x70,
+	0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x1a, 0x0e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c,
+	0x6c, 0x6f, 0x44, 0x61, 0x74, 0x61, 0x22, 0x00, 0x12, 0x30, 0x0a, 0x08, 0x53, 0x61, 0x79, 0x48,
+	0x65, 0x6c, 0x6c, 0x6f, 0x12, 0x11, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x0f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65,
+	0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x32, 0x78, 0x0a, 0x09, 0x54, 0x61,
+	0x73, 0x6b, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x12, 0x35, 0x0a, 0x05, 0x53, 0x70, 0x61, 0x77, 0x6e,
+	0x12, 0x16, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x54, 0x61, 0x73, 0x6b, 0x42, 0x6f, 0x6f, 0x74, 0x68,
+	0x53, 0x70, 0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x1a, 0x12, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x54,
+	0x61, 0x73, 0x6b, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x44, 0x61, 0x74, 0x61, 0x22, 0x00, 0x12, 0x34,
+	0x0a, 0x09, 0x53, 0x74, 0x61, 0x72, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x11, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x52, 0x65, 0x71, 0x1a, 0x12,
+	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x54, 0x61, 0x73, 0x6b, 0x52, 0x65,
+	0x73, 0x70, 0x22, 0x00, 0x32, 0xf9, 0x01, 0x0a, 0x0b, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x42,
+	0x6f, 0x6f, 0x74, 0x68, 0x12, 0x39, 0x0a, 0x05, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x12, 0x18, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x53,
+	0x70, 0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x1a, 0x14, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x52, 0x65,
+	0x6d, 0x6f, 0x74, 0x65, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x44, 0x61, 0x74, 0x61, 0x22, 0x00, 0x12,
+	0x3d, 0x0a, 0x08, 0x53, 0x61, 0x79, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x12, 0x16, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x53, 0x61, 0x79, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
+	0x52, 0x65, 0x71, 0x1a, 0x17, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65,
+	0x53, 0x61, 0x79, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x22, 0x00, 0x12, 0x34,
+	0x0a, 0x05, 0x57, 0x61, 0x74, 0x63, 0x68, 0x12, 0x13, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x52, 0x65,
+	0x6d, 0x6f, 0x74, 0x65, 0x57, 0x61, 0x74, 0x63, 0x68, 0x52, 0x65, 0x71, 0x1a, 0x14, 0x2e, 0x61,
+	0x70, 0x69, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x57, 0x61, 0x74, 0x63, 0x68, 0x52, 0x65,
+	0x73, 0x70, 0x22, 0x00, 0x12, 0x3a, 0x0a, 0x07, 0x55, 0x6e, 0x77, 0x61, 0x74, 0x63, 0x68, 0x12,
+	0x15, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x55, 0x6e, 0x77, 0x61,
+	0x74, 0x63, 0x68, 0x52, 0x65, 0x71, 0x1a, 0x16, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x52, 0x65, 0x6d,
+	0x6f, 0x74, 0x65, 0x55, 0x6e, 0x77, 0x61, 0x74, 0x63, 0x68, 0x52, 0x65, 0x73, 0x70, 0x22, 0x00,
+	0x32, 0x93, 0x01, 0x0a, 0x0a, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x12,
+	0x3c, 0x0a, 0x05, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x12, 0x17, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x4c,
+	0x6f, 0x63, 0x61, 0x6c, 0x42, 0x6f, 0x6f, 0x74, 0x68, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x41, 0x72,
+	0x67, 0x1a, 0x18, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x42, 0x6f, 0x6f,
+	0x74, 0x68, 0x53, 0x70, 0x61, 0x77, 0x6e, 0x44, 0x61, 0x74, 0x61, 0x22, 0x00, 0x12, 0x47, 0x0a,
+	0x0c, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x4e, 0x6f, 0x74, 0x69, 0x63, 0x65, 0x12, 0x19, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x4e,
+	0x6f, 0x74, 0x69, 0x63, 0x65, 0x52, 0x65, 0x71, 0x1a, 0x1a, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x4c,
+	0x6f, 0x63, 0x61, 0x6c, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x4e, 0x6f, 0x74, 0x69, 0x63, 0x65,
+	0x52, 0x65, 0x73, 0x70, 0x22, 0x00, 0x42, 0x1a, 0x5a, 0x18, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c,
+	0x65, 0x73, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x5f, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x2f, 0x61,
+	0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -291,24 +987,56 @@ func file_examples_hello_world_api_helloworld_proto_rawDescGZIP() []byte {
 	return file_examples_hello_world_api_helloworld_proto_rawDescData
 }
 
-var file_examples_hello_world_api_helloworld_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_examples_hello_world_api_helloworld_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_examples_hello_world_api_helloworld_proto_goTypes = []interface{}{
-	(*HelloData)(nil),     // 0: api.HelloData
-	(*HelloSpawnArg)(nil), // 1: api.HelloSpawnArg
-	(*HelloTimer)(nil),    // 2: api.HelloTimer
-	(*HelloRequest)(nil),  // 3: api.HelloRequest
-	(*HelloReply)(nil),    // 4: api.HelloReply
+	(*HelloData)(nil),             // 0: api.HelloData
+	(*HelloSpawnArg)(nil),         // 1: api.HelloSpawnArg
+	(*HelloTimer)(nil),            // 2: api.HelloTimer
+	(*HelloRequest)(nil),          // 3: api.HelloRequest
+	(*HelloReply)(nil),            // 4: api.HelloReply
+	(*TaskBoothSpawnArg)(nil),     // 5: api.TaskBoothSpawnArg
+	(*TaskBoothData)(nil),         // 6: api.TaskBoothData
+	(*StartTaskReq)(nil),          // 7: api.StartTaskReq
+	(*StartTaskResp)(nil),         // 8: api.StartTaskResp
+	(*RemoteBoothSpawnArg)(nil),   // 9: api.RemoteBoothSpawnArg
+	(*RemoteBoothData)(nil),       // 10: api.RemoteBoothData
+	(*RemoteSayHelloReq)(nil),     // 11: api.RemoteSayHelloReq
+	(*RemoteSayHelloResp)(nil),    // 12: api.RemoteSayHelloResp
+	(*RemoteWatchReq)(nil),        // 13: api.RemoteWatchReq
+	(*RemoteWatchResp)(nil),       // 14: api.RemoteWatchResp
+	(*RemoteUnwatchReq)(nil),      // 15: api.RemoteUnwatchReq
+	(*RemoteUnwatchResp)(nil),     // 16: api.RemoteUnwatchResp
+	(*LocalBoothSpawnArg)(nil),    // 17: api.LocalBoothSpawnArg
+	(*LocalBoothSpawnData)(nil),   // 18: api.LocalBoothSpawnData
+	(*LocalRemoteNoticeReq)(nil),  // 19: api.LocalRemoteNoticeReq
+	(*LocalRemoteNoticeResp)(nil), // 20: api.LocalRemoteNoticeResp
 }
 var file_examples_hello_world_api_helloworld_proto_depIdxs = []int32{
-	1, // 0: api.Greeter.Spawn:input_type -> api.HelloSpawnArg
-	3, // 1: api.Greeter.SayHello:input_type -> api.HelloRequest
-	0, // 2: api.Greeter.Spawn:output_type -> api.HelloData
-	4, // 3: api.Greeter.SayHello:output_type -> api.HelloReply
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1,  // 0: api.Greeter.Spawn:input_type -> api.HelloSpawnArg
+	3,  // 1: api.Greeter.SayHello:input_type -> api.HelloRequest
+	5,  // 2: api.TaskBooth.Spawn:input_type -> api.TaskBoothSpawnArg
+	7,  // 3: api.TaskBooth.StartTask:input_type -> api.StartTaskReq
+	9,  // 4: api.RemoteBooth.Spawn:input_type -> api.RemoteBoothSpawnArg
+	11, // 5: api.RemoteBooth.SayHello:input_type -> api.RemoteSayHelloReq
+	13, // 6: api.RemoteBooth.Watch:input_type -> api.RemoteWatchReq
+	15, // 7: api.RemoteBooth.Unwatch:input_type -> api.RemoteUnwatchReq
+	17, // 8: api.LocalBooth.Spawn:input_type -> api.LocalBoothSpawnArg
+	19, // 9: api.LocalBooth.RemoteNotice:input_type -> api.LocalRemoteNoticeReq
+	0,  // 10: api.Greeter.Spawn:output_type -> api.HelloData
+	4,  // 11: api.Greeter.SayHello:output_type -> api.HelloReply
+	6,  // 12: api.TaskBooth.Spawn:output_type -> api.TaskBoothData
+	8,  // 13: api.TaskBooth.StartTask:output_type -> api.StartTaskResp
+	10, // 14: api.RemoteBooth.Spawn:output_type -> api.RemoteBoothData
+	12, // 15: api.RemoteBooth.SayHello:output_type -> api.RemoteSayHelloResp
+	14, // 16: api.RemoteBooth.Watch:output_type -> api.RemoteWatchResp
+	16, // 17: api.RemoteBooth.Unwatch:output_type -> api.RemoteUnwatchResp
+	18, // 18: api.LocalBooth.Spawn:output_type -> api.LocalBoothSpawnData
+	20, // 19: api.LocalBooth.RemoteNotice:output_type -> api.LocalRemoteNoticeResp
+	10, // [10:20] is the sub-list for method output_type
+	0,  // [0:10] is the sub-list for method input_type
+	0,  // [0:0] is the sub-list for extension type_name
+	0,  // [0:0] is the sub-list for extension extendee
+	0,  // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_examples_hello_world_api_helloworld_proto_init() }
@@ -377,6 +1105,198 @@ func file_examples_hello_world_api_helloworld_proto_init() {
 				return nil
 			}
 		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TaskBoothSpawnArg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TaskBoothData); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*StartTaskReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*StartTaskResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteBoothSpawnArg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteBoothData); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteSayHelloReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteSayHelloResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteWatchReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteWatchResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteUnwatchReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoteUnwatchResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LocalBoothSpawnArg); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LocalBoothSpawnData); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LocalRemoteNoticeReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_examples_hello_world_api_helloworld_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*LocalRemoteNoticeResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -384,9 +1304,9 @@ func file_examples_hello_world_api_helloworld_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_examples_hello_world_api_helloworld_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   21,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   4,
 		},
 		GoTypes:           file_examples_hello_world_api_helloworld_proto_goTypes,
 		DependencyIndexes: file_examples_hello_world_api_helloworld_proto_depIdxs,

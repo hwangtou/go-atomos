@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"crypto/tls"
 	"os"
 	"sync"
 
@@ -56,6 +57,9 @@ type CosmosSelf struct {
 	mutex sync.Mutex
 	// Log
 	log *MailBox
+	// TLS if exists
+	clientCert *tls.Config
+	listenCert *tls.Config
 }
 
 func newCosmosSelf() *CosmosSelf {
@@ -82,5 +86,5 @@ func (c *CosmosSelf) GetName() string {
 }
 
 func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosWatchRemote, error) {
-	return c.remotes.getOrConnectRemote(nodeName, nodeAddr, c.config.EnableCert)
+	return c.remotes.getOrConnectRemote(nodeName, nodeAddr)
 }

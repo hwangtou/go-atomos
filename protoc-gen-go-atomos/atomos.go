@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	atomosPackage = protogen.GoImportPath("github.com/hwangtou/go-atomos")
+	atomosPackage   = protogen.GoImportPath("github.com/hwangtou/go-atomos")
 	protobufPackage = protogen.GoImportPath("google.golang.org/protobuf/proto")
 )
 
@@ -135,11 +135,11 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		if method.GoName == "Spawn" {
 			continue
 		}
-		g.P("func (c *", noExport(idName), ") ", method.GoName + "(from ", atomosPackage.Ident("Id"),
+		g.P("func (c *", noExport(idName), ") ", method.GoName+"(from ", atomosPackage.Ident("Id"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error)", " {")
 		g.P("r, err := c.Cosmos().MessageAtom(from, c, \"", method.GoName, "\", in)")
-		g.P("if err != nil { return nil, err }")
+		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomMessageReplyType"), " }")
 		g.P("return reply, nil")
@@ -151,6 +151,8 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	atomName := service.GoName
 	idName := service.GoName + "Id"
+
+	spawnArgTypeName := "proto.Message"
 
 	// Server struct.
 	g.P("// ", atomName, " is the atomos implements of ", service.GoName, " atomos.")
@@ -169,6 +171,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		if method.GoName == "Spawn" {
 			spawnSign(g, method)
+			spawnArgTypeName = "*" + g.QualifiedGoIdent(method.Input.GoIdent)
 		} else {
 			methodSign(g, method)
 		}
@@ -177,7 +180,8 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P()
 
 	// Spawn
-	g.P("func Spawn", service.GoName, "(c ", atomosPackage.Ident("CosmosNode"), ", name string, arg proto.Message) (",
+	g.P("func Spawn", service.GoName, "(c ", atomosPackage.Ident("CosmosNode"),
+		", name string, arg ", spawnArgTypeName, ") (",
 		idName, ", error) {")
 	g.P("_, err := c.SpawnAtom(\"", service.GoName, "\", name, arg)")
 	g.P("if err != nil { return nil, err }")
@@ -254,14 +258,14 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 const deprecationComment = "// Deprecated: Do not use."
 
 func spawnSign(g *protogen.GeneratedFile, method *protogen.Method) {
-	g.P(method.GoName + "(self ", atomosPackage.Ident("AtomSelf"),
+	g.P(method.GoName+"(self ", atomosPackage.Ident("AtomSelf"),
 		", arg *", g.QualifiedGoIdent(method.Input.GoIdent),
 		", data *", g.QualifiedGoIdent(method.Output.GoIdent),
 		") error")
 }
 
 func methodSign(g *protogen.GeneratedFile, method *protogen.Method) {
-	g.P(method.GoName + "(from ", atomosPackage.Ident("Id"),
+	g.P(method.GoName+"(from ", atomosPackage.Ident("Id"),
 		", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 		") (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error)")
 }

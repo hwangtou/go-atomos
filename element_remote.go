@@ -26,7 +26,20 @@ type ElementRemote struct {
 
 	// 该Element所有Id的缓存容器。
 	// Container of all cached Id.
-	cachedId map[string]*atomIdRemote
+	cachedId map[string]Id
+}
+
+func newPrivateElementInterface(name string) *ElementInterface {
+	return &ElementInterface{
+		Config: &ElementConfig{
+			Name:        name,
+			Version:     0,
+			LogLevel:    0,
+			AtomInitNum: 0,
+			Messages:    nil,
+		},
+		AtomMessages: map[string]*ElementAtomMessage{},
+	}
 }
 
 // Remote implementations of Element type.
@@ -36,6 +49,9 @@ func (e *ElementRemote) GetName() string {
 }
 
 func (e *ElementRemote) GetAtomId(name string) (Id, error) {
+	if !e.enableRemote() {
+		return nil, ErrRemoteNotAllowed
+	}
 	e.RLock()
 	id, has := e.cachedId[name]
 	e.RUnlock()
@@ -65,18 +81,9 @@ func (e *ElementRemote) GetAtomId(name string) (Id, error) {
 		if !resp.Has {
 			return nil, ErrAtomNotFound
 		}
-		id = &atomIdRemote{
-			cosmosNode: e.cosmos,
-			element:    e,
-			name:       name,
-			version:    e.elemInter.Config.Version,
-			created:    time.Now(),
-		}
-		e.Lock()
-		e.cachedId[name] = id
-		e.Unlock()
+		id = e.getOrCreateAtomId(name)
 	}
-	return e.elemInter.AtomIdConstructor(id), nil
+	return id, nil
 }
 
 func (e *ElementRemote) SpawnAtom(_ string, _ proto.Message) (*AtomCore, error) {
@@ -84,6 +91,15 @@ func (e *ElementRemote) SpawnAtom(_ string, _ proto.Message) (*AtomCore, error) 
 }
 
 func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
+	if fromId == nil {
+		return nil, ErrFromNotFound
+	}
+	if toId == nil {
+		return nil, ErrAtomNotFound
+	}
+	if !e.enableRemote() {
+		return nil, ErrRemoteNotAllowed
+	}
 	req := &CosmosRemoteMessagingReq{
 		From: &AtomId{
 			Node:    fromId.Cosmos().GetNodeName(),
@@ -126,21 +142,28 @@ func (e *ElementRemote) KillAtom(_, _ Id) error {
 	return ErrAtomCannotKill
 }
 
-func (e *ElementRemote) getOrCreateAtomId(from *AtomId) *atomIdRemote {
+func (e *ElementRemote) enableRemote() bool {
+	return e.cosmos.enableRemote != nil
+}
+
+func (e *ElementRemote) getOrCreateAtomId(name string) Id {
 	e.Lock()
 	defer e.Unlock()
-	id, has := e.cachedId[from.Name]
+	id, has := e.cachedId[name]
 	if has {
 		return id
 	}
 	id = &atomIdRemote{
 		cosmosNode: e.cosmos,
 		element:    e,
-		name:       from.Name,
+		name:       name,
 		version:    e.elemInter.Config.Version,
 		created:    time.Now(),
 	}
-	e.cachedId[from.Name] = id
+	if e.elemInter != nil {
+		id = e.elemInter.AtomIdConstructor(id)
+	}
+	e.cachedId[name] = id
 	return id
 }
 

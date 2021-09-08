@@ -18,7 +18,7 @@ type CosmosLocal struct {
 	elements   map[string]*ElementLocal
 	interfaces map[string]*ElementInterface
 	mainElem   *ElementLocal
-	mainAtom   *AtomCore
+	mainAtom   *mainAtom
 	mainKillCh chan bool
 }
 
@@ -38,6 +38,10 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 		return err
 	}
 
+	c.config = self.config
+	c.mainElem = newMainElement(self)
+	c.mainAtom = newMainAtom(c.mainElem)
+	c.cosmosSelf = self
 	// Pre-initialize all local elements in the Runnable.
 	loadedElements := map[string]*ElementLocal{}
 	elements := make(map[string]*ElementLocal, len(runnable.implementations))
@@ -56,6 +60,10 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s", loadedName)
 				}
 			}
+			c.config = nil
+			c.mainElem = nil
+			c.mainAtom = nil
+			c.cosmosSelf = nil
 			return err
 		}
 		// Add the element.
@@ -71,21 +79,17 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	// Lock, set elements, and unlock.
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	if c.config != nil || c.elements != nil {
+	if c.elements != nil {
 		err := fmt.Errorf("local cosmos has been initialized")
 		self.logFatal("CosmosLocal.initRunnable: Init runtime error, err=%v", err)
 		return err
 	}
-	c.config = self.config
-	c.cosmosSelf = self
 	c.elements = elements
 	c.interfaces = elementInterfaces
-	c.mainElem = newMainElement(self)
-	c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
 
 	for _, define := range c.elements {
-		define.current.Developer.Loaded(c.mainAtom)
+		define.current.Developer.Load(c.mainAtom)
 	}
 
 	// Init remote to support remote.
@@ -143,7 +147,7 @@ func (c *CosmosLocal) exitRunnable() {
 		} else {
 			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s", elemName)
 		}
-		elem.current.Developer.Unloaded()
+		elem.current.Developer.Unload()
 		delete(c.elements, elemName)
 	}
 	c.mainKillCh = nil

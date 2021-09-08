@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+package api;
+option go_package = "examples/chat/api";
+
+// User Manager
+
+// 用户管理器Atom
+service UserManagerAtom {
+  rpc Spawn (UserManagerSpawnArg) returns (UserManager) {}
+  // 注册用户
+  rpc RegisterUser (RegisterUserReq) returns (RegisterUserResp) {}
+  // 查找用户
+  rpc FindUser (FindUserReq) returns (FindUserResp) {}
+}
+
+message UserManagerSpawnArg {}
+message UserManager {
+  map<int64, int64> users = 1;
+}
+
+message RegisterUserReq {
+  UserBrief user = 1;
+}
+message RegisterUserResp {
+  bool succeed = 1;
+}
+
+message FindUserReq {
+  int64 id = 1;
+}
+message FindUserResp {
+  bool has = 1;
+}
+
+
+// User
+
+// 用户Atom
+service UserAtom {
+  rpc Spawn (UserSpawnArg) returns (User) {}
+  // 用户信息
+  rpc UserInfo (UserInfoReq) returns (UserInfoResp) {}
+  // 所有好友
+  rpc GetFriends (GetFriendsReq) returns (GetFriendsResp) {}
+  // 添加好友
+  rpc AddFriend (AddFriendReq) returns (AddFriendResp) {}
+  // 房间信息
+  // 房间消息推送
+  rpc RoomMessage (RoomMessagePush) returns (RoomMessagePushResp) {}
+}
+
+message UserSpawnArg {}
+message User {
+  UserBrief info = 1;
+  map<int64, UserBrief> friends = 2;
+  map<int64, ChatRoomBrief> rooms = 3;
+  int64 updated_at = 4;
+}
+
+message UserBrief {
+  int64 id = 1;
+  string nickname = 2;
+}
+
+message UserInfoReq {
+}
+message UserInfoResp {
+  UserBrief user = 1;
+}
+
+message GetFriendsReq {
+}
+message GetFriendsResp {
+  map<int64, UserBrief> friends = 1;
+}
+
+message AddFriendReq {
+  UserBrief user = 1;
+}
+message AddFriendResp {
+  bool succeed = 1;
+}
+
+message RoomMessagePush {
+  int64 room_id = 1;
+  int64 sender_id = 2;
+  string content = 3;
+}
+message RoomMessagePushResp {
+  bool succeed = 1;
+}
+
+
+// Chat Manager
+
+// 房间管理器Atom
+service ChatRoomManagerAtom {
+  rpc Spawn (ChatRoomManagerSpawnArg) returns (ChatRoomManager) {}
+  // 创建房间
+  rpc CreateRoom (CreateRoomReq) returns (CreateRoomResp) {}
+  // 查找房间
+  rpc FindRoom (FindRoomReq) returns (FindRoomResp) {}
+}
+
+message ChatRoomManagerSpawnArg {}
+message ChatRoomManager {
+  map<string, int64> rooms = 1;
+}
+
+message CreateRoomReq {
+  string name = 1;
+  UserBrief owner = 2;
+}
+message CreateRoomResp {
+  bool succeed = 1;
+}
+
+message FindRoomReq {
+  int64 room_id = 1;
+}
+message FindRoomResp {
+  bool has = 1;
+}
+
+
+// Chat
+
+// 房间Atom
+service ChatRoomAtom {
+  rpc Spawn (ChatRoomSpawnArg) returns (ChatRoom) {}
+  // 房间信息
+  rpc Info (ChatRoomInfoReq) returns (ChatRoomInfoResp) {}
+  // 添加房间成员
+  rpc AddMember (AddMemberReq) returns (AddMemberResp) {}
+  // 删除房间成员
+  rpc DelMember (DelMemberReq) returns (DelMemberResp) {}
+  // 发送消息
+  rpc SendMessage (SendMessageReq) returns (SendMessageResp) {}
+}
+
+message ChatRoomSpawnArg {
+  string name = 1;
+  UserBrief owner = 2;
+}
+message ChatRoom {
+  ChatRoomBrief info = 1;
+  UserBrief owner = 2;
+  map<int64, UserBrief> members = 3;
+}
+
+message ChatRoomBrief {
+  string name = 1;
+  int64 updated_at = 2;
+}
+
+message ChatRoomInfoReq {}
+message ChatRoomInfoResp {
+  ChatRoom room = 1;
+}
+
+message AddMemberReq {
+  UserBrief user = 1;
+}
+message AddMemberResp {
+  bool succeed = 1;
+}
+
+message DelMemberReq {
+  int64 user_id = 1;
+}
+message DelMemberResp {
+  bool succeed = 1;
+}
+
+message SendMessageReq {
+  int64 sender_id = 1;
+  string content = 2;
+}
+message SendMessageResp {
+  bool succeed = 1;
+}
+
+
+// Db
+
+// KvDb Atom
+service KvDbAtom {
+  rpc Spawn (KvDbSpawnArg) returns (KvDb) {}
+  rpc Get (DbGetReq) returns (DbGetResp) {}
+  rpc Set (DbSetReq) returns (DbSetResp) {}
+  rpc Del (DbDelReq) returns (DbDelResp) {}
+}
+
+message KvDbSpawnArg {
+  string db_path = 1;
+}
+message KvDb {}
+
+message DbGetReq {
+  string key = 1;
+}
+message DbGetResp {
+  bool has = 1;
+  bytes value = 2;
+}
+
+message DbSetReq {
+  string key = 1;
+  bytes value = 2;
+}
+message DbSetResp {
+  bool succeed = 1;
+}
+
+message DbDelReq {
+  string key = 1;
+}
+message DbDelResp {
+  bool succeed = 1;
+}

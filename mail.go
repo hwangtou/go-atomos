@@ -73,7 +73,7 @@ type MailBoxHandler struct {
 }
 
 type MailBox struct {
-	Name string
+	Name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool

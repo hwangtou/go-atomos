@@ -112,12 +112,12 @@ func (c *CosmosSelf) Close() {
 }
 
 // Daemon initialize.
-func (c *CosmosSelf) daemonInit(conf *Config) error {
+func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
 	// Check
 	if conf == nil {
 		return errors.New("no configuration")
 	}
-	if err := conf.check(c); err != nil {
+	if err = conf.check(c); err != nil {
 		return fmt.Errorf("config invalid, err=%v", err)
 	}
 
@@ -128,6 +128,12 @@ func (c *CosmosSelf) daemonInit(conf *Config) error {
 		return errors.New("config registered")
 	}
 	c.config = conf
+	if c.clientCert, err = conf.getClientCertConfig(); err != nil {
+		return err
+	}
+	if c.listenCert, err = conf.getListenCertConfig(); err != nil {
+		return err
+	}
 	c.local = newCosmosLocal()
 	c.remotes = newCosmosRemoteHelper(c)
 	c.daemonCmdCh = make(chan *DaemonCommand)

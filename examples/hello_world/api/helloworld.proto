@@ -26,11 +26,8 @@ service Greeter {
   rpc SayHello (HelloRequest) returns (HelloReply) {}
 }
 
-message HelloData {
-}
-
-message HelloSpawnArg {
-}
+message HelloData {}
+message HelloSpawnArg {}
 
 message HelloTimer {
   string info = 1;
@@ -45,3 +42,51 @@ message HelloRequest {
 message HelloReply {
   string message = 1;
 }
+
+
+// 展示如何使用任务
+service TaskBooth {
+  rpc Spawn (TaskBoothSpawnArg) returns (TaskBoothData) {}
+  // 开始演示各种任务的使用方式
+  rpc StartTask (StartTaskReq) returns (StartTaskResp) {}
+}
+message TaskBoothSpawnArg {}
+message TaskBoothData {}
+// Start Task
+message StartTaskReq {}
+message StartTaskResp {}
+
+
+// 展示如何使用远端
+service RemoteBooth {
+  rpc Spawn (RemoteBoothSpawnArg) returns (RemoteBoothData) {}
+  rpc SayHello (RemoteSayHelloReq) returns (RemoteSayHelloResp) {}
+  rpc Watch(RemoteWatchReq) returns (RemoteWatchResp) {}
+  rpc Unwatch(RemoteUnwatchReq) returns (RemoteUnwatchResp) {}
+}
+message RemoteBoothSpawnArg {}
+message RemoteBoothData {}
+// Remote Send
+message RemoteSayHelloReq {
+  int32 id = 1;
+  string message = 2;
+}
+message RemoteSayHelloResp {
+  int32 id = 1;
+}
+// Remote Watch
+message RemoteWatchReq {}
+message RemoteWatchResp {}
+// Remote Unwatch
+message RemoteUnwatchReq {}
+message RemoteUnwatchResp {}
+// 远端的本地调用
+service LocalBooth {
+  rpc Spawn (LocalBoothSpawnArg) returns (LocalBoothSpawnData) {}
+  rpc RemoteNotice (LocalRemoteNoticeReq) returns (LocalRemoteNoticeResp) {}
+}
+message LocalBoothSpawnArg {}
+message LocalBoothSpawnData {}
+// Local Remote Notice
+message LocalRemoteNoticeReq {}
+message LocalRemoteNoticeResp {}
