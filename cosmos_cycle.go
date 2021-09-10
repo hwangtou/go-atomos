@@ -70,7 +70,7 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 					func() {
 						defer func() {
 							if r := recover(); r != nil {
-								c.logInfo("CosmosSelf.Daemon: Exit error, err=%s", r)
+								c.logInfo("Cosmos.Daemon: Exit error, err=%s", r)
 							}
 						}()
 						c.local.mainKillCh <- true
@@ -79,9 +79,9 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 					go func() {
 						err := c.daemonCommandExecutor(cmd)
 						if err != nil {
-							c.logFatal("CosmosSelf.Daemon: Execute failed, err=%v", err)
+							c.logFatal("Cosmos.Daemon: Execute failed, err=%v", err)
 						} else {
-							c.logInfo("CosmosSelf.Daemon: Execute succeed")
+							c.logInfo("Cosmos.Daemon: Execute succeed")
 						}
 						daemonCh <- err
 					}()
@@ -89,11 +89,11 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 			case s := <-c.signCh:
 				exit, message := c.daemonSignalWatcher(s)
 				if exit {
-					c.logInfo("CosmosSelf.Daemon: Caught notice, exit=%v,message=%s", exit, message)
+					c.logInfo("Cosmos.Daemon: Caught notice, exit=%v,message=%s", exit, message)
 					c.local.mainKillCh <- true
 				}
 			case err := <-daemonCh:
-				c.logInfo("CosmosSelf.Daemon: Exit, err=%v", err)
+				c.logInfo("Cosmos.Daemon: Exit, err=%v", err)
 				return
 			}
 		}
@@ -184,7 +184,7 @@ func (c *CosmosSelf) daemonCommandExecutor(cmd *DaemonCommand) error {
 
 func (c *CosmosSelf) deferRunnable() {
 	if r := recover(); r != nil {
-		c.logFatal("CosmosSelf.deferRunnable: SCRIPT CRASH! reason=%s,stack=%s", r, string(debug.Stack()))
+		c.logFatal("Cosmos.Defer: SCRIPT CRASH! reason=%s,stack=%s", r, string(debug.Stack()))
 	}
 }
 

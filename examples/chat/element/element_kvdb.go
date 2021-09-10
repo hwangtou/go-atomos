@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	KvDbElementName = "DB"
 	KvDbElementAtomInit = 1
 )
 
@@ -21,8 +20,8 @@ func (k *KvDbElement) Check() error {
 	return nil
 }
 
-func (k *KvDbElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return KvDbElementName, 1, atomos.LogLevel_Debug, 1
+func (k *KvDbElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (k *KvDbElement) AtomConstructor() atomos.Atom {

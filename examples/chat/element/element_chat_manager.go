@@ -6,10 +6,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	ChatManagerElementName = "ChatManager"
-)
-
 // Element
 
 type ChatManagerElement struct {
@@ -26,8 +22,8 @@ func (c *ChatManagerElement) Persistence() atomos.ElementPersistence {
 	return nil
 }
 
-func (c *ChatManagerElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return ChatManagerElementName, 1, atomos.LogLevel_Debug, 1
+func (c *ChatManagerElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (c *ChatManagerElement) AtomConstructor() atomos.Atom {

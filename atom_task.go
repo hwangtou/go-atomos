@@ -233,7 +233,7 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 				// FRAMEWORK LEVEL ERROR
 				// Because it should not happen, once a TimerTask has been cancelled,
 				// it will be removed, thread-safely, immediately.
-				at.atom.element.cosmos.logFatal("atomTasks.AddAfter: FRAMEWORK ERROR, timer cancel")
+				at.atom.element.cosmos.logFatal("Atom.Task: AddAfter, FRAMEWORK ERROR, timer cancel")
 			}
 			return
 
@@ -245,14 +245,14 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 			it.timerState = TaskMailing
 			delete(at.tasks, it.id)
 			if ok := at.atom.mailbox.PushHead(am.Mail); !ok {
-				at.atom.element.cosmos.logFatal("atomTasks.AddAfter: atom is not running")
+				at.atom.element.cosmos.logFatal("Atom.Task: AddAfter, atom is not running")
 			}
 
 		// FRAMEWORK LEVEL ERROR
 		// Because it should not happen, once a TimerTask has been executed,
 		// it will be removed, thread-safely, immediately.
 		default:
-			at.atom.element.cosmos.logFatal("atomTasks.AddAfter: FRAMEWORK ERROR, timer executing")
+			at.atom.element.cosmos.logFatal("Atom.Task: AddAfter, FRAMEWORK ERROR, timer executing")
 		}
 	})
 	return curId, nil
@@ -265,18 +265,18 @@ func checkTaskFn(fn interface{}, msg proto.Message) (string, error) {
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
 	if fnValue.Kind() != reflect.Func {
-		return "", fmt.Errorf("atomTasks: Append invalid function, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("Atom.Task: Append invalid function, type=%T,fn=%+v", fn, fn)
 	}
 	fnRuntime := runtime.FuncForPC(fnValue.Pointer())
 	if fnRuntime == nil {
-		return "", fmt.Errorf("atomTasks: Append invalid function runtime, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("Atom.Task: Append invalid function runtime, type=%T,fn=%+v", fn, fn)
 	}
 	// Get func name.
 	fnRawName := fnRuntime.Name()
 	fnName := getTaskFnName(fnRawName)
 	fnRunes := []rune(fnName)
 	if len(fnRunes) == 0 || unicode.IsLower(fnRunes[0]) {
-		return "", fmt.Errorf("atomTasks: Append invalid function name, type=%T,fn=%+v", fn, fn)
+		return "", fmt.Errorf("Atom.Task: Append invalid function name, type=%T,fn=%+v", fn, fn)
 	}
 	_, err := checkFnArgs(fnType, fnName, msg)
 	return fnName, err
@@ -291,32 +291,32 @@ func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, er
 	case 1:
 		// Call with only a task id argument.
 		if msg != nil {
-			return 0, fmt.Errorf("atomTasks: Append func not support message, fn=%s", fnName)
+			return 0, fmt.Errorf("Atom.Task: Append func not support message, fn=%s", fnName)
 		}
 		fn0Type := fnType.In(0)
 		// Check task id.
 		if fn0Type.Kind() != reflect.Uint64 {
-			return 0, fmt.Errorf("atomTasks: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("Atom.Task: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		return 1, nil
 	case 2:
 		// Call with task id as first argument and message as second argument.
 		if msg == nil {
-			return 0, fmt.Errorf("atomTasks: Append nil message, fn=%s", fnName)
+			return 0, fmt.Errorf("Atom.Task: Append nil message, fn=%s", fnName)
 		}
 		fn0Type, fn1Type := fnType.In(0), fnType.In(1)
 		// Check task id.
 		if fn0Type.Kind() != reflect.Uint64 {
-			return 0, fmt.Errorf("atomTasks: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("Atom.Task: Append illegal task id receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		// Check message.
 		msgType := reflect.TypeOf(msg)
 		if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
-			return 0, fmt.Errorf("atomTasks: Append illegal message receiver, fn=%s,msg=%+v", fnName, msg)
+			return 0, fmt.Errorf("Atom.Task: Append illegal message receiver, fn=%s,msg=%+v", fnName, msg)
 		}
 		return 2, nil
 	}
-	return 0, fmt.Errorf("atomTasks: Append illegal function, fn=%v", fnType)
+	return 0, fmt.Errorf("Atom.Task: Append illegal function, fn=%v", fnType)
 }
 
 func getTaskFnName(fnRawName string) string {
@@ -377,7 +377,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
 			err = fmt.Errorf("cannot delete timer that not exists")
-			at.atom.element.cosmos.logFatal("atomTasks.cancelTask: FRAMEWORK ERROR, err=%v", err)
+			at.atom.element.cosmos.logFatal("Atom.Task: Cancel, FRAMEWORK ERROR, err=%v", err)
 			return cancel, err
 
 		// 排程的任务准备执行。
@@ -393,7 +393,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 				// Might only happen on the edge of scheduled time has reached,
 				// the period between time.AfterFunc has execute the function,
 				// and the function still have acquired the mutex.
-				at.atom.element.cosmos.logInfo("atomTasks.cancelTask: Cancel on the edge")
+				at.atom.element.cosmos.logInfo("Atom.Task: Cancel on the edge")
 			}
 			cancel.Id = id
 			cancel.Name = t.mail.name
@@ -414,7 +414,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 			return cancel, nil
 		default:
 			// FRAMEWORK LEVEL ERROR
-			at.atom.element.cosmos.logFatal("atomTasks.cancelTask: FRAMEWORK ERROR, unknown timer state, state=%v",
+			at.atom.element.cosmos.logFatal("Atom.Task: Cancel, FRAMEWORK ERROR, unknown timer state, state=%v",
 				t.timerState)
 			return cancel, fmt.Errorf("unknown timer state")
 		}
@@ -453,13 +453,13 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	instValue := reflect.ValueOf(at.atom.instance)
 	method := instValue.MethodByName(am.name)
 	if !method.IsValid() {
-		at.atom.log.Error("atomTasks.handleTask: Method invalid, id=%d,name=%s,arg=%+v",
+		at.atom.log.Error("Atom.Task: Method invalid, id=%d,name=%s,arg=%+v",
 			am.Mail.id, am.name, am.arg)
 		return
 	}
 	inNum, err := checkFnArgs(method.Type(), am.name, am.arg)
 	if err != nil {
-		at.atom.log.Error("atomTasks.handleTask: Argument invalid, id=%d,name=%s,arg=%+v,err=%v",
+		at.atom.log.Error("Atom.Task: Argument invalid, id=%d,name=%s,arg=%+v,err=%v",
 			am.Mail.id, am.name, am.arg, err)
 		return
 	}

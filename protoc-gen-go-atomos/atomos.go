@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -28,11 +29,12 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 }
 
 func serviceTitle(g *protogen.GeneratedFile, service *protogen.Service) {
+	elementName := service.GoName
 	head, tail := "////////// Element: ", " //////////"
-	nameLen := len(service.GoName) + len(head) + len(tail)
+	nameLen := len(elementName) + len(head) + len(tail)
 	c := strings.Repeat("/", nameLen)
 	g.P(c)
-	g.P(head, service.GoName, tail)
+	g.P(head, elementName, tail)
 	g.P(c)
 	if len(service.Comments.Leading.String()) > 0 {
 		g.P("//")
@@ -56,6 +58,11 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	g.P()
 	g.P()
 	for _, service := range file.Services {
+		elementName := service.GoName
+		if elementName == "Main" {
+			gen.Error(errors.New("cannot use element name \"Main\""))
+			continue
+		}
 		serviceTitle(g, service)
 		genIdInterface(g, service)
 		genGetIdInterface(g, service)
@@ -67,6 +74,11 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	g.P("//")
 	g.P()
 	for _, service := range file.Services {
+		elementName := service.GoName
+		if elementName == "Main" {
+			gen.Error(errors.New("cannot use element name \"Main\""))
+			continue
+		}
 		serviceTitle(g, service)
 		genIdInternal(g, service)
 		genImplement(file, g, service)
@@ -74,9 +86,12 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 }
 
 func genIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
+	elementName := service.GoName
 	idName := service.GoName + "Id"
 
-	g.P("// ", idName, " is the interface of ", service.GoName, " atomos.")
+	g.P("const ", elementName, "Name = \"", elementName, "\"")
+	g.P()
+	g.P("// ", idName, " is the interface of ", elementName, " atomos.")
 	g.P()
 
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
@@ -107,6 +122,7 @@ func genIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func genGetIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
+	elementName := service.GoName
 	idName := service.GoName + "Id"
 
 	// NewClient factory.
@@ -114,7 +130,7 @@ func genGetIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P(deprecationComment)
 	}
 	g.P("func Get", idName, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", idName, ", error) {")
-	g.P("ca, err := c.GetAtomId(\"", service.GoName, "\", name)")
+	g.P("ca, err := c.GetAtomId(", elementName, "Name, name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("if c, ok := ca.(", idName, "); ok { return c, nil } else { return nil, ", atomosPackage.Ident("ErrAtomType"), " }")
 	g.P("}")
@@ -149,23 +165,23 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
-	atomName := service.GoName
+	elementName := service.GoName
 	idName := service.GoName + "Id"
 
 	spawnArgTypeName := "proto.Message"
 
 	// Server struct.
-	g.P("// ", atomName, " is the atomos implements of ", service.GoName, " atomos.")
+	g.P("// ", elementName, " is the atomos implements of ", elementName, " atomos.")
 	g.P()
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P("//")
 		g.P(deprecationComment)
 	}
-	g.Annotate(atomName, service.Location)
-	g.P("type ", atomName, " interface {")
+	g.Annotate(elementName, service.Location)
+	g.P("type ", elementName, " interface {")
 	g.P(atomosPackage.Ident("Atom"))
 	for _, method := range service.Methods {
-		g.Annotate(atomName+"."+method.GoName, method.Location)
+		g.Annotate(elementName+"."+method.GoName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
 		}
@@ -180,12 +196,12 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P()
 
 	// Spawn
-	g.P("func Spawn", service.GoName, "(c ", atomosPackage.Ident("CosmosNode"),
+	g.P("func Spawn", elementName, "(c ", atomosPackage.Ident("CosmosNode"),
 		", name string, arg ", spawnArgTypeName, ") (",
 		idName, ", error) {")
-	g.P("_, err := c.SpawnAtom(\"", service.GoName, "\", name, arg)")
+	g.P("_, err := c.SpawnAtom(", elementName, "Name, name, arg)")
 	g.P("if err != nil { return nil, err }")
-	g.P("id, err := c.GetAtomId(\"", service.GoName, "\", name)")
+	g.P("id, err := c.GetAtomId(", elementName, "Name, name)")
 	g.P("if err != nil { return nil, err; }")
 	g.P("if i, ok := id.(", idName, "); ok { return i, nil }")
 	g.P("return nil, ", atomosPackage.Ident("ErrAtomType"))
@@ -194,12 +210,12 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 
 func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) {
 	atomIdName := atomosPackage.Ident("Id")
-	atomTypeName := service.GoName
+	elementName := service.GoName
 	idName := service.GoName + "Id"
 	interfaceName := service.GoName + "Interface"
 
-	g.P("func Get", service.GoName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
-	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper"), "(dev)")
+	g.P("func Get", elementName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
+	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper("), elementName, "Name, dev)")
 	g.P("elem.AtomIdConstructor = func(id ", atomIdName, ") ", atomIdName, " { return &", noExport(idName), "{id} }")
 	for _, method := range service.Methods {
 		if method.GoName != "Spawn" {
@@ -207,7 +223,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		}
 		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelf"), ", a ", atomosPackage.Ident("Atom"), ", arg, data ", protobufPackage.Ident("Message"), ") error {")
 		g.P("argT, _ := arg.(*", method.Input.GoIdent, "); dataT, _ := data.(*", method.Output.GoIdent, ")")
-		g.P("return a.(", service.GoName, ").Spawn(s, argT, dataT)")
+		g.P("return a.(", elementName, ").Spawn(s, argT, dataT)")
 		g.P("}")
 	}
 	g.P("elem.Config.Messages = map[string]*", atomosPackage.Ident("AtomMessageConfig"), "{")
@@ -234,7 +250,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 
 	g.P()
 
-	g.P("func Get", service.GoName, "Implement(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementImplementation"), "{")
+	g.P("func Get", elementName, "Implement(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementImplementation"), "{")
 	g.P("elem := ", atomosPackage.Ident("NewImplementationFromDeveloper"), "(dev)")
 	g.P("elem.Interface = Get", interfaceName, "(dev)")
 	g.P("elem.AtomHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
@@ -245,7 +261,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("\"", method.GoName, "\": func(from ", atomosPackage.Ident("Id"), ", to ", atomosPackage.Ident("Atom"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", error) {")
 		g.P("req, ok := in.(*", method.Input.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomMessageArgType"), "}")
-		g.P("a, ok := to.(", atomTypeName, ")")
+		g.P("a, ok := to.(", elementName, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomMessageAtomType"), "}")
 		g.P("return a.", method.GoName, "(from, req)")
 		g.P("},")

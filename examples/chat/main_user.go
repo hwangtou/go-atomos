@@ -8,11 +8,11 @@ import (
 
 func main() {
 	runnable := atomos.CosmosRunnable{}
-	runnable.AddElementImplementation(api.GetUserManagerAtomImplement(&element.UserManagerElement{}))
-	runnable.AddElementImplementation(api.GetUserAtomImplement(&element.UserElement{}))
-	runnable.AddElementImplementation(api.GetChatRoomManagerAtomImplement(&element.ChatManagerElement{}))
-	runnable.AddElementImplementation(api.GetChatRoomAtomImplement(&element.ChatRoomElement{}))
-	runnable.SetScript(scriptChat)
+	runnable.AddElementImplementation(api.GetUserManagerAtomImplement(&element.UserManagerElement{})).
+		AddElementImplementation(api.GetUserAtomImplement(&element.UserElement{})).
+		AddElementImplementation(api.GetChatRoomManagerAtomImplement(&element.ChatManagerElement{})).
+		AddElementImplementation(api.GetChatRoomAtomImplement(&element.ChatRoomElement{})).
+		SetScript(scriptChat)
 	config := &atomos.Config{
 		Node:               "Chat",
 		LogPath:            "/tmp/cosmos_log/",
@@ -38,26 +38,26 @@ func main() {
 
 func scriptChat(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
 	// Spawn UserManager
-	userManagerId, err := api.SpawnUserManagerAtom(cosmos.Local(), element.UserManagerElementName, &api.UserManagerSpawnArg{})
+	userManagerId, err := api.SpawnUserManagerAtom(cosmos.Local(), "UserManager", &api.UserManagerSpawnArg{})
 	if err != nil {
 		mainId.Log().Fatal("UserManager spawn failed, err=%v", err)
 		return
 	}
 	defer func() {
 		mainId.Log().Info("UserManager is exiting")
-		if err := userManagerId.Kill(mainId); err != nil {
+		if err = userManagerId.Kill(mainId); err != nil {
 			mainId.Log().Error("UserManager exited with error, err=%v", err)
 		}
 	}()
 
 	// Spawn ChatManager
-	chatManagerId, err := api.SpawnUserManagerAtom(cosmos.Local(), element.UserManagerElementName, &api.UserManagerSpawnArg{})
+	chatManagerId, err := api.SpawnChatRoomManagerAtom(cosmos.Local(), "RoomManager", &api.ChatRoomManagerSpawnArg{})
 	if err != nil {
 		mainId.Log().Fatal("ChatManager spawn failed, err=%v", err)
 	}
 	defer func() {
 		mainId.Log().Info("ChatManager is exiting")
-		if err := chatManagerId.Kill(mainId); err != nil {
+		if err = chatManagerId.Kill(mainId); err != nil {
 			mainId.Log().Error("ChatManager exited with error, err=%v", err)
 		}
 	}()

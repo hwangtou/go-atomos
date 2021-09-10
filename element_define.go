@@ -20,6 +20,10 @@ type ElementImplementation struct {
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
 // ElementInterface in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementInterface struct {
+	// Element的名称。
+	// Name of Element
+	Name string
+
 	// Element的配置。
 	// Configuration of the Element.
 	Config *ElementConfig
@@ -56,8 +60,8 @@ type ElementAtomMessage struct {
 }
 
 // For creating ElementInterface instance in *_atomos.pb.go.
-func NewInterfaceFromDeveloper(implement ElementDeveloper) *ElementInterface {
-	name, version, _, _ := implement.Info()
+func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *ElementInterface {
+	version, _, _ := implement.Info()
 	return &ElementInterface{
 		Config: &ElementConfig{
 			Name:     name,

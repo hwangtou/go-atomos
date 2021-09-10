@@ -22,8 +22,8 @@ func (r *LocalBoothElement) Unload() {
 	r.mainId.Log().Info("LocalBoothElement is loading")
 }
 
-func (r *LocalBoothElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return "LocalBooth", 1, atomos.LogLevel_Debug, 1
+func (r *LocalBoothElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (r *LocalBoothElement) AtomConstructor() atomos.Atom {

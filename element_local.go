@@ -55,7 +55,7 @@ func (e *ElementLocal) reload(newDefine *ElementImplementation) error {
 	for name, atom := range e.atoms {
 		err := atom.pushReloadMail(newDefine.Interface.Config.Version)
 		if err != nil {
-			e.cosmos.logError("ElementLocal.reload: Push reload failed, name=%s,err=%v", name, err)
+			e.cosmos.logError("Element.Reload: Push reload failed, name=%s,err=%v", name, err)
 		}
 	}
 	return nil
@@ -82,12 +82,17 @@ func (e *ElementLocal) unload() error {
 	for atomName, atom := range e.atoms {
 		go func(atomName string, atom *AtomCore) {
 			wg.Add(1)
-			e.cosmos.logInfo("ElementLocal.unload: Kill atom, name=%s", atomName)
+			defer func() {
+				wg.Done()
+				if r := recover(); r != nil {
+					e.cosmos.logFatal("Element.Unload: Panic, name=%s,reason=%s", atomName, r)
+				}
+			}()
+			e.cosmos.logInfo("Element.Unload: Kill atom, name=%s", atomName)
 			err := atom.Kill(e.cosmos.local.mainAtom)
 			if err != nil {
-				e.cosmos.logError("ElementLocal.unload: Kill atom error, name=%s,err=%v", atomName, err)
+				e.cosmos.logError("Element.Unload: Kill atom error, name=%s,err=%v", atomName, err)
 			}
-			wg.Done()
 		}(atomName, atom)
 	}
 	wg.Wait()

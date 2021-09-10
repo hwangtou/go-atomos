@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io/ioutil"
 )
 
@@ -76,4 +77,8 @@ func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err error) {
 		return nil, err
 	}
 	return
+}
+
+func (x *AtomId) str() string {
+	return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Name)
 }

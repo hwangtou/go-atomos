@@ -23,8 +23,8 @@ func (t TaskBoothElement) Unload() {
 	t.mainId.Log().Info("TaskBoothElement is loading")
 }
 
-func (t TaskBoothElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return "TaskBooth", 1, atomos.LogLevel_Debug, 1
+func (t TaskBoothElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (t TaskBoothElement) AtomConstructor() atomos.Atom {

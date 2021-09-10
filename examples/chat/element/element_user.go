@@ -8,10 +8,6 @@ import (
 	"github.com/hwangtou/go-atomos/examples/chat/api"
 )
 
-const (
-	UserElementName = "User"
-)
-
 // Element
 
 type UserElement struct {
@@ -28,8 +24,8 @@ func (u *UserElement) Persistence() atomos.ElementPersistence {
 	return nil
 }
 
-func (u *UserElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return UserElementName, 1, atomos.LogLevel_Debug, 100
+func (u *UserElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 100
 }
 
 func (u *UserElement) AtomConstructor() atomos.Atom {
@@ -37,7 +33,7 @@ func (u *UserElement) AtomConstructor() atomos.Atom {
 }
 
 func (u *UserElement) AtomCanKill(id atomos.Id) bool {
-	return id.Name() == UserManagerElementName
+	return id.Name() == api.UserManagerAtomName
 }
 
 // Atom

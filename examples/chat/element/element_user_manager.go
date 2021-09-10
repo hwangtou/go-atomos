@@ -9,10 +9,6 @@ import (
 	"github.com/hwangtou/go-atomos/examples/chat/api"
 )
 
-const (
-	UserManagerElementName = "UserManager"
-)
-
 // Element
 
 type UserManagerElement struct {
@@ -29,8 +25,8 @@ func (u *UserManagerElement) Persistence() atomos.ElementPersistence {
 	return nil
 }
 
-func (u *UserManagerElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return UserManagerElementName, 1, atomos.LogLevel_Debug, 1
+func (u *UserManagerElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (u *UserManagerElement) AtomConstructor() atomos.Atom {
@@ -48,19 +44,19 @@ type userManagerAtom struct {
 	*api.UserManager
 }
 
-func (u userManagerAtom) Spawn(self atomos.AtomSelf, arg *api.UserManagerSpawnArg, data *api.UserManager) error {
+func (u *userManagerAtom) Spawn(self atomos.AtomSelf, arg *api.UserManagerSpawnArg, data *api.UserManager) error {
 	self.Log().Info("Spawn")
 	u.self = self
 	u.UserManager = data
 	return nil
 }
 
-func (u userManagerAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) (saveData proto.Message) {
+func (u *userManagerAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) (saveData proto.Message) {
 	u.self.Log().Info("Halt")
 	return u.UserManager
 }
 
-func (u userManagerAtom) RegisterUser(from atomos.Id, in *api.RegisterUserReq) (*api.RegisterUserResp, error) {
+func (u *userManagerAtom) RegisterUser(from atomos.Id, in *api.RegisterUserReq) (*api.RegisterUserResp, error) {
 	_, has := u.Users[in.User.Id]
 	if has {
 		return &api.RegisterUserResp{ Succeed: false }, errors.New("user exists")
@@ -69,7 +65,7 @@ func (u userManagerAtom) RegisterUser(from atomos.Id, in *api.RegisterUserReq) (
 	return &api.RegisterUserResp{ Succeed: true }, nil
 }
 
-func (u userManagerAtom) FindUser(from atomos.Id, in *api.FindUserReq) (*api.FindUserResp, error) {
+func (u *userManagerAtom) FindUser(from atomos.Id, in *api.FindUserReq) (*api.FindUserResp, error) {
 	_, has := u.Users[in.Id]
 	if has {
 		return &api.FindUserResp{ Has: false }, errors.New("user exists")

@@ -170,11 +170,11 @@ func (a *AtomCore) CosmosSelf() *CosmosSelf {
 func (a *AtomCore) KillSelf() {
 	id, elem := a.atomId, a.element
 	if err := a.pushKillMail(a, false); err != nil {
-		elem.cosmos.logInfo(fmt.Sprintf("%s::%s::%s => Kill self error, err=%v",
-			id.Node, id.Element, id.Name, err))
+		elem.cosmos.logInfo(fmt.Sprintf("%s => Kill self error, err=%v",
+			id.str(), err))
 		return
 	}
-	elem.cosmos.logInfo(fmt.Sprintf("%s::%s::%s => Kill self.", id.Node, id.Element, id.Name))
+	elem.cosmos.logInfo(fmt.Sprintf("%s => Kill self.", id.str()))
 }
 
 func (a *AtomCore) Log() *atomLogsManager {
@@ -241,7 +241,7 @@ func (a *AtomCore) onReceive(mail *Mail) {
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushReloadMail.
 	default:
-		a.element.cosmos.logFatal("AtomCore.onReceive: Unknown message type, type=%v,mail=%+v", am.mailType, am)
+		a.element.cosmos.logFatal("Atom.Mail: Unknown message type, type=%v,mail=%+v", am.mailType, am)
 	}
 }
 
@@ -250,7 +250,7 @@ func (a *AtomCore) onReceive(mail *Mail) {
 func (a *AtomCore) onPanic(mail *Mail, trace string) {
 	am := mail.Content.(*atomMail)
 	// Try to reply here, to prevent mail non-reply, and stub.
-	errMsg := fmt.Errorf("AtomCore.onPanic: PANIC, name=%s,trace=%s", a.name, trace)
+	errMsg := fmt.Errorf("Atom.Mail: PANIC, name=%s,trace=%s", a.name, trace)
 	switch am.mailType {
 	case AtomMailMessage:
 		am.sendReply(nil, errMsg)
@@ -288,7 +288,7 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 			// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 			// but it's impossible to add task after locking.
-			a.element.cosmos.logFatal("AtomCore.onStop: Task mails have been sent after start closing, mail=%+v",
+			a.element.cosmos.logFatal("Atom.Mail: Stopped, task mails have been sent after start closing, mail=%+v",
 				remainMails)
 			t, err := a.task.cancelTask(remainMails.id, nil)
 			if err == nil {
@@ -299,7 +299,7 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
 			// Mail dealloc in AtomCore.pushReloadMail.
 		default:
-			a.element.cosmos.logFatal("AtomCore.onStop: Unknown message type, type=%v,mail=%+v",
+			a.element.cosmos.logFatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
 				remainAtomMail.mailType, remainAtomMail)
 		}
 	}
@@ -337,7 +337,7 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 	}
 	reply, ok := replyInterface.(proto.Message)
 	if !ok {
-		//return reply, fmt.Errorf("AtomCore.pushMessageMail: Reply type error, message=%s,args=%+v,reply=%+v",
+		//return reply, fmt.Errorf("Atom.Mail: Reply type error, message=%s,args=%+v,reply=%+v",
 		//	message, args, replyInterface)
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 	defer a.setWaiting()
 	handler := a.element.getMessageHandler(name, a.version)
 	if handler == nil {
-		return nil, fmt.Errorf("AtomCore.handleMessage: Handler not found, name=%s", name)
+		return nil, fmt.Errorf("Atom.Mail: Message handler not found, name=%s", name)
 	}
 	return handler(from, a.instance, in)
 }
@@ -374,11 +374,16 @@ func (a *AtomCore) pushKillMail(from Id, wait bool) error {
 // Stateful Atom will save data after Halt method has been called, while is doing this, Atom is set to Stopping.
 func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]CancelledTask) error {
 	a.setStopping()
+	defer func() {
+		if r := recover(); r != nil {
+			a.element.cosmos.logFatal("Atom.Mail: Kill, panic, id=%+V,data=%+V", a.atomId.str(), a.instance)
+		}
+	}()
 	data := a.instance.Halt(killAtomMail.from, cancels)
 	if impl := a.element.implements[a.version]; impl != nil {
 		if p := impl.Developer.Persistence(); p != nil {
 			if err := p.SetAtomData(a.name, data); err != nil {
-				a.element.cosmos.logInfo("AtomCore.handleKill: Save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
+				a.element.cosmos.logInfo("Atom.Mail: Kill, save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
 					a.atomId, a.version, a.instance, data)
 				return err
 			}
@@ -425,7 +430,7 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 	a.version = am.upgradeVersion
 	a.instance = reloadElementImplement.Developer.AtomConstructor()
 	if err := reloadElementImplement.Interface.AtomSpawner(a, a.instance, nil, data); err != nil {
-		a.element.cosmos.logInfo("AtomCore.handleReload: Reload spawn failed, id=%+v,version=%d,inst=%+v,data=%+v",
+		a.element.cosmos.logInfo("Atom.Mail: Reload spawn failed, id=%+v,version=%d,inst=%+v,data=%+v",
 			a.atomId, a.version, a.instance, data)
 		return err
 	}

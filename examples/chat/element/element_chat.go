@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	ChatElementName = "Chat"
 	ChatElementAtomInit = 100
 	ChatElementFmt = "Chat:%s"
 )
@@ -32,8 +31,8 @@ func (c *ChatRoomElement) Persistence() atomos.ElementPersistence {
 	return nil
 }
 
-func (c *ChatRoomElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return ChatElementName, 1, atomos.LogLevel_Debug, ChatElementAtomInit
+func (c *ChatRoomElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, ChatElementAtomInit
 }
 
 func (c *ChatRoomElement) AtomConstructor() atomos.Atom {
@@ -42,7 +41,7 @@ func (c *ChatRoomElement) AtomConstructor() atomos.Atom {
 
 func (c *ChatRoomElement) AtomCanKill(id atomos.Id) bool {
 	switch id.Name() {
-	case ChatManagerElementName, atomos.MainAtomName:
+	case api.ChatRoomManagerAtomName, atomos.MainAtomName:
 		return true
 	default:
 		return false
@@ -50,7 +49,7 @@ func (c *ChatRoomElement) AtomCanKill(id atomos.Id) bool {
 }
 
 func (c *ChatRoomElement) AtomDataLoader(name string) (proto.Message, error) {
-	dbId, err := api.GetKvDbAtomId(c.mainId.Cosmos(), KvDbElementName)
+	dbId, err := api.GetKvDbAtomId(c.mainId.Cosmos(), api.KvDbAtomName)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +70,7 @@ func (c *ChatRoomElement) AtomDataLoader(name string) (proto.Message, error) {
 }
 
 func (c *ChatRoomElement) AtomDataSaver(name string, data proto.Message) error {
-	dbId, err := api.GetKvDbAtomId(c.mainId.Cosmos(), KvDbElementName)
+	dbId, err := api.GetKvDbAtomId(c.mainId.Cosmos(), api.KvDbAtomName)
 	if err != nil {
 		return err
 	}

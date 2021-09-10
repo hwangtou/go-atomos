@@ -175,7 +175,7 @@ func (o *outgoingConn) connect() (err error) {
 
 	if err = o.Connected(o); err != nil {
 		if err = o.conn.Stop(); err != nil {
-			o.watch.helper.self.logError("Client.Connect: Stop connect error, err=%v", err)
+			o.watch.helper.self.logError("Remote.Conn: Stop connect error, err=%v", err)
 		}
 		return err
 	}
@@ -219,6 +219,8 @@ func (h *cosmosRemotesHelper) init() (err error) {
 	config := h.self.config
 	// Enable Cert
 	if config.EnableCert != nil {
+		h.self.logInfo("Cosmos.Init: Enable Cert, cert=%s,key=%s",
+			config.EnableCert.CertPath, config.EnableCert.KeyPath)
 		pair, err := tls.LoadX509KeyPair(config.EnableCert.CertPath, config.EnableCert.KeyPath)
 		if err != nil {
 			return err
@@ -231,6 +233,8 @@ func (h *cosmosRemotesHelper) init() (err error) {
 	}
 	// Enable Server
 	if config.EnableServer != nil {
+		h.self.logInfo("Cosmos.Init: Enable Server, host=%s,port=%d",
+			config.EnableServer.Host, config.EnableServer.Port)
 		h.enabled = true
 		if err = h.server.init(config.EnableServer.Host, config.EnableServer.Port); err != nil {
 			return err

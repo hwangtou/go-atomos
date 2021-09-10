@@ -24,8 +24,8 @@ func (r *RemoteBoothElement) Unload() {
 	r.mainId.Log().Info("RemoteBoothElement is loading")
 }
 
-func (r *RemoteBoothElement) Info() (name string, version uint64, logLevel atomos.LogLevel, initNum int) {
-	return "RemoteBooth", 1, atomos.LogLevel_Debug, 1
+func (r *RemoteBoothElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
+	return 1, atomos.LogLevel_Debug, 1
 }
 
 func (r *RemoteBoothElement) AtomConstructor() atomos.Atom {

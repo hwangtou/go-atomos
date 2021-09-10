@@ -45,7 +45,7 @@ func (s *Server) init(addr string, port int32) (err error) {
 		ErrorLog:  log.New(s.helper, "", 0),
 	}
 	if err = http2.ConfigureServer(s.server, &http2.Server{}); err != nil {
-		s.helper.self.logError("Server.Init: Configure http2 failed, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: Configure http2 failed, err=%v", err)
 	}
 	// Listen the local port.
 	s.listener, err = net.Listen("tcp", s.server.Addr)
@@ -67,47 +67,47 @@ func (s *Server) start() {
 func (s *Server) stop() {
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
-			s.helper.self.logError("Server.Stop: Close listener failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Close listener failed, err=%v", err)
 		}
 	}
 	if s.server != nil {
 		if err := s.server.Close(); err != nil {
-			s.helper.self.logError("Server.Stop: Close server failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Close server failed, err=%v", err)
 		}
 	}
 	s.helper.serverStopped()
 }
 
 func (s *Server) handleWatch(writer http.ResponseWriter, request *http.Request) {
-	s.helper.self.logInfo("Server.handleWatch: Begin")
+	s.helper.self.logInfo("Cosmos.Remote: Watch Begin")
 	// Check header.
 	remoteName, err := s.acceptHeaderInfo(request.Header)
 	if err != nil {
-		s.helper.self.logError("Server.handleWatch: Header remoteName invalid, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: Watch, Header remoteName invalid, err=%v", err)
 		return
 	}
 	// Upgrade.
 	wsConn, err := s.upgrade.Upgrade(writer, request, nil)
 	if err != nil {
-		s.helper.self.logError("Server.handleWatch: Upgrade, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: Watch, Upgrade, err=%v", err)
 		return
 	}
 	// Check duplicated.
 	conn, hasOld := s.helper.newIncomingConn(remoteName, wsConn)
 	// Accept new connection.
 	if !hasOld {
-		s.helper.self.logInfo("Server.handleWatch: Accept new conn Begin")
+		s.helper.self.logInfo("Cosmos.Remote: Watch, Accept new conn Begin")
 		if err = conn.watch.initRequester(); err != nil {
-			s.helper.self.logError("Server.handleWatch: Init requester failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Watch, Init requester failed, err=%v", err)
 			if err = conn.Stop(); err != nil {
-				s.helper.self.logError("Server.handleWatch: Init requester conn stop error, err=%v", err)
+				s.helper.self.logError("Cosmos.Remote: Watch, Init requester conn stop error, err=%v", err)
 			}
 			s.helper.delConn(remoteName)
 		}
 		if err = s.acceptNewConnect(remoteName, conn); err != nil {
-			s.helper.self.logError("Server.handleWatch: Accept new conn failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Watch, Accept new conn failed, err=%v", err)
 			if err = conn.Stop(); err != nil {
-				s.helper.self.logError("Server.handleWatch: Accept new conn stop error, err=%v", err)
+				s.helper.self.logError("Cosmos.Remote: Watch, Accept new conn stop error, err=%v", err)
 			}
 			s.helper.delConn(remoteName)
 		}
@@ -116,18 +116,18 @@ func (s *Server) handleWatch(writer http.ResponseWriter, request *http.Request) 
 	// Accept connection exist.
 	if conn != nil {
 		// Accepted connection reconnected.
-		s.helper.self.logInfo("Server.handleWatch: Accept reconnect Begin")
+		s.helper.self.logInfo("Cosmos.Remote: Watch, Accept reconnect Begin")
 		if err = conn.watch.initRequester(); err != nil {
-			s.helper.self.logError("Server.handleWatch: Init requester failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Watch, Init requester failed, err=%v", err)
 			if err = conn.Stop(); err != nil {
-				s.helper.self.logError("Server.handleWatch: Init requester conn stop error, err=%v", err)
+				s.helper.self.logError("Cosmos.Remote: Watch, Init requester conn stop error, err=%v", err)
 			}
 			s.helper.delConn(remoteName)
 		}
 		if err = s.acceptReconnect(remoteName, conn, wsConn); err != nil {
-			s.helper.self.logError("Server.handleWatch: Accept reconnect failed, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Watch, Accept reconnect failed, err=%v", err)
 			if err = conn.Stop(); err != nil {
-				s.helper.self.logError("Server.handleWatch: Accept reconnect stop error, err=%v", err)
+				s.helper.self.logError("Cosmos.Remote: Watch, Accept reconnect stop error, err=%v", err)
 			}
 			s.helper.delConn(remoteName)
 			return
@@ -135,7 +135,7 @@ func (s *Server) handleWatch(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	// Currently not supported, delete incoming conn.
-	s.helper.self.logInfo("Server.handleWatch: Currently not support server conn reconnect as client.")
+	s.helper.self.logInfo("Cosmos.Remote: Watch, Currently not support server conn reconnect as client.")
 	wsConn.Close()
 	return
 }
@@ -148,16 +148,16 @@ func (s *Server) handle404(_ http.ResponseWriter, request *http.Request) {
 
 // Handle atom id.
 func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request) {
-	//s.helper.self.logInfo("cosmosServer.handleAtomId")
+	//s.helper.self.logInfo("Cosmos.Remote: handleAtomId")
 	defer request.Body.Close()
 	body, err := ioutil.ReadAll(request.Body)
 	if err != nil {
-		s.helper.self.logError("cosmosServer.handleAtomId: Read body failed, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: handleAtomId, Read body failed, err=%v", err)
 		return
 	}
 	req, resp := &CosmosRemoteGetAtomIdReq{}, &CosmosRemoteGetAtomIdResp{}
 	if err = proto.Unmarshal(body, req); err != nil {
-		s.helper.self.logError("cosmosServer.handleAtomId: Unmarshal failed, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: handleAtomId, Unmarshal failed, err=%v", err)
 		return
 	}
 	element, has := s.helper.self.local.elements[req.Element]
@@ -169,12 +169,12 @@ func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request)
 	}
 	buf, err := proto.Marshal(resp)
 	if err != nil {
-		s.helper.self.logError("cosmosServer.handleAtomId: Marshal failed, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: handleAtomId, Marshal failed, err=%v", err)
 		return
 	}
 	_, err = writer.Write(buf)
 	if err != nil {
-		s.helper.self.logError("cosmosServer.handleAtomId: Write failed, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: handleAtomId, Write failed, err=%v", err)
 		return
 	}
 }
@@ -186,14 +186,14 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 	defer request.Body.Close()
 	body, err := ioutil.ReadAll(request.Body)
 	if err != nil {
-		s.helper.self.logError("cosmosRemotesHelper.handleAtomMsg: Cannot read request, body=%v,err=%v",
+		s.helper.self.logError("Cosmos.Remote: handleAtomMsg, Cannot read request, body=%v,err=%v",
 			request.Body, err)
 		return
 	}
 	req := &CosmosRemoteMessagingReq{}
 	resp := &CosmosRemoteMessagingResp{}
 	if err = proto.Unmarshal(body, req); err != nil {
-		s.helper.self.logError("cosmosRemotesHelper.handleAtomMsg: Cannot unmarshal request, body=%v,err=%v",
+		s.helper.self.logError("Cosmos.Remote: handleAtomMsg, Cannot unmarshal request, body=%v,err=%v",
 			body, err)
 		return
 	}
@@ -257,10 +257,10 @@ func (s *Server) acceptHeaderInfo(header http.Header) (string, error) {
 func (s *Server) acceptNewConnect(remoteName string, sc *incomingConn) error {
 	sc.conn.run()
 
-	s.helper.self.logInfo("ServerDelegate.acceptNewConnect")
+	s.helper.self.logInfo("Cosmos.Remote: AcceptNewConnect")
 	if err := sc.Connected(sc); err != nil {
 		if err := sc.Stop(); err != nil {
-			s.helper.self.logError("Server: Stop accept error, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Stop accept error, err=%v", err)
 		}
 		return err
 	}
@@ -272,7 +272,7 @@ func (s *Server) acceptReconnect(info string, sc *incomingConn, conn *websocket.
 	sc.conn.reconnecting = true
 	sc.conn.runningMutex.Unlock()
 	if err := sc.Stop(); err != nil {
-		s.helper.self.logError("ServerDelegate: Accept reconnect stop old connect error, err=%v", err)
+		s.helper.self.logError("Cosmos.Remote: Accept reconnect stop old connect error, err=%v", err)
 	} else {
 		<-sc.conn.reconnectCh
 	}
@@ -281,10 +281,10 @@ func (s *Server) acceptReconnect(info string, sc *incomingConn, conn *websocket.
 	sc.conn.sender = make(chan *msg)
 	sc.conn.run()
 
-	s.helper.self.logInfo("ServerDelegate.acceptReconnect")
+	s.helper.self.logInfo("Cosmos.Remote: AcceptReconnect")
 	if err := sc.Reconnected(sc); err != nil {
 		if err := sc.Stop(); err != nil {
-			s.helper.self.logError("ServerDelegate: Accept reconnect error, err=%v", err)
+			s.helper.self.logError("Cosmos.Remote: Accept reconnect error, err=%v", err)
 		}
 		return err
 	}

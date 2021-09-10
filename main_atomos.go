@@ -47,7 +47,7 @@ func newMainElement(self *CosmosSelf) *ElementLocal {
 	}
 	e := newElementLocal(self, &ElementImplementation{
 		Developer:    m,
-		Interface:    NewInterfaceFromDeveloper(m),
+		Interface:    NewInterfaceFromDeveloper(MainAtomName, m),
 		AtomHandlers: map[string]MessageHandler{},
 	})
 	e.current.Interface.AtomSpawner = m.AtomSpawner
@@ -68,6 +68,7 @@ func newMainAtom(e *ElementLocal) *mainAtom {
 	a.state = AtomSpawning
 	e.atoms[MainAtomName] = a
 	e.spawningAtom(a, nil)
+	a.element.cosmos.logInfo("Cosmos.Main: MainId is spawning")
 	return ma
 }
 
@@ -82,8 +83,8 @@ func (m *mainElement) Persistence() ElementPersistence {
 	return nil
 }
 
-func (m *mainElement) Info() (name string, version uint64, logLevel LogLevel, initNum int) {
-	return "Main", 1, m.self.config.LogLevel, 1
+func (m *mainElement) Info() (version uint64, logLevel LogLevel, initNum int) {
+	return 1, m.self.config.LogLevel, 1
 }
 
 func (m *mainElement) AtomConstructor() Atom {
@@ -113,12 +114,7 @@ func (m *mainAtom) Config() *Config {
 	return proto.Clone(m.self.config).(*Config)
 }
 
-func (m *mainAtom) Spawn(self AtomSelf, arg proto.Message) error {
-	self.Log().Info("mainAtom.Spawn")
-	return nil
-}
-
 func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
-	m.CosmosSelf().logInfo("mainAtom.Halt: Start halting")
+	m.CosmosSelf().logInfo("Cosmos.Main: MainId is halting")
 	return nil
 }

@@ -42,7 +42,7 @@ func newCosmosWatchRemote(helper *cosmosRemotesHelper, delegate ConnDelegate) *c
 }
 
 func (r *cosmosWatchRemote) initRequester() error {
-	r.helper.self.logInfo("cosmosWatchRemote.initRequester: Creating requester")
+	r.helper.self.logInfo("Remote.Init: Creating requester")
 	// Init http2 requester.
 	if r.helper.self.clientCert != nil {
 		r.requester.Transport = &http2.Transport{
@@ -82,7 +82,7 @@ func (r *cosmosWatchRemote) Receive(conn ConnDelegate, buf []byte) error {
 		for _, name := range msg.InitMessage.Config.Elements {
 			ei, has := r.helper.self.local.interfaces[name]
 			if !has {
-				r.helper.self.logInfo("cosmosRemote.watchConnReadAllInfo: Element not supported, element=%s", name)
+				r.helper.self.logInfo("Remote.Conn: Read element not supported, element=%s", name)
 				ei = newPrivateElementInterface(name)
 			}
 			r.elements[name] = &ElementRemote{
@@ -90,17 +90,17 @@ func (r *cosmosWatchRemote) Receive(conn ConnDelegate, buf []byte) error {
 				elemInter: ei,
 				cachedId:  map[string]Id{},
 			}
-			r.helper.self.logInfo("cosmosRemote.watchConnReadAllInfo: Element added, element=%s", name)
+			r.helper.self.logInfo("Remote.Conn: Read element added, element=%s", name)
 		}
 		r.initCh <- nil
 	default:
-		r.helper.self.logError("cosmosWatchRemote.Receive: Message type not supported, msg=%+v", msg)
+		r.helper.self.logError("Remote.Conn: Message type not supported, msg=%+v", msg)
 	}
 	return nil
 }
 
 func (r *cosmosWatchRemote) Connected(conn ConnDelegate) error {
-	r.helper.self.logInfo("cosmosWatchRemote.Connected")
+	r.helper.self.logInfo("Remote.Conn: Connected")
 	// Send local info.
 	buf, err := r.encodeInitMessage()
 	if err != nil {
@@ -121,12 +121,12 @@ func (r *cosmosWatchRemote) Connected(conn ConnDelegate) error {
 	select {
 	case err = <-r.initCh:
 		if err != nil {
-			r.helper.self.logInfo("cosmosWatchRemote.Connected: Init error, err=%v", err)
+			r.helper.self.logInfo("Remote.Conn: Init error, err=%v", err)
 			return err
 		}
-		r.helper.self.logInfo("cosmosWatchRemote.Connected: Init succeed")
+		r.helper.self.logInfo("Remote.Conn: Init succeed")
 	case <-time.After(cosmosRemoteInitWait):
-		r.helper.self.logInfo("cosmosWatchRemote.Connected: Init timeout")
+		r.helper.self.logInfo("Remote.Conn: Init timeout")
 		return errors.New("request timeout")
 	}
 
@@ -153,7 +153,7 @@ func (r *cosmosWatchRemote) getElement(name string) (*ElementRemote, error) {
 
 	elem, has := r.elements[name]
 	if !has {
-		err := fmt.Errorf("cosmosRemote.getElement: Element not found, nodeName=%s", name)
+		err := fmt.Errorf("Remote.Element: Element not found, nodeName=%s", name)
 		r.helper.self.logFatal("%s", err.Error())
 		return nil, err
 	}
@@ -166,10 +166,10 @@ func (r *cosmosWatchRemote) setElement(name string, elem *ElementRemote) error {
 
 	if _, has := r.elements[name]; has {
 		// Update.
-		r.helper.self.logInfo("cosmosRemote.setElement: Update exists element, nodeName=%s", name)
+		r.helper.self.logInfo("Remote.Element: Update exists element, nodeName=%s", name)
 	} else {
 		// Add.
-		r.helper.self.logInfo("cosmosRemote.setElement: Add element, nodeName=%s", name)
+		r.helper.self.logInfo("Remote.Element: Add element, nodeName=%s", name)
 	}
 	r.elements[name] = elem
 	return nil
@@ -182,12 +182,12 @@ func (r *cosmosWatchRemote) delElement(name string) error {
 	// Check exists.
 	_, has := r.elements[name]
 	if !has {
-		err := fmt.Errorf("cosmosRemote.delElement: Element not found, nodeName=%s", name)
+		err := fmt.Errorf("Remote.Element: Element not found, nodeName=%s", name)
 		r.helper.self.logFatal("%s", err.Error())
 		return err
 	}
 	// Try unload and unset.
-	r.helper.self.logFatal("cosmosRemote.delElement: Delete element, nodeName=%s", name)
+	r.helper.self.logFatal("Remote.Element: Delete element, nodeName=%s", name)
 	delete(r.elements, name)
 	return nil
 }
@@ -214,7 +214,7 @@ func (r *cosmosWatchRemote) GetAtomId(elemName, atomName string) (Id, error) {
 
 // 暂时不支持从remote启动一个Atom。
 func (r *cosmosWatchRemote) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
-	return nil, errors.New("cosmosRemote.SpawnAtom: Cannot spawn remote atom")
+	return nil, errors.New("Remote.SpawnAtom: Cannot spawn remote atom")
 }
 
 func (r *cosmosWatchRemote) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
@@ -252,7 +252,7 @@ func (r *cosmosWatchRemote) encodeInitMessage() ([]byte, error) {
 	}
 	buf, err := proto.Marshal(msg)
 	if err != nil {
-		r.helper.self.logError("CosmosClusterHelper.packInfo: Marshal failed, err=%v", err)
+		r.helper.self.logError("Remote.Conn: Marshal failed, err=%v", err)
 		return nil, err
 	}
 	return buf, nil

@@ -63,18 +63,18 @@ func (e *ElementRemote) GetAtomId(name string) (Id, error) {
 		resp := &CosmosRemoteGetAtomIdResp{}
 		reqBuf, err := proto.Marshal(req)
 		if err != nil {
-			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Protobuf marshal error, req=%+v,err=%v",
+			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf marshal error, req=%+v,err=%v",
 				req, err)
 			return nil, err
 		}
 		respBuf, err := e.cosmos.request(RemoteUriAtomId, reqBuf)
 		if err != nil {
-			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Request error, req=%+v,err=%v",
+			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Request error, req=%+v,err=%v",
 				req, err)
 			return nil, err
 		}
 		if err = proto.Unmarshal(respBuf, resp); err != nil {
-			e.cosmos.helper.self.logFatal("ElementRemote.GetAtomId: Protobuf unmarshal error, req=%+v,err=%v",
+			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf unmarshal error, req=%+v,err=%v",
 				req, err)
 			return nil, err
 		}
@@ -117,17 +117,17 @@ func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args prot
 	resp := &CosmosRemoteMessagingResp{}
 	reqBuf, err := proto.Marshal(req)
 	if err != nil {
-		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Protobuf marshal error, req=%+v,err=%v",
+		e.cosmos.helper.self.logFatal("Element.Remote: MessagingAtom Protobuf marshal error, req=%+v,err=%v",
 			req, err)
 		return nil, err
 	}
 	respBuf, err := e.cosmos.request(RemoteUriAtomMessage, reqBuf)
 	if err != nil {
-		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Request error, req=%+v,err=%v",
+		e.cosmos.helper.self.logFatal("Element.Remote: MessagingAtom Request error, req=%+v,err=%v",
 			req, err)
 	}
 	if err = proto.Unmarshal(respBuf, resp); err != nil {
-		e.cosmos.helper.self.logFatal("ElementRemote.MessagingAtom: Protobuf unmarshal error, req=%+v,err=%v",
+		e.cosmos.helper.self.logFatal("Element.Remote: MessagingAtom Protobuf unmarshal error, req=%+v,err=%v",
 			req, err)
 		return nil, err
 	}

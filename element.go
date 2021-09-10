@@ -57,7 +57,7 @@ type ElementDeveloper interface {
 
 	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
 	// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atom quantity.
-	Info() (name string, version uint64, logLevel LogLevel, initNum int)
+	Info() (version uint64, logLevel LogLevel, initNum int)
 
 	// Atom构造器
 	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。

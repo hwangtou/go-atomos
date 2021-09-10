@@ -4,10 +4,9 @@ package go_atomos
 
 import (
 	"fmt"
-	"log"
-	"time"
-
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"log"
+	"os"
 )
 
 // Cosmos的Log接口。
@@ -74,6 +73,8 @@ func (c *CosmosSelf) onLogStop(killMail, remainMails *Mail, num uint32) {
 	}
 }
 
+const logTimeFmt = "2006-01-02 15:04:05.000000"
+
 func (c *CosmosSelf) logging(lm *LogMail) {
 	var msg string
 	if lm.Id != nil {
@@ -83,17 +84,17 @@ func (c *CosmosSelf) logging(lm *LogMail) {
 	}
 	switch lm.Level {
 	case LogLevel_Debug:
-		logDebug(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Info:
-		logInfo(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Warn:
-		logWarn(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Error:
-		logErr(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	case LogLevel_Fatal:
-		logFatal(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	default:
-		logWarn(lm.Time.AsTime(), msg)
+		logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	}
 }
 
@@ -111,30 +112,9 @@ func (c *CosmosSelf) pushCosmosLog(level LogLevel, msg string) {
 
 // Concrete log to file logic.
 
-func logDebug(time time.Time, msg string) {
-	logWrite(fmt.Sprintf("%s [DEBUG] %s", logTime(time), msg))
-}
-
-func logInfo(time time.Time, msg string) {
-	logWrite(fmt.Sprintf("%s [INFO]  %s", logTime(time), msg))
-}
-
-func logWarn(time time.Time, msg string) {
-	logWrite(fmt.Sprintf("%s [WARN]  %s", logTime(time), msg))
-}
-
-func logErr(time time.Time, msg string) {
-	logWrite(fmt.Sprintf("%s [ERROR] %s", logTime(time), msg))
-}
-
-func logFatal(time time.Time, msg string) {
-	logWrite(fmt.Sprintf("%s [FATAL] %s", logTime(time), msg))
-}
-
-func logTime(time time.Time) string {
-	return time.Format("2006-01-02 15:04:05.000000")
-}
-
-func logWrite(msg string) {
-	fmt.Println(msg)
+func logWrite(msg string, err bool) {
+	if err {
+		os.Stderr.WriteString(msg)
+	}
+	os.Stdout.WriteString(msg)
 }

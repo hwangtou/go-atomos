@@ -22,6 +22,8 @@ import (
 // New line
 //
 
+const GreeterName = "Greeter"
+
 // GreeterId is the interface of Greeter atomos.
 
 type GreeterId interface {
@@ -32,7 +34,7 @@ type GreeterId interface {
 }
 
 func GetGreeterId(c go_atomos.CosmosNode, name string) (GreeterId, error) {
-	ca, err := c.GetAtomId("Greeter", name)
+	ca, err := c.GetAtomId(GreeterName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +54,11 @@ type Greeter interface {
 }
 
 func SpawnGreeter(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (GreeterId, error) {
-	_, err := c.SpawnAtom("Greeter", name, arg)
+	_, err := c.SpawnAtom(GreeterName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("Greeter", name)
+	id, err := c.GetAtomId(GreeterName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +75,8 @@ func SpawnGreeter(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (Gree
 // 展示如何使用任务
 //
 
+const TaskBoothName = "TaskBooth"
+
 // TaskBoothId is the interface of TaskBooth atomos.
 
 type TaskBoothId interface {
@@ -83,7 +87,7 @@ type TaskBoothId interface {
 }
 
 func GetTaskBoothId(c go_atomos.CosmosNode, name string) (TaskBoothId, error) {
-	ca, err := c.GetAtomId("TaskBooth", name)
+	ca, err := c.GetAtomId(TaskBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -103,11 +107,11 @@ type TaskBooth interface {
 }
 
 func SpawnTaskBooth(c go_atomos.CosmosNode, name string, arg *TaskBoothSpawnArg) (TaskBoothId, error) {
-	_, err := c.SpawnAtom("TaskBooth", name, arg)
+	_, err := c.SpawnAtom(TaskBoothName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("TaskBooth", name)
+	id, err := c.GetAtomId(TaskBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +128,8 @@ func SpawnTaskBooth(c go_atomos.CosmosNode, name string, arg *TaskBoothSpawnArg)
 // 展示如何使用远端
 //
 
+const RemoteBoothName = "RemoteBooth"
+
 // RemoteBoothId is the interface of RemoteBooth atomos.
 
 type RemoteBoothId interface {
@@ -137,7 +143,7 @@ type RemoteBoothId interface {
 }
 
 func GetRemoteBoothId(c go_atomos.CosmosNode, name string) (RemoteBoothId, error) {
-	ca, err := c.GetAtomId("RemoteBooth", name)
+	ca, err := c.GetAtomId(RemoteBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -159,11 +165,11 @@ type RemoteBooth interface {
 }
 
 func SpawnRemoteBooth(c go_atomos.CosmosNode, name string, arg *RemoteBoothSpawnArg) (RemoteBoothId, error) {
-	_, err := c.SpawnAtom("RemoteBooth", name, arg)
+	_, err := c.SpawnAtom(RemoteBoothName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("RemoteBooth", name)
+	id, err := c.GetAtomId(RemoteBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +186,8 @@ func SpawnRemoteBooth(c go_atomos.CosmosNode, name string, arg *RemoteBoothSpawn
 // 远端的本地调用
 //
 
+const LocalBoothName = "LocalBooth"
+
 // LocalBoothId is the interface of LocalBooth atomos.
 
 type LocalBoothId interface {
@@ -189,7 +197,7 @@ type LocalBoothId interface {
 }
 
 func GetLocalBoothId(c go_atomos.CosmosNode, name string) (LocalBoothId, error) {
-	ca, err := c.GetAtomId("LocalBooth", name)
+	ca, err := c.GetAtomId(LocalBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +217,11 @@ type LocalBooth interface {
 }
 
 func SpawnLocalBooth(c go_atomos.CosmosNode, name string, arg *LocalBoothSpawnArg) (LocalBoothId, error) {
-	_, err := c.SpawnAtom("LocalBooth", name, arg)
+	_, err := c.SpawnAtom(LocalBoothName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("LocalBooth", name)
+	id, err := c.GetAtomId(LocalBoothName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +260,7 @@ func (c *greeterId) SayHello(from go_atomos.Id, in *HelloRequest) (*HelloReply, 
 }
 
 func GetGreeterInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(GreeterName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &greeterId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*HelloSpawnArg)
@@ -314,7 +322,7 @@ func (c *taskBoothId) StartTask(from go_atomos.Id, in *StartTaskReq) (*StartTask
 }
 
 func GetTaskBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(TaskBoothName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &taskBoothId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*TaskBoothSpawnArg)
@@ -400,7 +408,7 @@ func (c *remoteBoothId) Unwatch(from go_atomos.Id, in *RemoteUnwatchReq) (*Remot
 }
 
 func GetRemoteBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(RemoteBoothName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &remoteBoothId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*RemoteBoothSpawnArg)
@@ -494,7 +502,7 @@ func (c *localBoothId) RemoteNotice(from go_atomos.Id, in *LocalRemoteNoticeReq)
 }
 
 func GetLocalBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(LocalBoothName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &localBoothId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*LocalBoothSpawnArg)

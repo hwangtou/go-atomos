@@ -31,7 +31,7 @@ func newCosmosLocal() *CosmosLocal {
 // 初始化Runnable。
 // Initial Runnable.
 func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) error {
-	self.logInfo("CosmosLocal.initRunnable")
+	self.logInfo("Cosmos.Init")
 
 	// Check runnable.
 	if err := runnable.Check(); err != nil {
@@ -50,14 +50,14 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 		elem := newElementLocal(self, define)
 		// Load the element.
 		if err := elem.load(); err != nil {
-			self.logFatal("CosmosLocal.initRunnable: Load local element failed, element=%s,err=%s", name, err)
+			self.logFatal("Cosmos.Init: Load element failed, element=%s,err=%s", name, err)
 			for loadedName, loadedElem := range loadedElements {
 				err = loadedElem.unload()
 				if err != nil {
-					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s,err=%v",
+					self.logInfo("Cosmos.Init: Unload loaded element, element=%s,err=%v",
 						loadedName, err)
 				} else {
-					self.logInfo("CosmosLocal.initRunnable: Unload loaded element, element=%s", loadedName)
+					self.logInfo("Cosmos.Init: Unload loaded element, element=%s", loadedName)
 				}
 			}
 			c.config = nil
@@ -68,7 +68,7 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 		}
 		// Add the element.
 		elements[name] = elem
-		self.logInfo("CosmosLocal.initRunnable: Load local element succeed, element=%s", name)
+		self.logInfo("Cosmos.Init: Load element succeed, element=%s", name)
 	}
 	// Pre-initialize all elements interface in the runnable.
 	elementInterfaces := make(map[string]*ElementInterface)
@@ -81,7 +81,7 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	defer c.mutex.Unlock()
 	if c.elements != nil {
 		err := fmt.Errorf("local cosmos has been initialized")
-		self.logFatal("CosmosLocal.initRunnable: Init runtime error, err=%v", err)
+		self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
 		return err
 	}
 	c.elements = elements
@@ -94,7 +94,7 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 
 	// Init remote to support remote.
 	if err := self.remotes.init(); err != nil {
-		self.logFatal("CosmosLocal.initRunnable: Init remote error, err=%v", err)
+		self.logFatal("Cosmos.Init: Init remote error, err=%v", err)
 		return err
 	}
 
@@ -109,17 +109,17 @@ func (c *CosmosLocal) runRunnable(runnable CosmosRunnable) error {
 	c.mutex.Unlock()
 	if cosmos == nil {
 		err := fmt.Errorf("local cosmos has not been initialized")
-		c.cosmosSelf.logFatal("CosmosLocal.runRunnable: Framework PANIC, err=%v", err.Error())
+		c.cosmosSelf.logFatal("Cosmos.Run: Framework PANIC, err=%v", err.Error())
 		return err
 	}
 
 	ma := c.mainAtom.instance.(MainId)
-	c.cosmosSelf.logInfo("CosmosLocal.runRunnable: Runnable is now RUNNING")
+	c.cosmosSelf.logInfo("Cosmos.Run: NOW RUNNING!")
 	runnable.script(cosmos, ma, c.mainKillCh)
 
 	// Close main.
 	if err := c.mainAtom.Kill(c.mainAtom); err != nil {
-		c.cosmosSelf.logError("CosmosLocal.runRunnable: Kill main atom error, err=%v", err)
+		c.cosmosSelf.logError("Cosmos.Run: Kill main atom error, err=%v", err)
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func (c *CosmosLocal) runRunnable(runnable CosmosRunnable) error {
 // 退出Runnable。
 // Exit runnable.
 func (c *CosmosLocal) exitRunnable() {
-	c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Runnable is now EXITING")
+	c.cosmosSelf.logInfo("Cosmos.Exit: NOW EXITING!")
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -142,10 +142,10 @@ func (c *CosmosLocal) exitRunnable() {
 	for elemName, elem := range c.elements {
 		err := elem.unload()
 		if err != nil {
-			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s,err=%v",
+			c.cosmosSelf.logInfo("Cosmos.Exit: Unload local element, element=%s,err=%v",
 				elemName, err)
 		} else {
-			c.cosmosSelf.logInfo("CosmosLocal.exitRunnable: Unload local element, element=%s", elemName)
+			c.cosmosSelf.logInfo("Cosmos.Exit: Unload local element, element=%s", elemName)
 		}
 		elem.current.Developer.Unload()
 		delete(c.elements, elemName)
@@ -168,18 +168,18 @@ func (c *CosmosLocal) addElement(name string, elem *ElementLocal) error {
 	// Check exists
 	if _, has := c.elements[name]; has {
 		err := fmt.Errorf("local element exists, name=%s", name)
-		c.cosmosSelf.logFatal("CosmosLocal.addElement: Element exists, name=%s", name)
+		c.cosmosSelf.logFatal("Cosmos.Element: Add, element exists, name=%s", name)
 		return err
 	}
 	// Try load and set
 	if err := elem.load(); err != nil {
 		err = fmt.Errorf("local element loads failed, name=%s", name)
-		c.cosmosSelf.logFatal("CosmosLocal.addElement: Element loads failed, err=%v", err.Error())
+		c.cosmosSelf.logFatal("Cosmos.Element: Add, element loads failed, err=%v", err.Error())
 		return err
 	}
 	c.elements[name] = elem
 
-	c.cosmosSelf.logInfo("CosmosLocal.addElement: Load local element succeed, element=%s", name)
+	c.cosmosSelf.logInfo("Cosmos.Element: Add, Load element succeed, element=%s", name)
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (c *CosmosLocal) getElement(name string) (*ElementLocal, error) {
 	elem, has := c.elements[name]
 	if !has {
 		err := fmt.Errorf("local element not found, name=%s", name)
-		c.cosmosSelf.logError("CosmosLocal.getElement: Cannot get element, name=%s", name)
+		c.cosmosSelf.logError("Cosmos.Element: Get, Cannot get element, name=%s", name)
 		return nil, err
 	}
 	return elem, nil
@@ -204,13 +204,13 @@ func (c *CosmosLocal) delElement(name string) error {
 	elem, has := c.elements[name]
 	if !has {
 		err := fmt.Errorf("local element not found, name=%s", name)
-		c.cosmosSelf.logFatal("CosmosLocal.delElement: Cannot delete element, err=%s", err.Error())
+		c.cosmosSelf.logFatal("Cosmos.Element: Del, Cannot delete element, err=%s", err.Error())
 		return err
 	}
 	// Try unload and unset
 	if err := elem.unload(); err != nil {
 		err = fmt.Errorf("local element unloads failed, name=%s,err=%v", name, err)
-		c.cosmosSelf.logFatal("CosmosLocal.delElement: Cannot unload element, err=%s", err.Error())
+		c.cosmosSelf.logFatal("Cosmos.Element: Del, Cannot unload element, err=%s", err.Error())
 		return err
 	}
 	delete(c.elements, name)

@@ -21,6 +21,8 @@ import (
 // 用户管理器Atom
 //
 
+const UserManagerAtomName = "UserManagerAtom"
+
 // UserManagerAtomId is the interface of UserManagerAtom atomos.
 
 type UserManagerAtomId interface {
@@ -34,7 +36,7 @@ type UserManagerAtomId interface {
 }
 
 func GetUserManagerAtomId(c go_atomos.CosmosNode, name string) (UserManagerAtomId, error) {
-	ca, err := c.GetAtomId("UserManagerAtom", name)
+	ca, err := c.GetAtomId(UserManagerAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -55,11 +57,11 @@ type UserManagerAtom interface {
 }
 
 func SpawnUserManagerAtom(c go_atomos.CosmosNode, name string, arg *UserManagerSpawnArg) (UserManagerAtomId, error) {
-	_, err := c.SpawnAtom("UserManagerAtom", name, arg)
+	_, err := c.SpawnAtom(UserManagerAtomName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("UserManagerAtom", name)
+	id, err := c.GetAtomId(UserManagerAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +77,8 @@ func SpawnUserManagerAtom(c go_atomos.CosmosNode, name string, arg *UserManagerS
 //
 // 用户Atom
 //
+
+const UserAtomName = "UserAtom"
 
 // UserAtomId is the interface of UserAtom atomos.
 
@@ -96,7 +100,7 @@ type UserAtomId interface {
 }
 
 func GetUserAtomId(c go_atomos.CosmosNode, name string) (UserAtomId, error) {
-	ca, err := c.GetAtomId("UserAtom", name)
+	ca, err := c.GetAtomId(UserAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +123,11 @@ type UserAtom interface {
 }
 
 func SpawnUserAtom(c go_atomos.CosmosNode, name string, arg *UserSpawnArg) (UserAtomId, error) {
-	_, err := c.SpawnAtom("UserAtom", name, arg)
+	_, err := c.SpawnAtom(UserAtomName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("UserAtom", name)
+	id, err := c.GetAtomId(UserAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +144,8 @@ func SpawnUserAtom(c go_atomos.CosmosNode, name string, arg *UserSpawnArg) (User
 // 房间管理器Atom
 //
 
+const ChatRoomManagerAtomName = "ChatRoomManagerAtom"
+
 // ChatRoomManagerAtomId is the interface of ChatRoomManagerAtom atomos.
 
 type ChatRoomManagerAtomId interface {
@@ -153,7 +159,7 @@ type ChatRoomManagerAtomId interface {
 }
 
 func GetChatRoomManagerAtomId(c go_atomos.CosmosNode, name string) (ChatRoomManagerAtomId, error) {
-	ca, err := c.GetAtomId("ChatRoomManagerAtom", name)
+	ca, err := c.GetAtomId(ChatRoomManagerAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -174,11 +180,11 @@ type ChatRoomManagerAtom interface {
 }
 
 func SpawnChatRoomManagerAtom(c go_atomos.CosmosNode, name string, arg *ChatRoomManagerSpawnArg) (ChatRoomManagerAtomId, error) {
-	_, err := c.SpawnAtom("ChatRoomManagerAtom", name, arg)
+	_, err := c.SpawnAtom(ChatRoomManagerAtomName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("ChatRoomManagerAtom", name)
+	id, err := c.GetAtomId(ChatRoomManagerAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +200,8 @@ func SpawnChatRoomManagerAtom(c go_atomos.CosmosNode, name string, arg *ChatRoom
 //
 // 房间Atom
 //
+
+const ChatRoomAtomName = "ChatRoomAtom"
 
 // ChatRoomAtomId is the interface of ChatRoomAtom atomos.
 
@@ -214,7 +222,7 @@ type ChatRoomAtomId interface {
 }
 
 func GetChatRoomAtomId(c go_atomos.CosmosNode, name string) (ChatRoomAtomId, error) {
-	ca, err := c.GetAtomId("ChatRoomAtom", name)
+	ca, err := c.GetAtomId(ChatRoomAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -237,11 +245,11 @@ type ChatRoomAtom interface {
 }
 
 func SpawnChatRoomAtom(c go_atomos.CosmosNode, name string, arg *ChatRoomSpawnArg) (ChatRoomAtomId, error) {
-	_, err := c.SpawnAtom("ChatRoomAtom", name, arg)
+	_, err := c.SpawnAtom(ChatRoomAtomName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("ChatRoomAtom", name)
+	id, err := c.GetAtomId(ChatRoomAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +266,8 @@ func SpawnChatRoomAtom(c go_atomos.CosmosNode, name string, arg *ChatRoomSpawnAr
 // KvDb Atom
 //
 
+const KvDbAtomName = "KvDbAtom"
+
 // KvDbAtomId is the interface of KvDbAtom atomos.
 
 type KvDbAtomId interface {
@@ -271,7 +281,7 @@ type KvDbAtomId interface {
 }
 
 func GetKvDbAtomId(c go_atomos.CosmosNode, name string) (KvDbAtomId, error) {
-	ca, err := c.GetAtomId("KvDbAtom", name)
+	ca, err := c.GetAtomId(KvDbAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -293,11 +303,11 @@ type KvDbAtom interface {
 }
 
 func SpawnKvDbAtom(c go_atomos.CosmosNode, name string, arg *KvDbSpawnArg) (KvDbAtomId, error) {
-	_, err := c.SpawnAtom("KvDbAtom", name, arg)
+	_, err := c.SpawnAtom(KvDbAtomName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId("KvDbAtom", name)
+	id, err := c.GetAtomId(KvDbAtomName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +357,7 @@ func (c *userManagerAtomId) FindUser(from go_atomos.Id, in *FindUserReq) (*FindU
 }
 
 func GetUserManagerAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(UserManagerAtomName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &userManagerAtomId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*UserManagerSpawnArg)
@@ -461,7 +471,7 @@ func (c *userAtomId) RoomMessage(from go_atomos.Id, in *RoomMessagePush) (*RoomM
 }
 
 func GetUserAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(UserAtomName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &userAtomId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*UserSpawnArg)
@@ -583,7 +593,7 @@ func (c *chatRoomManagerAtomId) FindRoom(from go_atomos.Id, in *FindRoomReq) (*F
 }
 
 func GetChatRoomManagerAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(ChatRoomManagerAtomName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &chatRoomManagerAtomId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*ChatRoomManagerSpawnArg)
@@ -697,7 +707,7 @@ func (c *chatRoomAtomId) SendMessage(from go_atomos.Id, in *SendMessageReq) (*Se
 }
 
 func GetChatRoomAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(ChatRoomAtomName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &chatRoomAtomId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*ChatRoomSpawnArg)
@@ -831,7 +841,7 @@ func (c *kvDbAtomId) Del(from go_atomos.Id, in *DbDelReq) (*DbDelResp, error) {
 }
 
 func GetKvDbAtomInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
-	elem := go_atomos.NewInterfaceFromDeveloper(dev)
+	elem := go_atomos.NewInterfaceFromDeveloper(KvDbAtomName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &kvDbAtomId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*KvDbSpawnArg)
