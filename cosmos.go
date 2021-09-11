@@ -85,6 +85,6 @@ func (c *CosmosSelf) GetName() string {
 	return c.config.Node
 }
 
-func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosWatchRemote, error) {
+func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosRemote, error) {
 	return c.remotes.getOrConnectRemote(nodeName, nodeAddr)
 }

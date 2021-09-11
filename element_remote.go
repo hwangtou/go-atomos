@@ -16,9 +16,9 @@ type ElementRemote struct {
 	// Lock.
 	sync.RWMutex
 
-	// cosmosWatchRemote引用。
-	// Reference to cosmosWatchRemote.
-	cosmos *cosmosWatchRemote
+	// CosmosRemote引用。
+	// Reference to cosmosRemote.
+	cosmos *cosmosRemote
 
 	// 当前ElementInterface的引用。
 	// Reference to current in use ElementInterface.
@@ -170,7 +170,7 @@ func (e *ElementRemote) getOrCreateAtomId(name string) Id {
 // Remote implementations of Id type.
 
 type atomIdRemote struct {
-	cosmosNode *cosmosWatchRemote
+	cosmosNode *cosmosRemote
 	element    *ElementRemote
 	name       string
 	version    uint64

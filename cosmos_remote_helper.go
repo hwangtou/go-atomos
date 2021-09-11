@@ -56,7 +56,7 @@ type cosmosConn interface {
 type incomingConn struct {
 	name  string
 	conn  *Conn
-	watch *cosmosWatchRemote
+	watch *cosmosRemote
 }
 
 func (h *cosmosRemotesHelper) newIncomingConn(remoteName string, conn *websocket.Conn) (ic *incomingConn, hasOld bool) {
@@ -74,7 +74,7 @@ func (h *cosmosRemotesHelper) newIncomingConn(remoteName string, conn *websocket
 	ic = &incomingConn{}
 	ic.name = remoteName
 	ic.conn = newConn(h, ic, conn)
-	ic.watch = newCosmosWatchRemote(h, ic)
+	ic.watch = newCosmosRemote(h, ic)
 	h.conns[remoteName] = ic
 	return ic, false
 }
@@ -122,7 +122,7 @@ func (i incomingConn) Disconnected(conn ConnDelegate) {
 type outgoingConn struct {
 	name, addr string
 	conn       *Conn
-	watch      *cosmosWatchRemote
+	watch      *cosmosRemote
 }
 
 func (h *cosmosRemotesHelper) newOutgoingConn(remoteName, remoteAddr string) (oc *outgoingConn, ic *incomingConn, hasOld bool) {
@@ -142,7 +142,7 @@ func (h *cosmosRemotesHelper) newOutgoingConn(remoteName, remoteAddr string) (oc
 	oc.name = remoteName
 	oc.addr = remoteAddr
 	oc.conn = newConn(h, oc, nil)
-	oc.watch = newCosmosWatchRemote(h, oc)
+	oc.watch = newCosmosRemote(h, oc)
 	h.conns[remoteName] = oc
 	return oc, nil, false
 }
@@ -264,7 +264,7 @@ func (h *cosmosRemotesHelper) Write(l []byte) (int, error) {
 
 // Client
 
-func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr string) (*cosmosWatchRemote, error) {
+func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr string) (*cosmosRemote, error) {
 	oc, ic, has := h.newOutgoingConn(name, addr)
 	if has {
 		if oc != nil {
@@ -284,7 +284,7 @@ func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr string) (*cosmosWatc
 	return oc.watch, nil
 }
 
-func (h *cosmosRemotesHelper) getRemote(name string) *cosmosWatchRemote {
+func (h *cosmosRemotesHelper) getRemote(name string) *cosmosRemote {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 

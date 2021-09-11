@@ -20,7 +20,7 @@ const (
 // Cosmos Watch Remote
 // TODO: Reconnect, EnableRemote
 
-type cosmosWatchRemote struct {
+type cosmosRemote struct {
 	helper       *cosmosRemotesHelper
 	delegate     ConnDelegate
 	mutex        sync.RWMutex
@@ -31,8 +31,8 @@ type cosmosWatchRemote struct {
 	requester *http.Client
 }
 
-func newCosmosWatchRemote(helper *cosmosRemotesHelper, delegate ConnDelegate) *cosmosWatchRemote {
-	return &cosmosWatchRemote{
+func newCosmosRemote(helper *cosmosRemotesHelper, delegate ConnDelegate) *cosmosRemote {
+	return &cosmosRemote{
 		helper:    helper,
 		delegate:  delegate,
 		elements:  map[string]*ElementRemote{},
@@ -41,7 +41,7 @@ func newCosmosWatchRemote(helper *cosmosRemotesHelper, delegate ConnDelegate) *c
 	}
 }
 
-func (r *cosmosWatchRemote) initRequester() error {
+func (r *cosmosRemote) initRequester() error {
 	r.helper.self.logInfo("Remote.Init: Creating requester")
 	// Init http2 requester.
 	if r.helper.self.clientCert != nil {
@@ -55,7 +55,7 @@ func (r *cosmosWatchRemote) initRequester() error {
 	return nil
 }
 
-func (r *cosmosWatchRemote) Receive(conn ConnDelegate, buf []byte) error {
+func (r *cosmosRemote) Receive(conn ConnDelegate, buf []byte) error {
 	msg, err := r.decodeMessage(buf)
 	if err != nil {
 		return errors.New("receive error")
@@ -99,7 +99,7 @@ func (r *cosmosWatchRemote) Receive(conn ConnDelegate, buf []byte) error {
 	return nil
 }
 
-func (r *cosmosWatchRemote) Connected(conn ConnDelegate) error {
+func (r *cosmosRemote) Connected(conn ConnDelegate) error {
 	r.helper.self.logInfo("Remote.Conn: Connected")
 	// Send local info.
 	buf, err := r.encodeInitMessage()
@@ -133,21 +133,21 @@ func (r *cosmosWatchRemote) Connected(conn ConnDelegate) error {
 	return nil
 }
 
-func (r *cosmosWatchRemote) Disconnected(conn ConnDelegate) {
+func (r *cosmosRemote) Disconnected(conn ConnDelegate) {
 }
 
 // ServerConnDelegate
 
-func (r *cosmosWatchRemote) ReconnectKickOld() {
+func (r *cosmosRemote) ReconnectKickOld() {
 }
 
-func (r *cosmosWatchRemote) Reconnected(conn ConnDelegate) error {
+func (r *cosmosRemote) Reconnected(conn ConnDelegate) error {
 	return r.Connected(conn)
 }
 
 // ElementRemote
 
-func (r *cosmosWatchRemote) getElement(name string) (*ElementRemote, error) {
+func (r *cosmosRemote) getElement(name string) (*ElementRemote, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -160,7 +160,7 @@ func (r *cosmosWatchRemote) getElement(name string) (*ElementRemote, error) {
 	return elem, nil
 }
 
-func (r *cosmosWatchRemote) setElement(name string, elem *ElementRemote) error {
+func (r *cosmosRemote) setElement(name string, elem *ElementRemote) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -175,7 +175,7 @@ func (r *cosmosWatchRemote) setElement(name string, elem *ElementRemote) error {
 	return nil
 }
 
-func (r *cosmosWatchRemote) delElement(name string) error {
+func (r *cosmosRemote) delElement(name string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -194,15 +194,15 @@ func (r *cosmosWatchRemote) delElement(name string) error {
 
 // CosmosNode
 
-func (r *cosmosWatchRemote) GetNodeName() string {
+func (r *cosmosRemote) GetNodeName() string {
 	return r.helper.self.config.Node
 }
 
-func (r *cosmosWatchRemote) IsLocal() bool {
+func (r *cosmosRemote) IsLocal() bool {
 	return false
 }
 
-func (r *cosmosWatchRemote) GetAtomId(elemName, atomName string) (Id, error) {
+func (r *cosmosRemote) GetAtomId(elemName, atomName string) (Id, error) {
 	// Get element.
 	e, err := r.getElement(elemName)
 	if err != nil {
@@ -213,21 +213,21 @@ func (r *cosmosWatchRemote) GetAtomId(elemName, atomName string) (Id, error) {
 }
 
 // 暂时不支持从remote启动一个Atom。
-func (r *cosmosWatchRemote) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
+func (r *cosmosRemote) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
 	return nil, errors.New("Remote.SpawnAtom: Cannot spawn remote atom")
 }
 
-func (r *cosmosWatchRemote) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
+func (r *cosmosRemote) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
 	return toId.Element().MessagingAtom(fromId, toId, message, args)
 }
 
-func (r *cosmosWatchRemote) KillAtom(fromId, toId Id) error {
+func (r *cosmosRemote) KillAtom(fromId, toId Id) error {
 	return toId.Element().KillAtom(fromId, toId)
 }
 
 // Coder
 
-func (r *cosmosWatchRemote) decodeMessage(buf []byte) (*CosmosWatch, error) {
+func (r *cosmosRemote) decodeMessage(buf []byte) (*CosmosWatch, error) {
 	msg := &CosmosWatch{}
 	if err := proto.Unmarshal(buf, msg); err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (r *cosmosWatchRemote) decodeMessage(buf []byte) (*CosmosWatch, error) {
 	return msg, nil
 }
 
-func (r *cosmosWatchRemote) encodeInitMessage() ([]byte, error) {
+func (r *cosmosRemote) encodeInitMessage() ([]byte, error) {
 	config := r.helper.self.config
 	msg := &CosmosWatch{
 		MessageType: CosmosWatchMessageType_Init,
@@ -260,7 +260,7 @@ func (r *cosmosWatchRemote) encodeInitMessage() ([]byte, error) {
 
 // Messaging
 
-func (r *cosmosWatchRemote) request(uri string, buf []byte) (body []byte, err error) {
+func (r *cosmosRemote) request(uri string, buf []byte) (body []byte, err error) {
 	reader := bytes.NewBuffer(buf)
 	// Connect.
 	var schema, addr string
