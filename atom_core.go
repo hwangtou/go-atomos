@@ -231,6 +231,9 @@ func (a *AtomCore) onReceive(mail *Mail) {
 	switch am.mailType {
 	case AtomMailMessage:
 		resp, err := a.handleMessage(am.from, am.name, am.arg)
+		if resp != nil {
+			resp = proto.Clone(resp)
+		}
 		am.sendReply(resp, err)
 		// Mail dealloc in AtomCore.pushMessageMail.
 	case AtomMailTask:

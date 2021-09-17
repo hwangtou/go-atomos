@@ -78,6 +78,9 @@ func (e *ElementRemote) GetAtomId(name string) (Id, error) {
 				req, err)
 			return nil, err
 		}
+		if resp.Error != "" {
+			return nil, errors.New(resp.Error)
+		}
 		if !resp.Has {
 			return nil, ErrAtomNotFound
 		}
@@ -125,6 +128,7 @@ func (e *ElementRemote) MessagingAtom(fromId, toId Id, message string, args prot
 	if err != nil {
 		e.cosmos.helper.self.logFatal("Element.Remote: MessagingAtom Request error, req=%+v,err=%v",
 			req, err)
+		return nil, err
 	}
 	if err = proto.Unmarshal(respBuf, resp); err != nil {
 		e.cosmos.helper.self.logFatal("Element.Remote: MessagingAtom Protobuf unmarshal error, req=%+v,err=%v",

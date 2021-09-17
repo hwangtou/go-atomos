@@ -162,9 +162,12 @@ func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request)
 	}
 	element, has := s.helper.self.local.elements[req.Element]
 	if has {
-		_, has = element.atoms[req.Name]
-		if has {
-			resp.Has = true
+		a, err := element.getAtomId(req.Name)
+		if err != nil {
+			resp.Error = err.Error()
+		} else {
+			resp.Has = a != nil
+			resp.Error = ""
 		}
 	}
 	buf, err := proto.Marshal(resp)
@@ -205,17 +208,21 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 	// Get to atom.
 	element, has := s.helper.self.local.elements[req.To.Element]
 	if has {
-		a, has := element.atoms[req.To.Name]
-		if has {
-			// Got to atom.
-			resp.Has = true
-			// Get from atom, create if not exists.
-			fromId := s.getFromId(req.From)
-			// Messaging to atom.
-			reply, err := s.helper.self.local.MessageAtom(fromId, a, req.Message, arg)
-			resp.Reply = MessageToAny(reply)
-			if err != nil {
-				resp.Error = err.Error()
+		a, err := element.GetAtomId(req.To.Name)
+		if err != nil {
+			resp.Error = err.Error()
+		} else {
+			if a != nil {
+				// Got to atom.
+				resp.Has = true
+				// Get from atom, create if not exists.
+				fromId := s.getFromId(req.From)
+				// Messaging to atom.
+				reply, err := s.helper.self.local.MessageAtom(fromId, a, req.Message, arg)
+				resp.Reply = MessageToAny(reply)
+				if err != nil {
+					resp.Error = err.Error()
+				}
 			}
 		}
 	}

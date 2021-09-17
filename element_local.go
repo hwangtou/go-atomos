@@ -109,43 +109,46 @@ func (e *ElementLocal) GetName() string {
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {
-	e.mutex.RLock()
-	if !e.loaded {
-		e.mutex.RUnlock()
-		return nil, ErrElementNotLoaded
+	id, err := e.getAtomId(name)
+	if err == nil {
+		return id, nil
 	}
-	a, has := e.atoms[name]
-	e.mutex.RUnlock()
-	if !has {
-		return nil, ErrAtomNotFound
+	if err != ErrAtomNotFound {
+		return nil, err
 	}
-	return e.implements[a.version].Interface.AtomIdConstructor(a), nil
-}
-
-func (e *ElementLocal) SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error) {
-	inst := e.current.Developer.AtomConstructor()
-	// Alloc an atom and try setting.
-	a := allocAtom()
-	initAtom(a, e, atomName, inst)
-	e.mutex.Lock()
-	if !e.loaded {
-		e.mutex.Unlock()
-		deallocAtom(a)
-		return nil, ErrElementNotLoaded
+	// Try to recover.
+	data, err := e.getAtomData(e.current, name)
+	if err != nil {
+		return nil, err
 	}
-	if _, has := e.atoms[atomName]; has {
-		e.mutex.Unlock()
-		deallocAtom(a)
-		return nil, ErrAtomExists
+	a, err := e.lockAtomName(name)
+	if err != nil {
+		return nil, err
 	}
-	a.state = AtomSpawning
-	e.atoms[atomName] = a
-	e.mutex.Unlock()
 	// Try spawning.
-	ac, err := e.spawningAtom(a, arg)
+	ac, err := e.spawningAtomMailbox(a, nil, data)
 	if err != nil {
 		e.mutex.Lock()
-		delete(e.atoms, atomName)
+		delete(e.atoms, name)
+		e.mutex.Unlock()
+	}
+	return ac, nil
+}
+
+func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomCore, error) {
+	a, err := e.lockAtomName(name)
+	if err != nil {
+		return nil, err
+	}
+	// Try spawning.
+	data, err := e.getAtomData(a.element.implements[a.version], name)
+	if err != nil {
+		return nil, err
+	}
+	ac, err := e.spawningAtomMailbox(a, arg, data)
+	if err != nil {
+		e.mutex.Lock()
+		delete(e.atoms, name)
 		e.mutex.Unlock()
 	}
 	return ac, nil
@@ -175,18 +178,47 @@ func (e *ElementLocal) KillAtom(fromId, toId Id) error {
 
 // Internal
 
-func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, error) {
-	var data proto.Message
+func (e *ElementLocal) lockAtomName(name string) (*AtomCore, error) {
+	inst := e.current.Developer.AtomConstructor()
+	// Alloc an atom and try setting.
+	a := allocAtom()
+	initAtom(a, e, name, inst)
+	e.mutex.Lock()
+	if !e.loaded {
+		e.mutex.Unlock()
+		deallocAtom(a)
+		return nil, ErrElementNotLoaded
+	}
+	if _, has := e.atoms[name]; has {
+		e.mutex.Unlock()
+		deallocAtom(a)
+		return nil, ErrAtomExists
+	}
+	a.state = AtomSpawning
+	e.atoms[name] = a
+	e.mutex.Unlock()
+	return a, nil
+}
+
+func (e *ElementLocal) getAtomId(name string) (Id, error) {
+	e.mutex.RLock()
+	if !e.loaded {
+		e.mutex.RUnlock()
+		return nil, ErrElementNotLoaded
+	}
+	a, has := e.atoms[name]
+	e.mutex.RUnlock()
+	if !has {
+		return nil, ErrAtomNotFound
+	}
+	return e.implements[a.version].Interface.AtomIdConstructor(a), nil
+}
+
+func (e *ElementLocal) spawningAtomMailbox(a *AtomCore, arg, data proto.Message) (*AtomCore, error) {
 	var err error
-	impl := a.element.implements[a.version]
-	if p := impl.Developer.Persistence(); p != nil {
-		data, err = p.GetAtomData(a.name)
-	}
-	if err != nil {
-		return nil, err
-	}
 	initMailBox(a)
 	a.mailbox.Start()
+	impl := a.element.implements[a.version]
 	if err = impl.Interface.AtomSpawner(a, a.instance, arg, data); err != nil {
 		a.setHalt()
 		DelMailBox(a.mailbox)
@@ -195,6 +227,18 @@ func (e *ElementLocal) spawningAtom(a *AtomCore, arg proto.Message) (*AtomCore, 
 	}
 	a.setWaiting()
 	return a, nil
+}
+
+func (e *ElementLocal) getAtomData(impl *ElementImplementation, name string) (proto.Message, error) {
+	p := impl.Developer.Persistence()
+	if p == nil {
+		return nil, nil
+	}
+	data, err := p.GetAtomData(name)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func (e *ElementLocal) getMessageHandler(name string, version uint64) MessageHandler {

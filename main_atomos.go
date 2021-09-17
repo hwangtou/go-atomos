@@ -67,7 +67,7 @@ func newMainAtom(e *ElementLocal) *mainAtom {
 	initAtom(a, e, MainAtomName, ma)
 	a.state = AtomSpawning
 	e.atoms[MainAtomName] = a
-	e.spawningAtom(a, nil)
+	e.spawningAtomMailbox(a, nil, nil)
 	a.element.cosmos.logInfo("Cosmos.Main: MainId is spawning")
 	return ma
 }

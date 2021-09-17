@@ -80,6 +80,7 @@ type ElementDeveloper interface {
 type ElementPersistence interface {
 	// Atom读取
 	// Get Atom.
+	// 没有数据时error应该返回nil。
 	GetAtomData(name string) (proto.Message, error)
 
 	// Atom保存

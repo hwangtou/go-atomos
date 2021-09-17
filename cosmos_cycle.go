@@ -229,7 +229,9 @@ type DaemonCommand struct {
 // Runnable
 type CosmosRunnable struct {
 	interfaces      map[string]*ElementInterface
+	interfaceOrder  []*ElementInterface
 	implementations map[string]*ElementImplementation
+	implementOrder  []*ElementImplementation
 	script          Script
 }
 
@@ -237,17 +239,24 @@ func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnabl
 	if r.interfaces == nil {
 		r.interfaces = map[string]*ElementInterface{}
 	}
-	r.interfaces[i.Config.Name] = i
+	if _, has := r.interfaces[i.Config.Name]; !has {
+		r.interfaces[i.Config.Name] = i
+		r.interfaceOrder = append(r.interfaceOrder, i)
+	}
 	return r
 }
 
 // CosmosRunnable构造器方法，用于添加Element。
 // Construct method of CosmosRunnable, uses to add Element.
 func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
+	r.AddElementInterface(i.Interface)
 	if r.implementations == nil {
 		r.implementations = map[string]*ElementImplementation{}
 	}
-	r.implementations[i.Interface.Config.Name] = i
+	if _, has := r.implementations[i.Interface.Config.Name]; !has {
+		r.implementations[i.Interface.Config.Name] = i
+		r.implementOrder = append(r.implementOrder, i)
+	}
 	return r
 }
 

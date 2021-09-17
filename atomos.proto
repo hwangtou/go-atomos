@@ -95,6 +95,7 @@ message CosmosRemoteGetAtomIdReq {
 
 message CosmosRemoteGetAtomIdResp {
   bool has = 1;
+  string error = 2;
 }
 
 message CosmosRemoteMessagingReq {

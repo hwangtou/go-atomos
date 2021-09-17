@@ -12,14 +12,15 @@ import (
 // Local Cosmos Instance
 
 type CosmosLocal struct {
-	mutex      sync.RWMutex
-	config     *Config
-	cosmosSelf *CosmosSelf
-	elements   map[string]*ElementLocal
-	interfaces map[string]*ElementInterface
-	mainElem   *ElementLocal
-	mainAtom   *mainAtom
-	mainKillCh chan bool
+	mutex         sync.RWMutex
+	config        *Config
+	cosmosSelf    *CosmosSelf
+	elements      map[string]*ElementLocal
+	elementsOrder []*ElementImplementation
+	interfaces    map[string]*ElementInterface
+	mainElem      *ElementLocal
+	mainAtom      *mainAtom
+	mainKillCh    chan bool
 }
 
 // Life cycle
@@ -85,11 +86,21 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 		return err
 	}
 	c.elements = elements
+	c.elementsOrder = runnable.implementOrder
 	c.interfaces = elementInterfaces
 	c.mainKillCh = make(chan bool)
 
-	for _, define := range c.elements {
-		define.current.Developer.Load(c.mainAtom)
+	for _, elem := range c.elementsOrder {
+		define, has := c.elements[elem.Interface.Config.Name]
+		if !has {
+			err := fmt.Errorf("local cosmos unknown panic")
+			self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
+			return err
+		}
+		if err := define.current.Developer.Load(c.mainAtom); err != nil {
+			self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
+			return err
+		}
 	}
 
 	// Init remote to support remote.
@@ -136,18 +147,23 @@ func (c *CosmosLocal) exitRunnable() {
 	c.cosmosSelf.remotes.close()
 	// Unload local element interfaces.
 	for elemName := range c.interfaces {
-		delete(c.elements, elemName)
+		delete(c.interfaces, elemName)
 	}
 	// Unload local elements.
-	for elemName, elem := range c.elements {
-		err := elem.unload()
+	for i := len(c.elementsOrder) - 1; i >= 0; i -= 1 {
+		elemName := c.elementsOrder[i].Interface.Config.Name
+		define, has := c.elements[elemName]
+		if !has {
+			c.cosmosSelf.logInfo("Cosmos.Exit: Unload runtime error, element=%s,err=not found", elemName)
+			continue
+		}
+		err := define.unload()
 		if err != nil {
-			c.cosmosSelf.logInfo("Cosmos.Exit: Unload local element, element=%s,err=%v",
-				elemName, err)
+			c.cosmosSelf.logInfo("Cosmos.Exit: Unload local element, element=%s,err=%v", elemName, err)
 		} else {
 			c.cosmosSelf.logInfo("Cosmos.Exit: Unload local element, element=%s", elemName)
 		}
-		elem.current.Developer.Unload()
+		define.current.Developer.Unload()
 		delete(c.elements, elemName)
 	}
 	c.mainKillCh = nil
@@ -155,6 +171,7 @@ func (c *CosmosLocal) exitRunnable() {
 	c.mainElem = nil
 	c.interfaces = nil
 	c.elements = nil
+	c.elementsOrder = nil
 	c.cosmosSelf = nil
 	c.config = nil
 }
