@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -90,8 +91,16 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	c.interfaces = elementInterfaces
 	c.mainKillCh = make(chan bool)
 
+	elemName := ""
+	defer func() {
+		if r := recover(); r != nil {
+			self.logFatal("Cosmos.Init: Load element error, name=%s,err=%v,stack=%s",
+				elemName, r, string(debug.Stack()))
+		}
+	}()
 	for _, elem := range c.elementsOrder {
-		define, has := c.elements[elem.Interface.Config.Name]
+		elemName = elem.Interface.Config.Name
+		define, has := c.elements[elemName]
 		if !has {
 			err := fmt.Errorf("local cosmos unknown panic")
 			self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
@@ -150,8 +159,15 @@ func (c *CosmosLocal) exitRunnable() {
 		delete(c.interfaces, elemName)
 	}
 	// Unload local elements.
+	elemName := ""
+	defer func() {
+		if r := recover(); r != nil {
+			c.cosmosSelf.logFatal("Cosmos.Exit: Unload element error, name=%s,err=%v,stack=%s",
+				elemName, r, string(debug.Stack()))
+		}
+	}()
 	for i := len(c.elementsOrder) - 1; i >= 0; i -= 1 {
-		elemName := c.elementsOrder[i].Interface.Config.Name
+		elemName = c.elementsOrder[i].Interface.Config.Name
 		define, has := c.elements[elemName]
 		if !has {
 			c.cosmosSelf.logInfo("Cosmos.Exit: Unload runtime error, element=%s,err=not found", elemName)

@@ -162,7 +162,7 @@ func (e *ElementLocal) MessagingAtom(fromId, toId Id, message string, args proto
 	if a == nil {
 		return reply, ErrAtomNotFound
 	}
-	return a.pushMessageMail(fromId, message, args)
+return a.pushMessageMail(fromId, message, args)
 }
 
 func (e *ElementLocal) KillAtom(fromId, toId Id) error {

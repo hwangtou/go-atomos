@@ -5,6 +5,7 @@ package go_atomos
 import (
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -354,7 +355,19 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 	if handler == nil {
 		return nil, fmt.Errorf("Atom.Mail: Message handler not found, name=%s", name)
 	}
-	return handler(from, a.instance, in)
+	var stack string
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack = string(debug.Stack())
+			}
+		}()
+		out, err = handler(from, a.instance, in)
+	}()
+	if stack != "" {
+		err = fmt.Errorf("Atom.Mail: Handle Message PANIC, name=%s,trace=%s", a.name, stack)
+	}
+	return
 }
 
 // Kill Mail
