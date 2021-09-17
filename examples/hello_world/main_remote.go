@@ -9,7 +9,6 @@ import (
 func main() {
 	runnable := atomos.CosmosRunnable{}
 	// RemoteBooth
-	runnable.AddElementInterface(api.GetRemoteBoothInterface(&element.RemoteBoothElement{}))
 	runnable.AddElementImplementation(api.GetRemoteBoothImplement(&element.RemoteBoothElement{}))
 	runnable.AddElementInterface(api.GetLocalBoothInterface(&element.LocalBoothElement{}))
 	runnable.SetScript(scriptRemote)

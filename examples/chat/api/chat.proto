@@ -3,181 +3,366 @@ syntax = "proto3";
 package api;
 option go_package = "examples/chat/api";
 
+message Nil {}
+
 // User Manager
 
 // 用户管理器Atom
-service UserManagerAtom {
-  rpc Spawn (UserManagerSpawnArg) returns (UserManager) {}
-  // 注册用户
+// 是基础服务，提供用户的注册、登录和注销的支持。
+service UserManager {
+  rpc Spawn (UserManagerSpawnArg) returns (UserManagerData) {}
+  // 用户注册
   rpc RegisterUser (RegisterUserReq) returns (RegisterUserResp) {}
+  // 用户登录
+  rpc LoginUser (LoginUserReq) returns (LoginUserResp) {}
   // 查找用户
   rpc FindUser (FindUserReq) returns (FindUserResp) {}
+  // 注销用户
+  rpc DeleteUser (DeleteUserReq) returns (DeleteUserResp) {}
 }
 
 message UserManagerSpawnArg {}
-message UserManager {
-  map<int64, int64> users = 1;
+message UserManagerData {
+  int64 cur_id = 1;
+  map<string, UserRegistration> users = 2;
+}
+message UserRegistration {
+  int64 user_id = 1;
+  string nickname = 2;
+  string password = 3;
+  int64 updated = 4;
 }
 
+// 用户注册
 message RegisterUserReq {
-  UserBrief user = 1;
+  string nickname = 1;
+  string password = 2;
 }
 message RegisterUserResp {
   bool succeed = 1;
+  string reason = 2;
+  int64 user_id = 3;
 }
 
+// 用户登录
+message LoginUserReq {;
+  string nickname = 1;
+  string password = 2;
+}
+message LoginUserResp {
+  bool succeed = 1;
+  int64 user_id = 2;
+  string nickname = 3;
+}
+
+// 查找用户
 message FindUserReq {
-  int64 id = 1;
+  int64 user_id = 1;
+  string nickname = 2;
 }
 message FindUserResp {
   bool has = 1;
+  int64 user_id = 2;
+  string nickname = 3;
+}
+
+// 注销用户
+message DeleteUserReq {
+  string nickname = 1;
+  string password = 2;
+}
+message DeleteUserResp {
+  bool succeed = 1;
 }
 
 
 // User
 
 // 用户Atom
-service UserAtom {
-  rpc Spawn (UserSpawnArg) returns (User) {}
+service User {
+  rpc Spawn (UserSpawnArg) returns (UserData) {}
+
+  // 用户
   // 用户信息
-  rpc UserInfo (UserInfoReq) returns (UserInfoResp) {}
+  rpc UserInfo (Nil) returns (UserInfoResp) {}
+
+  // 好友
   // 所有好友
-  rpc GetFriends (GetFriendsReq) returns (GetFriendsResp) {}
-  // 添加好友
-  rpc AddFriend (AddFriendReq) returns (AddFriendResp) {}
+  rpc GetFriends (Nil) returns (GetUserFriendResp) {}
+  // （主动方）添加好友，客户端请求
+  rpc AddFriend (AddUserFriendReq) returns (AddUserFriendResp) {}
+  // （主动方）删除好友，客户端请求
+  rpc DeleteFriend (DelUserFriendReq) returns (DelUserFriendResp) {}
+  // （被动方）添加好友，主动方请求
+  rpc NoticeAddedFriend (NoticeUserAddedFriendReq) returns (NoticeUserAddedFriendResp) {}
+  // （被动方）更新好友，主动方请求
+  rpc NoticeUpdatedFriend (NoticeUserUpdatedFriendReq) returns (Nil) {}
+  // （被动方）删除好友，主动方请求
+  rpc NoticeDeletedFriend (NoticeUserDeletedFriendReq) returns (Nil) {}
+
   // 房间信息
-  // 房间消息推送
-  rpc RoomMessage (RoomMessagePush) returns (RoomMessagePushResp) {}
+  // 所有房间
+  rpc GetRooms (Nil) returns (GetUserRoomsResp) {}
+  // （主动方）添加房间
+  rpc AddRoom (AddUserRoomReq) returns (AddUserRoomResp) {}
+  // （主动方）删除房间
+  rpc DelRoom (DelUserRoomReq) returns (DelUserRoomResp) {}
+  // （被东方）房间信息更新推送
+  rpc RoomUpdated (RoomUpdatedPush) returns (Nil) {}
+  // （被东方）房间人员推送
+  rpc RoomMemberUpdated (RoomMemberUpdatedPush) returns (Nil) {}
+  // （被动方）房间消息推送
+  rpc RoomMessaging (RoomMessagePush) returns (Nil) {}
 }
 
-message UserSpawnArg {}
-message User {
+message UserSpawnArg {
+  int64 user_id = 1;
+  string nickname = 2;
+}
+message UserData {
   UserBrief info = 1;
   map<int64, UserBrief> friends = 2;
   map<int64, ChatRoomBrief> rooms = 3;
-  int64 updated_at = 4;
+  map<int64, UserChatMessages> messages = 4;
+  int64 updated_at = 5;
+}
+message UserChatMessages {
+  int32 unread_count = 1;
+  repeated ChatMessage messages = 2;
+}
+message ChatMessage {
+  int64 sender_uid = 1;
+  string content = 2;
+  int64 created_at = 3;
 }
 
+// 用户 交换信息
 message UserBrief {
-  int64 id = 1;
+  int64 user_id = 1;
   string nickname = 2;
 }
 
-message UserInfoReq {
-}
+// 用户信息
 message UserInfoResp {
   UserBrief user = 1;
 }
 
-message GetFriendsReq {
-}
-message GetFriendsResp {
+// 所有好友
+message GetUserFriendResp {
   map<int64, UserBrief> friends = 1;
 }
 
-message AddFriendReq {
-  UserBrief user = 1;
+// （主动方）添加好友，客户端请求
+message AddUserFriendReq {
+  int64 user_id = 1;
+  string greeting = 2;
 }
-message AddFriendResp {
+message AddUserFriendResp {
   bool succeed = 1;
 }
 
+// （主动方）删除好友，客户端请求
+message DelUserFriendReq {
+  int64 user_id = 1;
+}
+message DelUserFriendResp {
+  bool succeed = 1;
+}
+
+// （被动方）添加好友，主动方请求
+message NoticeUserAddedFriendReq {
+  UserBrief requester_info = 1;
+}
+message NoticeUserAddedFriendResp {
+  UserBrief requested_info = 1;
+}
+
+// （被动方）更新好友，主动方请求
+message NoticeUserUpdatedFriendReq {
+  UserBrief friend_info = 1;
+}
+
+// （被动方）删除好友，主动方请求
+message NoticeUserDeletedFriendReq {
+  UserBrief friend_info = 1;
+}
+
+// 所有房间
+message GetUserRoomsResp {
+  map<int64, ChatRoomBrief> rooms = 1;
+}
+
+// （主动方）添加房间
+message AddUserRoomReq {
+  int64 room_id = 1;
+  string greeting = 2;
+}
+message AddUserRoomResp {
+  bool succeed = 1;
+}
+
+// （主动方）删除房间
+message DelUserRoomReq {
+  int64 room_id = 1;
+}
+message DelUserRoomResp {
+  bool succeed = 1;
+}
+
+// （被东方）房间更新推送
+message RoomUpdatedPush {
+  int64 room_id = 1;
+  string name = 2;
+}
+
+// （被东方）房间人员推送
+message RoomMemberUpdatedPush {
+  int64 room_id = 1;
+  bool new_member = 2;
+  UserBrief member = 3;
+}
+
+// （被动方）房间消息推送
 message RoomMessagePush {
   int64 room_id = 1;
   int64 sender_id = 2;
   string content = 3;
-}
-message RoomMessagePushResp {
-  bool succeed = 1;
+  int64 created_at = 4;
 }
 
 
 // Chat Manager
 
 // 房间管理器Atom
-service ChatRoomManagerAtom {
-  rpc Spawn (ChatRoomManagerSpawnArg) returns (ChatRoomManager) {}
+service ChatRoomManager {
+  rpc Spawn (ChatRoomManagerSpawnArg) returns (ChatRoomManagerData) {}
   // 创建房间
   rpc CreateRoom (CreateRoomReq) returns (CreateRoomResp) {}
+  // 所有房间
+  rpc GetRooms (Nil) returns (GetRoomsResp) {}
   // 查找房间
   rpc FindRoom (FindRoomReq) returns (FindRoomResp) {}
+  // 删除房间
+  rpc DelRoom (DelRoomReq) returns (DelRoomResp) {}
 }
 
 message ChatRoomManagerSpawnArg {}
-message ChatRoomManager {
-  map<string, int64> rooms = 1;
+message ChatRoomManagerData {
+  int64 cur_id = 1;
+  map<int64, RoomRegistration> rooms = 2;
+}
+message RoomRegistration {
+  int64 room_id = 1;
+  string name = 2;
+  int64 updated = 3;
 }
 
+// 创建房间
 message CreateRoomReq {
   string name = 1;
   UserBrief owner = 2;
 }
 message CreateRoomResp {
   bool succeed = 1;
+  ChatRoomBrief room = 2;
 }
 
+// 所有房间
+message GetRoomsResp {
+  map<int64, string> rooms = 1;
+}
+
+// 查找房间
 message FindRoomReq {
   int64 room_id = 1;
 }
 message FindRoomResp {
-  bool has = 1;
+  ChatRoomBrief room = 1;
+}
+
+// 删除房间
+message DelRoomReq {
+  int64 room_id = 1;
+}
+message DelRoomResp {
+  bool succeed = 1;
 }
 
 
 // Chat
 
 // 房间Atom
-service ChatRoomAtom {
-  rpc Spawn (ChatRoomSpawnArg) returns (ChatRoom) {}
+service ChatRoom {
+  rpc Spawn (ChatRoomSpawnArg) returns (ChatRoomData) {}
   // 房间信息
-  rpc Info (ChatRoomInfoReq) returns (ChatRoomInfoResp) {}
+  rpc Info (Nil) returns (ChatRoomInfoResp) {}
+  // 更新信息
+  rpc Update (ChatRoomUpdateReq) returns (ChatRoomUpdateResp) {}
   // 添加房间成员
-  rpc AddMember (AddMemberReq) returns (AddMemberResp) {}
+  rpc AddMember (ChatRoomAddMemberReq) returns (ChatRoomAddMemberResp) {}
   // 删除房间成员
-  rpc DelMember (DelMemberReq) returns (DelMemberResp) {}
+  rpc DelMember (ChatRoomDelMemberReq) returns (ChatRoomDelMemberResp) {}
   // 发送消息
-  rpc SendMessage (SendMessageReq) returns (SendMessageResp) {}
+  rpc SendMessage (ChatRoomSendMessageReq) returns (ChatRoomSendMessageResp) {}
+  // 删除房间
+  rpc DelSelf (Nil) returns (Nil) {}
 }
 
 message ChatRoomSpawnArg {
-  string name = 1;
-  UserBrief owner = 2;
+  int64 room_id = 1;
+  string name = 2;
+  UserBrief owner = 3;
 }
-message ChatRoom {
+message ChatRoomData {
   ChatRoomBrief info = 1;
   UserBrief owner = 2;
-  map<int64, UserBrief> members = 3;
 }
 
+// 房间 交换数据
 message ChatRoomBrief {
-  string name = 1;
-  int64 updated_at = 2;
+  int64 room_id = 1;
+  string name = 2;
+  map<int64, UserBrief> members = 3;
+  int64 updated_at = 4;
 }
 
-message ChatRoomInfoReq {}
+// 房间信息
 message ChatRoomInfoResp {
-  ChatRoom room = 1;
+  ChatRoomData room = 1;
 }
 
-message AddMemberReq {
-  UserBrief user = 1;
+// 更新信息
+message ChatRoomUpdateReq {
+  string name = 1;
 }
-message AddMemberResp {
+message ChatRoomUpdateResp {
   bool succeed = 1;
 }
 
-message DelMemberReq {
+// 添加房间成员
+message ChatRoomAddMemberReq {
+  UserBrief requester = 1;
+}
+message ChatRoomAddMemberResp {
+  bool succeed = 1;
+  ChatRoomBrief room = 2;
+}
+
+// 删除房间成员
+message ChatRoomDelMemberReq {
   int64 user_id = 1;
 }
-message DelMemberResp {
+message ChatRoomDelMemberResp {
   bool succeed = 1;
 }
 
-message SendMessageReq {
+// 发送消息
+message ChatRoomSendMessageReq {
   int64 sender_id = 1;
   string content = 2;
+  int64 created_at = 3;
 }
-message SendMessageResp {
+message ChatRoomSendMessageResp {
   bool succeed = 1;
 }
 

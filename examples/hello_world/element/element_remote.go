@@ -97,7 +97,7 @@ func (r *RemoteBoothAtom) Looper(taskId uint64) {
 			delete(r.localWatches, key)
 			r.self.Log().Error("Lost contact with remote watcher and deleted, id=%+V,err=%v", key, err)
 		}
-		r.self.Log().Info("Notice remote watcher, id=%+V", key)
+		r.self.Log().Info("Notice remote watcher, id=%s", key)
 	}
 	if _, err := r.self.Task().AddAfter(3 * time.Second, r.Looper, nil); err != nil {
 		r.self.Log().Error("Loop add task failed, err=%v", err)

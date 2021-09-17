@@ -16,7 +16,14 @@ const (
 type KvDbElement struct {
 }
 
-func (k *KvDbElement) Check() error {
+func (k *KvDbElement) Load(mainId atomos.MainId) error {
+	return nil
+}
+
+func (k *KvDbElement) Unload() {
+}
+
+func (k *KvDbElement) Persistence() atomos.ElementPersistence {
 	return nil
 }
 
@@ -26,14 +33,6 @@ func (k *KvDbElement) Info() (version uint64, logLevel atomos.LogLevel, initNum 
 
 func (k *KvDbElement) AtomConstructor() atomos.Atom {
 	return &kvDbAtom{}
-}
-
-func (k *KvDbElement) AtomDataLoader(name string) (proto.Message, error) {
-	return nil, nil
-}
-
-func (k *KvDbElement) AtomDataSaver(name string, data proto.Message) error {
-	return nil
 }
 
 func (k *KvDbElement) AtomCanKill(id atomos.Id) bool {
@@ -54,6 +53,7 @@ type kvDbAtom struct {
 }
 
 func (k *kvDbAtom) Spawn(self atomos.AtomSelf, arg *api.KvDbSpawnArg, data *api.KvDb) error {
+	self.Log().Info("Spawn")
 	k.self = self
 	if arg == nil {
 		// Reload spawn.
@@ -69,6 +69,7 @@ func (k *kvDbAtom) Spawn(self atomos.AtomSelf, arg *api.KvDbSpawnArg, data *api.
 }
 
 func (k *kvDbAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) (saveData proto.Message) {
+	k.self.Log().Info("Halt")
 	if err := k.db.Close(); err != nil {
 		k.self.Log().Error("Db close error, err=%v", err)
 	}

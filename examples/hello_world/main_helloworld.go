@@ -9,12 +9,10 @@ import (
 func main() {
 	runnable := atomos.CosmosRunnable{}
 	// TaskBooth
-	runnable.AddElementInterface(api.GetTaskBoothInterface(&element.TaskBoothElement{}))
 	runnable.AddElementImplementation(api.GetTaskBoothImplement(&element.TaskBoothElement{}))
 	// RemoteBooth
 	runnable.AddElementInterface(api.GetRemoteBoothInterface(&element.RemoteBoothElement{}))
 	// LocalBooth
-	runnable.AddElementInterface(api.GetLocalBoothInterface(&element.LocalBoothElement{}))
 	runnable.AddElementImplementation(api.GetLocalBoothImplement(&element.LocalBoothElement{}))
 	runnable.SetScript(scriptHelloWorld)
 	config := &atomos.Config{

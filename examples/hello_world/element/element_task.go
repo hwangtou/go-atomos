@@ -13,14 +13,14 @@ type TaskBoothElement struct {
 	mainId atomos.MainId
 }
 
-func (t TaskBoothElement) Load(mainId atomos.MainId) error {
+func (t *TaskBoothElement) Load(mainId atomos.MainId) error {
 	t.mainId = mainId
 	t.mainId.Log().Info("TaskBoothElement is loading")
 	return nil
 }
 
 func (t TaskBoothElement) Unload() {
-	t.mainId.Log().Info("TaskBoothElement is loading")
+	t.mainId.Log().Info("TaskBoothElement is unloading")
 }
 
 func (t TaskBoothElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {

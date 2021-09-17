@@ -8,10 +8,11 @@ import (
 
 func main() {
 	runnable := atomos.CosmosRunnable{}
-	runnable.AddElementImplementation(api.GetUserManagerAtomImplement(&element.UserManagerElement{})).
-		AddElementImplementation(api.GetUserAtomImplement(&element.UserElement{})).
-		AddElementImplementation(api.GetChatRoomManagerAtomImplement(&element.ChatManagerElement{})).
-		AddElementImplementation(api.GetChatRoomAtomImplement(&element.ChatRoomElement{})).
+	runnable.AddElementImplementation(api.GetKvDbAtomImplement(&element.KvDbElement{})).
+		AddElementImplementation(api.GetUserManagerImplement(&element.UserManagerElement{})).
+		AddElementImplementation(api.GetChatRoomManagerImplement(&element.ChatManagerElement{})).
+		AddElementImplementation(api.GetUserImplement(&element.UserElement{})).
+		AddElementImplementation(api.GetChatRoomImplement(&element.ChatRoomElement{})).
 		SetScript(scriptChat)
 	config := &atomos.Config{
 		Node:               "Chat",
@@ -37,8 +38,21 @@ func main() {
 }
 
 func scriptChat(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
+	// Spawn KV DB
+	dbId, err := api.SpawnKvDbAtom(cosmos.Local(), "DB", &api.KvDbSpawnArg{ DbPath: "data" })
+	if err != nil {
+		mainId.Log().Fatal("KvDb spawn failed, err=%v", err)
+		return
+	}
+	defer func() {
+		mainId.Log().Info("KvDb is exiting")
+		if err = dbId.Kill(mainId); err != nil {
+			mainId.Log().Error("KvDb exited with error, err=%v", err)
+		}
+	}()
+
 	// Spawn UserManager
-	userManagerId, err := api.SpawnUserManagerAtom(cosmos.Local(), "UserManager", &api.UserManagerSpawnArg{})
+	userManagerId, err := api.SpawnUserManager(cosmos.Local(), "UserManager", &api.UserManagerSpawnArg{})
 	if err != nil {
 		mainId.Log().Fatal("UserManager spawn failed, err=%v", err)
 		return
@@ -51,7 +65,7 @@ func scriptChat(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChann
 	}()
 
 	// Spawn ChatManager
-	chatManagerId, err := api.SpawnChatRoomManagerAtom(cosmos.Local(), "RoomManager", &api.ChatRoomManagerSpawnArg{})
+	chatManagerId, err := api.SpawnChatRoomManager(cosmos.Local(), "RoomManager", &api.ChatRoomManagerSpawnArg{})
 	if err != nil {
 		mainId.Log().Fatal("ChatManager spawn failed, err=%v", err)
 	}
