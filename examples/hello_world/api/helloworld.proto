@@ -90,3 +90,18 @@ message LocalBoothSpawnData {}
 // Local Remote Notice
 message LocalRemoteNoticeReq {}
 message LocalRemoteNoticeResp {}
+
+
+// 展示如何使用虫洞
+service WormBooth {
+  rpc Spawn (WormBoothSpawnArg) returns (WormBoothData) {}
+  rpc NewPackage (WormPackage) returns (WormPackage) {}
+}
+
+message WormBoothSpawnArg {}
+message WormBoothData {}
+message WormPackage {
+  int32 id = 1;
+  string handler = 2;
+  bytes buf = 3;
+}

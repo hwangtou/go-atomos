@@ -231,6 +231,58 @@ func SpawnLocalBooth(c go_atomos.CosmosNode, name string, arg *LocalBoothSpawnAr
 	return nil, go_atomos.ErrAtomType
 }
 
+////////////////////////////////////////
+////////// Element: WormBooth //////////
+////////////////////////////////////////
+//
+// 展示如何使用虫洞
+//
+
+const WormBoothName = "WormBooth"
+
+// WormBoothId is the interface of WormBooth atomos.
+
+type WormBoothId interface {
+	go_atomos.Id
+
+	NewPackage(from go_atomos.Id, in *WormPackage) (*WormPackage, error)
+}
+
+func GetWormBoothId(c go_atomos.CosmosNode, name string) (WormBoothId, error) {
+	ca, err := c.GetAtomId(WormBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(WormBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// WormBooth is the atomos implements of WormBooth atomos.
+
+type WormBooth interface {
+	go_atomos.Atom
+	Spawn(self go_atomos.AtomSelf, arg *WormBoothSpawnArg, data *WormBoothData) error
+	NewPackage(from go_atomos.Id, in *WormPackage) (*WormPackage, error)
+}
+
+func SpawnWormBooth(c go_atomos.CosmosNode, name string, arg *WormBoothSpawnArg) (WormBoothId, error) {
+	_, err := c.SpawnAtom(WormBoothName, name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId(WormBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(WormBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
 //////
 //// IMPLEMENTATIONS
 //
@@ -535,6 +587,68 @@ func GetLocalBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementIm
 				return nil, go_atomos.ErrAtomMessageAtomType
 			}
 			return a.RemoteNotice(from, req)
+		},
+	}
+	return elem
+}
+
+////////////////////////////////////////
+////////// Element: WormBooth //////////
+////////////////////////////////////////
+//
+// 展示如何使用虫洞
+//
+
+type wormBoothId struct {
+	go_atomos.Id
+}
+
+func (c *wormBoothId) NewPackage(from go_atomos.Id, in *WormPackage) (*WormPackage, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "NewPackage", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*WormPackage)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetWormBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(WormBoothName, dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &wormBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*WormBoothSpawnArg)
+		dataT, _ := data.(*WormBoothData)
+		return a.(WormBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"NewPackage": go_atomos.NewAtomCallConfig(&WormPackage{}, &WormPackage{}),
+	}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
+		"NewPackage": {
+			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &WormPackage{}) },
+			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &WormPackage{}) },
+		},
+	}
+	return elem
+}
+
+func GetWormBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetWormBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"NewPackage": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+			req, ok := in.(*WormPackage)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageArgType
+			}
+			a, ok := to.(WormBooth)
+			if !ok {
+				return nil, go_atomos.ErrAtomMessageAtomType
+			}
+			return a.NewPackage(from, req)
 		},
 	}
 	return elem

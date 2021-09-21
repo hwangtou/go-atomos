@@ -232,6 +232,7 @@ type CosmosRunnable struct {
 	interfaceOrder  []*ElementInterface
 	implementations map[string]*ElementImplementation
 	implementOrder  []*ElementImplementation
+	wormholes       map[string]Wormhole
 	script          Script
 }
 
@@ -256,6 +257,16 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 	if _, has := r.implementations[i.Interface.Config.Name]; !has {
 		r.implementations[i.Interface.Config.Name] = i
 		r.implementOrder = append(r.implementOrder, i)
+	}
+	return r
+}
+
+func (r *CosmosRunnable) AddWormhole(w Wormhole) *CosmosRunnable {
+	if r.wormholes == nil {
+		r.wormholes = map[string]Wormhole{}
+	}
+	if _, has := r.wormholes[w.Name()]; !has {
+		r.wormholes[w.Name()] = w
 	}
 	return r
 }

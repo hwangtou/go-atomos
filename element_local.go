@@ -3,9 +3,8 @@ package go_atomos
 // CHECKED!
 
 import (
-	"sync"
-
 	"google.golang.org/protobuf/proto"
+	"sync"
 )
 
 // 本地Element实现。
@@ -84,6 +83,8 @@ func (e *ElementLocal) unload() error {
 			wg.Add(1)
 			defer func() {
 				wg.Done()
+			}()
+			defer func() {
 				if r := recover(); r != nil {
 					e.cosmos.logFatal("Element.Unload: Panic, name=%s,reason=%s", atomName, r)
 				}
@@ -97,8 +98,8 @@ func (e *ElementLocal) unload() error {
 	}
 	wg.Wait()
 
-	e.cosmos = nil
-	e.implements = nil
+	//e.cosmos = nil
+	//e.implements = nil
 	return nil
 }
 
@@ -142,7 +143,7 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomCore, err
 	}
 	// Try spawning.
 	data, err := e.getAtomData(a.element.implements[a.version], name)
-	if err != nil {
+	if err != nil && err != ErrAtomNotFound {
 		return nil, err
 	}
 	ac, err := e.spawningAtomMailbox(a, arg, data)
@@ -162,7 +163,7 @@ func (e *ElementLocal) MessagingAtom(fromId, toId Id, message string, args proto
 	if a == nil {
 		return reply, ErrAtomNotFound
 	}
-return a.pushMessageMail(fromId, message, args)
+	return a.pushMessageMail(fromId, message, args)
 }
 
 func (e *ElementLocal) KillAtom(fromId, toId Id) error {
@@ -232,7 +233,7 @@ func (e *ElementLocal) spawningAtomMailbox(a *AtomCore, arg, data proto.Message)
 func (e *ElementLocal) getAtomData(impl *ElementImplementation, name string) (proto.Message, error) {
 	p := impl.Developer.Persistence()
 	if p == nil {
-		return nil, nil
+		return nil, ErrAtomNotFound
 	}
 	data, err := p.GetAtomData(name)
 	if err != nil {

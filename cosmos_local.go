@@ -77,6 +77,20 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	for elementName, elementInterface := range runnable.interfaces {
 		elementInterfaces[elementName] = elementInterface
 	}
+	// Pre-initialize all wormhole.
+	wormholes := map[string]Wormhole{}
+	for name, wormhole := range runnable.wormholes {
+		if err := wormhole.Boot(); err != nil {
+			err = fmt.Errorf("wormhole boot failed")
+			self.logFatal("Cosmos.Init: Init wormhole error, name=%s,err=%v", name, err)
+			for _, wormhole = range wormholes {
+				wormhole.BootFailed()
+			}
+			return err
+		}
+		self.logInfo("Cosmos.Init: Init wormhole succeed, name=%s", name)
+		wormholes[name] = wormhole
+	}
 
 	// Lock, set elements, and unlock.
 	c.mutex.Lock()
@@ -116,6 +130,19 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	if err := self.remotes.init(); err != nil {
 		self.logFatal("Cosmos.Init: Init remote error, err=%v", err)
 		return err
+	}
+
+	// Init wormhole.
+	self.wormholes = wormholes
+	for _, wormhole := range self.wormholes {
+		go func(w Wormhole) {
+			defer func() {
+				if r := recover(); r != nil {
+					self.logFatal("Cosmos.Init: Wormhole CRASH, stack=%s", string(debug.Stack()))
+				}
+			}()
+			w.Start(c.mainAtom)
+		}(wormhole)
 	}
 
 	return nil
@@ -166,6 +193,12 @@ func (c *CosmosLocal) exitRunnable() {
 				elemName, r, string(debug.Stack()))
 		}
 	}()
+
+	// Exit wormhole.
+	for name, wormhole := range c.cosmosSelf.wormholes {
+		c.cosmosSelf.logInfo("Cosmos.Exit: Stop wormhole succeed, name=%s", name)
+		wormhole.Stop()
+	}
 	for i := len(c.elementsOrder) - 1; i >= 0; i -= 1 {
 		elemName = c.elementsOrder[i].Interface.Config.Name
 		define, has := c.elements[elemName]

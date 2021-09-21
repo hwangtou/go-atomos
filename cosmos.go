@@ -60,6 +60,9 @@ type CosmosSelf struct {
 	// TLS if exists
 	clientCert *tls.Config
 	listenCert *tls.Config
+
+	// Wormhole.
+	wormholes map[string]Wormhole
 }
 
 func newCosmosSelf() *CosmosSelf {
