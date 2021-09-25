@@ -47,12 +47,21 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	// Pre-initialize all local elements in the Runnable.
 	loadedElements := map[string]*ElementLocal{}
 	elements := make(map[string]*ElementLocal, len(runnable.implementations))
-	for name, define := range runnable.implementations {
+
+	elemName := ""
+	defer func() {
+		if r := recover(); r != nil {
+			self.logFatal("Cosmos.Init: Load element error, name=%s,err=%v,stack=%s",
+				elemName, r, string(debug.Stack()))
+		}
+	}()
+	for _, define := range runnable.implementOrder {
 		// Create local element .
+		elemName = define.Interface.Config.Name
 		elem := newElementLocal(self, define)
 		// Load the element.
 		if err := elem.load(); err != nil {
-			self.logFatal("Cosmos.Init: Load element failed, element=%s,err=%s", name, err)
+			self.logFatal("Cosmos.Init: Load element failed, element=%s,err=%s", elemName, err)
 			for loadedName, loadedElem := range loadedElements {
 				err = loadedElem.unload()
 				if err != nil {
@@ -69,8 +78,8 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 			return err
 		}
 		// Add the element.
-		elements[name] = elem
-		self.logInfo("Cosmos.Init: Load element succeed, element=%s", name)
+		elements[elemName] = elem
+		self.logInfo("Cosmos.Init: Load element succeed, element=%s", elemName)
 	}
 	// Pre-initialize all elements interface in the runnable.
 	elementInterfaces := make(map[string]*ElementInterface)
@@ -91,31 +100,24 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 	c.interfaces = elementInterfaces
 	c.mainKillCh = make(chan bool)
 
-	elemName := ""
-	defer func() {
-		if r := recover(); r != nil {
-			self.logFatal("Cosmos.Init: Load element error, name=%s,err=%v,stack=%s",
-				elemName, r, string(debug.Stack()))
-		}
-	}()
-	for _, elem := range c.elementsOrder {
-		elemName = elem.Interface.Config.Name
-		define, has := c.elements[elemName]
-		if !has {
-			err := fmt.Errorf("local cosmos unknown panic")
-			self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
-			return err
-		}
-		if err := define.current.Developer.Load(c.mainAtom); err != nil {
-			self.logFatal("Cosmos.Init: Init runtime error, err=%v", err)
-			return err
-		}
-	}
-
 	// Init remote to support remote.
 	if err := self.remotes.init(); err != nil {
 		self.logFatal("Cosmos.Init: Init remote error, err=%v", err)
 		return err
+	}
+
+	// Load wormhole.
+	for name, elem := range c.elements {
+		go func(n string, e *ElementLocal) {
+			defer func() {
+				if r := recover(); r != nil {
+					self.logFatal("Cosmos.Init: Daemon wormhole error, name=%s,err=%v", n, r)
+				}
+			}()
+			if w, ok := e.current.Developer.(WormholeDeveloper); ok {
+				w.Daemon()
+			}
+		}(name, elem)
 	}
 
 	return nil

@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"errors"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -30,6 +31,9 @@ type MainId interface {
 
 	// Clone of Config
 	Config() *Config
+
+	// Get Customize Config.
+	CustomizeConfig(name string, p proto.Message) error
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.
@@ -112,6 +116,21 @@ func (m *mainAtom) Connect(name, addr string) (CosmosNode, error) {
 
 func (m *mainAtom) Config() *Config {
 	return proto.Clone(m.self.config).(*Config)
+}
+
+func (m *mainAtom) CustomizeConfig(name string, p proto.Message) error {
+	customize := m.Config().Customize
+	if customize == nil {
+		return errors.New("customize config has not defined")
+	}
+	whAny, has := customize["Wormhole"]
+	if !has {
+		return errors.New("customize config key has not defined")
+	}
+	if err := whAny.UnmarshalTo(p); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
