@@ -153,6 +153,9 @@ func (a *AtomCore) getLocalAtom() *AtomCore {
 	return a
 }
 
+//func (a *AtomCore) SetWormholeConn(fromId Id, conn net.Conn) error {
+//}
+
 //
 // Implementation of AtomSelf
 //
@@ -244,6 +247,10 @@ func (a *AtomCore) onReceive(mail *Mail) {
 		err := a.handleReload(am)
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushReloadMail.
+	case AtomMailWormhole:
+		err := a.handleWormhole(am)
+		am.sendReply(nil, err)
+		// Mail dealloc in AtomCore.pushWormholeMail.
 	default:
 		a.element.cosmos.logFatal("Atom.Mail: Unknown message type, type=%v,mail=%+v", am.mailType, am)
 	}
@@ -265,6 +272,8 @@ func (a *AtomCore) onPanic(mail *Mail, trace string) {
 	case AtomMailReload:
 		am.sendReply(nil, errMsg)
 		// Mail then will be dealloc in AtomCore.pushReloadMail.
+	case AtomMailWormhole:
+		am.sendReply(nil, errMsg)
 	}
 }
 

@@ -44,7 +44,7 @@ type LocalBoothAtom struct {
 	self atomos.AtomSelf
 }
 
-func (r *LocalBoothAtom) Spawn(self atomos.AtomSelf, arg *api.LocalBoothSpawnArg, data *api.LocalBoothSpawnData) error {
+func (r *LocalBoothAtom) Spawn(self atomos.AtomSelf, arg *api.LocalBoothSpawnArg, data *api.LocalBoothData) error {
 	r.self = self
 	remoteCosmos, err := self.CosmosSelf().Connect(api.RemoteName, api.NodeRemoteAddr)
 	if err != nil {

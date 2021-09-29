@@ -260,6 +260,12 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 	return r
 }
 
+// 添加虫洞
+// Add wormhole.
+func (r *CosmosRunnable) AddWormhole(w *ElementImplementation) {
+	r.AddElementImplementation(w)
+}
+
 // CosmosRunnable构造器方法，用于设置Script。
 // Construct method of CosmosRunnable, uses to set Script.
 func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {

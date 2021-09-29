@@ -4,9 +4,15 @@ import (
 	atomos "github.com/hwangtou/go-atomos"
 	"github.com/hwangtou/go-atomos/examples/hello_world/api"
 	"github.com/hwangtou/go-atomos/examples/hello_world/element"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func main() {
+	// Config
+	wh, _ := anypb.New(&api.WormholeBoothSpawnArg{
+		Addr: "0.0.0.0:20000",
+	})
+	// Load runnable
 	runnable := atomos.CosmosRunnable{}
 	// TaskBooth
 	runnable.AddElementImplementation(api.GetTaskBoothImplement(&element.TaskBoothElement{}))
@@ -14,6 +20,8 @@ func main() {
 	runnable.AddElementInterface(api.GetRemoteBoothInterface(&element.RemoteBoothElement{}))
 	// LocalBooth
 	runnable.AddElementImplementation(api.GetLocalBoothImplement(&element.LocalBoothElement{}))
+	// WormholeBooth
+	runnable.AddWormhole(api.GetWormholeBoothImplement(&element.WormholeBoothElement{}))
 	runnable.SetScript(scriptHelloWorld)
 	config := &atomos.Config{
 		Node:     api.NodeHelloWorld,
@@ -27,6 +35,9 @@ func main() {
 		EnableServer: &atomos.RemoteServerConfig{
 			Host: api.NodeHost,
 			Port: api.NodeHelloPort,
+		},
+		Customize: map[string]*anypb.Any{
+			"Wormhole": wh,
 		},
 	}
 	// Cycle
@@ -43,7 +54,8 @@ func main() {
 
 func scriptHelloWorld(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
 	//demoTaskBooth(cosmos, mainId, killNoticeChannel)
-	demoRemoteBoothLocal(cosmos, mainId, killNoticeChannel)
+	//demoRemoteBoothLocal(cosmos, mainId, killNoticeChannel)
+	demoWormholeBooth(cosmos, mainId, killNoticeChannel)
 }
 
 // TaskBooth
@@ -80,5 +92,9 @@ func demoRemoteBoothLocal(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killN
 	if err != nil {
 		panic(err)
 	}
+	<-killNoticeChannel
+}
+
+func demoWormholeBooth(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
 	<-killNoticeChannel
 }

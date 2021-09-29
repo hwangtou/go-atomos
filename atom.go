@@ -116,3 +116,7 @@ type AtomSelf interface {
 	// Atom Tasks.
 	Task() *atomTasksManager
 }
+
+type WormholeReader func() error
+//type WormholeCloser func(reason error)
+//type WormholeClosable func()

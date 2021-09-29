@@ -30,6 +30,10 @@ type CosmosNode interface {
 	// 发送删除消息到Atom。
 	// Kill Message to an Atom.
 	KillAtom(fromId, toId Id) error
+
+	// 设置虫洞的Conn
+	// Set conn of wormhole.
+	SetWormholeConn(fromId, toId Id, conn interface{}) error
 }
 
 // CosmosSelf

@@ -295,3 +295,14 @@ func (c *CosmosLocal) MessageAtom(fromId, toId Id, message string, args proto.Me
 func (c *CosmosLocal) KillAtom(fromId, toId Id) error {
 	return toId.Element().KillAtom(fromId, toId)
 }
+
+func (c *CosmosLocal) SetWormholeConn(fromId, toId Id, conn interface{}) error {
+	if fromId == nil {
+		return ErrFromNotFound
+	}
+	a := toId.getLocalAtom()
+	if a == nil {
+		return ErrAtomNotFound
+	}
+	return a.handleSetWormholeConn(fromId, conn)
+}

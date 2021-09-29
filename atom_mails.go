@@ -39,6 +39,8 @@ const (
 	// 重载邮件，用于升级Atom的ElementLocal引用，以实现热更。
 	// Reload Mail, for upgrading ElementLocal reference of an atom, to support hot-reload feature.
 	AtomMailReload AtomMailType = 3
+
+	AtomMailWormhole AtomMailType = 4
 )
 
 // Atom邮件
@@ -164,6 +166,9 @@ func initKillMail(am *atomMail, from Id) {
 	am.upgradeVersion = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
+}
+
+func initWormholeMail(am *atomMail, data interface{}, err error) {
 }
 
 // Mail返回

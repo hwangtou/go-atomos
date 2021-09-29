@@ -225,6 +225,10 @@ func (r *cosmosRemote) KillAtom(fromId, toId Id) error {
 	return toId.Element().KillAtom(fromId, toId)
 }
 
+func (r *cosmosRemote) SetWormholeConn(fromId, toId Id, conn interface{}) error {
+	return errors.New("Remote.SetWormholeConn: Cannot set remote conn")
+}
+
 // Coder
 
 func (r *cosmosRemote) decodeMessage(buf []byte) (*CosmosWatch, error) {

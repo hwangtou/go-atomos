@@ -80,13 +80,31 @@ message RemoteWatchResp {}
 // Remote Unwatch
 message RemoteUnwatchReq {}
 message RemoteUnwatchResp {}
-// 远端的本地调用
+
+
+// 展示如何本地调用远端
 service LocalBooth {
-  rpc Spawn (LocalBoothSpawnArg) returns (LocalBoothSpawnData) {}
+  rpc Spawn (LocalBoothSpawnArg) returns (LocalBoothData) {}
   rpc RemoteNotice (LocalRemoteNoticeReq) returns (LocalRemoteNoticeResp) {}
 }
 message LocalBoothSpawnArg {}
-message LocalBoothSpawnData {}
+message LocalBoothData {}
 // Local Remote Notice
 message LocalRemoteNoticeReq {}
 message LocalRemoteNoticeResp {}
+
+
+// 展示如何使用虫洞
+service WormholeBooth {
+  rpc SpawnWormhole (WormholeBoothSpawnArg) returns (WormholeBoothData) {}
+}
+message WormholeBoothSpawnArg {
+  string addr = 1;
+}
+message WormholeBoothData {}
+
+message WormPackage {
+  int32 id = 1;
+  string handler = 2;
+  bytes buf = 3;
+}

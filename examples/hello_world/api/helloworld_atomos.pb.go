@@ -183,7 +183,7 @@ func SpawnRemoteBooth(c go_atomos.CosmosNode, name string, arg *RemoteBoothSpawn
 ////////// Element: LocalBooth //////////
 /////////////////////////////////////////
 //
-// 远端的本地调用
+// 展示如何本地调用远端
 //
 
 const LocalBoothName = "LocalBooth"
@@ -212,7 +212,7 @@ func GetLocalBoothId(c go_atomos.CosmosNode, name string) (LocalBoothId, error) 
 
 type LocalBooth interface {
 	go_atomos.Atom
-	Spawn(self go_atomos.AtomSelf, arg *LocalBoothSpawnArg, data *LocalBoothSpawnData) error
+	Spawn(self go_atomos.AtomSelf, arg *LocalBoothSpawnArg, data *LocalBoothData) error
 	RemoteNotice(from go_atomos.Id, in *LocalRemoteNoticeReq) (*LocalRemoteNoticeResp, error)
 }
 
@@ -226,6 +226,57 @@ func SpawnLocalBooth(c go_atomos.CosmosNode, name string, arg *LocalBoothSpawnAr
 		return nil, err
 	}
 	if i, ok := id.(LocalBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
+////////////////////////////////////////////
+////////// Element: WormholeBooth //////////
+////////////////////////////////////////////
+//
+// 展示如何使用虫洞
+//
+
+const WormholeBoothName = "WormholeBooth"
+
+// WormholeBoothId is the interface of WormholeBooth atomos.
+
+type WormholeBoothId interface {
+	go_atomos.WormholeId
+}
+
+func GetWormholeBoothId(c go_atomos.CosmosNode, name string) (WormholeBoothId, error) {
+	ca, err := c.GetAtomId(WormholeBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(WormholeBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// WormholeBooth is the atomos implements of WormholeBooth atomos.
+
+type WormholeBooth interface {
+	go_atomos.Atom
+	SpawnWormhole(self go_atomos.WormholeSelf, arg *WormholeBoothSpawnArg, data *WormholeBoothData) error
+	SetWormholeConn(fromId go_atomos.Id, conn interface{}) error
+	SetWormSenderAndCloser()
+}
+
+func SpawnWormholeBooth(c go_atomos.CosmosNode, name string, arg *WormholeBoothSpawnArg) (WormholeBoothId, error) {
+	_, err := c.SpawnAtom(WormholeBoothName, name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId(WormholeBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(WormholeBoothId); ok {
 		return i, nil
 	}
 	return nil, go_atomos.ErrAtomType
@@ -482,7 +533,7 @@ func GetRemoteBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 ////////// Element: LocalBooth //////////
 /////////////////////////////////////////
 //
-// 远端的本地调用
+// 展示如何本地调用远端
 //
 
 type localBoothId struct {
@@ -506,7 +557,7 @@ func GetLocalBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementIn
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &localBoothId{id} }
 	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
 		argT, _ := arg.(*LocalBoothSpawnArg)
-		dataT, _ := data.(*LocalBoothSpawnData)
+		dataT, _ := data.(*LocalBoothData)
 		return a.(LocalBooth).Spawn(s, argT, dataT)
 	}
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
@@ -537,5 +588,42 @@ func GetLocalBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementIm
 			return a.RemoteNotice(from, req)
 		},
 	}
+	return elem
+}
+
+////////////////////////////////////////////
+////////// Element: WormholeBooth //////////
+////////////////////////////////////////////
+//
+// 展示如何使用虫洞
+//
+
+type wormholeBoothId struct {
+	go_atomos.Id
+	Daemon
+}
+
+func (c *wormholeBoothId) SetWormholeConn(from go_atomos.Id, conn interface{}) error {
+	return c.Cosmos().SetWormholeConn(from, c, conn)
+}
+
+func GetWormholeBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(WormholeBoothName, dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &wormholeBoothId{id} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		w, _ := s.(go_atomos.WormholeSelf)
+		argT, _ := arg.(*WormholeBoothSpawnArg)
+		dataT, _ := data.(*WormholeBoothData)
+		return a.(WormholeBooth).SpawnWormhole(w, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{}
+	return elem
+}
+
+func GetWormholeBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetWormholeBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{}
 	return elem
 }

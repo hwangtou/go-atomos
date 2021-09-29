@@ -100,9 +100,13 @@ func genIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 	g.Annotate(idName, service.Location)
 	g.P("type ", idName, " interface {")
-	g.P(atomosPackage.Ident("Id"))
+	if isWormhole(service.Methods) {
+		g.P(atomosPackage.Ident("WormholeId"))
+	} else {
+		g.P(atomosPackage.Ident("Id"))
+	}
 	for _, method := range service.Methods {
-		if method.GoName == "Spawn" {
+		if method.GoName == "Spawn" || method.GoName == "SpawnWormhole" {
 			continue
 		}
 		g.Annotate(idName+"."+method.GoName, method.Location)
@@ -119,6 +123,15 @@ func genIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 	g.P("}")
 	g.P()
+}
+
+func isWormhole(m []*protogen.Method) bool {
+	for _, method := range m {
+		if method.GoName == "SpawnWormhole" {
+			return true
+		}
+	}
+	return false
 }
 
 func genGetIdInterface(g *protogen.GeneratedFile, service *protogen.Service) {
@@ -148,7 +161,10 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 
 	// Client method implementations.
 	for _, method := range service.Methods {
-		if method.GoName == "Spawn" {
+		if method.GoName == "Spawn" || method.GoName == "SpawnWormhole" || method.GoName == "SetWormholeConn" {
+			if method.GoName == "SpawnWormhole" {
+				genSetWormholeConn(g, service)
+			}
 			continue
 		}
 		g.P("func (c *", noExport(idName), ") ", method.GoName+"(from ", atomosPackage.Ident("Id"),
@@ -162,6 +178,15 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("}")
 		g.P()
 	}
+}
+
+func genSetWormholeConn(g *protogen.GeneratedFile, service *protogen.Service) {
+	idName := service.GoName + "Id"
+	g.P("func (c *", noExport(idName), ") SetWormholeConn(from ", atomosPackage.Ident("Id"),
+		", conn interface{}) error {")
+	g.P("return c.Cosmos().SetWormholeConn(from, c, conn)")
+	g.P("}")
+	g.P()
 }
 
 func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
@@ -185,10 +210,16 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
 		}
-		if method.GoName == "Spawn" {
+		switch method.GoName {
+		case "Spawn":
 			spawnSign(g, method)
 			spawnArgTypeName = "*" + g.QualifiedGoIdent(method.Input.GoIdent)
-		} else {
+		case "SpawnWormhole":
+			spawnSign(g, method)
+			setConnSign(g, method)
+			spawnArgTypeName = "*" + g.QualifiedGoIdent(method.Input.GoIdent)
+		case "SetWormholeConn":
+		default:
 			methodSign(g, method)
 		}
 	}
@@ -218,17 +249,21 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper("), elementName, "Name, dev)")
 	g.P("elem.AtomIdConstructor = func(id ", atomIdName, ") ", atomIdName, " { return &", noExport(idName), "{id} }")
 	for _, method := range service.Methods {
-		if method.GoName != "Spawn" {
+		if method.GoName != "Spawn" && method.GoName != "SpawnWormhole" {
 			continue
 		}
 		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelf"), ", a ", atomosPackage.Ident("Atom"), ", arg, data ", protobufPackage.Ident("Message"), ") error {")
 		g.P("argT, _ := arg.(*", method.Input.GoIdent, "); dataT, _ := data.(*", method.Output.GoIdent, ")")
-		g.P("return a.(", elementName, ").Spawn(s, argT, dataT)")
+		if isWormhole(service.Methods) {
+			g.P("return a.(", elementName, ").SpawnWormhole(s, argT, dataT)")
+		} else {
+			g.P("return a.(", elementName, ").Spawn(s, argT, dataT)")
+		}
 		g.P("}")
 	}
 	g.P("elem.Config.Messages = map[string]*", atomosPackage.Ident("AtomMessageConfig"), "{")
 	for _, method := range service.Methods {
-		if method.GoName == "Spawn" {
+		if method.GoName == "Spawn" || method.GoName == "SpawnWormhole" || method.GoName == "SetWormholeConn" {
 			continue
 		}
 		g.P("\"", method.GoName, "\": ", atomosPackage.Ident("NewAtomCallConfig"), "(&", method.Input.GoIdent, "{}, &", method.Output.GoIdent, "{}),")
@@ -236,7 +271,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("}")
 	g.P("elem.AtomMessages = map[string]*", atomosPackage.Ident("ElementAtomMessage"), "{")
 	for _, method := range service.Methods {
-		if method.GoName == "Spawn" {
+		if method.GoName == "Spawn" || method.GoName == "SpawnWormhole" || method.GoName == "SetWormholeConn" {
 			continue
 		}
 		g.P("\"", method.GoName, "\": {")
@@ -255,7 +290,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("elem.Interface = Get", interfaceName, "(dev)")
 	g.P("elem.AtomHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
 	for _, method := range service.Methods {
-		if method.GoName == "Spawn" {
+		if method.GoName == "Spawn" || method.GoName == "SpawnWormhole" || method.GoName == "SetWormholeConn" {
 			continue
 		}
 		g.P("\"", method.GoName, "\": func(from ", atomosPackage.Ident("Id"), ", to ", atomosPackage.Ident("Atom"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", error) {")
@@ -278,6 +313,10 @@ func spawnSign(g *protogen.GeneratedFile, method *protogen.Method) {
 		", arg *", g.QualifiedGoIdent(method.Input.GoIdent),
 		", data *", g.QualifiedGoIdent(method.Output.GoIdent),
 		") error")
+}
+
+func setConnSign(g *protogen.GeneratedFile, method *protogen.Method) {
+	g.P("SetWormholeConn(fromId ", atomosPackage.Ident("Id"), ", conn interface{}) error")
 }
 
 func methodSign(g *protogen.GeneratedFile, method *protogen.Method) {

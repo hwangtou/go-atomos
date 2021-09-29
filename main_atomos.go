@@ -43,6 +43,23 @@ type MainAtom interface {
 	AtomSelf
 }
 
+type WormholeDaemon interface {
+	// GoRoutine
+	ReadLoop() error
+	WormholeHandler
+}
+
+type WormholeHandler interface {
+	// Call by user
+	Write([]byte) error
+	Close() error
+}
+
+type WormholeMainId interface {
+	MainId
+	DaemonWormhole(run WormholeDaemon) WormholeClosable
+}
+
 // Main Element Develop
 
 func newMainElement(self *CosmosSelf) *ElementLocal {
@@ -131,6 +148,12 @@ func (m *mainAtom) CustomizeConfig(name string, p proto.Message) error {
 		return err
 	}
 	return nil
+}
+
+type WormholeRun func()
+type WormholeClosable func()
+
+func (m *mainAtom) DaemonWormhole(run WormholeRun) WormholeClosable {
 }
 
 func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
