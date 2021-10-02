@@ -94,7 +94,6 @@ message LocalRemoteNoticeResp {}
 
 // 虫洞
 service WormholeBooth {
-  rpc Spawn (WormholeBoothSpawnArg) returns (WormholeBoothData) {}
   rpc SpawnWormhole (WormholeBoothSpawnArg) returns (WormholeBoothData) {}
 }
 message WormholeBoothSpawnArg {}

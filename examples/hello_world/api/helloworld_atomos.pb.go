@@ -600,18 +600,6 @@ type wormholeBoothId struct {
 	go_atomos.WormholeId
 }
 
-func (c *wormholeBoothId) SpawnWormhole(from go_atomos.WormholeId, in *WormholeBoothSpawnArg) (*WormholeBoothData, error) {
-	r, err := c.Cosmos().MessageAtom(from, c, "SpawnWormhole", in)
-	if r == nil {
-		return nil, err
-	}
-	reply, ok := r.(*WormholeBoothData)
-	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
-	}
-	return reply, nil
-}
-
 func GetWormholeBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(WormholeBoothName, dev)
 	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &wormholeBoothId{id.(go_atomos.WormholeId)} }
