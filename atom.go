@@ -116,3 +116,37 @@ type AtomSelf interface {
 	// Atom Tasks.
 	Task() *atomTasksManager
 }
+
+//
+// Wormhole
+//
+
+// WormholeAtom，支持WormholeAtom的Atom，可以得到Wormhole的支持。
+// Implement WormholeAtom interface to gain wormhole support.
+type WormholeAtom interface {
+	Atom
+	AcceptWorm(control WormholeControl) error
+	CloseWorm(control WormholeControl)
+}
+
+// WormholeId，是Id接口的延伸，提供向WormholeAtom发送Wormhole的可能。
+// Extend of Id, it lets send wormhole to WormholeAtom become possible.
+type WormholeId interface {
+	Id
+	Accept(daemon WormholeDaemon) error
+}
+
+// WormholeDaemon，通常包装着wormhole（真实网络连接）。负责接受信息并处理，并提供操作接口。
+// WormholeDaemon generally used to wrap the real connection. It handles message processing,
+// and provides operating methods.
+type WormholeDaemon interface {
+	Daemon(AtomSelf) error
+	WormholeControl
+}
+
+// WormholeControl，向WormholeAtom提供发送和关闭接口。
+// WormholeControl provides Send and Close to WormholeAtom.
+type WormholeControl interface {
+	Send([]byte) error
+	Close(isKickByNew bool) error
+}

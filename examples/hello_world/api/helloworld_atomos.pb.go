@@ -231,6 +231,55 @@ func SpawnLocalBooth(c go_atomos.CosmosNode, name string, arg *LocalBoothSpawnAr
 	return nil, go_atomos.ErrAtomType
 }
 
+////////////////////////////////////////////
+////////// Element: WormholeBooth //////////
+////////////////////////////////////////////
+//
+// 虫洞
+//
+
+const WormholeBoothName = "WormholeBooth"
+
+// WormholeBoothId is the interface of WormholeBooth atomos.
+
+type WormholeBoothId interface {
+	go_atomos.WormholeId
+}
+
+func GetWormholeBoothId(c go_atomos.CosmosNode, name string) (WormholeBoothId, error) {
+	ca, err := c.GetAtomId(WormholeBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := ca.(WormholeBoothId); ok {
+		return c, nil
+	} else {
+		return nil, go_atomos.ErrAtomType
+	}
+}
+
+// WormholeBooth is the atomos implements of WormholeBooth atomos.
+
+type WormholeBooth interface {
+	go_atomos.WormholeAtom
+	Spawn(self go_atomos.AtomSelf, arg *WormholeBoothSpawnArg, data *WormholeBoothData) error
+}
+
+func SpawnWormholeBooth(c go_atomos.CosmosNode, name string, arg *WormholeBoothSpawnArg) (WormholeBoothId, error) {
+	_, err := c.SpawnAtom(WormholeBoothName, name, arg)
+	if err != nil {
+		return nil, err
+	}
+	id, err := c.GetAtomId(WormholeBoothName, name)
+	if err != nil {
+		return nil, err
+	}
+	if i, ok := id.(WormholeBoothId); ok {
+		return i, nil
+	}
+	return nil, go_atomos.ErrAtomType
+}
+
 //////
 //// IMPLEMENTATIONS
 //
@@ -537,5 +586,48 @@ func GetLocalBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementIm
 			return a.RemoteNotice(from, req)
 		},
 	}
+	return elem
+}
+
+////////////////////////////////////////////
+////////// Element: WormholeBooth //////////
+////////////////////////////////////////////
+//
+// 虫洞
+//
+
+type wormholeBoothId struct {
+	go_atomos.WormholeId
+}
+
+func (c *wormholeBoothId) SpawnWormhole(from go_atomos.WormholeId, in *WormholeBoothSpawnArg) (*WormholeBoothData, error) {
+	r, err := c.Cosmos().MessageAtom(from, c, "SpawnWormhole", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*WormholeBoothData)
+	if !ok {
+		return nil, go_atomos.ErrAtomMessageReplyType
+	}
+	return reply, nil
+}
+
+func GetWormholeBoothInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
+	elem := go_atomos.NewInterfaceFromDeveloper(WormholeBoothName, dev)
+	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &wormholeBoothId{id.(go_atomos.WormholeId)} }
+	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+		argT, _ := arg.(*WormholeBoothSpawnArg)
+		dataT, _ := data.(*WormholeBoothData)
+		return a.(WormholeBooth).Spawn(s, argT, dataT)
+	}
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{}
+	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{}
+	return elem
+}
+
+func GetWormholeBoothImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
+	elem := go_atomos.NewImplementationFromDeveloper(dev)
+	elem.Interface = GetWormholeBoothInterface(dev)
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{}
 	return elem
 }

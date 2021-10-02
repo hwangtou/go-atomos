@@ -80,5 +80,8 @@ func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err error) {
 }
 
 func (x *AtomId) str() string {
+	if x == nil {
+		return "InvalidAtomId"
+	}
 	return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Name)
 }

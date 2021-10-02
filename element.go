@@ -77,6 +77,10 @@ type ElementDeveloper interface {
 	AtomCanKill(Id) bool
 }
 
+type ElementWormholeDeveloper interface {
+	Daemon()
+}
+
 type ElementPersistence interface {
 	// Atom读取
 	// Get Atom.

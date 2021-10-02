@@ -49,6 +49,7 @@ var (
 	ErrAtomCannotSpawn  = errors.New("atom cannot spawn")
 	ErrAtomIsNotRunning = errors.New("atom is not running")
 	ErrAtomCannotKill   = errors.New("atom cannot be killed")
+	ErrNotWormhole      = errors.New("atom is not a wormhole")
 
 	ErrAtomType             = errors.New("atom type error")
 	ErrAtomMessageAtomType  = errors.New("atom message atom type error")
@@ -244,6 +245,10 @@ func (a *AtomCore) onReceive(mail *Mail) {
 		err := a.handleReload(am)
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushReloadMail.
+	case AtomMailWormhole:
+		err := a.handleWormhole(am.wormholeAction, am.wormhole)
+		am.sendReply(nil, err)
+		// Mail dealloc in AtomCore.pushWormholeMail.
 	default:
 		a.element.cosmos.logFatal("Atom.Mail: Unknown message type, type=%v,mail=%+v", am.mailType, am)
 	}
@@ -265,6 +270,9 @@ func (a *AtomCore) onPanic(mail *Mail, trace string) {
 	case AtomMailReload:
 		am.sendReply(nil, errMsg)
 		// Mail then will be dealloc in AtomCore.pushReloadMail.
+	case AtomMailWormhole:
+		am.sendReply(nil, errMsg)
+		// Mail then will be dealloc in AtomCore.pushWormholeMail.
 	}
 }
 
@@ -302,6 +310,9 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 		case AtomMailReload:
 			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
 			// Mail dealloc in AtomCore.pushReloadMail.
+		case AtomMailWormhole:
+			remainAtomMail.sendReply(nil, ErrMailBoxClosed)
+		// Mail dealloc in AtomCore.pushWormholeMail.
 		default:
 			a.element.cosmos.logFatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
 				remainAtomMail.mailType, remainAtomMail)
@@ -450,6 +461,71 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 			a.atomId, a.version, a.instance, data)
 		return err
 	}
+	return nil
+}
+
+// Wormhole Mail
+
+const (
+	// 接受新的wormhole
+	wormholeAccept = iota
+
+	// 关闭旧的Wormhole
+	wormholeClose
+)
+
+// WormholeElement向WormholeAtom发送WormholeDaemon。
+// WormholeElement sends WormholeDaemon to WormholeAtom.
+func (a *AtomCore) pushWormholeMail(action int, wormhole WormholeDaemon) error {
+	am := allocAtomMail()
+	initWormholeMail(am, action, wormhole)
+	if ok := a.mailbox.PushHead(am.Mail); !ok {
+		return ErrAtomIsNotRunning
+	}
+	_, err := am.waitReply()
+	deallocAtomMail(am)
+	return err
+}
+
+func (a *AtomCore) handleWormhole(action int, wormhole WormholeDaemon) error {
+	a.setBusy()
+	defer a.setWaiting()
+
+	wa, ok := a.instance.(WormholeAtom)
+	if !ok {
+		return ErrNotWormhole
+	}
+	var err error
+	switch action {
+	case wormholeAccept:
+		err = wa.AcceptWorm(wormhole)
+	case wormholeClose:
+		wa.CloseWorm(wormhole)
+	default:
+		err = ErrAtomMessageArgType
+	}
+	return err
+}
+
+// WormholeId Implementation.
+func (a *AtomCore) Accept(daemon WormholeDaemon) error {
+	if err := a.pushWormholeMail(wormholeAccept, daemon); err != nil {
+		return err
+	}
+	// Daemon read until return.
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				a.element.cosmos.logFatal("Atom.Wormhole: Panic, id=%+V,reason=%s", a.atomId.str(), r)
+			}
+		}()
+		a.element.cosmos.logInfo("Atom.Wormhole: Daemon, id=%+V", a.atomId.str())
+		if err := daemon.Daemon(a); err != nil {
+			if err = a.pushWormholeMail(wormholeClose, daemon); err != nil {
+				a.element.cosmos.logError("Atom.Wormhole: Daemon close error, id=%+V,err=%s", a.atomId.str(), err)
+			}
+		}
+	}()
 	return nil
 }
 

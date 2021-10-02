@@ -4,6 +4,7 @@ import (
 	atomos "github.com/hwangtou/go-atomos"
 	"github.com/hwangtou/go-atomos/examples/hello_world/api"
 	"github.com/hwangtou/go-atomos/examples/hello_world/element"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func main() {
@@ -14,6 +15,8 @@ func main() {
 	runnable.AddElementInterface(api.GetRemoteBoothInterface(&element.RemoteBoothElement{}))
 	// LocalBooth
 	runnable.AddElementImplementation(api.GetLocalBoothImplement(&element.LocalBoothElement{}))
+	// WormholeBooth
+	runnable.AddElementImplementation(api.GetWormholeBoothImplement(&element.WormholeBoothElement{}))
 	runnable.SetScript(scriptHelloWorld)
 	config := &atomos.Config{
 		Node:     api.NodeHelloWorld,
@@ -27,6 +30,8 @@ func main() {
 		EnableServer: &atomos.RemoteServerConfig{
 			Host: api.NodeHost,
 			Port: api.NodeHelloPort,
+		},
+		Customize: map[string]*anypb.Any{
 		},
 	}
 	// Cycle
@@ -43,7 +48,8 @@ func main() {
 
 func scriptHelloWorld(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killNoticeChannel chan bool) {
 	//demoTaskBooth(cosmos, mainId, killNoticeChannel)
-	demoRemoteBoothLocal(cosmos, mainId, killNoticeChannel)
+	//demoRemoteBoothLocal(cosmos, mainId, killNoticeChannel)
+	demoWormholeBoothLocal(cosmos, mainId, killNoticeChannel)
 }
 
 // TaskBooth
@@ -81,4 +87,8 @@ func demoRemoteBoothLocal(cosmos *atomos.CosmosSelf, mainId atomos.MainId, killN
 		panic(err)
 	}
 	<-killNoticeChannel
+}
+
+func demoWormholeBoothLocal(cosmos *atomos.CosmosSelf, id atomos.MainId, channel chan bool) {
+	<-channel
 }

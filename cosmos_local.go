@@ -114,7 +114,8 @@ func (c *CosmosLocal) initRunnable(self *CosmosSelf, runnable CosmosRunnable) er
 					self.logFatal("Cosmos.Init: Daemon wormhole error, name=%s,err=%v", n, r)
 				}
 			}()
-			if w, ok := e.current.Developer.(WormholeDeveloper); ok {
+			if w, ok := e.current.Developer.(ElementWormholeDeveloper); ok {
+				self.logInfo("Cosmos.Init: Daemon wormhole, name=%s", n)
 				w.Daemon()
 			}
 		}(name, elem)

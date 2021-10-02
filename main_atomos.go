@@ -123,7 +123,7 @@ func (m *mainAtom) CustomizeConfig(name string, p proto.Message) error {
 	if customize == nil {
 		return errors.New("customize config has not defined")
 	}
-	whAny, has := customize["Wormhole"]
+	whAny, has := customize[name]
 	if !has {
 		return errors.New("customize config key has not defined")
 	}

@@ -39,6 +39,8 @@ const (
 	// 重载邮件，用于升级Atom的ElementLocal引用，以实现热更。
 	// Reload Mail, for upgrading ElementLocal reference of an atom, to support hot-reload feature.
 	AtomMailReload AtomMailType = 3
+
+	AtomMailWormhole AtomMailType = 4
 )
 
 // Atom邮件
@@ -70,6 +72,9 @@ type atomMail struct {
 	// 需要升级的Element。
 	// Upgrade Element.
 	upgradeVersion uint64
+
+	wormholeAction int
+	wormhole       WormholeDaemon
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
@@ -149,6 +154,20 @@ func initReloadMail(am *atomMail, version uint64) {
 	am.from = nil
 	am.name = ""
 	am.upgradeVersion = version
+	am.mailReply = mailReply{}
+	am.waitCh = make(chan *mailReply, 1)
+}
+
+func initWormholeMail(am *atomMail, action int, wormhole WormholeDaemon) {
+	am.Mail.id = DefaultMailId
+	am.Mail.action = MailActionRun
+	am.mailType = AtomMailWormhole
+	am.from = nil
+	am.name = ""
+	am.arg = nil
+	am.wormholeAction = action
+	am.wormhole = wormhole
+	am.upgradeVersion = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
