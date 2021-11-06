@@ -88,7 +88,7 @@ func (r *cosmosRemote) Receive(conn ConnDelegate, buf []byte) error {
 			r.elements[name] = &ElementRemote{
 				cosmos:    r,
 				elemInter: ei,
-				cachedId:  map[string]Id{},
+				cachedId:  map[string]*atomIdRemote{},
 			}
 			r.helper.self.logInfo("Remote.Conn: Read element added, element=%s", name)
 		}

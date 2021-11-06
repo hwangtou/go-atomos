@@ -24,7 +24,7 @@ type MainId interface {
 
 	// Atom任务
 	// Atom Tasks.
-	Task() *atomTasksManager
+	Task() TaskManager
 
 	// Connect to remote CosmosNode.
 	Connect(name, addr string) (CosmosNode, error)

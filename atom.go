@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"time"
 )
 
 //
@@ -62,6 +63,10 @@ type Atom interface {
 // Id，是Atom的类似句柄的对象。
 // Id, an instance that similar to file descriptor of the Atom.
 type Id interface {
+	// 释放Id的引用计数
+	// Release reference count of Id.
+	Release()
+
 	// Atom所在Cosmos节点。
 	// Cosmos Node of the Atom.
 	Cosmos() CosmosNode
@@ -114,8 +119,23 @@ type AtomSelf interface {
 
 	// Atom任务
 	// Atom Tasks.
-	Task() *atomTasksManager
+	Task() TaskManager
 }
+
+type TaskManager interface {
+	Append(fn interface{}, msg proto.Message) (id uint64, err error)
+	AddAfter(d time.Duration, fn interface{}, msg proto.Message) (id uint64, err error)
+	Cancel(id uint64) (CancelledTask, error)
+}
+
+type ParallelSelf interface {
+	Id
+	CosmosSelf() *CosmosSelf
+	KillSelf()
+	Log() *atomLogsManager
+}
+
+type ParallelFn func(self ParallelSelf, message proto.Message, id... Id)
 
 //
 // Wormhole

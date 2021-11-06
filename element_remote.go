@@ -26,7 +26,7 @@ type ElementRemote struct {
 
 	// 该Element所有Id的缓存容器。
 	// Container of all cached Id.
-	cachedId map[string]Id
+	cachedId map[string]*atomIdRemote
 }
 
 func newPrivateElementInterface(name string) *ElementInterface {
@@ -55,38 +55,38 @@ func (e *ElementRemote) GetAtomId(name string) (Id, error) {
 	e.RLock()
 	id, has := e.cachedId[name]
 	e.RUnlock()
-	if !has {
-		req := &CosmosRemoteGetAtomIdReq{
-			Element: e.elemInter.Config.Name,
-			Name:    name,
-		}
-		resp := &CosmosRemoteGetAtomIdResp{}
-		reqBuf, err := proto.Marshal(req)
-		if err != nil {
-			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf marshal error, req=%+v,err=%v",
-				req, err)
-			return nil, err
-		}
-		respBuf, err := e.cosmos.request(RemoteUriAtomId, reqBuf)
-		if err != nil {
-			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Request error, req=%+v,err=%v",
-				req, err)
-			return nil, err
-		}
-		if err = proto.Unmarshal(respBuf, resp); err != nil {
-			e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf unmarshal error, req=%+v,err=%v",
-				req, err)
-			return nil, err
-		}
-		if resp.Error != "" {
-			return nil, errors.New(resp.Error)
-		}
-		if !resp.Has {
-			return nil, ErrAtomNotFound
-		}
-		id = e.getOrCreateAtomId(name)
+	if has {
+		return id, nil
 	}
-	return id, nil
+	req := &CosmosRemoteGetAtomIdReq{
+		Element: e.elemInter.Config.Name,
+		Name:    name,
+	}
+	resp := &CosmosRemoteGetAtomIdResp{}
+	reqBuf, err := proto.Marshal(req)
+	if err != nil {
+		e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf marshal error, req=%+v,err=%v",
+			req, err)
+		return nil, err
+	}
+	respBuf, err := e.cosmos.request(RemoteUriAtomId, reqBuf)
+	if err != nil {
+		e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Request error, req=%+v,err=%v",
+			req, err)
+		return nil, err
+	}
+	if err = proto.Unmarshal(respBuf, resp); err != nil {
+		e.cosmos.helper.self.logFatal("Element.Remote: GetAtomId Protobuf unmarshal error, req=%+v,err=%v",
+			req, err)
+		return nil, err
+	}
+	if resp.Error != "" {
+		return nil, errors.New(resp.Error)
+	}
+	if !resp.Has {
+		return nil, ErrAtomNotFound
+	}
+	return e.getOrCreateAtomId(name), nil
 }
 
 func (e *ElementRemote) SpawnAtom(_ string, _ proto.Message) (*AtomCore, error) {
@@ -150,24 +150,26 @@ func (e *ElementRemote) enableRemote() bool {
 	return e.cosmos.enableRemote != nil
 }
 
-func (e *ElementRemote) getOrCreateAtomId(name string) Id {
+func (e *ElementRemote) getOrCreateAtomId(name string) (id Id) {
 	e.Lock()
 	defer e.Unlock()
-	id, has := e.cachedId[name]
+	c, has := e.cachedId[name]
 	if has {
-		return id
+		c.count += 1
+		return c
 	}
-	id = &atomIdRemote{
+	c = &atomIdRemote{
 		cosmosNode: e.cosmos,
 		element:    e,
 		name:       name,
 		version:    e.elemInter.Config.Version,
+		count:      1,
 		created:    time.Now(),
 	}
 	if e.elemInter != nil {
-		id = e.elemInter.AtomIdConstructor(id)
+		id = e.elemInter.AtomIdConstructor(c)
 	}
-	e.cachedId[name] = id
+	e.cachedId[name] = c
 	return id
 }
 
@@ -178,7 +180,18 @@ type atomIdRemote struct {
 	element    *ElementRemote
 	name       string
 	version    uint64
+	count      int
 	created    time.Time
+}
+
+func (a *atomIdRemote) Release() {
+	a.count -= 1
+	if a.count < 0 {
+		a.cosmosNode.helper.self.logWarn("Remote Id release overtime")
+	}
+	if a.count == 0 {
+		a.tryDelete()
+	}
 }
 
 func (a *atomIdRemote) Cosmos() CosmosNode {
@@ -203,4 +216,18 @@ func (a *atomIdRemote) Kill(from Id) error {
 
 func (a *atomIdRemote) getLocalAtom() *AtomCore {
 	return nil
+}
+
+func (a *atomIdRemote) tryDelete() {
+	a.element.Lock()
+	if a.count > 0 {
+		a.element.Unlock()
+		return
+	}
+	// Mail dealloc in Element.killingAtom
+	_, toRelease := a.element.cachedId[a.name]
+	if toRelease {
+		delete(a.element.cachedId, a.name)
+	}
+	a.element.Unlock()
 }

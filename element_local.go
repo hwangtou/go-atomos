@@ -109,8 +109,9 @@ func (e *ElementLocal) GetName() string {
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {
-	id, err := e.getAtomId(name)
+	id, a, err := e.getAtomId(name)
 	if err == nil {
+		a.count += 1
 		return id, nil
 	}
 	if err != ErrAtomNotFound {
@@ -121,7 +122,7 @@ func (e *ElementLocal) GetAtomId(name string) (Id, error) {
 	if err != nil {
 		return nil, err
 	}
-	a, err := e.lockAtomName(name)
+	a, err = e.lockAtomName(name)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +133,7 @@ func (e *ElementLocal) GetAtomId(name string) (Id, error) {
 		delete(e.atoms, name)
 		e.mutex.Unlock()
 	}
+	a.count += 1
 	return ac, nil
 }
 
@@ -200,18 +202,18 @@ func (e *ElementLocal) lockAtomName(name string) (*AtomCore, error) {
 	return a, nil
 }
 
-func (e *ElementLocal) getAtomId(name string) (Id, error) {
+func (e *ElementLocal) getAtomId(name string) (Id, *AtomCore, error) {
 	e.mutex.RLock()
 	if !e.loaded {
 		e.mutex.RUnlock()
-		return nil, ErrElementNotLoaded
+		return nil, nil, ErrElementNotLoaded
 	}
 	a, has := e.atoms[name]
 	e.mutex.RUnlock()
 	if !has {
-		return nil, ErrAtomNotFound
+		return nil, nil, ErrAtomNotFound
 	}
-	return e.implements[a.version].Interface.AtomIdConstructor(a), nil
+	return e.implements[a.version].Interface.AtomIdConstructor(a), a, nil
 }
 
 func (e *ElementLocal) spawningAtomMailbox(a *AtomCore, arg, data proto.Message) (*AtomCore, error) {

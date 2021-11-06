@@ -162,7 +162,7 @@ func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request)
 	}
 	element, has := s.helper.self.local.elements[req.Element]
 	if has {
-		a, err := element.getAtomId(req.Name)
+		a, _, err := element.getAtomId(req.Name)
 		if err != nil {
 			resp.Error = err.Error()
 		} else {

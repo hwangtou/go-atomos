@@ -103,6 +103,10 @@ type AtomCore struct {
 	// Atom信息的protobuf对象，以便于Atom信息的序列化。
 	// Protobuf instance of Atom information, for a convenience serialization of Atom information.
 	atomId *AtomId
+
+	// 引用计数，所以任何GetId操作之后都需要Release。
+	// Reference count, thus we have to Release any Id after GetId.
+	count int
 }
 
 // Atom对象的内存池
@@ -124,6 +128,16 @@ var atomsPool = sync.Pool{
 // With Id, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
 // then the AtomCanKill method judge kill it or not.
 // AtomCore implements Id interface directly, so local Id is able to use AtomCore reference directly.
+
+func (a *AtomCore) Release() {
+	a.count -= 1
+	if a.count < 0 {
+		a.log.Warn("Release overtime")
+	}
+	if a.count == 0 {
+		a.tryDelete()
+	}
+}
 
 func (a *AtomCore) Cosmos() CosmosNode {
 	return a.element.cosmos.local
@@ -183,8 +197,19 @@ func (a *AtomCore) Log() *atomLogsManager {
 	return &a.log
 }
 
-func (a *AtomCore) Task() *atomTasksManager {
+func (a *AtomCore) Task() TaskManager {
 	return &a.task
+}
+
+func (a *AtomCore) Parallel(fn ParallelFn, msg proto.Message, ids ...Id) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				a.element.cosmos.logFatal("Atom.Parallel: Panic, id=%+V,reason=%s", a.atomId.str(), r)
+			}
+		}()
+		fn(a, msg, ids...)
+	}()
 }
 
 // 内部实现
@@ -283,6 +308,7 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 	defer a.task.stopUnlock()
 
 	a.setStopping()
+	defer a.tryDelete()
 	defer a.setHalt()
 
 	killAtomMail := killMail.Content.(*atomMail)
@@ -322,10 +348,23 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 	// Handle Kill and Reply Kill.
 	err := a.handleKill(killAtomMail, cancels)
 	killAtomMail.sendReply(nil, err)
-	// Mail dealloc in Element.killingAtom
+}
+
+func (a *AtomCore) tryDelete() {
 	a.element.mutex.Lock()
-	delete(a.element.atoms, a.name)
+	if a.count > 0 || a.state != AtomHalt {
+		a.element.mutex.Unlock()
+		return
+	}
+	// Mail dealloc in Element.killingAtom
+	_, toRelease := a.element.atoms[a.name]
+	if toRelease {
+		delete(a.element.atoms, a.name)
+	}
 	a.element.mutex.Unlock()
+	if !toRelease {
+		return
+	}
 	releaseAtom(a)
 	deallocAtom(a)
 }
