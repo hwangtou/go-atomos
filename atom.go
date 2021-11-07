@@ -21,6 +21,8 @@ type Atom interface {
 	Halt(from Id, cancels map[uint64]CancelledTask) (saveData proto.Message)
 }
 
+const RunnableName = "AtomosRunnable"
+
 //// 可以被重载的Atom类型
 //// Reloadable Atom type.
 //type AtomReloadable interface {
@@ -135,7 +137,7 @@ type ParallelSelf interface {
 	Log() *atomLogsManager
 }
 
-type ParallelFn func(self ParallelSelf, message proto.Message, id... Id)
+type ParallelFn func(self ParallelSelf, message proto.Message, id ...Id)
 
 //
 // Wormhole
@@ -160,6 +162,8 @@ type WormholeId interface {
 // WormholeDaemon generally used to wrap the real connection. It handles message processing,
 // and provides operating methods.
 type WormholeDaemon interface {
+	// 加载&卸载
+	// Loaded & Unloaded
 	Daemon(AtomSelf) error
 	WormholeControl
 }

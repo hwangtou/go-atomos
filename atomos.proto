@@ -38,7 +38,7 @@ message Config {
   LogLevel log_level = 3;
   CertConfig enable_cert = 4;
   RemoteServerConfig enable_server = 5;
-  map<string, google.protobuf.Any> customize = 6;
+  map<string, string> customize = 6;
 }
 
 message RemoteServerConfig {

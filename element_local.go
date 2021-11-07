@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"container/list"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -12,7 +13,10 @@ import (
 // Implementation of local Element.
 type ElementLocal struct {
 	// Lock.
-	mutex sync.RWMutex
+	lock sync.RWMutex
+
+	// Available or Upgrading
+	avail bool
 
 	// CosmosSelf引用。
 	// Reference to CosmosSelf.
@@ -20,7 +24,7 @@ type ElementLocal struct {
 
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
-	current *ElementImplementation
+	current, upgrading *ElementImplementation
 
 	// 所有添加过的不同版本的ElementImplementation的容器。
 	// Container of all added versions of ElementImplementation.
@@ -28,78 +32,155 @@ type ElementLocal struct {
 
 	// 该Element所有Atom的容器。
 	// Container of all atoms.
-	atoms map[string]*AtomCore
-
-	// Is loaded.
-	loaded bool
+	// 思考：要考虑在频繁变动的情景下，迭代不全的问题。
+	// 两种情景：更新&关闭。
+	atoms    map[string]*AtomCore
+	names    *list.List
+	upgrades int
 }
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(cosmosSelf *CosmosSelf, define *ElementImplementation) *ElementLocal {
-	elem := &ElementLocal{}
-	elem.cosmos = cosmosSelf
-	elem.current = define
-	elem.implements = map[uint64]*ElementImplementation{
-		define.Interface.Config.Version: define,
+func newElementLocal(cosmosSelf *CosmosSelf, atomInitNum int) *ElementLocal {
+	elem := &ElementLocal{
+		lock:       sync.RWMutex{},
+		avail:      false,
+		cosmos:     cosmosSelf,
+		current:    nil,
+		upgrading:  nil,
+		implements: map[uint64]*ElementImplementation{},
+		atoms:      make(map[string]*AtomCore, atomInitNum),
+		names:      list.New(),
 	}
-	elem.atoms = make(map[string]*AtomCore, define.Interface.Config.AtomInitNum)
 	return elem
+}
+
+// 加载
+func (e *ElementLocal) setInitDefine(define *ElementImplementation) error {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	e.avail = false
+	e.current = define
+	e.upgrading = nil
+	e.implements[define.Interface.Config.Version] = define
+	if wh, ok := define.Developer.(ElementLoadable); ok {
+		return wh.Load(e.cosmos.runtime.mainAtom, false)
+	}
+	return nil
+}
+
+func (e *ElementLocal) setUpgradeDefine(define *ElementImplementation) error {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	e.avail = false
+	e.upgrading = define
+	if wh, ok := define.Developer.(ElementLoadable); ok {
+		return wh.Load(e.cosmos.runtime.mainAtom, false)
+	}
+	return nil
+}
+
+func (e *ElementLocal) rollback(isUpgrade, loadFailed bool) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	if !loadFailed {
+		var dev ElementDeveloper
+		if e.upgrading != nil {
+			dev = e.upgrading.Developer
+		} else {
+			dev = e.current.Developer
+		}
+		if wh, ok := dev.(ElementLoadable); ok {
+			wh.Unload()
+		}
+	}
+	if isUpgrade {
+		e.avail = true
+		e.upgrading = nil
+	}
+}
+
+// For upgrading only.
+func (e *ElementLocal) commit(isUpgrade bool) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	e.avail = true
+	if isUpgrade {
+		e.current = e.upgrading
+		e.upgrading = nil
+		if _, has := e.implements[e.current.Interface.Config.Version]; !has {
+			e.implements[e.current.Interface.Config.Version] = e.current
+		}
+	}
 }
 
 // 重载Element，需要指定一个版本的ElementImplementation。
 // Reload element, specific version of ElementImplementation is needed.
-func (e *ElementLocal) reload(newDefine *ElementImplementation) error {
-	e.current = newDefine
-	e.implements[newDefine.Interface.Config.Version] = newDefine
-	for name, atom := range e.atoms {
-		err := atom.pushReloadMail(newDefine.Interface.Config.Version)
-		if err != nil {
-			e.cosmos.logError("Element.Reload: Push reload failed, name=%s,err=%v", name, err)
-		}
+func (e *ElementLocal) pushUpgrade(upgradeCount int) {
+	e.lock.Lock()
+	atomNameList := make([]string, 0, e.names.Len())
+	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
+		atomNameList = append(atomNameList, nameElem.Value.(string))
 	}
-	return nil
-}
-
-// 加载
-func (e *ElementLocal) load() error {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-
-	if err := e.current.Developer.Load(e.cosmos.local.mainAtom); err != nil {
-		return err
-	}
-	e.loaded = true
-	return nil
-}
-
-func (e *ElementLocal) unload() error {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-
-	e.loaded = false
+	e.upgrades = upgradeCount
+	e.lock.Unlock()
 	wg := sync.WaitGroup{}
-	for atomName, atom := range e.atoms {
-		go func(atomName string, atom *AtomCore) {
-			wg.Add(1)
+	for _, name := range atomNameList {
+		wg.Add(1)
+		go func(name string) {
 			defer func() {
 				wg.Done()
 				if r := recover(); r != nil {
-					e.cosmos.logFatal("Element.Unload: Panic, name=%s,reason=%s", atomName, r)
+					e.cosmos.logFatal("Element.Reload: Panic, name=%s,reason=%s", name, r)
 				}
 			}()
-			e.cosmos.logInfo("Element.Unload: Kill atom, name=%s", atomName)
-			err := atom.Kill(e.cosmos.local.mainAtom)
-			if err != nil {
-				e.cosmos.logError("Element.Unload: Kill atom error, name=%s,err=%v", atomName, err)
+			e.lock.Lock()
+			atom, has := e.atoms[name]
+			e.lock.Unlock()
+			if !has {
+				return
 			}
-		}(atomName, atom)
+			e.cosmos.logInfo("Element.Reload: Reloading atom, name=%s", name)
+			err := atom.pushReloadMail(e.current, upgradeCount)
+			if err != nil {
+				e.cosmos.logError("Element.Reload: Push reload failed, name=%s,err=%v", name, err)
+			}
+		}(name)
 	}
 	wg.Wait()
+}
 
-	//e.cosmos = nil
-	//e.implements = nil
-	return nil
+func (e *ElementLocal) unload() {
+	e.lock.Lock()
+	atomNameList := make([]string, 0, e.names.Len())
+	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
+		atomNameList = append(atomNameList, nameElem.Value.(string))
+	}
+	e.lock.Unlock()
+	wg := sync.WaitGroup{}
+	for _, name := range atomNameList {
+		wg.Add(1)
+		go func(name string) {
+			defer func() {
+				wg.Done()
+				if r := recover(); r != nil {
+					e.cosmos.logFatal("Element.Unload: Panic, name=%s,reason=%s", name, r)
+				}
+			}()
+			e.lock.Lock()
+			atom, has := e.atoms[name]
+			e.lock.Unlock()
+			if !has {
+				return
+			}
+			e.cosmos.logInfo("Element.Unload: Kill atom, name=%s", name)
+			err := atom.pushKillMail(e.cosmos.runtime.mainAtom, true)
+			if err != nil {
+				e.cosmos.logError("Element.Unload: Kill atom error, name=%s,err=%v", name, err)
+			}
+		}(name)
+	}
+	wg.Wait()
 }
 
 // Local implementations of Element type.
@@ -109,51 +190,15 @@ func (e *ElementLocal) GetName() string {
 }
 
 func (e *ElementLocal) GetAtomId(name string) (Id, error) {
-	id, a, err := e.getAtomId(name)
-	if err == nil {
-		a.count += 1
-		return id, nil
-	}
-	if err != ErrAtomNotFound {
-		return nil, err
-	}
-	// Try to recover.
-	data, err := e.getAtomData(e.current, name)
+	atom, err := e.elementGetAtom(name)
 	if err != nil {
 		return nil, err
 	}
-	a, err = e.lockAtomName(name)
-	if err != nil {
-		return nil, err
-	}
-	// Try spawning.
-	ac, err := e.spawningAtomMailbox(a, nil, data)
-	if err != nil {
-		e.mutex.Lock()
-		delete(e.atoms, name)
-		e.mutex.Unlock()
-	}
-	a.count += 1
-	return ac, nil
+	return atom.id, nil
 }
 
 func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomCore, error) {
-	a, err := e.lockAtomName(name)
-	if err != nil {
-		return nil, err
-	}
-	// Try spawning.
-	data, err := e.getAtomData(a.element.implements[a.version], name)
-	if err != nil && err != ErrAtomNotFound {
-		return nil, err
-	}
-	ac, err := e.spawningAtomMailbox(a, arg, data)
-	if err != nil {
-		e.mutex.Lock()
-		delete(e.atoms, name)
-		e.mutex.Unlock()
-	}
-	return ac, nil
+	return e.elementCreateAtom(name, arg)
 }
 
 func (e *ElementLocal) MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
@@ -180,79 +225,98 @@ func (e *ElementLocal) KillAtom(fromId, toId Id) error {
 
 // Internal
 
-func (e *ElementLocal) lockAtomName(name string) (*AtomCore, error) {
-	inst := e.current.Developer.AtomConstructor()
-	// Alloc an atom and try setting.
-	a := allocAtom()
-	initAtom(a, e, name, inst)
-	e.mutex.Lock()
-	if !e.loaded {
-		e.mutex.Unlock()
-		deallocAtom(a)
-		return nil, ErrElementNotLoaded
-	}
-	if _, has := e.atoms[name]; has {
-		e.mutex.Unlock()
-		deallocAtom(a)
-		return nil, ErrAtomExists
-	}
-	a.state = AtomSpawning
-	e.atoms[name] = a
-	e.mutex.Unlock()
-	return a, nil
-}
-
-func (e *ElementLocal) getAtomId(name string) (Id, *AtomCore, error) {
-	e.mutex.RLock()
-	if !e.loaded {
-		e.mutex.RUnlock()
-		return nil, nil, ErrElementNotLoaded
-	}
-	a, has := e.atoms[name]
-	e.mutex.RUnlock()
-	if !has {
-		return nil, nil, ErrAtomNotFound
-	}
-	return e.implements[a.version].Interface.AtomIdConstructor(a), a, nil
-}
-
-func (e *ElementLocal) spawningAtomMailbox(a *AtomCore, arg, data proto.Message) (*AtomCore, error) {
-	var err error
-	initMailBox(a)
-	a.mailbox.Start()
-	impl := a.element.implements[a.version]
-	if err = impl.Interface.AtomSpawner(a, a.instance, arg, data); err != nil {
-		a.setHalt()
-		DelMailBox(a.mailbox)
-		a.mailbox.Stop()
-		return nil, err
-	}
-	a.setWaiting()
-	return a, nil
-}
-
-func (e *ElementLocal) getAtomData(impl *ElementImplementation, name string) (proto.Message, error) {
-	p := impl.Developer.Persistence()
-	if p == nil {
+func (e *ElementLocal) elementGetAtom(name string) (*AtomCore, error) {
+	e.lock.RLock()
+	current := e.current
+	atom, hasAtom := e.atoms[name]
+	e.lock.RUnlock()
+	if current.Developer.Persistence() == nil {
+		if hasAtom && atom.state > AtomHalt {
+			atom.count += 1
+			return atom, nil
+		}
 		return nil, ErrAtomNotFound
 	}
-	data, err := p.GetAtomData(name)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return e.elementCreateAtom(name, nil)
 }
 
-func (e *ElementLocal) getMessageHandler(name string, version uint64) MessageHandler {
-	e.mutex.RLock()
-	if !e.loaded {
-		e.mutex.RUnlock()
-		return nil
-	}
-	c, has := e.implements[version].AtomHandlers[name]
-	e.mutex.RUnlock()
+func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomCore, error) {
+	e.lock.RLock()
+	current, upgrade := e.current, e.upgrades
+	e.lock.RUnlock()
+	// Alloc an atom and try setting.
+	atom := allocAtom()
+	initAtom(atom, e, name, current, upgrade)
+	// If not exist, lock and set an new one.
+	e.lock.Lock()
+	oldAtom, has := e.atoms[name]
 	if !has {
-		return nil
+		e.atoms[name] = atom
+		atom.nameElement = e.names.PushBack(name)
 	}
-	return c
+	e.lock.Unlock()
+	// If exists and running, release new and return error.
+	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
+	if has && oldAtom.state > AtomHalt {
+		deallocAtom(atom)
+		return nil, ErrAtomExists
+	}
+	// If exists and not running, release new and use old.
+	if has {
+		deallocAtom(atom)
+		atom = oldAtom
+		atom.count += 1
+	}
+	// Get data and Spawning.
+	var data proto.Message
+	if p := current.Developer.Persistence(); p != nil {
+		d, err := p.GetAtomData(name)
+		if err != nil {
+			atom.setHalt()
+			e.elementReleaseAtom(atom)
+			return nil, err
+		}
+		data = d
+	}
+	if err := e.elementSpawningAtom(atom, current, arg, data); err != nil {
+		e.elementReleaseAtom(atom)
+		return nil, err
+	}
+	return atom, nil
+}
+
+func (e *ElementLocal) elementReleaseAtom(atom *AtomCore) {
+	atom.count -= 1
+	if atom.state > AtomHalt {
+		return
+	}
+	if atom.count > 0 {
+		return
+	}
+	e.lock.Lock()
+	_, has := e.atoms[atom.name]
+	if has {
+		delete(e.atoms, atom.name)
+	}
+	if atom.nameElement != nil {
+		e.names.Remove(atom.nameElement)
+		atom.nameElement = nil
+	}
+	e.lock.Unlock()
+	releaseAtom(atom)
+	deallocAtom(atom)
+}
+
+func (e *ElementLocal) elementSpawningAtom(a *AtomCore, impl *ElementImplementation, arg, data proto.Message) error {
+	var err error
+	initMailBox(a)
+	a.mailbox.start()
+	if err = impl.Interface.AtomSpawner(a, a.instance, arg, data); err != nil {
+		a.setHalt()
+		delMailBox(a.mailbox)
+		a.mailbox.stop()
+		return err
+	}
+	a.setWaiting()
+	return nil
 }

@@ -6,10 +6,24 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"time"
 )
 
 // Cosmos生命周期，开发者定义和使用的部分。
 // Cosmos Life Cycle, part for developer customize and use.
+
+func newCosmosSelf() *CosmosSelf {
+	c := &CosmosSelf{}
+	// Cosmos log is initialized once and available all the time.
+	c.log = newMailBox(MailBoxHandler{
+		OnReceive: c.onLogMessage,
+		OnPanic:   c.onLogPanic,
+		OnStop:    c.onLogStop,
+	})
+	c.log.Name = "logger"
+	c.log.start()
+	return c
+}
 
 // Runnable相关入口脚本
 // Entrance script of runnable.
@@ -18,37 +32,6 @@ type Script func(cosmosSelf *CosmosSelf, mainId MainId, killNoticeChannel chan b
 // Cosmos生命周期
 // Cosmos Life Cycle
 
-type CosmosCycle interface {
-	Daemon(*Config) (chan struct{}, error)
-	SendScript(*DaemonCommand)
-	SendRunnable(CosmosRunnable)
-	SendKill()
-	Close()
-}
-
-func NewCosmosCycle() CosmosCycle {
-	return newCosmosSelf()
-}
-
-func (c *CosmosSelf) SendRunnable(runnable CosmosRunnable) {
-	c.SendScript(&DaemonCommand{
-		Cmd:      DaemonCommandExecuteRunnable,
-		Runnable: runnable,
-	})
-}
-
-// 给Daemon中的Cosmos发送命令。
-// write Daemon Command to a daemon cosmos.
-func (c *CosmosSelf) SendScript(cmd *DaemonCommand) {
-	c.daemonCmdCh <- cmd
-}
-
-func (c *CosmosSelf) SendKill() {
-	c.SendScript(&DaemonCommand{
-		Cmd: DaemonCommandExit,
-	})
-}
-
 // DaemonWithRunnable会一直阻塞直至收到终结信号，或者脚本已经执行完毕。
 // DaemonWithRunnable will block until stop signal received or script terminated.
 func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
@@ -56,60 +39,133 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 		return nil, err
 	}
 	closeCh := make(chan struct{}, 1)
+	runCh := make(chan struct{}, 1)
 	go func() {
 		defer func() {
 			closeCh <- struct{}{}
 		}()
-		defer c.daemonExit()
 		daemonCh := make(chan error, 1)
 		for {
+			exit := false
+			runCh <- struct{}{}
 			select {
 			case cmd := <-c.daemonCmdCh:
-				switch cmd.Cmd {
+				if cmd == nil {
+					c.logFatal("Cosmos.Daemon: Invalid runnable")
+					break
+				}
+				if err := cmd.Check(); err != nil {
+					c.logFatal("Cosmos.Daemon: Invalid runnable, err=%v", err)
+					break
+				}
+				switch cmd.Type() {
 				case DaemonCommandExit:
-					func() {
-						defer func() {
-							if r := recover(); r != nil {
-								c.logInfo("Cosmos.Daemon: Exit error, err=%s", r)
-							}
-						}()
-						c.local.mainKillCh <- true
-					}()
+					if !c.isRunning() {
+						c.logInfo("Cosmos.Daemon: Cannot stop runnable, because it's not running")
+						break
+					}
+					if c.runtime.stop() {
+						exit = true
+					}
+				case DaemonCommandStopRunnable:
+					if !c.isRunning() {
+						c.logInfo("Cosmos.Daemon: Cannot stop runnable, because it's not running")
+						break
+					}
+					c.runtime.stop()
 				case DaemonCommandExecuteRunnable:
+					if c.isRunning() {
+						c.logInfo("Cosmos.Daemon: Cannot execute runnable, because it's running")
+						break
+					}
 					go func() {
-						err := c.daemonCommandExecutor(cmd)
+						// Running
+						err := c.daemonRunnableExecute(*cmd.GetRunnable())
 						if err != nil {
-							c.logFatal("Cosmos.Daemon: Execute failed, err=%v", err)
+							c.logFatal("Cosmos.Daemon: Execute runnable failed, err=%v", err)
 						} else {
-							c.logInfo("Cosmos.Daemon: Execute succeed")
+							c.logInfo("Cosmos.Daemon: Execute runnable succeed.")
 						}
+						// Stopped
 						daemonCh <- err
 					}()
-				}
-			case s := <-c.signCh:
-				exit, message := c.daemonSignalWatcher(s)
-				if exit {
-					c.logInfo("Cosmos.Daemon: Caught notice, exit=%v,message=%s", exit, message)
-					c.local.mainKillCh <- true
+				case DaemonCommandReloadRunnable:
+					if !c.isRunning() {
+						c.logInfo("Cosmos.Daemon: Cannot execute runnable upgrade, because it's not running.")
+						break
+					}
+					// Running
+					err := c.daemonRunnableUpgrade(*cmd.GetRunnable())
+					if err != nil {
+						c.logFatal("Cosmos.Daemon: Execute runnable upgrade failed, err=%v", err)
+					} else {
+						c.logInfo("Cosmos.Daemon: Execute runnable upgrade succeed")
+					}
 				}
 			case err := <-daemonCh:
-				c.logInfo("Cosmos.Daemon: Exit, err=%v", err)
-				return
+				if err != nil {
+					c.logError("Cosmos.Daemon: Exited, err=%v", err)
+				} else {
+					c.logInfo("Cosmos.Daemon: Exited")
+				}
+				if exit {
+					return
+				}
 			}
 		}
 	}()
+	<-runCh
 	return closeCh, nil
+}
+
+func (c *CosmosSelf) Send(command DaemonCommand) error {
+	select {
+	case c.daemonCmdCh <- command:
+		return nil
+	default:
+		return ErrDaemonIsBusy
+	}
+}
+
+func (c *CosmosSelf) WaitKillSignal() {
+	ch := make(chan os.Signal)
+	signal.Notify(ch)
+	defer signal.Stop(ch)
+	for {
+		select {
+		case s := <-ch:
+			switch s {
+			case os.Interrupt:
+				fmt.Println()
+				fallthrough
+			case os.Kill:
+				if err := c.Send(NewExitCommand()); err != nil {
+					LogWrite(LogFormatter(time.Now(), LogLevel_Fatal, fmt.Sprintf("WaitKillSignal killed atomos fails, err=%v", err)), true)
+					continue
+				}
+				LogWrite(LogFormatter(time.Now(), LogLevel_Info, fmt.Sprintf("WaitKillSignal killed atomos")), false)
+				return
+			}
+		}
+	}
 }
 
 // Daemon结束后Close。
 // Close after Daemon run.
 func (c *CosmosSelf) Close() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 	if c.log != nil {
-		c.log.WaitStop()
+		c.log.waitStop()
+		c.log = nil
 	}
+	c.daemonCmdCh = nil
+	c.clientCert = nil
+	c.listenCert = nil
+	c.config = nil
 }
+
+//////////////////////////////////////////////////
+////////////
+// Daemon
 
 // Daemon initialize.
 func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
@@ -117,14 +173,12 @@ func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
 	if conf == nil {
 		return errors.New("no configuration")
 	}
-	if err = conf.check(c); err != nil {
+	if err = conf.Check(); err != nil {
 		return fmt.Errorf("config invalid, err=%v", err)
 	}
 
 	// Init
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.config != nil {
+	if c.isRunning() {
 		return errors.New("config registered")
 	}
 	c.config = conf
@@ -134,52 +188,45 @@ func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
 	if c.listenCert, err = conf.getListenCertConfig(); err != nil {
 		return err
 	}
-	c.local = newCosmosLocal()
+	c.daemonCmdCh = make(chan DaemonCommand)
+	c.runtime = newCosmosRuntime()
 	c.remotes = newCosmosRemoteHelper(c)
-	c.daemonCmdCh = make(chan *DaemonCommand)
-	c.signCh = make(chan os.Signal)
-	signal.Notify(c.signCh)
 
 	return nil
 }
 
-// Daemon exit.
-func (c *CosmosSelf) daemonExit() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.remotes.close()
-}
-
 // 后台驻留执行可执行命令。
 // Daemon execute executable command.
-func (c *CosmosSelf) daemonCommandExecutor(cmd *DaemonCommand) error {
-	switch cmd.Cmd {
-	case DaemonCommandExecuteRunnable:
-		{
-			// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
-			// Make CosmosLocal initial the content of Runnable, especially the Element information.
-			if err := c.local.initRunnable(c, cmd.Runnable); err != nil {
-				return err
-			}
-			// 最后执行Runnable的清理相关动作，还原Cosmos的原状。
-			// At last, clean up the Runnable, recover Cosmos.
-			defer c.local.exitRunnable()
-
-			// 防止Runnable中的Script崩溃导致程序崩溃。
-			// To prevent panic from the Runnable Script.
-			defer c.deferRunnable()
-
-			// 执行Runnable。
-			// Execute runnable.
-			if err := c.local.runRunnable(cmd.Runnable); err != nil {
-				return err
-			}
-			return nil
-		}
-	case DaemonCommandExecuteDynamicRunnable:
-		return errors.New("not supported")
+func (c *CosmosSelf) daemonRunnableExecute(runnable CosmosRunnable) error {
+	if !c.trySetRunning(true) {
+		return ErrDeamonIsRunning
 	}
-	return fmt.Errorf("unknown daemon command, cmd=%+v", cmd)
+	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
+	// Make CosmosRuntime initial the content of Runnable, especially the Element information.
+	if err := c.runtime.init(c, &runnable); err != nil {
+		c.trySetRunning(false)
+		return err
+	}
+	// 最后执行Runnable的清理相关动作，还原Cosmos的原状。
+	// At last, clean up the Runnable, recover Cosmos.
+	defer c.trySetRunning(false)
+	defer c.runtime.close()
+
+	// 防止Runnable中的Script崩溃导致程序崩溃。
+	// To prevent panic from the Runnable Script.
+	defer c.deferRunnable()
+
+	// 执行Runnable。
+	// Execute runnable.
+	if err := c.runtime.run(&runnable); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *CosmosSelf) daemonRunnableUpgrade(runnable CosmosRunnable) error {
+	c.upgradeCount += 1
+	return c.runtime.upgrade(&runnable, c.upgradeCount)
 }
 
 func (c *CosmosSelf) deferRunnable() {
@@ -188,51 +235,33 @@ func (c *CosmosSelf) deferRunnable() {
 	}
 }
 
-// 后台驻留检测系统信号。
-// Daemon watching OS process signal.
-func (c *CosmosSelf) daemonSignalWatcher(s os.Signal) (exit bool, message string) {
-	switch s {
-	case os.Interrupt:
-		// Print more pretty in command line.
-		fmt.Println()
-		fallthrough
-	case os.Kill:
-		exit = true
-		message = fmt.Sprintf("<ExitSignal:%s>", s)
-	default:
-		exit = false
-		message = fmt.Sprintf("<Signal:%s>", s)
+func (c *CosmosSelf) trySetRunning(run bool) bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.running == run {
+		return false
 	}
-	return
+	c.running = run
+	return true
 }
 
-// 命令类型
-// Command Type
-type DaemonCommandType int
-
-const (
-	DaemonCommandExit = 0
-	// 运行Runnable
-	DaemonCommandExecuteRunnable = 1
-	// TODO: Support in future version.
-	DaemonCommandExecuteDynamicRunnable = 2
-)
-
-// 命令
-// Command
-type DaemonCommand struct {
-	Cmd      DaemonCommandType
-	Runnable CosmosRunnable
-	//DynamicRunnable CosmosDynamicRunnable
+func (c *CosmosSelf) isRunning() bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.running
 }
 
+//////////////////////////////////////////////////
+////////////
 // Runnable
+
 type CosmosRunnable struct {
-	interfaces      map[string]*ElementInterface
-	interfaceOrder  []*ElementInterface
-	implementations map[string]*ElementImplementation
-	implementOrder  []*ElementImplementation
-	script          Script
+	interfaces     map[string]*ElementInterface
+	interfaceOrder []*ElementInterface
+	implements     map[string]*ElementImplementation
+	implementOrder []*ElementImplementation
+	mainScript     Script
+	upgradeScript  Script
 }
 
 func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
@@ -250,11 +279,11 @@ func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnabl
 // Construct method of CosmosRunnable, uses to add Element.
 func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
 	r.AddElementInterface(i.Interface)
-	if r.implementations == nil {
-		r.implementations = map[string]*ElementImplementation{}
+	if r.implements == nil {
+		r.implements = map[string]*ElementImplementation{}
 	}
-	if _, has := r.implementations[i.Interface.Config.Name]; !has {
-		r.implementations[i.Interface.Config.Name] = i
+	if _, has := r.implements[i.Interface.Config.Name]; !has {
+		r.implements[i.Interface.Config.Name] = i
 		r.implementOrder = append(r.implementOrder, i)
 	}
 	return r
@@ -263,25 +292,105 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 // CosmosRunnable构造器方法，用于设置Script。
 // Construct method of CosmosRunnable, uses to set Script.
 func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {
-	r.script = script
+	r.mainScript = script
 	return r
 }
 
-// CosmosRunnable合法性检查。
-// CosmosRunnable legal checker.
-func (r *CosmosRunnable) Check() error {
-	if r.implementations == nil {
-		return errors.New("config has no Interface yet")
-	}
-	if r.script == nil {
-		return errors.New("config has no Script yet")
-	}
-	return nil
+func (r *CosmosRunnable) SetUpgradeScript(script Script) *CosmosRunnable {
+	r.upgradeScript = script
+	return r
 }
 
-//// Dynamic Runnable
-//type CosmosDynamicRunnable struct {
-//	path     string
-//	loaded   bool
-//	runnable CosmosRunnable
-//}
+// 命令
+// Command
+
+type DaemonCommand interface {
+	Type() DaemonCommandType
+	GetRunnable() *CosmosRunnable
+	Check() error
+}
+
+// 命令类型
+// Command Type
+type DaemonCommandType int
+
+const (
+	DaemonCommandExit = 0
+	// 运行Runnable
+	DaemonCommandExecuteRunnable = 1
+	DaemonCommandStopRunnable    = 2
+	DaemonCommandReloadRunnable  = 3
+)
+
+var (
+	ErrDeamonIsRunning = errors.New("cosmos daemon is running")
+	ErrDaemonIsBusy    = errors.New("cosmos daemon is busy")
+	ErrRunnableInvalid = errors.New("cosmos runnable invalid")
+)
+
+func NewRunnableCommand(runnable *CosmosRunnable) DaemonCommand {
+	return &command{
+		cmdType:  DaemonCommandExecuteRunnable,
+		runnable: runnable,
+	}
+}
+
+func NewRunnableUpdateCommand(runnable *CosmosRunnable) DaemonCommand {
+	return &command{
+		cmdType:  DaemonCommandReloadRunnable,
+		runnable: runnable,
+	}
+}
+
+func NewStopCommand() DaemonCommand {
+	return &command{
+		cmdType:  DaemonCommandStopRunnable,
+		runnable: nil,
+	}
+}
+
+func NewExitCommand() DaemonCommand {
+	return &command{
+		cmdType:  DaemonCommandExit,
+		runnable: nil,
+	}
+}
+
+// Command具体实现
+type command struct {
+	cmdType  DaemonCommandType
+	runnable *CosmosRunnable
+}
+
+func (c command) Type() DaemonCommandType {
+	return c.cmdType
+}
+
+func (c command) GetRunnable() *CosmosRunnable {
+	return c.runnable
+}
+
+func (c command) Check() error {
+	switch c.cmdType {
+	case DaemonCommandExit, DaemonCommandStopRunnable:
+		return nil
+	case DaemonCommandExecuteRunnable:
+		if c.runnable == nil {
+			return ErrRunnableInvalid
+		}
+		if c.runnable.mainScript == nil {
+			return ErrRunnableInvalid
+		}
+		return nil
+	case DaemonCommandReloadRunnable:
+		if c.runnable == nil {
+			return ErrRunnableInvalid
+		}
+		if c.runnable.upgradeScript == nil {
+			return ErrRunnableInvalid
+		}
+		return nil
+	default:
+		return ErrRunnableInvalid
+	}
+}

@@ -80,7 +80,7 @@ func (r *cosmosRemote) Receive(conn ConnDelegate, buf []byte) error {
 		}
 		r.enableRemote = msg.InitMessage.Config.EnableRemote
 		for _, name := range msg.InitMessage.Config.Elements {
-			ei, has := r.helper.self.local.interfaces[name]
+			ei, has := r.helper.self.runtime.runnable.interfaces[name]
 			if !has {
 				r.helper.self.logInfo("Remote.Conn: Read element not supported, element=%s", name)
 				ei = newPrivateElementInterface(name)
@@ -243,11 +243,11 @@ func (r *cosmosRemote) encodeInitMessage() ([]byte, error) {
 			Config: &CosmosLocalConfig{
 				EnableRemote: config.EnableServer,
 				NodeName:     config.Node,
-				Elements:     make([]string, 0, len(r.helper.self.local.elements)),
+				Elements:     make([]string, 0, len(r.helper.self.runtime.elements)),
 			},
 		},
 	}
-	for name := range r.helper.self.local.elements {
+	for name := range r.helper.self.runtime.elements {
 		msg.InitMessage.Config.Elements = append(msg.InitMessage.Config.Elements, name)
 	}
 	buf, err := proto.Marshal(msg)

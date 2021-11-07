@@ -41,8 +41,8 @@ func (l *atomLogsManager) pushAtomLog(id *AtomId, level LogLevel, msg string) {
 	lm.Time = timestamppb.Now()
 	lm.Level = level
 	lm.Message = msg
-	m := NewMail(defaultLogMailId, lm)
-	if ok := l.atom.element.cosmos.log.PushTail(m); !ok {
+	m := newMail(defaultLogMailId, lm)
+	if ok := l.atom.element.cosmos.log.pushTail(m); !ok {
 		log.Printf("atomLogs: Add log mail failed, id=%+v,level=%v,msg=%s", id, level, msg)
 	}
 }

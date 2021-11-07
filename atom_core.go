@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"container/list"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -90,7 +91,7 @@ type AtomCore struct {
 
 	// 邮箱，也是实现Atom无锁队列的关键。
 	// Mailbox, the key of lockless queue of Atom.
-	mailbox *MailBox
+	mailbox *mailBox
 
 	// 任务管理器，用于处理来自Atom内部的任务调派。
 	// Task Manager, uses to handle Task from inner Atom.
@@ -107,6 +108,18 @@ type AtomCore struct {
 	// 引用计数，所以任何GetId操作之后都需要Release。
 	// Reference count, thus we have to Release any Id after GetId.
 	count int
+
+	// Element中名称列表的元素
+	nameElement *list.Element
+
+	// 升级次数版本
+	upgrades    int
+
+	// 实际的Id类型
+	id          Id
+
+	// 当前实现
+	current     *ElementImplementation
 }
 
 // Atom对象的内存池
@@ -130,17 +143,11 @@ var atomsPool = sync.Pool{
 // AtomCore implements Id interface directly, so local Id is able to use AtomCore reference directly.
 
 func (a *AtomCore) Release() {
-	a.count -= 1
-	if a.count < 0 {
-		a.log.Warn("Release overtime")
-	}
-	if a.count == 0 {
-		a.tryDelete()
-	}
+	a.element.elementReleaseAtom(a)
 }
 
 func (a *AtomCore) Cosmos() CosmosNode {
-	return a.element.cosmos.local
+	return a.element.cosmos.runtime
 }
 
 func (a *AtomCore) Element() Element {
@@ -158,7 +165,7 @@ func (a *AtomCore) Version() uint64 {
 // 从另一个AtomCore，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomCore or from Main Script.
 func (a *AtomCore) Kill(from Id) error {
-	if ok := a.element.implements[a.version].Developer.AtomCanKill(from); !ok {
+	if ok := a.element.current.Developer.AtomCanKill(from); !ok {
 		return ErrAtomCannotKill
 	}
 	return a.pushKillMail(from, true)
@@ -223,17 +230,22 @@ func allocAtom() *AtomCore {
 	return atomsPool.Get().(*AtomCore)
 }
 
-func initAtom(a *AtomCore, es *ElementLocal, name string, inst Atom) {
+func initAtom(a *AtomCore, es *ElementLocal, name string, current *ElementImplementation, upgrade int) {
+	inst := current.Developer.AtomConstructor()
 	a.element = es
-	a.version = es.current.Interface.Config.Version
+	a.current = current
+	a.version = current.Interface.Config.Version
 	a.name = name
 	a.instance = inst
-	a.state = AtomHalt
+	a.state = AtomSpawning
 	a.atomId = &AtomId{
 		Node:    a.CosmosSelf().GetName(),
 		Element: a.Element().GetName(),
 		Name:    a.name,
 	}
+	a.count = 1
+	a.upgrades = upgrade
+	a.id = current.Interface.AtomIdConstructor(a)
 	initAtomLog(&a.log, a)
 	initAtomTasksManager(&a.task, a)
 }
@@ -253,7 +265,7 @@ func deallocAtom(a *AtomCore) {
 
 // 处理邮箱消息。
 // Handle mailbox messages.
-func (a *AtomCore) onReceive(mail *Mail) {
+func (a *AtomCore) onReceive(mail *mail) {
 	am := mail.Content.(*atomMail)
 	switch am.mailType {
 	case AtomMailMessage:
@@ -281,7 +293,7 @@ func (a *AtomCore) onReceive(mail *Mail) {
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
-func (a *AtomCore) onPanic(mail *Mail, trace string) {
+func (a *AtomCore) onPanic(mail *mail, trace string) {
 	am := mail.Content.(*atomMail)
 	// Try to reply here, to prevent mail non-reply, and stub.
 	errMsg := fmt.Errorf("Atom.Mail: PANIC, name=%s,trace=%s", a.name, trace)
@@ -303,12 +315,12 @@ func (a *AtomCore) onPanic(mail *Mail, trace string) {
 
 // 处理邮箱退出。
 // Handle mailbox stops.
-func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
+func (a *AtomCore) onStop(killMail, remainMails *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
 	a.setStopping()
-	defer a.tryDelete()
+	defer a.element.elementReleaseAtom(a)
 	defer a.setHalt()
 
 	killAtomMail := killMail.Content.(*atomMail)
@@ -350,25 +362,6 @@ func (a *AtomCore) onStop(killMail, remainMails *Mail, num uint32) {
 	killAtomMail.sendReply(nil, err)
 }
 
-func (a *AtomCore) tryDelete() {
-	a.element.mutex.Lock()
-	if a.count > 0 || a.state != AtomHalt {
-		a.element.mutex.Unlock()
-		return
-	}
-	// Mail dealloc in Element.killingAtom
-	_, toRelease := a.element.atoms[a.name]
-	if toRelease {
-		delete(a.element.atoms, a.name)
-	}
-	a.element.mutex.Unlock()
-	if !toRelease {
-		return
-	}
-	releaseAtom(a)
-	deallocAtom(a)
-}
-
 // 推送邮件，并管理邮件对象的生命周期。
 // 处理邮件，并设置Atom的运行状态。
 //
@@ -381,7 +374,7 @@ func (a *AtomCore) tryDelete() {
 func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) (reply proto.Message, err error) {
 	am := allocAtomMail()
 	initMessageMail(am, from, message, args)
-	if ok := a.mailbox.PushTail(am.Mail); !ok {
+	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return reply, ErrAtomIsNotRunning
 	}
 	replyInterface, err := am.waitReply()
@@ -401,7 +394,7 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out proto.Message, err error) {
 	a.setBusy()
 	defer a.setWaiting()
-	handler := a.element.getMessageHandler(name, a.version)
+	handler := a.current.AtomHandlers[name]
 	if handler == nil {
 		return nil, fmt.Errorf("Atom.Mail: Message handler not found, name=%s", name)
 	}
@@ -425,7 +418,7 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 func (a *AtomCore) pushKillMail(from Id, wait bool) error {
 	am := allocAtomMail()
 	initKillMail(am, from)
-	if ok := a.mailbox.PushHead(am.Mail); !ok {
+	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return ErrAtomIsNotRunning
 	}
 	if wait {
@@ -442,11 +435,12 @@ func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]Cancell
 	a.setStopping()
 	defer func() {
 		if r := recover(); r != nil {
-			a.element.cosmos.logFatal("Atom.Mail: Kill, panic, id=%+V,data=%+V", a.atomId.str(), a.instance)
+			a.element.cosmos.logFatal("Atom.Mail: Kill, panic, id=%s,data=%+V,reason=%s,stack=%s",
+				a.atomId.str(), a.instance, r, debug.Stack())
 		}
 	}()
 	data := a.instance.Halt(killAtomMail.from, cancels)
-	if impl := a.element.implements[a.version]; impl != nil {
+	if impl := a.element.current; impl != nil {
 		if p := impl.Developer.Persistence(); p != nil {
 			if err := p.SetAtomData(a.name, data); err != nil {
 				a.element.cosmos.logInfo("Atom.Mail: Kill, save atom failed, id=%+v,version=%d,inst=%+v,data=%+v",
@@ -462,10 +456,10 @@ func (a *AtomCore) handleKill(killAtomMail *atomMail, cancels map[uint64]Cancell
 
 // 重载邮件，指定Atom的版本。
 // Reload Mail with specific version.
-func (a *AtomCore) pushReloadMail(version uint64) error {
+func (a *AtomCore) pushReloadMail(elem *ElementImplementation, upgradeCount int) error {
 	am := allocAtomMail()
-	initReloadMail(am, version)
-	if ok := a.mailbox.PushHead(am.Mail); !ok {
+	initReloadMail(am, elem, upgradeCount)
+	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return ErrAtomIsNotRunning
 	}
 	_, err := am.waitReply()
@@ -482,20 +476,23 @@ func (a *AtomCore) handleReload(am *atomMail) error {
 
 	// 如果没有新的Element，就用旧的Element。
 	// Use old Element if there is no new Element.
-	reloadElementImplement, has := a.element.implements[am.upgradeVersion]
-	if !has {
+	if am.upgrade == nil {
 		return errors.New("atom upgrade version invalid")
 	}
+	if am.upgradeCount == a.upgrades {
+		return nil
+	}
+	a.upgrades = am.upgradeCount
+	upgrade := am.upgrade
 	// 释放邮件。
 	// Dealloc Atom Mail.
 	deallocAtomMail(am)
 
 	// Save old data.
-	data := a.instance.Halt(a.element.cosmos.local.mainAtom, map[uint64]CancelledTask{})
+	data := a.instance.Halt(a.element.cosmos.runtime.mainAtom, map[uint64]CancelledTask{})
 	// Restoring data and replace instance.
-	a.version = am.upgradeVersion
-	a.instance = reloadElementImplement.Developer.AtomConstructor()
-	if err := reloadElementImplement.Interface.AtomSpawner(a, a.instance, nil, data); err != nil {
+	a.instance = upgrade.Developer.AtomConstructor()
+	if err := upgrade.Interface.AtomSpawner(a, a.instance, nil, data); err != nil {
 		a.element.cosmos.logInfo("Atom.Mail: Reload spawn failed, id=%+v,version=%d,inst=%+v,data=%+v",
 			a.atomId, a.version, a.instance, data)
 		return err
@@ -518,7 +515,7 @@ const (
 func (a *AtomCore) pushWormholeMail(action int, wormhole WormholeDaemon) error {
 	am := allocAtomMail()
 	initWormholeMail(am, action, wormhole)
-	if ok := a.mailbox.PushHead(am.Mail); !ok {
+	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return ErrAtomIsNotRunning
 	}
 	_, err := am.waitReply()

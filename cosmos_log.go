@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"os"
+	"time"
 )
 
 // Cosmos的Log接口。
@@ -50,14 +51,14 @@ func (c *CosmosSelf) logFatal(format string, args ...interface{}) {
 // Cosmos的Log实现。
 // Implementation of Cosmos Log.
 
-func (c *CosmosSelf) onLogMessage(mail *Mail) {
+func (c *CosmosSelf) onLogMessage(mail *mail) {
 	lm := mail.Content.(*LogMail)
 	c.logging(lm)
 	logMailsPool.Put(lm)
-	DelMail(mail)
+	delMail(mail)
 }
 
-func (c *CosmosSelf) onLogPanic(mail *Mail, trace string) {
+func (c *CosmosSelf) onLogPanic(mail *mail, trace string) {
 	lm := mail.Content.(*LogMail)
 	c.logging(&LogMail{
 		Id:      lm.Id,
@@ -67,7 +68,7 @@ func (c *CosmosSelf) onLogPanic(mail *Mail, trace string) {
 	})
 }
 
-func (c *CosmosSelf) onLogStop(killMail, remainMails *Mail, num uint32) {
+func (c *CosmosSelf) onLogStop(killMail, remainMails *mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.onLogMessage(curMail)
 	}
@@ -84,18 +85,37 @@ func (c *CosmosSelf) logging(lm *LogMail) {
 	}
 	switch lm.Level {
 	case LogLevel_Debug:
-		logWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Info:
-		logWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Warn:
-		logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Error:
-		logWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
+		LogWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	case LogLevel_Fatal:
-		logWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
+		LogWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	default:
-		logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
+		LogWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	}
+}
+
+func LogFormatter(t time.Time, level LogLevel, msg string) string {
+	l := "ERROR"
+	switch level {
+	case LogLevel_Debug:
+		l = "[DEBUG]"
+	case LogLevel_Info:
+		l = "[INFO] "
+	case LogLevel_Warn:
+		l = "[WARN] "
+	case LogLevel_Error:
+		l = "[ERROR]"
+	case LogLevel_Fatal:
+		l = "[FATAL]"
+	default:
+		l = "[WARN] "
+	}
+	return fmt.Sprintf("%s %s %s\n", t.Format(logTimeFmt), l, msg)
 }
 
 func (c *CosmosSelf) pushCosmosLog(level LogLevel, msg string) {
@@ -104,17 +124,18 @@ func (c *CosmosSelf) pushCosmosLog(level LogLevel, msg string) {
 	lm.Time = timestamppb.Now()
 	lm.Level = level
 	lm.Message = msg
-	m := NewMail(defaultLogMailId, lm)
-	if ok := c.log.PushTail(m); !ok {
+	m := newMail(defaultLogMailId, lm)
+	if ok := c.log.pushTail(m); !ok {
 		log.Println("Cosmos Log Mail failed", level, msg)
 	}
 }
 
 // Concrete log to file logic.
 
-func logWrite(msg string, err bool) {
+func LogWrite(msg string, err bool) {
 	if err {
 		os.Stderr.WriteString(msg)
+	} else {
+		os.Stdout.WriteString(msg)
 	}
-	os.Stdout.WriteString(msg)
 }

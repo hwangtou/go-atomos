@@ -47,14 +47,14 @@ type Element interface {
 	KillAtom(fromId, toId Id) error
 }
 
+type ElementLoadable interface {
+	Load(mainId MainId, isReload bool) error
+	Unload()
+}
+
 // 从*.proto文件生成到*_atomos.pb.go文件中的，具体的Element对象。
 // Concrete Element instance in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementDeveloper interface {
-	// 加载&卸载
-	// Loaded & Unloaded
-	Load(mainId MainId) error
-	Unload()
-
 	// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
 	// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atom quantity.
 	Info() (version uint64, logLevel LogLevel, initNum int)
@@ -78,7 +78,7 @@ type ElementDeveloper interface {
 }
 
 type ElementWormholeDeveloper interface {
-	Daemon()
+	Daemon(isUpgrade bool)
 }
 
 type ElementPersistence interface {

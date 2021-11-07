@@ -174,7 +174,7 @@ func (at *atomTasksManager) Append(fn interface{}, msg proto.Message) (id uint64
 	am := allocAtomMail()
 	initTaskMail(am, at.curId, fnName, msg)
 	// Append to the tail of Atom mailbox immediately.
-	if ok := at.atom.mailbox.PushTail(am.Mail); !ok {
+	if ok := at.atom.mailbox.pushTail(am.mail); !ok {
 		return 0, ErrAtomIsNotRunning
 	}
 	return at.curId, nil
@@ -244,7 +244,7 @@ func (at *atomTasksManager) AddAfter(d time.Duration, fn interface{}, msg proto.
 		case TaskScheduling:
 			it.timerState = TaskMailing
 			delete(at.tasks, it.id)
-			if ok := at.atom.mailbox.PushHead(am.Mail); !ok {
+			if ok := at.atom.mailbox.pushHead(am.mail); !ok {
 				at.atom.element.cosmos.logFatal("Atom.Task: AddAfter, atom is not running")
 			}
 
@@ -403,7 +403,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 		// 定时任务已经在Atom mailbox中。
 		// Timer task is already in Atom mailbox.
 		case TaskMailing:
-			m := at.atom.mailbox.PopById(id)
+			m := at.atom.mailbox.popById(id)
 			if m == nil {
 				err = fmt.Errorf("cannot delete timer that not exists")
 				return cancel, err
@@ -419,7 +419,7 @@ func (at *atomTasksManager) cancelTask(id uint64, t *atomTask) (cancel Cancelled
 			return cancel, fmt.Errorf("unknown timer state")
 		}
 	}
-	m := at.atom.mailbox.PopById(id)
+	m := at.atom.mailbox.popById(id)
 	if m == nil {
 		err = fmt.Errorf("cannot delete timer that not exists")
 		return cancel, err
@@ -454,13 +454,13 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	method := instValue.MethodByName(am.name)
 	if !method.IsValid() {
 		at.atom.log.Error("Atom.Task: Method invalid, id=%d,name=%s,arg=%+v",
-			am.Mail.id, am.name, am.arg)
+			am.mail.id, am.name, am.arg)
 		return
 	}
 	inNum, err := checkFnArgs(method.Type(), am.name, am.arg)
 	if err != nil {
 		at.atom.log.Error("Atom.Task: Argument invalid, id=%d,name=%s,arg=%+v,err=%v",
-			am.Mail.id, am.name, am.arg, err)
+			am.mail.id, am.name, am.arg, err)
 		return
 	}
 	var val []reflect.Value

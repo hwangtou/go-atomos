@@ -1,0 +1,11 @@
+node: helloworld
+log_path: log
+log_level: 1
+enable_cert:
+  cert_path: config/server.crt
+  key_path: config/server.key
+  insecure_skip_verify: true
+enable_server:
+  host: 127.0.0.1
+  port: 12345
+customize:

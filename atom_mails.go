@@ -49,7 +49,7 @@ const (
 type atomMail struct {
 	// 具体的Mail实例
 	// Concrete Mail instance.
-	*Mail
+	*mail
 
 	// Atom邮件类型
 	// Atom mail type.
@@ -71,7 +71,8 @@ type atomMail struct {
 
 	// 需要升级的Element。
 	// Upgrade Element.
-	upgradeVersion uint64
+	upgrade *ElementImplementation
+	upgradeCount int
 
 	wormholeAction int
 	wormhole       WormholeDaemon
@@ -101,21 +102,21 @@ var atomMailsPool = sync.Pool{
 
 func allocAtomMail() *atomMail {
 	am := atomMailsPool.Get().(*atomMail)
-	m := NewMail(DefaultMailId, am)
-	am.Mail = m
+	m := newMail(DefaultMailId, am)
+	am.mail = m
 	return am
 }
 
 func deallocAtomMail(am *atomMail) {
-	DelMail(am.Mail)
+	delMail(am.mail)
 	atomMailsPool.Put(am)
 }
 
 // 消息邮件
 // Message Mail
 func initMessageMail(am *atomMail, from Id, name string, arg proto.Message) {
-	am.Mail.id = DefaultMailId
-	am.Mail.action = MailActionRun
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
 	am.mailType = AtomMailMessage
 	am.from = from
 	am.name = name
@@ -125,7 +126,8 @@ func initMessageMail(am *atomMail, from Id, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
-	am.upgradeVersion = 0
+	am.upgrade = nil
+	am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -133,41 +135,44 @@ func initMessageMail(am *atomMail, from Id, name string, arg proto.Message) {
 // 任务邮件
 // Task Mail
 func initTaskMail(am *atomMail, taskId uint64, name string, arg proto.Message) {
-	am.Mail.id = taskId
-	am.Mail.action = MailActionRun
+	am.mail.id = taskId
+	am.mail.action = MailActionRun
 	am.mailType = AtomMailTask
 	am.from = nil
 	am.name = name
 	// I think it doesn't have to clone, because Atom is thread-safe.
 	am.arg = arg
-	am.upgradeVersion = 0
+	am.upgrade = nil
+	am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 // 重载邮件
 // Reload Mail
-func initReloadMail(am *atomMail, version uint64) {
-	am.Mail.id = DefaultMailId
-	am.Mail.action = MailActionRun
+func initReloadMail(am *atomMail, elem *ElementImplementation, upgradeCount int) {
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
 	am.mailType = AtomMailReload
 	am.from = nil
 	am.name = ""
-	am.upgradeVersion = version
+	am.upgrade = elem
+	am.upgradeCount = upgradeCount
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 func initWormholeMail(am *atomMail, action int, wormhole WormholeDaemon) {
-	am.Mail.id = DefaultMailId
-	am.Mail.action = MailActionRun
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
 	am.mailType = AtomMailWormhole
 	am.from = nil
 	am.name = ""
 	am.arg = nil
 	am.wormholeAction = action
 	am.wormhole = wormhole
-	am.upgradeVersion = 0
+	am.upgrade = nil
+	am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -175,12 +180,13 @@ func initWormholeMail(am *atomMail, action int, wormhole WormholeDaemon) {
 // 终止邮件
 // Halt Mail
 func initKillMail(am *atomMail, from Id) {
-	am.Mail.id = DefaultMailId
-	am.Mail.action = MailActionExit
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionExit
 	am.mailType = AtomMailHalt
 	am.from = from
 	am.name = ""
-	am.upgradeVersion = 0
+	am.upgrade = nil
+	am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }

@@ -160,9 +160,9 @@ func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request)
 		s.helper.self.logError("Cosmos.Remote: handleAtomId, Unmarshal failed, err=%v", err)
 		return
 	}
-	element, has := s.helper.self.local.elements[req.Element]
+	element, has := s.helper.self.runtime.elements[req.Element]
 	if has {
-		a, _, err := element.getAtomId(req.Name)
+		a, err := element.elementGetAtom(req.Name)
 		if err != nil {
 			resp.Error = err.Error()
 		} else {
@@ -206,7 +206,7 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	// Get to atom.
-	element, has := s.helper.self.local.elements[req.To.Element]
+	element, has := s.helper.self.runtime.elements[req.To.Element]
 	if has {
 		a, err := element.GetAtomId(req.To.Name)
 		if err != nil {
@@ -218,7 +218,7 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 				// Get from atom, create if not exists.
 				fromId := s.getFromId(req.From)
 				// Messaging to atom.
-				reply, err := s.helper.self.local.MessageAtom(fromId, a, req.Message, arg)
+				reply, err := s.helper.self.runtime.MessageAtom(fromId, a, req.Message, arg)
 				resp.Reply = MessageToAny(reply)
 				if err != nil {
 					resp.Error = err.Error()

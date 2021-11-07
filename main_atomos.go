@@ -33,7 +33,7 @@ type MainId interface {
 	Config() *Config
 
 	// Get Customize Config.
-	CustomizeConfig(name string, p proto.Message) error
+	CustomizeConfig(name string) (string, error)
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.
@@ -49,31 +49,43 @@ func newMainElement(self *CosmosSelf) *ElementLocal {
 	m := &mainElement{
 		self: self,
 	}
-	e := newElementLocal(self, &ElementImplementation{
+	e := newElementLocal(self, 1)
+	e.current = &ElementImplementation{
 		Developer:    m,
-		Interface:    NewInterfaceFromDeveloper(MainAtomName, m),
-		AtomHandlers: map[string]MessageHandler{},
-	})
-	e.current.Interface.AtomSpawner = m.AtomSpawner
+		Interface:    &ElementInterface{
+			Name:              MainAtomName,
+			Config:            &ElementConfig{
+				Name:          MainAtomName,
+				Version:       1,
+				LogLevel:      self.config.LogLevel,
+				AtomInitNum:   1,
+				Messages:      map[string]*AtomMessageConfig{},
+			},
+			AtomSpawner:       m.AtomSpawner,
+			AtomIdConstructor: func(id Id) Id {
+				return self.runtime.mainAtom
+			},
+			AtomMessages:      nil,
+		},
+		AtomHandlers: nil,
+	}
 	return e
 }
 
 type mainElement struct {
 	self *CosmosSelf
+	atom *AtomCore
 }
 
 func newMainAtom(e *ElementLocal) *mainAtom {
 	a := allocAtom()
-	ma := &mainAtom{
-		self:     e.cosmos,
-		AtomCore: a,
-	}
-	initAtom(a, e, MainAtomName, ma)
-	a.state = AtomSpawning
+	e.current.Developer.(*mainElement).atom = a
+	initAtom(a, e, MainAtomName, e.current, e.upgrades)
+	a.state = AtomWaiting
 	e.atoms[MainAtomName] = a
-	e.spawningAtomMailbox(a, nil, nil)
+	_ = e.elementSpawningAtom(a, e.current, nil, nil)
 	a.element.cosmos.logInfo("Cosmos.Main: MainId is spawning")
-	return ma
+	return a.instance.(*mainAtom)
 }
 
 func (m *mainElement) Load(mainId MainId) error {
@@ -92,11 +104,14 @@ func (m *mainElement) Info() (version uint64, logLevel LogLevel, initNum int) {
 }
 
 func (m *mainElement) AtomConstructor() Atom {
-	return &mainAtom{}
+	return &mainAtom{
+		self:     m.self,
+		AtomCore: m.atom,
+	}
 }
 
 func (m *mainElement) AtomCanKill(id Id) bool {
-	return true
+	return false
 }
 
 func (m *mainElement) AtomSpawner(s AtomSelf, a Atom, arg, data proto.Message) error {
@@ -118,22 +133,19 @@ func (m *mainAtom) Config() *Config {
 	return proto.Clone(m.self.config).(*Config)
 }
 
-func (m *mainAtom) CustomizeConfig(name string, p proto.Message) error {
+func (m *mainAtom) CustomizeConfig(name string) (string, error) {
 	customize := m.Config().Customize
 	if customize == nil {
-		return errors.New("customize config has not defined")
+		return "", errors.New("customize config has not defined")
 	}
-	whAny, has := customize[name]
+	value, has := customize[name]
 	if !has {
-		return errors.New("customize config key has not defined")
+		return "", errors.New("customize config key has not defined")
 	}
-	if err := whAny.UnmarshalTo(p); err != nil {
-		return err
-	}
-	return nil
+	return value, nil
 }
 
 func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
-	m.CosmosSelf().logInfo("Cosmos.Main: MainId is halting")
+	m.self.logInfo("Cosmos.Main: MainId is halting")
 	return nil
 }

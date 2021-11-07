@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config Error
@@ -20,7 +23,63 @@ var (
 	ErrConfigKeyPathInvalid  = errors.New("config key path is invalid")
 )
 
-func (x *Config) check(c *CosmosSelf) error {
+type yamlConfig struct {
+	Node         string                  `yaml:"node"`
+	LogPath      string                  `yaml:"log_path"`
+	LogLevel     int                     `yaml:"log_level"`
+	EnableCert   *yamlCertConfig         `yaml:"enable_cert"`
+	EnableServer *yamlRemoteServerConfig `yaml:"enable_server"`
+	Customize    map[string]string       `yaml:"customize"`
+}
+
+type yamlCertConfig struct {
+	CertPath           string `yaml:"cert_path"`
+	KeyPath            string `yaml:"key_path"`
+	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+}
+
+type yamlRemoteServerConfig struct {
+	Host string `yaml:"host"`
+	Port int32  `yaml:"port"`
+}
+
+func ConfigFromYaml(filepath string) (*Config, error) {
+	dat, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	y := &yamlConfig{}
+	if err = yaml.Unmarshal(dat, y); err != nil {
+		return nil, err
+	}
+	conf := &Config{
+		Node:      y.Node,
+		LogPath:   y.LogPath,
+		LogLevel:  LogLevel(y.LogLevel),
+		Customize: map[string]string{},
+	}
+	if cert := y.EnableCert; cert != nil {
+		conf.EnableCert = &CertConfig{
+			CertPath:           cert.CertPath,
+			KeyPath:            cert.KeyPath,
+			InsecureSkipVerify: cert.InsecureSkipVerify,
+		}
+	}
+	if svr := y.EnableServer; svr != nil {
+		conf.EnableServer = &RemoteServerConfig{
+			Host: svr.Host,
+			Port: svr.Port,
+		}
+	}
+	if custom := y.Customize; custom != nil {
+		for key, value := range custom {
+			conf.Customize[key] = value
+		}
+	}
+	return conf, nil
+}
+
+func (x *Config) Check() error {
 	if x == nil {
 		return ErrConfigIsNil
 	}

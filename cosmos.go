@@ -2,11 +2,23 @@ package go_atomos
 
 import (
 	"crypto/tls"
-	"os"
-	"sync"
-
 	"google.golang.org/protobuf/proto"
+	"sync"
 )
+
+// Cosmos生命周期
+// Cosmos Life Cycle
+
+type CosmosCycle interface {
+	Daemon(*Config) (chan struct{}, error)
+	Send(DaemonCommand) error
+	WaitKillSignal()
+	Close()
+}
+
+func NewCosmosCycle() CosmosCycle {
+	return newCosmosSelf()
+}
 
 // Cosmos节点需要支持的接口内容
 // 仅供生成器内部使用
@@ -35,50 +47,39 @@ type CosmosNode interface {
 // CosmosSelf
 
 type CosmosSelf struct {
-	// Loads at NewCosmosCycle.
+	// CosmosCycle
+	// Cosmos循环
+
+	// Loads at NewCosmosCycle & Daemon.
+	// Log
+	log *mailBox
+	// State
+	mutex   sync.Mutex
+	running bool
+	// Config
 	config *Config
+	// TLS if exists
+	clientCert *tls.Config
+	listenCert *tls.Config
+	// A channel focus on Daemon Command.
+	daemonCmdCh chan DaemonCommand
+	upgradeCount int
+
+	// CosmosRunnable & CosmosRuntime.
+	// 可运行Cosmos & Cosmos运行时。
 
 	// Loads at DaemonWithRunnable or Runnable.
-	local *CosmosLocal
+	runtime *CosmosRuntime
 
 	// 集群助手，帮助访问远程的Cosmos。
 	// Cluster helper helps access to remote Cosmos.
 	remotes *cosmosRemotesHelper
-
-	// 关注Daemon命令的管道。
-	// A channel focus on Daemon Command.
-	daemonCmdCh chan *DaemonCommand
-
-	// 关注系统进程信号的管道。
-	// A channel focus on OS process.
-	signCh chan os.Signal
-
-	// Lock
-	mutex sync.Mutex
-	// Log
-	log *MailBox
-	// TLS if exists
-	clientCert *tls.Config
-	listenCert *tls.Config
-}
-
-func newCosmosSelf() *CosmosSelf {
-	c := &CosmosSelf{}
-	// Cosmos log is initialized once and available all the time.
-	c.log = NewMailBox(MailBoxHandler{
-		OnReceive: c.onLogMessage,
-		OnPanic:   c.onLogPanic,
-		OnStop:    c.onLogStop,
-	})
-	c.log.Name = "logger"
-	c.log.Start()
-	return c
 }
 
 // Interface
 
-func (c *CosmosSelf) Local() *CosmosLocal {
-	return c.local
+func (c *CosmosSelf) Local() *CosmosRuntime {
+	return c.runtime
 }
 
 func (c *CosmosSelf) GetName() string {

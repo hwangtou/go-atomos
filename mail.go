@@ -13,8 +13,8 @@ var (
 
 // Mail
 
-type Mail struct {
-	next    *Mail
+type mail struct {
+	next    *mail
 	id      uint64
 	action  MailAction
 	Content interface{}
@@ -29,31 +29,31 @@ const (
 
 var mailsPool = sync.Pool{
 	New: func() interface{} {
-		return &Mail{}
+		return &mail{}
 	},
 }
 
-func NewMail(id uint64, content interface{}) *Mail {
-	m := mailsPool.Get().(*Mail)
-	m.Reset()
+func newMail(id uint64, content interface{}) *mail {
+	m := mailsPool.Get().(*mail)
+	m.reset()
 	m.id = id
 	m.action = MailActionRun
 	m.Content = content
 	return m
 }
 
-func NewExitMail(waitCh chan struct{}) *Mail {
-	m := NewMail(0, nil)
+func newExitMail(waitCh chan struct{}) *mail {
+	m := newMail(0, nil)
 	m.action = MailActionExit
 	m.Content = waitCh
 	return m
 }
 
-func DelMail(m *Mail) {
+func delMail(m *mail) {
 	mailsPool.Put(m)
 }
 
-func (m *Mail) Reset() {
+func (m *mail) reset() {
 	m.next = nil
 	m.id = 0
 	m.action = MailActionRun
@@ -62,9 +62,9 @@ func (m *Mail) Reset() {
 
 // Mail Box
 
-type MailBoxOnReceiveFn func(mail *Mail)
-type MailBoxOnPanicFn func(mail *Mail, trace string)
-type MailBoxOnStopFn func(stopMail, remainMails *Mail, num uint32)
+type MailBoxOnReceiveFn func(mail *mail)
+type MailBoxOnPanicFn func(mail *mail, trace string)
+type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
 
 type MailBoxHandler struct {
 	OnReceive MailBoxOnReceiveFn
@@ -72,33 +72,33 @@ type MailBoxHandler struct {
 	OnStop    MailBoxOnStopFn
 }
 
-type MailBox struct {
+type mailBox struct {
 	Name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
 	handler MailBoxHandler
-	head    *Mail
-	tail    *Mail
+	head    *mail
+	tail    *mail
 	num     uint32
 }
 
 var mailBoxPool = sync.Pool{
 	New: func() interface{} {
-		b := &MailBox{}
+		b := &mailBox{}
 		b.cond = sync.NewCond(&b.mutex)
 		return b
 	},
 }
 
-func NewMailBox(handler MailBoxHandler) *MailBox {
-	mb := mailBoxPool.Get().(*MailBox)
+func newMailBox(handler MailBoxHandler) *mailBox {
+	mb := mailBoxPool.Get().(*mailBox)
 	mb.handler = handler
 	return mb
 }
 
 func initMailBox(a *AtomCore) {
-	a.mailbox = NewMailBox(MailBoxHandler{
+	a.mailbox = newMailBox(MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,
 		OnStop:    a.onStop,
@@ -106,12 +106,12 @@ func initMailBox(a *AtomCore) {
 	a.mailbox.Name = a.name
 }
 
-func DelMailBox(b *MailBox) {
-	b.Reset()
+func delMailBox(b *mailBox) {
+	b.reset()
 	mailBoxPool.Put(b)
 }
 
-func (mb *MailBox) Start() {
+func (mb *mailBox) start() {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
 	if mb.running {
@@ -121,19 +121,19 @@ func (mb *MailBox) Start() {
 	go mb.loop()
 }
 
-func (mb *MailBox) WaitStop() {
+func (mb *mailBox) waitStop() {
 	ch := make(chan struct{}, 1)
-	m := NewExitMail(ch)
-	mb.PushHead(m)
+	m := newExitMail(ch)
+	mb.pushHead(m)
 	<-ch
 }
 
-func (mb *MailBox) Stop() {
-	m := NewExitMail(nil)
-	mb.PushHead(m)
+func (mb *mailBox) stop() {
+	m := newExitMail(nil)
+	mb.pushHead(m)
 }
 
-func (mb *MailBox) WaitPop() *Mail {
+func (mb *mailBox) waitPop() *mail {
 	mb.mutex.Lock()
 	if mb.num == 0 {
 		mb.cond.Wait()
@@ -155,7 +155,7 @@ func (mb *MailBox) WaitPop() *Mail {
 	}
 }
 
-func (mb *MailBox) GetById(id uint64) *Mail {
+func (mb *mailBox) getById(id uint64) *mail {
 	mb.mutex.Lock()
 	m := mb.head
 	if m == nil {
@@ -172,7 +172,7 @@ func (mb *MailBox) GetById(id uint64) *Mail {
 	return nil
 }
 
-func (mb *MailBox) PushHead(m *Mail) bool {
+func (mb *mailBox) pushHead(m *mail) bool {
 	mb.mutex.Lock()
 	if !mb.running {
 		mb.mutex.Unlock()
@@ -191,7 +191,7 @@ func (mb *MailBox) PushHead(m *Mail) bool {
 	return true
 }
 
-func (mb *MailBox) PushTail(m *Mail) bool {
+func (mb *mailBox) pushTail(m *mail) bool {
 	mb.mutex.Lock()
 	if !mb.running {
 		mb.mutex.Unlock()
@@ -210,7 +210,7 @@ func (mb *MailBox) PushTail(m *Mail) bool {
 	return true
 }
 
-func (mb *MailBox) PopAll() (head *Mail, num uint32) {
+func (mb *mailBox) popAll() (head *mail, num uint32) {
 	mb.mutex.Lock()
 	// There is no Mail in box
 	if mb.head == nil {
@@ -226,9 +226,9 @@ func (mb *MailBox) PopAll() (head *Mail, num uint32) {
 	return head, num
 }
 
-func (mb *MailBox) PopById(id uint64) *Mail {
+func (mb *mailBox) popById(id uint64) *mail {
 	mb.mutex.Lock()
-	var pM, m *Mail = nil, mb.head
+	var pM, m *mail = nil, mb.head
 	if m == nil {
 		mb.mutex.Unlock()
 		return nil
@@ -259,11 +259,11 @@ func (mb *MailBox) PopById(id uint64) *Mail {
 	return nil
 }
 
-func (mb *MailBox) loop() {
+func (mb *mailBox) loop() {
 	for {
 		if exit := func() (exit bool) {
 			exit = false
-			var curMail *Mail
+			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
 					// Only should AtomMailMessage and AtomMailTask 3rd-part logic
@@ -277,7 +277,7 @@ func (mb *MailBox) loop() {
 			}()
 			for {
 				// If there is no more new message, just waiting.
-				curMail = mb.WaitPop()
+				curMail = mb.waitPop()
 				switch curMail.action {
 				case MailActionRun:
 					// When this line can be executed, it means there is mail in box.
@@ -290,7 +290,7 @@ func (mb *MailBox) loop() {
 					mb.mutex.Unlock()
 					exit = true
 					// Reject all mails backward.
-					mails, num := mb.PopAll()
+					mails, num := mb.popAll()
 					mb.handler.OnStop(curMail, mails, num)
 					// Wait channel.
 					if curMail.Content != nil {
@@ -306,10 +306,10 @@ func (mb *MailBox) loop() {
 			break
 		}
 	}
-	DelMailBox(mb)
+	delMailBox(mb)
 }
 
-func (mb *MailBox) Reset() {
+func (mb *mailBox) reset() {
 	mb.running = false
 	mb.handler = MailBoxHandler{}
 	mb.head = nil
@@ -317,7 +317,7 @@ func (mb *MailBox) Reset() {
 	mb.num = 0
 }
 
-func (mb *MailBox) sharedLock() *sync.Mutex {
+func (mb *mailBox) sharedLock() *sync.Mutex {
 	return &mb.mutex
 }
 
