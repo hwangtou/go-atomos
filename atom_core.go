@@ -39,6 +39,22 @@ const (
 	AtomStopping AtomState = 4
 )
 
+func (as AtomState) String() string {
+	switch as {
+	case AtomHalt:
+		return "Halt"
+	case AtomSpawning:
+		return "Spawning"
+	case AtomWaiting:
+		return "Waiting"
+	case AtomBusy:
+		return "Busy"
+	case AtomStopping:
+		return "Stopping"
+	}
+	return "Unknown"
+}
+
 // Atom Error
 
 var (

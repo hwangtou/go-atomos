@@ -50,6 +50,7 @@ func (h *HelloAtom) Spawn(self atomos.AtomSelf, arg *api.HelloSpawnArg, data *ap
 }
 
 func (h *HelloAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) (saveData proto.Message) {
+	h.self.Log().Info("Halt")
 	return nil
 }
 

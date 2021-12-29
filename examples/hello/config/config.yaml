@@ -8,4 +8,10 @@ enable_cert:
 enable_server:
   host: 127.0.0.1
   port: 12345
+enable_telnet:
+  network: tcp
+  address: 127.0.0.1:1234
+  admin:
+    username: admin
+    password: admin123
 customize:

@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"crypto/tls"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -47,9 +48,29 @@ func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) error {
 		err := fmt.Errorf("runnable check elements failed")
 		return err
 	}
+	// Enable Cert
+	if self.config.EnableCert != nil {
+		self.logInfo("Cosmos.Init: Enable Cert, cert=%s,key=%s",
+			self.config.EnableCert.CertPath, self.config.EnableCert.KeyPath)
+		pair, err := tls.LoadX509KeyPair(self.config.EnableCert.CertPath, self.config.EnableCert.KeyPath)
+		if err != nil {
+			return err
+		}
+		c.self.listenCert = &tls.Config{
+			Certificates: []tls.Certificate{
+				pair,
+			},
+		}
+	}
 	// Init remote to support remote.
 	if err := self.remotes.init(); err != nil {
 		self.logFatal("Cosmos.Init: Init remote error, err=%v", err)
+		c.rollback(false, map[string]error{})
+		return err
+	}
+	// Init telnet.
+	if err := self.telnet.init(); err != nil {
+		self.logFatal("Cosmos.Init: Init telnet error, err=%v", err)
 		c.rollback(false, map[string]error{})
 		return err
 	}
@@ -143,6 +164,7 @@ func (c *CosmosRuntime) close() {
 	_ = c.mainAtom.pushKillMail(c.mainAtom, true)
 
 	// Close remote.
+	c.cosmosSelf.telnet.close()
 	c.cosmosSelf.remotes.close()
 	c.mainKillCh = nil
 	c.mainAtom = nil
@@ -153,24 +175,27 @@ func (c *CosmosRuntime) close() {
 
 // Element Interface.
 
-func (c *CosmosRuntime) getElement(name string) (*ElementLocal, error) {
+func (c *CosmosRuntime) getElement(name string) (elem *ElementLocal, err error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil || c.loading != nil {
-		// TODO
-		err := fmt.Errorf("upgrading")
+		if c.runnable == nil {
+			err = fmt.Errorf("no runnable")
+		} else {
+			err = fmt.Errorf("upgrading")
+		}
 		c.cosmosSelf.logError("Cosmos.Element: Get, Upgrading, name=%s", name)
 		return nil, err
 	}
 	elem, has := c.elements[name]
 	if !has {
-		err := fmt.Errorf("local element not found, name=%s", name)
+		err = fmt.Errorf("local element not found, name=%s", name)
 		c.cosmosSelf.logError("Cosmos.Element: Get, Cannot get element, name=%s", name)
 		return nil, err
 	}
 	if !elem.avail {
-		err := fmt.Errorf("local element is not avail, name=%s", name)
+		err = fmt.Errorf("local element is not avail, name=%s", name)
 		c.cosmosSelf.logError("Cosmos.Element: Get, Not avail now, name=%s", name)
 		return nil, err
 	}

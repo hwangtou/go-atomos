@@ -1,7 +1,6 @@
 package go_atomos
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
@@ -27,14 +26,14 @@ type cosmosRemotesHelper struct {
 	// State
 	started bool
 	// Conn
-	conns map[string]cosmosConn
+	conn map[string]cosmosConn
 }
 
 func newCosmosRemoteHelper(s *CosmosSelf) *cosmosRemotesHelper {
 	helper := &cosmosRemotesHelper{
 		self:   s,
 		server: Server{},
-		conns:  map[string]cosmosConn{},
+		conn:   map[string]cosmosConn{},
 	}
 	helper.server.helper = helper
 	return helper
@@ -44,8 +43,8 @@ func (h *cosmosRemotesHelper) delConn(name string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if _, has := h.conns[name]; has {
-		delete(h.conns, name)
+	if _, has := h.conn[name]; has {
+		delete(h.conn, name)
 	}
 }
 
@@ -63,7 +62,7 @@ func (h *cosmosRemotesHelper) newIncomingConn(remoteName string, conn *websocket
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	c, has := h.conns[remoteName]
+	c, has := h.conn[remoteName]
 	if has {
 		ic, ok := c.(*incomingConn)
 		if !ok {
@@ -75,7 +74,7 @@ func (h *cosmosRemotesHelper) newIncomingConn(remoteName string, conn *websocket
 	ic.name = remoteName
 	ic.conn = newConn(h, ic, conn)
 	ic.watch = newCosmosRemote(h, ic)
-	h.conns[remoteName] = ic
+	h.conn[remoteName] = ic
 	return ic, false
 }
 
@@ -129,7 +128,7 @@ func (h *cosmosRemotesHelper) newOutgoingConn(remoteName, remoteAddr string) (oc
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	c, has := h.conns[remoteName]
+	c, has := h.conn[remoteName]
 	if has {
 		switch conn := c.(type) {
 		case *outgoingConn:
@@ -143,7 +142,7 @@ func (h *cosmosRemotesHelper) newOutgoingConn(remoteName, remoteAddr string) (oc
 	oc.addr = remoteAddr
 	oc.conn = newConn(h, oc, nil)
 	oc.watch = newCosmosRemote(h, oc)
-	h.conns[remoteName] = oc
+	h.conn[remoteName] = oc
 	return oc, nil, false
 }
 
@@ -217,20 +216,6 @@ func (o outgoingConn) Disconnected(conn ConnDelegate) {
 func (h *cosmosRemotesHelper) init() (err error) {
 	// Config shortcut
 	config := h.self.config
-	// Enable Cert
-	if config.EnableCert != nil {
-		h.self.logInfo("Cosmos.Init: Enable Cert, cert=%s,key=%s",
-			config.EnableCert.CertPath, config.EnableCert.KeyPath)
-		pair, err := tls.LoadX509KeyPair(config.EnableCert.CertPath, config.EnableCert.KeyPath)
-		if err != nil {
-			return err
-		}
-		h.server.tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{
-				pair,
-			},
-		}
-	}
 	// Enable Server
 	if config.EnableServer != nil {
 		h.self.logInfo("Cosmos.Init: Enable Server, host=%s,port=%d",
@@ -288,7 +273,7 @@ func (h *cosmosRemotesHelper) getRemote(name string) *cosmosRemote {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	conn, has := h.conns[name]
+	conn, has := h.conn[name]
 	if !has {
 		return nil
 	}

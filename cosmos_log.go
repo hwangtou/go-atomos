@@ -14,35 +14,35 @@ import (
 // Interface of Cosmos Log.
 
 func (c *CosmosSelf) Debug(format string, args ...interface{}) {
-	if c.config.LogLevel > LogLevel_Debug {
+	if c == nil || c.config == nil || c.config.LogLevel > LogLevel_Debug {
 		return
 	}
 	c.pushCosmosLog(LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
 func (c *CosmosSelf) logInfo(format string, args ...interface{}) {
-	if c.config.LogLevel > LogLevel_Info {
+	if c == nil || c.config == nil || c.config.LogLevel > LogLevel_Info {
 		return
 	}
 	c.pushCosmosLog(LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
 func (c *CosmosSelf) logWarn(format string, args ...interface{}) {
-	if c.config.LogLevel > LogLevel_Warn {
+	if c == nil || c.config == nil || c.config.LogLevel > LogLevel_Warn {
 		return
 	}
 	c.pushCosmosLog(LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
 func (c *CosmosSelf) logError(format string, args ...interface{}) {
-	if c.config.LogLevel > LogLevel_Error {
+	if c == nil || c.config == nil || c.config.LogLevel > LogLevel_Error {
 		return
 	}
 	c.pushCosmosLog(LogLevel_Error, fmt.Sprintf(format, args...))
 }
 
 func (c *CosmosSelf) logFatal(format string, args ...interface{}) {
-	if c.config.LogLevel > LogLevel_Fatal {
+	if c == nil || c.config == nil || c.config.LogLevel > LogLevel_Fatal {
 		return
 	}
 	c.pushCosmosLog(LogLevel_Fatal, fmt.Sprintf(format, args...))

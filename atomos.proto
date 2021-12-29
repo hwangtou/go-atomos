@@ -38,12 +38,24 @@ message Config {
   LogLevel log_level = 3;
   CertConfig enable_cert = 4;
   RemoteServerConfig enable_server = 5;
-  map<string, string> customize = 6;
+  TelnetServerConfig enable_telnet = 6;
+  map<string, string> customize = 7;
 }
 
 message RemoteServerConfig {
   string host = 1;
   int32 port = 2;
+}
+
+message TelnetServerConfig {
+  string network = 1;
+  string address = 2;
+  TelnetAdminConfig admin = 3;
+}
+
+message TelnetAdminConfig {
+  string username = 1;
+  string password = 2;
 }
 
 message CertConfig {

@@ -1,7 +1,6 @@
 package go_atomos
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
@@ -16,7 +15,6 @@ import (
 type Server struct {
 	helper    *cosmosRemotesHelper
 	server    *http.Server
-	tlsConfig *tls.Config
 	listener  net.Listener
 	upgrade   websocket.Upgrader
 }
@@ -41,7 +39,7 @@ func (s *Server) init(addr string, port int32) (err error) {
 	s.server = &http.Server{
 		Addr:      fmt.Sprintf("%s:%d", addr, port),
 		Handler:   mux,
-		TLSConfig: s.tlsConfig,
+		TLSConfig: s.helper.self.listenCert,
 		ErrorLog:  log.New(s.helper, "", 0),
 	}
 	if err = http2.ConfigureServer(s.server, &http2.Server{}); err != nil {

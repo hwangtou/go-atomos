@@ -29,6 +29,7 @@ type yamlConfig struct {
 	LogLevel     int                     `yaml:"log_level"`
 	EnableCert   *yamlCertConfig         `yaml:"enable_cert"`
 	EnableServer *yamlRemoteServerConfig `yaml:"enable_server"`
+	EnableTelnet *yamlTelnetConfig       `yaml:"enable_telnet"`
 	Customize    map[string]string       `yaml:"customize"`
 }
 
@@ -41,6 +42,17 @@ type yamlCertConfig struct {
 type yamlRemoteServerConfig struct {
 	Host string `yaml:"host"`
 	Port int32  `yaml:"port"`
+}
+
+type yamlTelnetConfig struct {
+	Network string           `yaml:"network"`
+	Address string           `yaml:"address"`
+	Admin   *yamlTelnetAdmin `yaml:"admin"`
+}
+
+type yamlTelnetAdmin struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 func ConfigFromYaml(filepath string) (*Config, error) {
@@ -65,10 +77,22 @@ func ConfigFromYaml(filepath string) (*Config, error) {
 			InsecureSkipVerify: cert.InsecureSkipVerify,
 		}
 	}
-	if svr := y.EnableServer; svr != nil {
+	if server := y.EnableServer; server != nil {
 		conf.EnableServer = &RemoteServerConfig{
-			Host: svr.Host,
-			Port: svr.Port,
+			Host: server.Host,
+			Port: server.Port,
+		}
+	}
+	if telnet := y.EnableTelnet; telnet != nil {
+		conf.EnableTelnet = &TelnetServerConfig{
+			Network: telnet.Network,
+			Address: telnet.Address,
+		}
+		if telnetAdmin := telnet.Admin; telnetAdmin != nil {
+			conf.EnableTelnet.Admin = &TelnetAdminConfig{
+				Username: telnetAdmin.Username,
+				Password: telnetAdmin.Password,
+			}
 		}
 	}
 	if custom := y.Customize; custom != nil {

@@ -74,6 +74,7 @@ type ElementDeveloper interface {
 	// Atom保存函数的函数类型，只有有状态的Atom会被保存。
 	// Whether the Atom can be killed by the Id or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
+	// TODO: 以后考虑改成AtomCanAdmin，就改个名字。
 	AtomCanKill(Id) bool
 }
 

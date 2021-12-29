@@ -307,6 +307,13 @@ func (e *ElementLocal) elementReleaseAtom(atom *AtomCore) {
 	deallocAtom(atom)
 }
 
+func (e *ElementLocal) atomsNum() int {
+	e.lock.RLock()
+	num := len(e.atoms)
+	e.lock.RUnlock()
+	return num
+}
+
 func (e *ElementLocal) elementSpawningAtom(a *AtomCore, impl *ElementImplementation, arg, data proto.Message) error {
 	var err error
 	initMailBox(a)

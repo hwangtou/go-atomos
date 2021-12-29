@@ -74,6 +74,9 @@ type CosmosSelf struct {
 	// 集群助手，帮助访问远程的Cosmos。
 	// Cluster helper helps access to remote Cosmos.
 	remotes *cosmosRemotesHelper
+
+	// Telnet
+	telnet *cosmosTelnet
 }
 
 // Interface

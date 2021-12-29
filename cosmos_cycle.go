@@ -191,6 +191,7 @@ func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
 	c.daemonCmdCh = make(chan DaemonCommand)
 	c.runtime = newCosmosRuntime()
 	c.remotes = newCosmosRemoteHelper(c)
+	c.telnet = newCosmosTelnet(c)
 
 	return nil
 }
@@ -199,7 +200,7 @@ func (c *CosmosSelf) daemonInit(conf *Config) (err error) {
 // Daemon execute executable command.
 func (c *CosmosSelf) daemonRunnableExecute(runnable CosmosRunnable) error {
 	if !c.trySetRunning(true) {
-		return ErrDeamonIsRunning
+		return ErrDaemonIsRunning
 	}
 	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 	// Make CosmosRuntime initial the content of Runnable, especially the Element information.
@@ -323,7 +324,7 @@ const (
 )
 
 var (
-	ErrDeamonIsRunning = errors.New("cosmos daemon is running")
+	ErrDaemonIsRunning = errors.New("cosmos daemon is running")
 	ErrDaemonIsBusy    = errors.New("cosmos daemon is busy")
 	ErrRunnableInvalid = errors.New("cosmos runnable invalid")
 )

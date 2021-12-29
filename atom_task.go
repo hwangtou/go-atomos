@@ -479,3 +479,11 @@ func (at *atomTasksManager) handleTask(am *atomMail) {
 	}
 	method.Call(val)
 }
+
+// 供给Telnet使用的任务数量统计。
+func (at *atomTasksManager) getTasksNum() int {
+	at.mutex.Lock()
+	num := len(at.tasks)
+	at.mutex.Unlock()
+	return num
+}

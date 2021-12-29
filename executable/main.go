@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"plugin"
 	"time"
 
@@ -10,10 +11,12 @@ import (
 )
 
 func main() {
+	workingPath := os.Args[0]
 	configPath := flag.String("config", "examples/hello/config/config.yaml", "yaml config path")
 	runnablePath := flag.String("runnable", "examples/hello/bin/atomos_hello", "atomos runnable file path")
 	flag.Parse()
 
+	atomos.LogWrite(atomos.LogFormatter(time.Now(), atomos.LogLevel_Info, fmt.Sprintf("Working Path: %s", workingPath)), false)
 	// Load config.
 	conf, err := atomos.ConfigFromYaml(*configPath)
 	if err != nil {
