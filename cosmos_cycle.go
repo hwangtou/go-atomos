@@ -42,6 +42,9 @@ func (c *CosmosSelf) Daemon(conf *Config) (chan struct{}, error) {
 	runCh := make(chan struct{}, 1)
 	go func() {
 		defer func() {
+			c.logInfo("Cosmos.Daemon: Exited, bye!")
+		}()
+		defer func() {
 			closeCh <- struct{}{}
 		}()
 		daemonCh := make(chan error, 1)

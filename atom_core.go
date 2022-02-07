@@ -224,11 +224,23 @@ func (a *AtomCore) Task() TaskManager {
 	return &a.task
 }
 
+func (a *AtomCore) CallNameWithProtoBuffer(name string, buf []byte) (proto.Message, error) {
+	handler, has := a.element.current.Interface.AtomMessages[name]
+	if !has {
+		return nil, ErrAtomMessageAtomType
+	}
+	in, err := handler.InDec(buf)
+	if err != nil {
+		return nil, ErrAtomMessageArgType
+	}
+	return a.pushMessageMail(a, name, in)
+}
+
 func (a *AtomCore) Parallel(fn ParallelFn, msg proto.Message, ids ...Id) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				a.element.cosmos.logFatal("Atom.Parallel: Panic, id=%+V,reason=%s", a.atomId.str(), r)
+				a.element.cosmos.logFatal("Atom.Parallel: Panic, id=%s,reason=%s", a.atomId.str(), r)
 			}
 		}()
 		fn(a, msg, ids...)
@@ -568,13 +580,13 @@ func (a *AtomCore) Accept(daemon WormholeDaemon) error {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				a.element.cosmos.logFatal("Atom.Wormhole: Panic, id=%+V,reason=%s", a.atomId.str(), r)
+				a.element.cosmos.logFatal("Atom.Wormhole: Panic, id=%s,reason=%s", a.atomId.str(), r)
 			}
 		}()
-		a.element.cosmos.logInfo("Atom.Wormhole: Daemon, id=%+V", a.atomId.str())
+		a.element.cosmos.logInfo("Atom.Wormhole: Daemon, id=%s", a.atomId.str())
 		if err := daemon.Daemon(a); err != nil {
 			if err = a.pushWormholeMail(wormholeClose, daemon); err != nil {
-				a.element.cosmos.logError("Atom.Wormhole: Daemon close error, id=%+V,err=%s", a.atomId.str(), err)
+				a.element.cosmos.logError("Atom.Wormhole: Daemon close error, id=%s,err=%s", a.atomId.str(), err)
 			}
 		}
 	}()

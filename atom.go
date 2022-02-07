@@ -122,6 +122,9 @@ type AtomSelf interface {
 	// Atom任务
 	// Atom Tasks.
 	Task() TaskManager
+
+	// Call
+	CallNameWithProtoBuffer(name string, buf []byte) (proto.Message, error)
 }
 
 type TaskManager interface {

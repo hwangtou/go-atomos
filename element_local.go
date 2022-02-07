@@ -230,11 +230,11 @@ func (e *ElementLocal) elementGetAtom(name string) (*AtomCore, error) {
 	current := e.current
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
+	if hasAtom && atom.state > AtomHalt {
+		atom.count += 1
+		return atom, nil
+	}
 	if current.Developer.Persistence() == nil {
-		if hasAtom && atom.state > AtomHalt {
-			atom.count += 1
-			return atom, nil
-		}
 		return nil, ErrAtomNotFound
 	}
 	return e.elementCreateAtom(name, nil)
@@ -271,7 +271,7 @@ func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomC
 	var data proto.Message
 	if p := current.Developer.Persistence(); p != nil {
 		d, err := p.GetAtomData(name)
-		if err != nil {
+		if err != nil && arg == nil {
 			atom.setHalt()
 			e.elementReleaseAtom(atom)
 			return nil, err
