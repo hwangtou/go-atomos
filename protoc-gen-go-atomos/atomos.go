@@ -166,7 +166,7 @@ func genIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("ErrAtomMessageReplyType"), " }")
-		g.P("return reply, nil")
+		g.P("return reply, err")
 		g.P("}")
 		g.P()
 	}
