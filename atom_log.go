@@ -12,6 +12,14 @@ import (
 
 const defaultLogMailId = 0
 
+type AtomosLogging interface {
+	Debug(format string, args ...interface{})
+	Info(format string, args ...interface{})
+	Warn(format string, args ...interface{})
+	Error(format string, args ...interface{})
+	Fatal(format string, args ...interface{})
+}
+
 // Atomos日志管理器
 // Atomos Logs Manager
 

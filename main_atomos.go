@@ -21,23 +21,23 @@ type MainId interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() *atomLogsManager
+	Log() AtomosLogging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() TaskManager
+	Task() AtomosTasking
 
-	// Connect to remote CosmosNode.
-	Connect(name, addr string) (CosmosNode, error)
+	//// Connect to remote CosmosNode.
+	//Connect(name, addr string) (CosmosNode, error)
 
-	// Config
-	// Clone of Config
-	Config() *Config
-
-	// CustomizeConfig
-	// Get Customize Config.
-	CustomizeConfig(name string) (string, error)
+	//// Config
+	//// Clone of Config
+	//Config() *Config
+	//
+	//// CustomizeConfig
+	//// Get Customize Config.
+	//CustomizeConfig(name string) (string, error)
 }
 
 // GreeterAtom is the atomos implements of Greeter atomos.

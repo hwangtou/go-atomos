@@ -20,7 +20,7 @@ import (
 
 type TaskFn func(taskId uint64, data proto.Message)
 
-type TaskManager interface {
+type AtomosTasking interface {
 	Append(fn TaskFn, msg proto.Message) (id uint64, err error)
 	AddAfter(d time.Duration, fn TaskFn, msg proto.Message) (id uint64, err error)
 	Cancel(id uint64) (CancelledTask, error)
