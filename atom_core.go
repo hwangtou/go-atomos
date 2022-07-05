@@ -12,49 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Atom状态
-// AtomState
-
-type AtomState int
-
-const (
-	// 停止
-	// Atom is stopped.
-	AtomHalt AtomState = 0
-
-	// 启动中
-	// Atom is starting up.
-	AtomSpawning AtomState = 1
-
-	// 启动成功，等待消息
-	// Atom is started and waiting for message.
-	AtomWaiting AtomState = 2
-
-	// 启动成功，正在处理消息
-	// Atom is started and busy processing message.
-	AtomBusy AtomState = 3
-
-	// 停止中
-	// Atom is stopping.
-	AtomStopping AtomState = 4
-)
-
-func (as AtomState) String() string {
-	switch as {
-	case AtomHalt:
-		return "Halt"
-	case AtomSpawning:
-		return "Spawning"
-	case AtomWaiting:
-		return "Waiting"
-	case AtomBusy:
-		return "Busy"
-	case AtomStopping:
-		return "Stopping"
-	}
-	return "Unknown"
-}
-
 // Atom Error
 
 var (
@@ -99,27 +56,24 @@ type AtomCore struct {
 	//
 	// Atom-type instance that has been created by AtomConstructor method of ElementLocal,
 	// which is implemented by developer.
-	instance Atom
+	instance Atomos
 
-	// 状态
-	// State
-	state AtomState
+	//// 邮箱，也是实现Atom无锁队列的关键。
+	//// Mailbox, the key of lockless queue of Atom.
+	//mailbox *mailBox
+	baseAtomos
 
-	// 邮箱，也是实现Atom无锁队列的关键。
-	// Mailbox, the key of lockless queue of Atom.
-	mailbox *mailBox
+	//// 任务管理器，用于处理来自Atom内部的任务调派。
+	//// Task Manager, uses to handle Task from inner Atom.
+	//task atomTasksManager
+	//
+	//// 日志管理器，用于处理来自Atom内部的日志。
+	//// Logs Manager, uses to handle Log from inner Atom.
+	//log atomLogsManager
 
-	// 任务管理器，用于处理来自Atom内部的任务调派。
-	// Task Manager, uses to handle Task from inner Atom.
-	task atomTasksManager
-
-	// 日志管理器，用于处理来自Atom内部的日志。
-	// Logs Manager, uses to handle Log from inner Atom.
-	log atomLogsManager
-
-	// Atom信息的protobuf对象，以便于Atom信息的序列化。
-	// Protobuf instance of Atom information, for a convenience serialization of Atom information.
-	atomId *AtomId
+	//// Atom信息的protobuf对象，以便于Atom信息的序列化。
+	//// Protobuf instance of Atom information, for a convenience serialization of Atom information.
+	//atomId *IDInfo
 
 	// 引用计数，所以任何GetId操作之后都需要Release。
 	// Reference count, thus we have to Release any Id after GetId.
@@ -129,13 +83,18 @@ type AtomCore struct {
 	nameElement *list.Element
 
 	// 升级次数版本
-	upgrades    int
+	upgrades int
 
 	// 实际的Id类型
-	id          Id
+	id ID
 
 	// 当前实现
-	current     *ElementImplementation
+	current *ElementImplementation
+}
+
+func (a *AtomCore) GetVersion() uint64 {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Atom对象的内存池
@@ -170,7 +129,7 @@ func (a *AtomCore) Element() Element {
 	return a.element
 }
 
-func (a *AtomCore) Name() string {
+func (a *AtomCore) GetName() string {
 	return a.name
 }
 
@@ -178,9 +137,10 @@ func (a *AtomCore) Version() uint64 {
 	return a.version
 }
 
+// Kill
 // 从另一个AtomCore，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomCore or from Main Script.
-func (a *AtomCore) Kill(from Id) error {
+func (a *AtomCore) Kill(from ID) error {
 	if ok := a.element.current.Developer.AtomCanKill(from); !ok {
 		return ErrAtomCannotKill
 	}
@@ -205,9 +165,14 @@ func (a *AtomCore) CosmosSelf() *CosmosSelf {
 	return a.element.cosmos
 }
 
+func (a *AtomCore) ElementSelf() Element {
+	return a.element
+}
+
+// KillSelf
 // Atom kill itself from inner
 func (a *AtomCore) KillSelf() {
-	id, elem := a.atomId, a.element
+	id, elem := a.id, a.element
 	if err := a.pushKillMail(a, false); err != nil {
 		elem.cosmos.logInfo(fmt.Sprintf("%s => Kill self error, err=%v",
 			id.str(), err))
@@ -216,13 +181,13 @@ func (a *AtomCore) KillSelf() {
 	elem.cosmos.logInfo(fmt.Sprintf("%s => Kill self.", id.str()))
 }
 
-func (a *AtomCore) Log() *atomLogsManager {
-	return &a.log
-}
-
-func (a *AtomCore) Task() TaskManager {
-	return &a.task
-}
+//func (a *AtomCore) Log() *atomLogsManager {
+//	return &a.log
+//}
+//
+//func (a *AtomCore) Task() TaskManager {
+//	return &a.task
+//}
 
 func (a *AtomCore) CallNameWithProtoBuffer(name string, buf []byte) (proto.Message, error) {
 	handler, has := a.element.current.Interface.AtomMessages[name]
@@ -236,7 +201,7 @@ func (a *AtomCore) CallNameWithProtoBuffer(name string, buf []byte) (proto.Messa
 	return a.pushMessageMail(a, name, in)
 }
 
-func (a *AtomCore) Parallel(fn ParallelFn, msg proto.Message, ids ...Id) {
+func (a *AtomCore) Parallel(fn ParallelFn, msg proto.Message, ids ...ID) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -266,26 +231,27 @@ func initAtom(a *AtomCore, es *ElementLocal, name string, current *ElementImplem
 	a.name = name
 	a.instance = inst
 	a.state = AtomSpawning
-	a.atomId = &AtomId{
-		Node:    a.CosmosSelf().GetName(),
-		Element: a.Element().GetName(),
-		Name:    a.name,
+	a.baseAtomos.id = &IDInfo{
+		Type:    IDType_Atomos,
+		Cosmos:  a.CosmosSelf().GetName(),
+		Element: a.Element().GetElementName(),
+		Atomos:  a.name,
 	}
 	a.count = 1
 	a.upgrades = upgrade
 	a.id = current.Interface.AtomIdConstructor(a)
-	initAtomLog(&a.log, a)
-	initAtomTasksManager(&a.task, a)
+	//initAtomLog(&a.log, a)
+	//initAtomTasksManager(&a.task, a)
 }
 
-func releaseAtom(a *AtomCore) {
-	releaseAtomTask(&a.task)
-	releaseAtomLog(&a.log)
-}
-
-func deallocAtom(a *AtomCore) {
-	atomsPool.Put(a)
-}
+//func releaseAtom(a *AtomCore) {
+//	releaseAtomTask(&a.task)
+//	releaseAtomLog(&a.log)
+//}
+//
+//func deallocAtom(a *AtomCore) {
+//	atomsPool.Put(a)
+//}
 
 // 邮箱控制器相关
 // Mailbox Handler
@@ -399,7 +365,7 @@ func (a *AtomCore) onStop(killMail, remainMails *mail, num uint32) {
 // Message Mail
 
 // TODO: dead-lock loop checking
-func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) (reply proto.Message, err error) {
+func (a *AtomCore) pushMessageMail(from ID, message string, args proto.Message) (reply proto.Message, err error) {
 	am := allocAtomMail()
 	initMessageMail(am, from, message, args)
 	if ok := a.mailbox.pushTail(am.mail); !ok {
@@ -419,7 +385,7 @@ func (a *AtomCore) pushMessageMail(from Id, message string, args proto.Message) 
 	return reply, err
 }
 
-func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out proto.Message, err error) {
+func (a *AtomCore) handleMessage(from ID, name string, in proto.Message) (out proto.Message, err error) {
 	a.setBusy()
 	defer a.setWaiting()
 	handler := a.current.AtomHandlers[name]
@@ -443,7 +409,7 @@ func (a *AtomCore) handleMessage(from Id, name string, in proto.Message) (out pr
 
 // Kill Mail
 
-func (a *AtomCore) pushKillMail(from Id, wait bool) error {
+func (a *AtomCore) pushKillMail(from ID, wait bool) error {
 	am := allocAtomMail()
 	initKillMail(am, from)
 	if ok := a.mailbox.pushHead(am.mail); !ok {
@@ -591,28 +557,4 @@ func (a *AtomCore) Accept(daemon WormholeDaemon) error {
 		}
 	}()
 	return nil
-}
-
-// 各种状态
-// State
-// State of Atom
-
-func (a *AtomCore) getState() AtomState {
-	return a.state
-}
-
-func (a *AtomCore) setBusy() {
-	a.state = AtomBusy
-}
-
-func (a *AtomCore) setWaiting() {
-	a.state = AtomWaiting
-}
-
-func (a *AtomCore) setStopping() {
-	a.state = AtomStopping
-}
-
-func (a *AtomCore) setHalt() {
-	a.state = AtomHalt
 }

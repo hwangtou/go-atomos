@@ -19,7 +19,7 @@ type CosmosRuntime struct {
 	runnable   *CosmosRunnable
 	loading    *CosmosRunnable
 	elements   map[string]*ElementLocal
-	mainElem   *ElementLocal
+	//mainElem   *ElementLocal
 	mainKillCh chan bool
 	*mainAtom
 }
@@ -343,7 +343,7 @@ func (c *CosmosRuntime) IsLocal() bool {
 	return true
 }
 
-func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (Id, error) {
+func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (ID, error) {
 	// Get element.
 	e, err := c.getElement(elemName)
 	if err != nil {
@@ -353,7 +353,7 @@ func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (Id, error) {
 	return e.GetAtomId(atomName)
 }
 
-func (c *CosmosRuntime) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
+func (c *CosmosRuntime) SpawnAtom(elemName, atomName string, arg proto.Message) (ID, error) {
 	// Get element.
 	e, err := c.getElement(elemName)
 	if err != nil {
@@ -369,10 +369,10 @@ func (c *CosmosRuntime) SpawnAtom(elemName, atomName string, arg proto.Message) 
 	return i, nil
 }
 
-func (c *CosmosRuntime) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
+func (c *CosmosRuntime) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error) {
 	return toId.Element().MessagingAtom(fromId, toId, message, args)
 }
 
-func (c *CosmosRuntime) KillAtom(fromId, toId Id) error {
+func (c *CosmosRuntime) KillAtom(fromId, toId ID) error {
 	return toId.Element().KillAtom(fromId, toId)
 }

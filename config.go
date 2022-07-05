@@ -162,9 +162,18 @@ func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err error) {
 	return
 }
 
-func (x *AtomId) str() string {
+func (x *IDInfo) str() string {
 	if x == nil {
 		return "InvalidAtomId"
 	}
-	return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Name)
+	switch x.Type {
+	case IDType_Atomos:
+		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atomos)
+	case IDType_Element:
+		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
+	case IDType_Cosmos:
+		fallthrough
+	default:
+		return fmt.Sprintf("%s", x.Cosmos)
+	}
 }

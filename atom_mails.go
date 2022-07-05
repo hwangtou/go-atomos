@@ -24,18 +24,22 @@ const DefaultMailId = 0
 type AtomMailType int
 
 const (
+	// AtomMailHalt
 	// 终止邮件，用于停止Atom的运行。
 	// Halt Mail, for stopping an atom from running.
 	AtomMailHalt AtomMailType = 0
 
+	// AtomMailMessage
 	// 信息邮件，用于外部给运行中的Atom传递信息。
 	// Message Mail, for messaging to a running atom from outer.
 	AtomMailMessage AtomMailType = 1
 
+	// AtomMailTask
 	// 任务邮件，用于内部给运行中的Atom新增任务。
 	// Task Mail, for adding task to a running atom from inner.
 	AtomMailTask AtomMailType = 2
 
+	// AtomMailReload
 	// 重载邮件，用于升级Atom的ElementLocal引用，以实现热更。
 	// Reload Mail, for upgrading ElementLocal reference of an atom, to support hot-reload feature.
 	AtomMailReload AtomMailType = 3
@@ -59,7 +63,7 @@ type atomMail struct {
 
 	// 从哪个Id发来的邮件。
 	// Mail send from which Id.
-	from Id
+	from ID
 
 	// Message和Task邮件会使用到的，调用的目标对象的名称。
 	// Mail target name, used by Message mail and Task mail.
@@ -71,7 +75,7 @@ type atomMail struct {
 
 	// 需要升级的Element。
 	// Upgrade Element.
-	upgrade *ElementImplementation
+	upgrade      *ElementImplementation
 	upgradeCount int
 
 	wormholeAction int
@@ -114,7 +118,7 @@ func deallocAtomMail(am *atomMail) {
 
 // 消息邮件
 // Message Mail
-func initMessageMail(am *atomMail, from Id, name string, arg proto.Message) {
+func initMessageMail(am *atomMail, from ID, name string, arg proto.Message) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionRun
 	am.mailType = AtomMailMessage
@@ -179,7 +183,7 @@ func initWormholeMail(am *atomMail, action int, wormhole WormholeDaemon) {
 
 // 终止邮件
 // Halt Mail
-func initKillMail(am *atomMail, from Id) {
+func initKillMail(am *atomMail, from ID) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionExit
 	am.mailType = AtomMailHalt

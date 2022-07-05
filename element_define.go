@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// ElementImplementation
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementImplementation对象。
 // ElementImplementation in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementImplementation struct {
@@ -17,6 +18,7 @@ type ElementImplementation struct {
 	AtomHandlers map[string]MessageHandler
 }
 
+// ElementInterface
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
 // ElementInterface in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementInterface struct {
@@ -42,16 +44,20 @@ type ElementInterface struct {
 
 type AtomSpawner func(s AtomSelf, a Atom, arg, data proto.Message) error
 
+// AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
 // Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
-type AtomIdConstructor func(Id) Id
+type AtomIdConstructor func(ID) ID
 
+// MessageHandler
 // Message处理器
-type MessageHandler func(from Id, to Atom, in proto.Message) (out proto.Message, err error)
+type MessageHandler func(from ID, to Atom, in proto.Message) (out proto.Message, err error)
 
+// MessageDecoder
 // Message解码器
 type MessageDecoder func(buf []byte) (proto.Message, error)
 
+// ElementAtomMessage
 // Element的Atom的调用信息。
 // Element Atom Message Info.
 type ElementAtomMessage struct {
@@ -59,9 +65,14 @@ type ElementAtomMessage struct {
 	OutDec MessageDecoder
 }
 
+// NewInterfaceFromDeveloper
 // For creating ElementInterface instance in *_atomos.pb.go.
 func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *ElementInterface {
-	version, _, _ := implement.Info()
+	var version uint64
+	// Get version.
+	if customizeVersion, ok := implement.(ElementCustomizeVersion); ok {
+		version = customizeVersion.GetElementVersion()
+	}
 	return &ElementInterface{
 		Config: &ElementConfig{
 			Name:     name,

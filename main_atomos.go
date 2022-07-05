@@ -16,12 +16,14 @@ const (
 // MainId is the interface of Greeter atomos.
 //
 type MainId interface {
-	Id
+	//ID
 
+	// Log
 	// Atom日志。
 	// Atom Logs.
 	Log() *atomLogsManager
 
+	// Task
 	// Atom任务
 	// Atom Tasks.
 	Task() TaskManager
@@ -29,9 +31,11 @@ type MainId interface {
 	// Connect to remote CosmosNode.
 	Connect(name, addr string) (CosmosNode, error)
 
+	// Config
 	// Clone of Config
 	Config() *Config
 
+	// CustomizeConfig
 	// Get Customize Config.
 	CustomizeConfig(name string) (string, error)
 }
@@ -51,21 +55,21 @@ func newMainElement(self *CosmosSelf) *ElementLocal {
 	}
 	e := newElementLocal(self, 1)
 	e.current = &ElementImplementation{
-		Developer:    m,
-		Interface:    &ElementInterface{
-			Name:              MainAtomName,
-			Config:            &ElementConfig{
-				Name:          MainAtomName,
-				Version:       1,
-				LogLevel:      self.config.LogLevel,
-				AtomInitNum:   1,
-				Messages:      map[string]*AtomMessageConfig{},
+		Developer: m,
+		Interface: &ElementInterface{
+			Name: MainAtomName,
+			Config: &ElementConfig{
+				Name:        MainAtomName,
+				Version:     1,
+				LogLevel:    self.config.LogLevel,
+				AtomInitNum: 1,
+				Messages:    map[string]*AtomMessageConfig{},
 			},
-			AtomSpawner:       m.AtomSpawner,
+			AtomSpawner: m.AtomSpawner,
 			AtomIdConstructor: func(id Id) Id {
 				return self.runtime.mainAtom
 			},
-			AtomMessages:      nil,
+			AtomMessages: nil,
 		},
 		AtomHandlers: nil,
 	}
@@ -88,34 +92,11 @@ func newMainAtom(e *ElementLocal) *mainAtom {
 	return a.instance.(*mainAtom)
 }
 
-func (m *mainElement) Load(mainId MainId) error {
-	return nil
-}
-
-func (m *mainElement) Unload() {
-}
-
-func (m *mainElement) Persistence() ElementPersistence {
-	return nil
-}
-
-func (m *mainElement) Info() (version uint64, logLevel LogLevel, initNum int) {
-	return 1, m.self.config.LogLevel, 1
-}
-
 func (m *mainElement) AtomConstructor() Atom {
 	return &mainAtom{
 		self:     m.self,
 		AtomCore: m.atom,
 	}
-}
-
-func (m *mainElement) AtomCanKill(id Id) bool {
-	return false
-}
-
-func (m *mainElement) AtomSpawner(s AtomSelf, a Atom, arg, data proto.Message) error {
-	return nil
 }
 
 // Main Atom
@@ -145,7 +126,7 @@ func (m *mainAtom) CustomizeConfig(name string) (string, error) {
 	return value, nil
 }
 
-func (m *mainAtom) Halt(from Id, cancels map[uint64]CancelledTask) proto.Message {
+func (m *mainAtom) Halt(from ID, cancels map[uint64]CancelledTask) proto.Message {
 	m.self.logInfo("Cosmos.Main: MainId is halting")
 	return nil
 }

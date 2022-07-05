@@ -78,8 +78,17 @@ const logTimeFmt = "2006-01-02 15:04:05.000000"
 
 func (c *CosmosSelf) logging(lm *LogMail) {
 	var msg string
-	if lm.Id != nil {
-		msg = fmt.Sprintf("%s::%s::%s => %s", lm.Id.Node, lm.Id.Element, lm.Id.Name, lm.Message)
+	if id := lm.Id; id != nil {
+		switch id.Type {
+		case IDType_Element:
+			msg = fmt.Sprintf("%s::%s => %s", id.Cosmos, id.Element, lm.Message)
+		case IDType_Cosmos:
+			msg = fmt.Sprintf("%s => %s", id.Cosmos, lm.Message)
+		case IDType_Atomos:
+			fallthrough
+		default:
+			msg = fmt.Sprintf("%s::%s::%s => %s", id.Cosmos, id.Element, id.Atomos, lm.Message)
+		}
 	} else {
 		msg = fmt.Sprintf("%s", lm.Message)
 	}

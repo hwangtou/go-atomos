@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ElementLocal
 // 本地Element实现。
 // Implementation of local Element.
 type ElementLocal struct {
@@ -185,11 +186,11 @@ func (e *ElementLocal) unload() {
 
 // Local implementations of Element type.
 
-func (e *ElementLocal) GetName() string {
+func (e *ElementLocal) GetElementName() string {
 	return e.current.Interface.Config.Name
 }
 
-func (e *ElementLocal) GetAtomId(name string) (Id, error) {
+func (e *ElementLocal) GetAtomId(name string) (ID, error) {
 	atom, err := e.elementGetAtom(name)
 	if err != nil {
 		return nil, err
@@ -201,23 +202,23 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomCore, err
 	return e.elementCreateAtom(name, arg)
 }
 
-func (e *ElementLocal) MessagingAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
+func (e *ElementLocal) MessagingAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error) {
 	if fromId == nil {
 		return reply, ErrFromNotFound
 	}
-	a := toId.getLocalAtom()
-	if a == nil {
+	a, ok := toId.(*AtomCore)
+	if !ok || a == nil {
 		return reply, ErrAtomNotFound
 	}
 	return a.pushMessageMail(fromId, message, args)
 }
 
-func (e *ElementLocal) KillAtom(fromId, toId Id) error {
+func (e *ElementLocal) KillAtom(fromId, toId ID) error {
 	if fromId == nil {
 		return ErrFromNotFound
 	}
-	a := toId.getLocalAtom()
-	if a == nil {
+	a, ok := toId.(*AtomCore)
+	if !ok || a == nil {
 		return ErrAtomNotFound
 	}
 	return a.pushKillMail(fromId, true)
