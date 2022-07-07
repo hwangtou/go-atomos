@@ -19,6 +19,12 @@ import (
 type Atomos interface {
 	//Spawn(self AtomSelf, arg proto.Message) error
 	Halt(from ID, cancels map[uint64]CancelledTask) (saveData proto.Message)
+
+	onReceive(mail *mail)
+	handleMessage(from ID, name string, in proto.Message) (out proto.Message, err *ErrorInfo)
+	handleKill(killAtomMail *atomosMail, cancels map[uint64]CancelledTask) *ErrorInfo
+	handleReload(am *atomosMail) *ErrorInfo
+	handleWormhole(action int, wormhole WormholeDaemon) *ErrorInfo
 }
 
 const RunnableName = "AtomosRunnable"
@@ -65,6 +71,7 @@ const RunnableName = "AtomosRunnable"
 // ID 是Atom的类似句柄的对象。
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
+
 	// Release
 	// 释放Id的引用计数
 	// Release reference count of ID.
@@ -94,17 +101,19 @@ type ID interface {
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
-	Kill(from ID) error
+	Kill(from ID) *ErrorInfo
 
 	//// 内部使用，如果是本地Atom，会返回本地Atom的引用。
 	//// Inner use only, if Atom is local, it returns the local AtomCore reference.
 	//getLocalAtom() *AtomCore
+
+	String() string
 }
 
 type CallProtoBuffer interface {
 	// CallNameWithProtoBuffer
 	// 直接接收调用
-	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, error)
+	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *ErrorInfo)
 }
 
 type CallJson interface {
@@ -143,12 +152,12 @@ type AtomSelf interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() *atomosLogsManager
+	Log() AtomosLogging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() TaskManager
+	Task() AtomosTasking
 }
 
 type ParallelSelf interface {

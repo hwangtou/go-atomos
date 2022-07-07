@@ -53,7 +53,7 @@ func (l *atomosLogsManager) pushAtomosLog(id *IDInfo, level LogLevel, msg string
 	lm.Level = level
 	lm.Message = msg
 	m := newMail(defaultLogMailId, lm)
-	if ok := l.atomos.cosmosLogMailbox.pushTail(m); !ok {
+	if ok := l.atomos.logging.log.pushTail(m); !ok {
 		log.Printf("atomLogs: Add log mail failed, id=%+v,level=%v,msg=%s", id, level, msg)
 	}
 }

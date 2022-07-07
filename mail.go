@@ -1,14 +1,9 @@
 package go_atomos
 
 import (
-	"errors"
 	"log"
 	"runtime/debug"
 	"sync"
-)
-
-var (
-	ErrMailBoxClosed = errors.New("MailBox: Closed")
 )
 
 // Mail
@@ -73,7 +68,7 @@ type MailBoxHandler struct {
 }
 
 type mailBox struct {
-	Name    string
+	//Name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
@@ -93,17 +88,19 @@ var mailBoxPool = sync.Pool{
 
 func newMailBox(handler MailBoxHandler) *mailBox {
 	mb := mailBoxPool.Get().(*mailBox)
+	mb.running = false
 	mb.handler = handler
+	mb.head, mb.tail, mb.num = nil, nil, 0
 	return mb
 }
 
-func initMailBox(a *AtomCore) {
+func initMailBox(a *baseAtomos) {
 	a.mailbox = newMailBox(MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,
 		OnStop:    a.onStop,
 	})
-	a.mailbox.Name = a.name
+	//a.mailbox.Name = a.name
 }
 
 func delMailBox(b *mailBox) {

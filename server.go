@@ -13,10 +13,10 @@ import (
 )
 
 type Server struct {
-	helper    *cosmosRemotesHelper
-	server    *http.Server
-	listener  net.Listener
-	upgrade   websocket.Upgrader
+	helper   *cosmosRemotesHelper
+	server   *http.Server
+	listener net.Listener
+	upgrade  websocket.Upgrader
 }
 
 const (
@@ -144,7 +144,7 @@ func (s *Server) handle404(_ http.ResponseWriter, request *http.Request) {
 	return
 }
 
-// Handle atom id.
+// Handle atomos id.
 func (s *Server) handleAtomId(writer http.ResponseWriter, request *http.Request) {
 	//s.helper.self.logInfo("Cosmos.Remote: handleAtomId")
 	defer request.Body.Close()
@@ -203,7 +203,7 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 		// TODO
 		return
 	}
-	// Get to atom.
+	// Get to atomos.
 	element, has := s.helper.self.runtime.elements[req.To.Element]
 	if has {
 		a, err := element.GetAtomId(req.To.Name)
@@ -211,11 +211,11 @@ func (s *Server) handleAtomMsg(writer http.ResponseWriter, request *http.Request
 			resp.Error = err.Error()
 		} else {
 			if a != nil {
-				// Got to atom.
+				// Got to atomos.
 				resp.Has = true
-				// Get from atom, create if not exists.
+				// Get from atomos, create if not exists.
 				fromId := s.getFromId(req.From)
-				// Messaging to atom.
+				// Messaging to atomos.
 				reply, err := s.helper.self.runtime.MessageAtom(fromId, a, req.Message, arg)
 				resp.Reply = MessageToAny(reply)
 				if err != nil {

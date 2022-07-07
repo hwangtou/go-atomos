@@ -103,7 +103,7 @@ func ConfigFromYaml(filepath string) (*Config, error) {
 	return conf, nil
 }
 
-func (x *Config) Check() error {
+func (x *Config) Check() *ErrorInfo {
 	if x == nil {
 		return ErrConfigIsNil
 	}
@@ -117,17 +117,17 @@ func (x *Config) Check() error {
 	return nil
 }
 
-func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err error) {
+func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
 	cert := x.EnableCert
 	if cert == nil {
 		return nil, nil
 	}
 	if cert.CertPath == "" {
-		return nil, ErrConfigCertPathInvalid
+		return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
 	}
-	caCert, err := ioutil.ReadFile(cert.CertPath)
-	if err != nil {
-		return nil, err
+	caCert, e := ioutil.ReadFile(cert.CertPath)
+	if e != nil {
+		return nil, NewError(ErrCosmosCertConfigInvalid, fmt.Sprintf("Cert file read error, err=(%v)", e))
 	}
 	tlsConfig = &tls.Config{}
 	if cert.InsecureSkipVerify {
@@ -141,39 +141,24 @@ func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err error) {
 	return tlsConfig, nil
 }
 
-func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err error) {
+func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
 	cert := x.EnableCert
 	if cert == nil {
 		return nil, nil
 	}
 	if cert.CertPath == "" {
-		return nil, ErrConfigCertPathInvalid
+		return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
 	}
 	if cert.KeyPath == "" {
-		return nil, ErrConfigKeyPathInvalid
+		return nil, NewError(ErrCosmosCertConfigInvalid, "Key path is empty")
 	}
 	tlsConfig = &tls.Config{
 		Certificates: make([]tls.Certificate, 1),
 	}
-	tlsConfig.Certificates[0], err = tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
-	if err != nil {
-		return nil, err
+	var e error
+	tlsConfig.Certificates[0], e = tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+	if e != nil {
+		return nil, NewError(ErrCosmosCertConfigInvalid, fmt.Sprintf("Load key pair error, err=(%v)", e))
 	}
 	return
-}
-
-func (x *IDInfo) str() string {
-	if x == nil {
-		return "InvalidAtomId"
-	}
-	switch x.Type {
-	case IDType_Atomos:
-		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atomos)
-	case IDType_Element:
-		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
-	case IDType_Cosmos:
-		fallthrough
-	default:
-		return fmt.Sprintf("%s", x.Cosmos)
-	}
 }

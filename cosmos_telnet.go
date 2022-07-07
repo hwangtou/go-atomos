@@ -218,7 +218,7 @@ func (t *cosmosTelnet) handleAtomos(cmdSlice []string, reply *bytes.Buffer) {
 			if a != nil {
 				state = a.state.String()
 			} else if err == ErrAtomNotFound {
-				state = AtomHalt.String()
+				state = AtomosHalt.String()
 			} else if err != nil {
 				state = err.Error()
 			}

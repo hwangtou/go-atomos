@@ -1,9 +1,7 @@
 package go_atomos
 
 import (
-	"crypto/tls"
 	"google.golang.org/protobuf/proto"
-	"sync"
 )
 
 // Cosmos生命周期
@@ -17,7 +15,7 @@ type CosmosCycle interface {
 }
 
 func NewCosmosCycle() CosmosCycle {
-	return newCosmosSelf()
+	return newCosmosProcess()
 }
 
 // Cosmos节点需要支持的接口内容
@@ -51,49 +49,26 @@ type CosmosNode interface {
 
 // CosmosSelf
 
-type CosmosSelf struct {
-	// CosmosCycle
-	// Cosmos循环
+func (c *CosmosProcess) atomosHalt(a *baseAtomos) {
+	//TODO implement me
+	panic("implement me")
+}
 
-	// Loads at NewCosmosCycle & Daemon.
-	// Log
-	log *mailBox
-	// State
-	mutex   sync.Mutex
-	running bool
-	// Config
-	config *Config
-	// TLS if exists
-	clientCert *tls.Config
-	listenCert *tls.Config
-	// A channel focus on Daemon Command.
-	daemonCmdCh  chan DaemonCommand
-	upgradeCount int
-
-	// CosmosRunnable & CosmosRuntime.
-	// 可运行Cosmos & Cosmos运行时。
-
-	// Loads at DaemonWithRunnable or Runnable.
-	runtime *CosmosRuntime
-
-	// 集群助手，帮助访问远程的Cosmos。
-	// Cluster helper helps access to remote Cosmos.
-	remotes *cosmosRemotesHelper
-
-	// Telnet
-	telnet *cosmosTelnet
+func (c *CosmosProcess) atomosRelease(a *baseAtomos) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Interface
 
-func (c *CosmosSelf) Local() *CosmosRuntime {
+func (c *CosmosProcess) Local() *CosmosRuntime {
 	return c.runtime
 }
 
-func (c *CosmosSelf) GetName() string {
+func (c *CosmosProcess) GetName() string {
 	return c.config.Node
 }
 
-func (c *CosmosSelf) Connect(nodeName, nodeAddr string) (*cosmosRemote, error) {
+func (c *CosmosProcess) Connect(nodeName, nodeAddr string) (*cosmosRemote, error) {
 	return c.remotes.getOrConnectRemote(nodeName, nodeAddr)
 }

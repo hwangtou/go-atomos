@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -23,6 +24,8 @@ type ElementLocal struct {
 	// Reference to CosmosSelf.
 	cosmos *CosmosSelf
 
+	atomos *baseAtomos
+
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
 	current, upgrading *ElementImplementation
@@ -35,23 +38,69 @@ type ElementLocal struct {
 	// Container of all atoms.
 	// 思考：要考虑在频繁变动的情景下，迭代不全的问题。
 	// 两种情景：更新&关闭。
-	atoms    map[string]*AtomCore
+	atoms    map[string]*AtomLocal
 	names    *list.List
 	upgrades int
+
+	log      *loggingMailBox
+	logLevel LogLevel
+}
+
+func (e *ElementLocal) Release() {
+}
+
+func (e *ElementLocal) Cosmos() CosmosNode {
+	return e.cosmos.runtime
+}
+
+func (e *ElementLocal) Element() Element {
+	return e
+}
+
+func (e *ElementLocal) GetName() string {
+	return e.current.Interface.Name
+}
+
+func (e *ElementLocal) GetVersion() uint64 {
+	return e.current.Interface.Config.Version
+}
+
+func (e *ElementLocal) Kill(from ID) *ErrorInfo {
+	return NewError(ErrElementCannotKill, "Cannot kill element")
+}
+
+func (e *ElementLocal) String() string {
+	return e.atomos.id.str()
+}
+
+func (e *ElementLocal) atomosHalt(a *baseAtomos) {
 }
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(cosmosSelf *CosmosSelf, atomInitNum int) *ElementLocal {
+func newElementLocal(cosmosSelf *CosmosSelf, define *ElementImplementation) *ElementLocal {
+	id := &IDInfo{
+		Type:    IDType_Element,
+		Cosmos:  cosmosSelf.config.Node,
+		Element: define.Interface.Name,
+		Atomos:  "",
+	}
+	atomos := allocBaseAtomos()
+	initBaseAtomos(atomos, id, cosmosSelf.log, define.Interface.Config.LogLevel, cosmosSelf, define.Developer.AtomConstructor())
 	elem := &ElementLocal{
 		lock:       sync.RWMutex{},
 		avail:      false,
 		cosmos:     cosmosSelf,
+		atomos:     atomos,
 		current:    nil,
 		upgrading:  nil,
 		implements: map[uint64]*ElementImplementation{},
-		atoms:      make(map[string]*AtomCore, atomInitNum),
 		names:      list.New(),
+	}
+	if atomsInitNum, ok := define.Developer.(ElementCustomizeAtomsInitNum); ok {
+		elem.atoms = make(map[string]*AtomLocal, atomsInitNum.GetElementAtomsInitNum())
+	} else {
+		elem.atoms = map[string]*AtomLocal{}
 	}
 	return elem
 }
@@ -65,7 +114,7 @@ func (e *ElementLocal) setInitDefine(define *ElementImplementation) error {
 	e.upgrading = nil
 	e.implements[define.Interface.Config.Version] = define
 	if wh, ok := define.Developer.(ElementLoadable); ok {
-		return wh.Load(e.cosmos.runtime.mainAtom, false)
+		return wh.Load(e.atomos, false)
 	}
 	return nil
 }
@@ -76,7 +125,7 @@ func (e *ElementLocal) setUpgradeDefine(define *ElementImplementation) error {
 	e.avail = false
 	e.upgrading = define
 	if wh, ok := define.Developer.(ElementLoadable); ok {
-		return wh.Load(e.cosmos.runtime.mainAtom, false)
+		return wh.Load(e.atomos, false)
 	}
 	return nil
 }
@@ -132,7 +181,7 @@ func (e *ElementLocal) pushUpgrade(upgradeCount int) {
 			defer func() {
 				wg.Done()
 				if r := recover(); r != nil {
-					e.cosmos.logFatal("Element.Reload: Panic, name=%s,reason=%s", name, r)
+					e.atomos.log.Fatal("Element.Reload: Panic, name=%s,reason=%s", name, r)
 				}
 			}()
 			e.lock.Lock()
@@ -141,10 +190,10 @@ func (e *ElementLocal) pushUpgrade(upgradeCount int) {
 			if !has {
 				return
 			}
-			e.cosmos.logInfo("Element.Reload: Reloading atom, name=%s", name)
+			e.atomos.log.Info("Element.Reload: Reloading atomos, name=%s", name)
 			err := atom.pushReloadMail(e.current, upgradeCount)
 			if err != nil {
-				e.cosmos.logError("Element.Reload: Push reload failed, name=%s,err=%v", name, err)
+				e.atomos.log.Error("Element.Reload: Push reload failed, name=%s,err=%v", name, err)
 			}
 		}(name)
 	}
@@ -165,7 +214,7 @@ func (e *ElementLocal) unload() {
 			defer func() {
 				wg.Done()
 				if r := recover(); r != nil {
-					e.cosmos.logFatal("Element.Unload: Panic, name=%s,reason=%s", name, r)
+					e.atomos.log.Fatal("Element.Unload: Panic, name=%s,reason=%s", name, r)
 				}
 			}()
 			e.lock.Lock()
@@ -174,10 +223,10 @@ func (e *ElementLocal) unload() {
 			if !has {
 				return
 			}
-			e.cosmos.logInfo("Element.Unload: Kill atom, name=%s", name)
-			err := atom.pushKillMail(e.cosmos.runtime.mainAtom, true)
+			e.atomos.log.Info("Element.Unload: Kill atomos, name=%s", name)
+			err := atom.pushKillMail(e, true)
 			if err != nil {
-				e.cosmos.logError("Element.Unload: Kill atom error, name=%s,err=%v", name, err)
+				e.atomos.log.Error("Element.Unload: Kill atomos error, name=%s,err=%v", name, err)
 			}
 		}(name)
 	}
@@ -190,7 +239,7 @@ func (e *ElementLocal) GetElementName() string {
 	return e.current.Interface.Config.Name
 }
 
-func (e *ElementLocal) GetAtomId(name string) (ID, error) {
+func (e *ElementLocal) GetAtomId(name string) (ID, *ErrorInfo) {
 	atom, err := e.elementGetAtom(name)
 	if err != nil {
 		return nil, err
@@ -198,114 +247,121 @@ func (e *ElementLocal) GetAtomId(name string) (ID, error) {
 	return atom.id, nil
 }
 
-func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomCore, error) {
+func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *ErrorInfo) {
 	return e.elementCreateAtom(name, arg)
 }
 
-func (e *ElementLocal) MessagingAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error) {
+func (e *ElementLocal) MessagingAtom(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	if fromId == nil {
-		return reply, ErrFromNotFound
+		return reply, NewError(ErrAtomFromIDInvalid, fmt.Sprintf("From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args))
 	}
-	a, ok := toId.(*AtomCore)
+	a, ok := toId.(*AtomLocal)
 	if !ok || a == nil {
-		return reply, ErrAtomNotFound
+		return reply, NewError(ErrAtomToIDInvalid, fmt.Sprintf("To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args))
 	}
-	return a.pushMessageMail(fromId, message, args)
+	return a.pushMessageMail(fromId, name, args)
 }
 
-func (e *ElementLocal) KillAtom(fromId, toId ID) error {
+func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
 	if fromId == nil {
-		return ErrFromNotFound
+		return NewError(ErrAtomFromIDInvalid, fmt.Sprintf("From ID invalid, from=(%s),to=(%s)", fromId, toId))
 	}
-	a, ok := toId.(*AtomCore)
+	a, ok := toId.(*AtomLocal)
 	if !ok || a == nil {
-		return ErrAtomNotFound
+		return NewError(ErrAtomToIDInvalid, fmt.Sprintf("To ID invalid, from=(%s),to=(%s)", fromId, toId))
 	}
 	return a.pushKillMail(fromId, true)
 }
 
 // Internal
 
-func (e *ElementLocal) elementGetAtom(name string) (*AtomCore, error) {
+func (e *ElementLocal) elementGetAtom(name string) (*AtomLocal, *ErrorInfo) {
 	e.lock.RLock()
 	current := e.current
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
-	if hasAtom && atom.state > AtomHalt {
-		atom.count += 1
+	if hasAtom && atom.atomos.state > AtomosHalt {
+		atom.atomos.refCount += 1
 		return atom, nil
 	}
-	if current.Developer.Persistence() == nil {
-		return nil, ErrAtomNotFound
+	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
+	if !ok || persistence == nil {
+		return nil, NewError(ErrAtomNotExists, fmt.Sprintf("Atom not exists, name=(%s)", name))
 	}
 	return e.elementCreateAtom(name, nil)
 }
 
-func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomCore, error) {
+func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomLocal, *ErrorInfo) {
 	e.lock.RLock()
-	current, upgrade := e.current, e.upgrades
+	//current, upgrade := e.current, e.upgrades
+	current := e.current
 	e.lock.RUnlock()
-	// Alloc an atom and try setting.
-	atom := allocAtom()
-	initAtom(atom, e, name, current, upgrade)
+	// Alloc an atomos and try setting.
+	atom := allocAtomLocal()
+	initAtomLocal(name, atom, e, current, e.log, e.logLevel)
 	// If not exist, lock and set an new one.
 	e.lock.Lock()
 	oldAtom, has := e.atoms[name]
 	if !has {
 		e.atoms[name] = atom
-		atom.nameElement = e.names.PushBack(name)
+		atom.atomos.nameElement = e.names.PushBack(name)
 	}
 	e.lock.Unlock()
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
-	if has && oldAtom.state > AtomHalt {
-		deallocAtom(atom)
-		return nil, ErrAtomExists
+	if has && oldAtom.atomos.state > AtomosHalt {
+		deallocAtomLocal(atom)
+		return nil, NewError(ErrAtomExists, fmt.Sprintf("Atom exists, name=(%s),arg=(%v)", name, arg))
 	}
 	// If exists and not running, release new and use old.
 	if has {
-		deallocAtom(atom)
+		deallocAtomLocal(atom)
 		atom = oldAtom
-		atom.count += 1
+		atom.atomos.refCount += 1
 	}
 	// Get data and Spawning.
 	var data proto.Message
-	if p := current.Developer.Persistence(); p != nil {
-		d, err := p.GetAtomData(name)
-		if err != nil && arg == nil {
-			atom.setHalt()
-			e.elementReleaseAtom(atom)
+	if p, ok := current.Developer.(ElementCustomizeAutoDataPersistence); ok && p != nil {
+		d, err := p.Persistence().GetAtomData(name)
+		if err != nil {
+			atom.atomos.setHalt()
+			e.atomosRelease(atom.atomos)
 			return nil, err
+		}
+		if d == nil && arg == nil {
+			atom.atomos.setHalt()
+			e.atomosRelease(atom.atomos)
+			return nil, NewError(ErrAtomSpawnArgInvalid, fmt.Sprintf("Spawn atom without arg, name=(%s)", name))
 		}
 		data = d
 	}
 	if err := e.elementSpawningAtom(atom, current, arg, data); err != nil {
-		e.elementReleaseAtom(atom)
+		e.atomosRelease(atom.atomos)
 		return nil, err
 	}
 	return atom, nil
 }
 
-func (e *ElementLocal) elementReleaseAtom(atom *AtomCore) {
-	atom.count -= 1
-	if atom.state > AtomHalt {
+func (e *ElementLocal) atomosRelease(atom *baseAtomos) {
+	atom.refCount -= 1
+	if atom.state > AtomosHalt {
 		return
 	}
-	if atom.count > 0 {
+	if atom.refCount > 0 {
 		return
 	}
 	e.lock.Lock()
-	_, has := e.atoms[atom.name]
+	a, has := e.atoms[atom.id.Atomos]
 	if has {
-		delete(e.atoms, atom.name)
+		delete(e.atoms, atom.id.Atomos)
 	}
 	if atom.nameElement != nil {
 		e.names.Remove(atom.nameElement)
 		atom.nameElement = nil
 	}
 	e.lock.Unlock()
-	releaseAtom(atom)
-	deallocAtom(atom)
+	releaseAtomLocal(a)
+	deallocAtomLocal(a)
 }
 
 func (e *ElementLocal) atomsNum() int {
@@ -315,16 +371,15 @@ func (e *ElementLocal) atomsNum() int {
 	return num
 }
 
-func (e *ElementLocal) elementSpawningAtom(a *AtomCore, impl *ElementImplementation, arg, data proto.Message) error {
-	var err error
-	initMailBox(a)
-	a.mailbox.start()
-	if err = impl.Interface.AtomSpawner(a, a.instance, arg, data); err != nil {
-		a.setHalt()
-		delMailBox(a.mailbox)
-		a.mailbox.stop()
+func (e *ElementLocal) elementSpawningAtom(a *AtomLocal, impl *ElementImplementation, arg, data proto.Message) *ErrorInfo {
+	//initMailBox(a.atomos)
+	a.atomos.mailbox.start()
+	if err := impl.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
+		a.atomos.setHalt()
+		//delMailBox(a.mailbox)
+		a.atomos.mailbox.stop()
 		return err
 	}
-	a.setWaiting()
+	a.atomos.setWaiting()
 	return nil
 }

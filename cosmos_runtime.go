@@ -15,13 +15,13 @@ import (
 
 type CosmosRuntime struct {
 	mutex      sync.RWMutex
-	cosmosSelf *CosmosSelf
+	cosmosSelf *CosmosProcess
 	runnable   *CosmosRunnable
 	loading    *CosmosRunnable
 	elements   map[string]*ElementLocal
 	//mainElem   *ElementLocal
 	mainKillCh chan bool
-	*mainAtom
+	//*mainAtom
 }
 
 // Life cycle
@@ -231,7 +231,7 @@ func (c *CosmosRuntime) setElement(name string, define *ElementImplementation) e
 	c.mutex.Lock()
 	elem, has := c.elements[name]
 	if !has {
-		elem = newElementLocal(c.cosmosSelf, int(define.Interface.Config.AtomInitNum))
+		elem = newElementLocal(c.cosmosSelf, define)
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()
@@ -349,7 +349,7 @@ func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (ID, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Get atom.
+	// Get atomos.
 	return e.GetAtomId(atomName)
 }
 

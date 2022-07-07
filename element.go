@@ -3,16 +3,14 @@ package go_atomos
 // CHECKED!
 
 import (
-	"errors"
-
 	"google.golang.org/protobuf/proto"
 )
 
 // Element Error
 
-var (
-	ErrElementNotLoaded = errors.New("element not loaded")
-)
+//var (
+//	ErrElementNotLoaded = errors.New("element not loaded")
+//)
 
 // 给Element生成器使用。
 // For Element Generator use.
@@ -23,7 +21,7 @@ var (
 // 我们可以把Element理解成Atom的类型和管理器容器，类似面向对象的class和对应实例的容器管理器的概念。
 // 两种Element类型，本地Element和远程Element。
 //
-// A specific Element type is a type of the Atom and container of Atoms, it's similar to the concept "class" of OOP,
+// A specific Element type is a type of the Atom and holder of Atoms, it's similar to the concept "class" of OOP,
 // and it contains its instance. There are two kinds of Element, Local Element and Remote Element.
 type Element interface {
 	// GetElementName
@@ -34,46 +32,46 @@ type Element interface {
 	// GetAtomId
 	// 通过Atom名称获取指定的Atom的Id。
 	// Get AtomId by name of Atom.
-	GetAtomId(atomName string) (ID, error)
+	GetAtomId(atomName string) (ID, *ErrorInfo)
 
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(atomName string, arg proto.Message) (*AtomCore, error)
+	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *ErrorInfo)
 
 	// MessagingAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
-	MessagingAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error)
+	MessagingAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
 	// KillAtom
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
-	KillAtom(fromId, toId ID) error
+	KillAtom(fromId, toId ID) *ErrorInfo
 }
 
 type ElementId interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() *atomLogsManager
+	Log() AtomosLogging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() TaskManager
+	Task() AtomosTasking
 
-	// Connect
-	// To remote CosmosNode.
-	Connect(name, addr string) (CosmosNode, error)
-
-	// Config
-	// Clone of Config
-	Config() *Config
-
-	// CustomizeConfig
-	// Get Customize Config.
-	CustomizeConfig(name string) (string, error)
+	//// Connect
+	//// To remote CosmosNode.
+	//Connect(name, addr string) (CosmosNode, error)
+	//
+	//// Config
+	//// Clone of Config
+	//Config() *Config
+	//
+	//// CustomizeConfig
+	//// Get Customize Config.
+	//CustomizeConfig(name string) (string, error)
 }
 
 type ElementLoadable interface {
@@ -93,7 +91,7 @@ type ElementCustomizeLogLevel interface {
 	GetElementLogLevel() LogLevel
 }
 
-type ElementCustomizePersistence interface {
+type ElementCustomizeAutoDataPersistence interface {
 	// Persistence
 	// 数据持久化助手
 	// Data Persistence Helper
@@ -108,7 +106,7 @@ type ElementCustomizeAuthorization interface {
 	// Whether the Atom can be killed by the ID or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
 	// TODO: 以后考虑改成AtomCanAdmin，就改个名字。
-	AtomCanKill(ID) bool
+	AtomCanKill(ID) *ErrorInfo
 }
 
 // ElementDeveloper
@@ -117,15 +115,17 @@ type ElementCustomizeAuthorization interface {
 type ElementDeveloper interface {
 	//// Info
 	//// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
-	//// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atom quantity.
+	//// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atomos quantity.
 	//Info() (version uint64, logLevel LogLevel, initNum int)
+
+	//ElementConstructor() Atomos
 
 	// AtomConstructor
 	// Atom构造器
 	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
 	// Atom Constructor.
 	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
-	AtomConstructor() Atom
+	AtomConstructor() Atomos
 }
 
 type ElementWormholeDeveloper interface {
@@ -137,12 +137,12 @@ type ElementPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetAtomData(name string) (proto.Message, error)
+	GetAtomData(name string) (proto.Message, *ErrorInfo)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetAtomData(name string, data proto.Message) error
+	SetAtomData(name string, data proto.Message) *ErrorInfo
 }
 
 // TODO:

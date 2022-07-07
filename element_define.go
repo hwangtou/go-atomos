@@ -38,11 +38,11 @@ type ElementInterface struct {
 	AtomIdConstructor AtomIdConstructor
 
 	// 一个存储Atom的Call方法的容器。
-	// A container to store all the Message method of Atom.
+	// A holder to store all the Message method of Atom.
 	AtomMessages map[string]*ElementAtomMessage
 }
 
-type AtomSpawner func(s AtomSelf, a Atom, arg, data proto.Message) error
+type AtomSpawner func(s AtomSelf, a Atomos, arg, data proto.Message) *ErrorInfo
 
 // AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
@@ -51,7 +51,7 @@ type AtomIdConstructor func(ID) ID
 
 // MessageHandler
 // Message处理器
-type MessageHandler func(from ID, to Atom, in proto.Message) (out proto.Message, err error)
+type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo)
 
 // MessageDecoder
 // Message解码器

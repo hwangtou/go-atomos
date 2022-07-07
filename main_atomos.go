@@ -82,10 +82,10 @@ type mainElement struct {
 }
 
 func newMainAtom(e *ElementLocal) *mainAtom {
-	a := allocAtom()
+	a := allocAtomLocal()
 	e.current.Developer.(*mainElement).atom = a
-	initAtom(a, e, MainAtomName, e.current, e.upgrades)
-	a.state = AtomWaiting
+	initAtomLocal(a, e, MainAtomName, e.current, e.upgrades)
+	a.state = AtomosWaiting
 	e.atoms[MainAtomName] = a
 	_ = e.elementSpawningAtom(a, e.current, nil, nil)
 	a.element.cosmos.logInfo("Cosmos.Main: MainId is spawning")

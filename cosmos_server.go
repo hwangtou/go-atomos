@@ -208,13 +208,13 @@ func (r *cosmosRemote) GetAtomId(elemName, atomName string) (Id, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Get atom.
+	// Get atomos.
 	return e.GetAtomId(atomName)
 }
 
 // 暂时不支持从remote启动一个Atom。
 func (r *cosmosRemote) SpawnAtom(elemName, atomName string, arg proto.Message) (Id, error) {
-	return nil, errors.New("Remote.SpawnAtom: Cannot spawn remote atom")
+	return nil, errors.New("Remote.SpawnAtom: Cannot spawn remote atomos")
 }
 
 func (r *cosmosRemote) MessageAtom(fromId, toId Id, message string, args proto.Message) (reply proto.Message, err error) {
