@@ -128,18 +128,18 @@ type CallJson interface {
 
 // AtomSelf
 // 是Atom内部可以访问的Atom资源的概念。
-// 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
+// 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosProcess）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // AtomSelf, a concept that provide Atom resource access to inner Atom.
-// With AtomSelf, Atom can access its self-cosmos with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// With AtomSelf, Atom can access its self-cosmos with "CosmosProcess", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 type AtomSelf interface {
 	ID
 
-	// CosmosSelf
-	// 获取Atom的CosmosSelf。
-	// Access to the CosmosSelf of the Atom.
-	CosmosSelf() *CosmosSelf
+	// CosmosProcess
+	// 获取Atom的CosmosProcess。
+	// Access to the CosmosProcess of the Atom.
+	CosmosSelf() *CosmosProcess
 
 	// TODO
 	ElementSelf() Element
@@ -162,7 +162,7 @@ type AtomSelf interface {
 
 type ParallelSelf interface {
 	ID
-	CosmosSelf() *CosmosSelf
+	CosmosSelf() *CosmosProcess
 	KillSelf()
 	Log() *atomosLogsManager
 }

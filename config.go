@@ -15,13 +15,13 @@ import (
 
 // Config Error
 
-var (
-	ErrConfigIsNil           = errors.New("config not found")
-	ErrConfigNodeInvalid     = errors.New("config node name is invalid")
-	ErrConfigLogPathInvalid  = errors.New("config log path is invalid")
-	ErrConfigCertPathInvalid = errors.New("config cert path is invalid")
-	ErrConfigKeyPathInvalid  = errors.New("config key path is invalid")
-)
+//var (
+//	ErrConfigIsNil           = errors.New("config not found")
+//	ErrConfigNodeInvalid     = errors.New("config node name is invalid")
+//	ErrConfigLogPathInvalid  = errors.New("config log path is invalid")
+//	ErrConfigCertPathInvalid = errors.New("config cert path is invalid")
+//	ErrConfigKeyPathInvalid  = errors.New("config key path is invalid")
+//)
 
 type yamlConfig struct {
 	Node         string                  `yaml:"node"`

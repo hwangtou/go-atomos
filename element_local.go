@@ -22,7 +22,7 @@ type ElementLocal struct {
 
 	// CosmosSelf引用。
 	// Reference to CosmosSelf.
-	cosmos *CosmosSelf
+	cosmos *CosmosProcess
 
 	atomos *baseAtomos
 

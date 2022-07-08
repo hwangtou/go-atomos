@@ -86,7 +86,7 @@ type AtomLocal struct {
 	current *ElementImplementation
 }
 
-func (a *AtomLocal) CosmosSelf() *CosmosSelf {
+func (a *AtomLocal) CosmosSelf() *CosmosProcess {
 	return a.element.cosmos
 }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"log"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -86,7 +85,7 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *ErrorInfo) {
 	runCh := make(chan struct{}, 1)
 	go func() {
 		defer func() {
-			c.atomos.log.Info("Cosmos.Daemon: Exited, bye!")
+			c.logging(LogLevel_Info, "CosmosProcess: Exited, bye!")
 		}()
 		defer func() {
 			closeCh <- struct{}{}
@@ -98,17 +97,17 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *ErrorInfo) {
 			select {
 			case cmd := <-c.daemonCmdCh:
 				if cmd == nil {
-					c.atomos.log.Fatal("Cosmos.Daemon: Invalid runnable")
+					c.logging(LogLevel_Fatal, "CosmosProcess: Invalid runnable")
 					break
 				}
 				if err := cmd.Check(); err != nil {
-					c.atomos.log.Fatal("Cosmos.Daemon: Invalid runnable, err=%v", err)
+					c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Invalid runnable, err=(%v)", err))
 					break
 				}
 				switch cmd.Type() {
 				case DaemonCommandExit:
 					if !c.isRunning() {
-						c.atomos.log.Info("Cosmos.Daemon: Cannot stop runnable, because it's not running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					if c.runtime.stop() {
@@ -116,44 +115,44 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *ErrorInfo) {
 					}
 				case DaemonCommandStopRunnable:
 					if !c.isRunning() {
-						c.atomos.log.Info("Cosmos.Daemon: Cannot stop runnable, because it's not running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					c.runtime.stop()
 				case DaemonCommandExecuteRunnable:
 					if c.isRunning() {
-						c.atomos.log.Info("Cosmos.Daemon: Cannot execute runnable, because it's running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable, because it's running")
 						break
 					}
 					go func() {
 						// Running
 						err := c.daemonRunnableExecute(*cmd.GetRunnable())
 						if err != nil {
-							c.atomos.log.Fatal("Cosmos.Daemon: Execute runnable failed, err=%v", err)
+							c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable failed, err=(%v)", err))
 						} else {
-							c.atomos.log.Info("Cosmos.Daemon: Execute runnable succeed.")
+							c.logging(LogLevel_Info, "CosmosProcess: Execute runnable succeed.")
 						}
 						// Stopped
 						daemonCh <- err
 					}()
 				case DaemonCommandReloadRunnable:
 					if !c.isRunning() {
-						c.atomos.log.Info("Cosmos.Daemon: Cannot execute runnable upgrade, because it's not running.")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable upgrade, because it's not running.")
 						break
 					}
 					// Running
 					err := c.daemonRunnableUpgrade(*cmd.GetRunnable())
 					if err != nil {
-						c.atomos.log.Fatal("Cosmos.Daemon: Execute runnable upgrade failed, err=%v", err)
+						c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable upgrade failed, err=(%v)", err))
 					} else {
-						c.atomos.log.Info("Cosmos.Daemon: Execute runnable upgrade succeed")
+						c.logging(LogLevel_Info, "CosmosProcess: Execute runnable upgrade succeed")
 					}
 				}
 			case err := <-daemonCh:
 				if err != nil {
-					c.atomos.log.Error("Cosmos.Daemon: Exited, err=%v", err)
+					c.logging(LogLevel_Error, fmt.Sprintf("CosmosProcess: Exited, err=(%v)", err))
 				} else {
-					c.atomos.log.Info("Cosmos.Daemon: Exited")
+					c.logging(LogLevel_Info, "CosmosProcess: Exited")
 				}
 				if exit {
 					return
@@ -187,7 +186,7 @@ func (c *CosmosProcess) WaitKillSignal() {
 				fallthrough
 			case os.Kill:
 				if err := c.Send(NewExitCommand()); err != nil {
-					logWrite(LogFormatter(time.Now(), LogLevel_Fatal, fmt.Sprintf("WaitKillSignal killed atomos fails, err=%v", err)), true)
+					logWrite(LogFormatter(time.Now(), LogLevel_Fatal, fmt.Sprintf("WaitKillSignal killed atomos fails, err=(%v)", err)), true)
 					continue
 				}
 				logWrite(LogFormatter(time.Now(), LogLevel_Info, fmt.Sprintf("WaitKillSignal killed atomos")), false)
@@ -279,7 +278,7 @@ func (c *CosmosProcess) daemonRunnableUpgrade(runnable CosmosRunnable) error {
 
 func (c *CosmosProcess) deferRunnable() {
 	if r := recover(); r != nil {
-		c.atomos.log.Fatal("Cosmos.Defer: SCRIPT CRASH! reason=%s,stack=%s", r, string(debug.Stack()))
+		c.logging(LogLevel_Fatal, fmt.Sprintf("Cosmos.Defer: SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack())))
 	}
 }
 
@@ -312,7 +311,7 @@ func (c *CosmosProcess) logging(level LogLevel, msg string) {
 	lm.Message = msg
 	m := newMail(defaultLogMailId, lm)
 	if ok := c.log.log.pushTail(m); !ok {
-		log.Printf("atomLogs: Add log mail failed, id=%+v,level=%v,msg=%s", id, level, msg)
+		logWrite(fmt.Sprintf("atomLogs: Add log mail failed, id=(%s),level=(%v),msg=(%s)", lm.Id.str(), level, msg), true)
 	}
 }
 
