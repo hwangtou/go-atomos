@@ -2,7 +2,6 @@ package go_atomos
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"os"
@@ -164,12 +163,16 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *ErrorInfo) {
 	return closeCh, nil
 }
 
-func (c *CosmosProcess) Send(command DaemonCommand) error {
+func (c *CosmosProcess) Send(command DaemonCommand) *ErrorInfo {
 	select {
 	case c.daemonCmdCh <- command:
 		return nil
 	default:
-		return ErrDaemonIsBusy
+		if c.daemonCmdCh == nil {
+			return NewErrorf(ErrCosmosIsClosed, "Send to close, cmd=(%v)", command)
+		} else {
+			return NewErrorf(ErrCosmosIsBusy, "Send to busy, cmd=(%v)", command)
+		}
 	}
 }
 
@@ -215,10 +218,6 @@ func (c *CosmosProcess) Close() {
 
 // Daemon initialize.
 func (c *CosmosProcess) daemonInit(conf *Config) (err *ErrorInfo) {
-	// Check
-	if conf == nil {
-		return NewError(ErrCosmosConfigInvalid, "No configuration")
-	}
 	if err = conf.Check(); err != nil {
 		return err
 	}
@@ -244,9 +243,9 @@ func (c *CosmosProcess) daemonInit(conf *Config) (err *ErrorInfo) {
 
 // 后台驻留执行可执行命令。
 // Daemon execute executable command.
-func (c *CosmosProcess) daemonRunnableExecute(runnable CosmosRunnable) error {
+func (c *CosmosProcess) daemonRunnableExecute(runnable CosmosRunnable) *ErrorInfo {
 	if !c.trySetRunning(true) {
-		return ErrDaemonIsRunning
+		return NewErrorf(ErrCosmosHasAlreadyRun, "Execute runnable failed, runnable=(%v)", runnable)
 	}
 	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 	// Make CosmosRuntime initial the content of Runnable, especially the Element information.
@@ -271,7 +270,7 @@ func (c *CosmosProcess) daemonRunnableExecute(runnable CosmosRunnable) error {
 	return nil
 }
 
-func (c *CosmosProcess) daemonRunnableUpgrade(runnable CosmosRunnable) error {
+func (c *CosmosProcess) daemonRunnableUpgrade(runnable CosmosRunnable) *ErrorInfo {
 	c.upgradeCount += 1
 	return c.runtime.upgrade(&runnable, c.upgradeCount)
 }
@@ -371,7 +370,7 @@ func (r *CosmosRunnable) SetUpgradeScript(script Script) *CosmosRunnable {
 type DaemonCommand interface {
 	Type() DaemonCommandType
 	GetRunnable() *CosmosRunnable
-	Check() error
+	Check() *ErrorInfo
 }
 
 // 命令类型
@@ -386,11 +385,11 @@ const (
 	DaemonCommandReloadRunnable  = 3
 )
 
-var (
-	ErrDaemonIsRunning = errors.New("cosmos daemon is running")
-	ErrDaemonIsBusy    = errors.New("cosmos daemon is busy")
-	ErrRunnableInvalid = errors.New("cosmos runnable invalid")
-)
+//var (
+//	ErrDaemonIsRunning = errors.New("cosmos daemon is running")
+//	ErrDaemonIsBusy    = errors.New("cosmos daemon is busy")
+//	ErrRunnableInvalid = errors.New("cosmos runnable invalid")
+//)
 
 func NewRunnableCommand(runnable *CosmosRunnable) DaemonCommand {
 	return &command{

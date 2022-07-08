@@ -4,7 +4,6 @@ package go_atomos
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -253,22 +252,22 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *E
 
 func (e *ElementLocal) MessagingAtom(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	if fromId == nil {
-		return reply, NewError(ErrAtomFromIDInvalid, fmt.Sprintf("From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args))
+		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args)
 	}
 	a, ok := toId.(*AtomLocal)
 	if !ok || a == nil {
-		return reply, NewError(ErrAtomToIDInvalid, fmt.Sprintf("To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args))
+		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)", fromId, toId, name, args)
 	}
 	return a.pushMessageMail(fromId, name, args)
 }
 
 func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
 	if fromId == nil {
-		return NewError(ErrAtomFromIDInvalid, fmt.Sprintf("From ID invalid, from=(%s),to=(%s)", fromId, toId))
+		return NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s)", fromId, toId)
 	}
 	a, ok := toId.(*AtomLocal)
 	if !ok || a == nil {
-		return NewError(ErrAtomToIDInvalid, fmt.Sprintf("To ID invalid, from=(%s),to=(%s)", fromId, toId))
+		return NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s)", fromId, toId)
 	}
 	return a.pushKillMail(fromId, true)
 }
@@ -286,7 +285,7 @@ func (e *ElementLocal) elementGetAtom(name string) (*AtomLocal, *ErrorInfo) {
 	}
 	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || persistence == nil {
-		return nil, NewError(ErrAtomNotExists, fmt.Sprintf("Atom not exists, name=(%s)", name))
+		return nil, NewErrorf(ErrAtomNotExists, "Atom not exists, name=(%s)", name)
 	}
 	return e.elementCreateAtom(name, nil)
 }
@@ -311,7 +310,7 @@ func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomL
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
 	if has && oldAtom.atomos.state > AtomosHalt {
 		deallocAtomLocal(atom)
-		return nil, NewError(ErrAtomExists, fmt.Sprintf("Atom exists, name=(%s),arg=(%v)", name, arg))
+		return nil, NewErrorf(ErrAtomExists, "Atom exists, name=(%s),arg=(%v)", name, arg)
 	}
 	// If exists and not running, release new and use old.
 	if has {
@@ -331,7 +330,7 @@ func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomL
 		if d == nil && arg == nil {
 			atom.atomos.setHalt()
 			e.atomosRelease(atom.atomos)
-			return nil, NewError(ErrAtomSpawnArgInvalid, fmt.Sprintf("Spawn atom without arg, name=(%s)", name))
+			return nil, NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)", name)
 		}
 		data = d
 	}

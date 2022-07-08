@@ -75,13 +75,13 @@ func (c *loggingMailBox) onLogMessage(mail *mail) {
 	delMail(mail)
 }
 
-func (c *loggingMailBox) onLogPanic(mail *mail, trace string) {
+func (c *loggingMailBox) onLogPanic(mail *mail, trace []byte) {
 	lm := mail.Content.(*LogMail)
 	c.logging(&LogMail{
 		Id:      lm.Id,
 		Time:    lm.Time,
 		Level:   LogLevel_Fatal,
-		Message: trace,
+		Message: string(trace),
 	})
 }
 

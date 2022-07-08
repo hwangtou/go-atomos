@@ -32,7 +32,7 @@ func newCosmosRuntime() *CosmosRuntime {
 
 // 初始化Runnable。
 // Initial Runnable.
-func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) error {
+func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) *ErrorInfo {
 	self.logInfo("Cosmos.Init")
 
 	c.cosmosSelf = self
@@ -85,7 +85,7 @@ func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) error {
 
 // 执行Runnable。
 // Run runnable.
-func (c *CosmosRuntime) run(runnable *CosmosRunnable) error {
+func (c *CosmosRuntime) run(runnable *CosmosRunnable) *ErrorInfo {
 	//ma := c.mainAtom.instance.(MainId)
 	c.cosmosSelf.logInfo("Cosmos.Run: NOW RUNNING!")
 	runnable.mainScript(c.cosmosSelf, c.mainAtom, c.mainKillCh)
@@ -94,7 +94,7 @@ func (c *CosmosRuntime) run(runnable *CosmosRunnable) error {
 
 // 升级
 // Upgrade
-func (c *CosmosRuntime) upgrade(runnable *CosmosRunnable, upgradeCount int) error {
+func (c *CosmosRuntime) upgrade(runnable *CosmosRunnable, upgradeCount int) *ErrorInfo {
 	c.cosmosSelf.logInfo("Cosmos.Upgrade")
 	c.mutex.Lock()
 	if c.loading != nil {

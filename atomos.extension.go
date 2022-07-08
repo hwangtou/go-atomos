@@ -28,11 +28,27 @@ func NewError(code int64, message string) *ErrorInfo {
 	}
 }
 
-func NewErrorWithStack(code int64, message, stack string) *ErrorInfo {
+func NewErrorf(code int64, format string, args ...interface{}) *ErrorInfo {
+	return &ErrorInfo{
+		Code:    code,
+		Message: fmt.Sprintf(format, args...),
+		Stack:   "",
+	}
+}
+
+func NewErrorWithStack(code int64, stack, message string) *ErrorInfo {
 	return &ErrorInfo{
 		Code:    code,
 		Message: message,
 		Stack:   stack,
+	}
+}
+
+func NewErrorfWithStack(code int64, stack []byte, format string, args ...interface{}) *ErrorInfo {
+	return &ErrorInfo{
+		Code:    code,
+		Message: fmt.Sprintf(format, args...),
+		Stack:   string(stack),
 	}
 }
 

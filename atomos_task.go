@@ -3,7 +3,6 @@ package go_atomos
 // CHECKED!
 
 import (
-	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -180,7 +179,8 @@ func (at *atomosTasksManager) Append(fn TaskFn, msg proto.Message) (id uint64, e
 
 	// If baseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
-		return 0, NewError(ErrAtomosIsNotRunning, fmt.Sprintf("STOPPED, Append atomos failed, fn=(%T),msg=(%+v)", fn, msg))
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, Append atomos failed, fn=(%T),msg=(%+v)", fn, msg)
 	}
 
 	// Id increment.
@@ -191,7 +191,8 @@ func (at *atomosTasksManager) Append(fn TaskFn, msg proto.Message) (id uint64, e
 	initTaskMail(am, at.curId, fnName, msg)
 	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
-		return 0, NewError(ErrAtomosIsNotRunning, fmt.Sprintf("STOPPED, Append mailbox failed, fn=(%T),msg=(%+v)", fn, msg))
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, Append mailbox failed, fn=(%T),msg=(%+v)", fn, msg)
 	}
 	return at.curId, nil
 }
@@ -211,7 +212,8 @@ func (at *atomosTasksManager) AddAfter(after time.Duration, fn TaskFn, msg proto
 
 	// If baseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
-		return 0, NewError(ErrAtomosIsNotRunning, fmt.Sprintf("STOPPED, AddAfter failed, after=(%v),fn=(%T),msg=(%+v)", after, fn, msg))
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, AddAfter failed, after=(%v),fn=(%T),msg=(%+v)", after, fn, msg)
 	}
 
 	// Increment
@@ -282,25 +284,25 @@ func checkTaskFn(a *baseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInf
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
 	if fnValue.Kind() != reflect.Func {
-		return "", NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func type, fnType=(%T)", fn))
+		return "", NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func type, fnType=(%T)", fn)
 	}
 	fnRuntime := runtime.FuncForPC(fnValue.Pointer())
 	if fnRuntime == nil {
-		return "", NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func runtime, fnType=(%T)", fn))
+		return "", NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func runtime, fnType=(%T)", fn)
 	}
 	// Get func name.
 	fnRawName := fnRuntime.Name()
 	fnName := getTaskFnName(fnRawName)
 	fnRunes := []rune(fnName)
 	if len(fnRunes) == 0 || unicode.IsLower(fnRunes[0]) {
-		return "", NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func name, fnType=(%T)", fn))
+		return "", NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func name, fnType=(%T)", fn)
 	}
 	// 用反射来执行任务函数。
 	// Executing task method using reflect.
 	instValue := reflect.ValueOf(a.instance)
 	method := instValue.MethodByName(fnName)
 	if !method.IsValid() {
-		return "", NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func value, fnType=(%T)", fn))
+		return "", NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func value, fnType=(%T)", fn)
 	}
 	_, err := checkFnArgs(fnType, fnName, msg)
 	return fnName, err
@@ -331,18 +333,18 @@ func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, *E
 		fn0Type, fn1Type := fnType.In(0), fnType.In(1)
 		// Check task id.
 		if fn0Type.Kind() != reflect.Uint64 {
-			return 0, NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func task id receiver, fnName=(%s),fn0Type=(%s)", fnName, fn0Type.Name()))
+			return 0, NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func task id receiver, fnName=(%s),fn0Type=(%s)", fnName, fn0Type.Name())
 		}
 		// Check message.
 		if msg != nil {
 			msgType := reflect.TypeOf(msg)
 			if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
-				return 0, NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func message receiver, fnName=(%s),fn1Type=(%T)", fnName, msg))
+				return 0, NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func message receiver, fnName=(%s),fn1Type=(%T)", fnName, msg)
 			}
 		}
 		return 2, nil
 	}
-	return 0, NewError(ErrAtomosTaskInvalidFn, fmt.Sprintf("Invalid task func signature, fnName=(%s)", fnName))
+	return 0, NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func signature, fnName=(%s)", fnName)
 }
 
 func getTaskFnName(fnRawName string) string {
@@ -403,7 +405,7 @@ func (at *atomosTasksManager) cancelTask(id uint64, t *atomosTask) (cancel Cance
 			deallocAtomosMail(t.mail)
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
-			err = NewError(ErrFrameworkPanic, fmt.Sprintf("Delete a not exists task timer, task=(%+v)", t))
+			err = NewErrorf(ErrFrameworkPanic, "Delete a not exists task timer, task=(%+v)", t)
 			at.atomos.log.Fatal("AtomosTask: Cancel, FRAMEWORK ERROR, err=(%v)", err)
 			return cancel, err
 
@@ -432,7 +434,7 @@ func (at *atomosTasksManager) cancelTask(id uint64, t *atomosTask) (cancel Cance
 		case TaskMailing:
 			m := at.atomos.mailbox.popById(id)
 			if m == nil {
-				err = NewError(ErrAtomosTaskNotExists, fmt.Sprintf("Delete a not exists task timer, task=(%+v)", t))
+				err = NewErrorf(ErrAtomosTaskNotExists, "Delete a not exists task timer, task=(%+v)", t)
 				return cancel, err
 			}
 			cancel.Id = id
@@ -441,19 +443,19 @@ func (at *atomosTasksManager) cancelTask(id uint64, t *atomosTask) (cancel Cance
 			return cancel, nil
 		default:
 			// FRAMEWORK LEVEL ERROR
-			err = NewError(ErrFrameworkPanic, fmt.Sprintf("Unknown timer state, task=(%+v)", t))
+			err = NewErrorf(ErrFrameworkPanic, "Unknown timer state, task=(%+v)", t)
 			at.atomos.log.Fatal("AtomosTask: Cancel, FRAMEWORK ERROR, err=(%v)", err)
 			return cancel, err
 		}
 	}
 	m := at.atomos.mailbox.popById(id)
 	if m == nil {
-		err = NewError(ErrAtomosTaskNotExists, fmt.Sprintf("Delete a not exists task timer, task=(%+v)", t))
+		err = NewErrorf(ErrAtomosTaskNotExists, "Delete a not exists task timer, task=(%+v)", t)
 		return cancel, err
 	}
 	am, ok := m.Content.(*atomosMail)
 	if !ok {
-		err = NewError(ErrAtomosTaskNotExists, fmt.Sprintf("Delete a task timer but its mail is invalid, task=(%+v)", t))
+		err = NewErrorf(ErrAtomosTaskNotExists, "Delete a task timer but its mail is invalid, task=(%+v)", t)
 		return cancel, err
 	}
 	cancel.Id = id

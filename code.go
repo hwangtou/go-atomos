@@ -6,8 +6,12 @@ const (
 	ErrFrameworkPanic
 
 	ErrCosmosConfigInvalid
-	ErrCosmosHasAlreadyRun
+	ErrCosmosConfigNodeNameInvalid
+	ErrCosmosConfigLogPathInvalid
 	ErrCosmosCertConfigInvalid
+	ErrCosmosHasAlreadyRun
+	ErrCosmosIsBusy
+	ErrCosmosIsClosed
 
 	ErrAtomosPanic
 	ErrAtomosIsNotRunning

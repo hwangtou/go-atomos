@@ -3,7 +3,6 @@ package go_atomos
 // CHECKED!
 
 import (
-	"fmt"
 	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"sync"
@@ -291,8 +290,8 @@ func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (r
 	am := allocAtomosMail()
 	initMessageMail(am, from, name, args)
 	if ok := a.atomos.mailbox.pushTail(am.mail); !ok {
-		return reply, NewError(ErrAtomosIsNotRunning,
-			fmt.Sprintf("Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args))
+		return reply, NewErrorf(ErrAtomosIsNotRunning,
+			"Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
 	replyInterface, err := am.waitReply()
 	deallocAtomosMail(am)
@@ -313,21 +312,21 @@ func (a *AtomLocal) handleMessage(from ID, name string, args proto.Message) (out
 	defer a.atomos.setWaiting()
 	handler := a.current.AtomHandlers[name]
 	if handler == nil {
-		return nil, NewError(ErrAtomMessageHandlerNotExists,
-			fmt.Sprintf("Message handler not found, from=(%s),name=(%s),args=(%v)", from, name, args))
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
+			"Message handler not found, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
-	var stack string
+	var stack []byte
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				stack = string(debug.Stack())
+				stack = debug.Stack()
 			}
 		}()
 		out, err = handler(from, a.atomos.instance, args)
 	}()
-	if stack != "" {
-		err = NewErrorWithStack(ErrAtomMessageHandlerPanic,
-			fmt.Sprintf("Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args), stack)
+	if len(stack) != 0 {
+		err = NewErrorfWithStack(ErrAtomMessageHandlerPanic, stack,
+			"Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
 	return
 }
@@ -338,7 +337,7 @@ func (a *AtomLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
 	am := allocAtomosMail()
 	initKillMail(am, from)
 	if ok := a.atomos.mailbox.pushHead(am.mail); !ok {
-		return NewError(ErrAtomosIsNotRunning, fmt.Sprintf("Atomos is not running, from=(%s),wait=(%v)", from, wait))
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),wait=(%v)", from, wait)
 	}
 	if wait {
 		_, err := am.waitReply()
@@ -354,8 +353,8 @@ func (a *AtomLocal) handleKill(killAtomMail *atomosMail, cancels map[uint64]Canc
 	a.atomos.setStopping()
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewErrorWithStack(ErrAtomKillHandlerPanic,
-				fmt.Sprintf("Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", a.atomos.id, a.atomos.instance, r), string(debug.Stack()))
+			err = NewErrorfWithStack(ErrAtomKillHandlerPanic, debug.Stack(),
+				"Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", a.atomos.id, a.atomos.instance, r)
 			a.atomos.log.Error(err.Message)
 		}
 	}()
@@ -379,7 +378,7 @@ func (a *AtomLocal) pushReloadMail(elem *ElementImplementation, upgradeCount int
 	am := allocAtomosMail()
 	initReloadMail(am, elem, upgradeCount)
 	if ok := a.atomos.mailbox.pushHead(am.mail); !ok {
-		return NewError(ErrAtomosIsNotRunning, fmt.Sprintf("Atomos is not running, upgrade=(%d)", upgradeCount))
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, upgrade=(%d)", upgradeCount)
 	}
 	_, err := am.waitReply()
 	deallocAtomosMail(am)
@@ -396,7 +395,7 @@ func (a *AtomLocal) handleReload(am *atomosMail) *ErrorInfo {
 	// 如果没有新的Element，就用旧的Element。
 	// Use old Element if there is no new Element.
 	if am.upgrade == nil {
-		return NewError(ErrAtomUpgradeInvalid, fmt.Sprintf("Upgrade is invalid, mail=(%v)", am))
+		return NewErrorf(ErrAtomUpgradeInvalid, "Upgrade is invalid, mail=(%v)", am)
 	}
 	if am.upgradeCount == a.upgrades {
 		return nil

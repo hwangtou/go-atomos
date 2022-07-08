@@ -8,8 +8,8 @@ import (
 // Cosmos Life Cycle
 
 type CosmosCycle interface {
-	Daemon(*Config) (chan struct{}, error)
-	Send(DaemonCommand) error
+	Daemon(*Config) (chan struct{}, *ErrorInfo)
+	Send(DaemonCommand) *ErrorInfo
 	WaitKillSignal()
 	Close()
 }

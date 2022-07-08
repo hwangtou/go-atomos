@@ -5,8 +5,6 @@ package go_atomos
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -105,13 +103,13 @@ func ConfigFromYaml(filepath string) (*Config, error) {
 
 func (x *Config) Check() *ErrorInfo {
 	if x == nil {
-		return ErrConfigIsNil
+		return NewError(ErrCosmosConfigInvalid, "No configuration")
 	}
 	if x.Node == "" {
-		return ErrConfigNodeInvalid
+		return NewError(ErrCosmosConfigNodeNameInvalid, "Node name is empty")
 	}
 	if x.LogPath == "" {
-		return ErrConfigLogPathInvalid
+		return NewError(ErrCosmosConfigLogPathInvalid, "Log path is empty")
 	}
 	// TODO: Try open log file
 	return nil
@@ -127,7 +125,7 @@ func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
 	}
 	caCert, e := ioutil.ReadFile(cert.CertPath)
 	if e != nil {
-		return nil, NewError(ErrCosmosCertConfigInvalid, fmt.Sprintf("Cert file read error, err=(%v)", e))
+		return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Cert file read error, err=(%v)", e)
 	}
 	tlsConfig = &tls.Config{}
 	if cert.InsecureSkipVerify {
@@ -158,7 +156,7 @@ func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
 	var e error
 	tlsConfig.Certificates[0], e = tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
 	if e != nil {
-		return nil, NewError(ErrCosmosCertConfigInvalid, fmt.Sprintf("Load key pair error, err=(%v)", e))
+		return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Load key pair error, err=(%v)", e)
 	}
 	return
 }

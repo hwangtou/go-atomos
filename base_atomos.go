@@ -2,7 +2,6 @@ package go_atomos
 
 import (
 	"container/list"
-	"fmt"
 	"google.golang.org/protobuf/proto"
 	"sync"
 )
@@ -192,10 +191,10 @@ func (a *baseAtomos) onReceive(mail *mail) {
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
-func (a *baseAtomos) onPanic(mail *mail, trace string) {
+func (a *baseAtomos) onPanic(mail *mail, trace []byte) {
 	am := mail.Content.(*atomosMail)
 	// Try to reply here, to prevent mail non-reply, and stub.
-	err := NewErrorWithStack(ErrAtomosPanic, fmt.Sprintf("PANIC, mail=(%+v)", am), trace)
+	err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
 	switch am.mailType {
 	case AtomosMailMessage:
 		am.sendReply(nil, err)
@@ -229,7 +228,7 @@ func (a *baseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 	killAtomMail := killMail.Content.(*atomosMail)
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMails != nil; remainMails = remainMails.next {
-		err := NewError(ErrAtomosIsNotRunning, fmt.Sprintf("Atomos is stopping, mail=(%+v)", remainMails))
+		err := NewErrorf(ErrAtomosIsNotRunning, "Atomos is stopping, mail=(%+v)", remainMails)
 		remainAtomMail := remainMails.Content.(*atomosMail)
 		switch remainAtomMail.mailType {
 		case AtomosMailHalt:
