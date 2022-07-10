@@ -1,4 +1,4 @@
-module github.com/hwangtou/go-atomos
+module github.com/hwangtou/go-atomos/core
 
 go 1.16
 

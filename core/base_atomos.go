@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 import (
 	"container/list"
@@ -7,11 +7,11 @@ import (
 )
 
 type AtomosHolder interface {
-	atomosHalt(a *baseAtomos)
-	atomosRelease(a *baseAtomos)
+	atomosHalt(a *BaseAtomos)
+	atomosRelease(a *BaseAtomos)
 }
 
-type baseAtomos struct {
+type BaseAtomos struct {
 	// 句柄信息
 	id *IDInfo
 
@@ -21,7 +21,7 @@ type baseAtomos struct {
 
 	// Cosmos日志邮箱
 	// 整个进程共享的，用于日志输出的邮箱。
-	logging *loggingMailBox
+	logging *loggingAtomos
 
 	// Atomos邮箱，也是实现Atom无锁队列的关键。
 	// Mailbox, the key of lockless queue of Atom.
@@ -34,11 +34,11 @@ type baseAtomos struct {
 
 	// 任务管理器，用于处理来自Atom内部的任务调派。
 	// Task Manager, uses to handle Task from inner Atom.
-	task atomosTasksManager
+	task atomosTaskManager
 
 	// 日志管理器，用于处理来自Atom内部的日志。
 	// Logs Manager, uses to handle Log from inner Atom.
-	log atomosLogsManager
+	log atomosLoggingManager
 
 	refCount int
 
@@ -50,40 +50,40 @@ type baseAtomos struct {
 // Atom instance pools.
 var atomosPool = sync.Pool{
 	New: func() interface{} {
-		return &baseAtomos{}
+		return &BaseAtomos{}
 	},
 }
 
-func allocBaseAtomos() *baseAtomos {
-	return atomosPool.Get().(*baseAtomos)
+func allocBaseAtomos() *BaseAtomos {
+	return atomosPool.Get().(*BaseAtomos)
 }
 
-func initBaseAtomos(a *baseAtomos, id *IDInfo, log *loggingMailBox, lv LogLevel, holder AtomosHolder, inst Atomos) {
+func initBaseAtomos(a *BaseAtomos, id *IDInfo, log *loggingAtomos, lv LogLevel, holder AtomosHolder, inst Atomos) {
 	a.id = id
 	a.state = AtomosHalt
 	a.logging = log
 	initMailBox(a)
 	a.holder = holder
 	a.instance = inst
-	initAtomosLog(&a.log, a, lv)
+	initAtomosLog(&a.log, log, a, lv)
 	initAtomosTasksManager(&a.task, a)
 	a.refCount = 1
 }
 
-func releaseAtomos(a *baseAtomos) {
+func releaseAtomos(a *BaseAtomos) {
 	releaseAtomosTask(&a.task)
 	releaseAtomosLog(&a.log)
 }
 
-func deallocAtomos(a *baseAtomos) {
+func deallocAtomos(a *BaseAtomos) {
 	atomosPool.Put(a)
 }
 
-func (a *baseAtomos) Log() AtomosLogging {
+func (a *BaseAtomos) Log() Logging {
 	return &a.log
 }
 
-func (a *baseAtomos) Task() AtomosTasking {
+func (a *BaseAtomos) Task() Task {
 	return &a.task
 }
 
@@ -139,23 +139,23 @@ func (as AtomosState) String() string {
 // 各种状态
 // State of Atom
 
-func (a *baseAtomos) getState() AtomosState {
+func (a *BaseAtomos) getState() AtomosState {
 	return a.state
 }
 
-func (a *baseAtomos) setBusy() {
+func (a *BaseAtomos) setBusy() {
 	a.state = AtomosBusy
 }
 
-func (a *baseAtomos) setWaiting() {
+func (a *BaseAtomos) setWaiting() {
 	a.state = AtomosWaiting
 }
 
-func (a *baseAtomos) setStopping() {
+func (a *BaseAtomos) setStopping() {
 	a.state = AtomosStopping
 }
 
-func (a *baseAtomos) setHalt() {
+func (a *BaseAtomos) setHalt() {
 	a.state = AtomosHalt
 }
 
@@ -163,27 +163,27 @@ func (a *baseAtomos) setHalt() {
 
 // 处理邮箱消息。
 // Handle mailbox messages.
-func (a *baseAtomos) onReceive(mail *mail) {
+func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.Content.(*atomosMail)
 	switch am.mailType {
-	case AtomosMailMessage:
-		resp, err := a.instance.handleMessage(am.from, am.name, am.arg)
+	case MailMessage:
+		resp, err := a.instance.OnMessaging(am.from, am.name, am.arg)
 		if resp != nil {
 			resp = proto.Clone(resp)
 		}
 		am.sendReply(resp, err)
 		// Mail dealloc in AtomCore.pushMessageMail.
-	case AtomosMailTask:
+	case MailTask:
 		a.task.handleTask(am)
-		// Mail dealloc in atomosTasksManager.handleTask and cancels.
-	case AtomosMailReload:
+		// Mail dealloc in atomosTaskManager.handleTask and cancels.
+	case MailReload:
 		err := a.instance.handleReload(am)
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushReloadMail.
-	case AtomosMailWormhole:
-		err := a.instance.handleWormhole(am.wormholeAction, am.wormhole)
-		am.sendReply(nil, err)
-		// Mail dealloc in AtomCore.pushWormholeMail.
+	//case AtomosMailWormhole:
+	//	err := a.instance.handleWormhole(am.wormholeAction, am.wormhole)
+	//	am.sendReply(nil, err)
+	//	// Mail dealloc in AtomCore.pushWormholeMail.
 	default:
 		a.log.Fatal("Atomos: Received unknown message type, type=(%v),mail=(%+v)", am.mailType, am)
 	}
@@ -191,24 +191,24 @@ func (a *baseAtomos) onReceive(mail *mail) {
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
-func (a *baseAtomos) onPanic(mail *mail, trace []byte) {
+func (a *BaseAtomos) onPanic(mail *mail, trace []byte) {
 	am := mail.Content.(*atomosMail)
 	// Try to reply here, to prevent mail non-reply, and stub.
 	err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
 	switch am.mailType {
-	case AtomosMailMessage:
+	case MailMessage:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushMessageMail.
-	case AtomosMailHalt:
+	case MailHalt:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushKillMail.
-	case AtomosMailReload:
+	case MailReload:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushReloadMail.
-	case AtomosMailWormhole:
-		am.sendReply(nil, err)
-		// Mail then will be dealloc in AtomCore.pushWormholeMail.
-	case AtomosMailTask:
+	//case AtomosMailWormhole:
+	//	am.sendReply(nil, err)
+	//	// Mail then will be dealloc in AtomCore.pushWormholeMail.
+	case MailTask:
 		a.log.Error("Atomos: PANIC when atomos is running task, id=(%s),type=(%v),mail=(%+v)", a.id.str(), am.mailType, am)
 	default:
 		a.log.Fatal("Atomos: PANIC unknown message type, id=(%s),type=(%v),mail=(%+v)", a.id.str(), am.mailType, am)
@@ -217,7 +217,7 @@ func (a *baseAtomos) onPanic(mail *mail, trace []byte) {
 
 // 处理邮箱退出。
 // Handle mailbox stops.
-func (a *baseAtomos) onStop(killMail, remainMails *mail, num uint32) {
+func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
@@ -231,13 +231,13 @@ func (a *baseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 		err := NewErrorf(ErrAtomosIsNotRunning, "Atomos is stopping, mail=(%+v)", remainMails)
 		remainAtomMail := remainMails.Content.(*atomosMail)
 		switch remainAtomMail.mailType {
-		case AtomosMailHalt:
+		case MailHalt:
 			remainAtomMail.sendReply(nil, err)
 			// Mail dealloc in AtomCore.pushKillMail.
-		case AtomosMailMessage:
+		case MailMessage:
 			remainAtomMail.sendReply(nil, err)
 			// Mail dealloc in AtomCore.pushMessageMail.
-		case AtomosMailTask:
+		case MailTask:
 			// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 			// but it's impossible to add task after locking.
@@ -246,13 +246,13 @@ func (a *baseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 			if err == nil {
 				cancels[remainMails.id] = t
 			}
-			// Mail dealloc in atomosTasksManager.cancelTask.
-		case AtomosMailReload:
+			// Mail dealloc in atomosTaskManager.cancelTask.
+		case MailReload:
 			remainAtomMail.sendReply(nil, err)
 			// Mail dealloc in AtomCore.pushReloadMail.
-		case AtomosMailWormhole:
-			remainAtomMail.sendReply(nil, err)
-		// Mail dealloc in AtomCore.pushWormholeMail.
+		//case AtomosMailWormhole:
+		//	remainAtomMail.sendReply(nil, err)
+		//// Mail dealloc in AtomCore.pushWormholeMail.
 		default:
 			a.log.Fatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
 				remainAtomMail.mailType, remainAtomMail)

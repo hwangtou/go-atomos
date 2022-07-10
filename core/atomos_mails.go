@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 // CHECKED!
 
@@ -21,30 +21,28 @@ const DefaultMailId = 0
 
 // 邮件类型
 
-type AtomosMailType int
+type MailType int
 
 const (
-	// AtomosMailHalt
+	// MailHalt
 	// 终止邮件，用于停止Atomos的运行。
 	// Halt Mail, for stopping an atomos from running.
-	AtomosMailHalt AtomosMailType = 0
+	MailHalt MailType = 0
 
-	// AtomosMailMessage
+	// MailMessage
 	// 信息邮件，用于外部给运行中的Atomos传递信息。
 	// Message Mail, for messaging to a running atomos from outer.
-	AtomosMailMessage AtomosMailType = 1
+	MailMessage MailType = 1
 
-	// AtomosMailTask
+	// MailTask
 	// 任务邮件，用于内部给运行中的Atomos新增任务。
 	// Task Mail, for adding task to a running atomos from inner.
-	AtomosMailTask AtomosMailType = 2
+	MailTask MailType = 2
 
-	// AtomosMailReload
+	// MailReload
 	// 重载邮件，用于升级Atomos的ElementLocal引用，以实现热更。
 	// Reload Mail, for upgrading ElementLocal reference of an atomos, to support hot-reload feature.
-	AtomosMailReload AtomosMailType = 3
-
-	AtomosMailWormhole AtomosMailType = 4
+	MailReload MailType = 3
 )
 
 // Atomos邮件
@@ -59,11 +57,11 @@ type atomosMail struct {
 	// Atomos mail type.
 	//
 	// Halt, Message, Task, Reload
-	mailType AtomosMailType
+	mailType MailType
 
 	// 从哪个Id发来的邮件。
-	// Mail send from which Id.
-	from ID
+	// Mail send from which ID.
+	from *IDInfo
 
 	// Message和Task邮件会使用到的，调用的目标对象的名称。
 	// Mail target name, used by Message mail and Task mail.
@@ -73,13 +71,13 @@ type atomosMail struct {
 	// Argument that pass to target, used by Message mail and Task mail.
 	arg proto.Message
 
-	// 需要升级的Element。
-	// Upgrade Element.
-	upgrade      *ElementImplementation
-	upgradeCount int
-
-	wormholeAction int
-	wormhole       WormholeDaemon
+	//// 需要升级的Element。
+	//// Upgrade Element.
+	//upgrade      *ElementImplementation
+	//upgradeCount int
+	//
+	//wormholeAction int
+	//wormhole       WormholeDaemon
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
@@ -118,10 +116,10 @@ func deallocAtomosMail(am *atomosMail) {
 
 // 消息邮件
 // Message Mail
-func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
+func initMessageMail(am *atomosMail, from *IDInfo, name string, arg proto.Message) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionRun
-	am.mailType = AtomosMailMessage
+	am.mailType = MailMessage
 	am.from = from
 	am.name = name
 	// I think it has to be cloned, because argument is passing between atomos.
@@ -130,8 +128,8 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
-	am.upgrade = nil
-	am.upgradeCount = 0
+	//am.upgrade = nil
+	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -141,56 +139,56 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message) {
 	am.mail.id = taskId
 	am.mail.action = MailActionRun
-	am.mailType = AtomosMailTask
+	am.mailType = MailTask
 	am.from = nil
 	am.name = name
 	// I think it doesn't have to clone, because Atomos is thread-safe.
 	am.arg = arg
-	am.upgrade = nil
-	am.upgradeCount = 0
+	//am.upgrade = nil
+	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
 
-// 重载邮件
-// Reload Mail
-func initReloadMail(am *atomosMail, elem *ElementImplementation, upgradeCount int) {
-	am.mail.id = DefaultMailId
-	am.mail.action = MailActionRun
-	am.mailType = AtomosMailReload
-	am.from = nil
-	am.name = ""
-	am.upgrade = elem
-	am.upgradeCount = upgradeCount
-	am.mailReply = mailReply{}
-	am.waitCh = make(chan *mailReply, 1)
-}
+//// 重载邮件
+//// Reload Mail
+//func initReloadMail(am *atomosMail, elem *ElementImplementation, upgradeCount int) {
+//	am.mail.id = DefaultMailId
+//	am.mail.action = MailActionRun
+//	am.mailType = MailReload
+//	am.from = nil
+//	am.name = ""
+//	am.upgrade = elem
+//	am.upgradeCount = upgradeCount
+//	am.mailReply = mailReply{}
+//	am.waitCh = make(chan *mailReply, 1)
+//}
 
-func initWormholeMail(am *atomosMail, action int, wormhole WormholeDaemon) {
-	am.mail.id = DefaultMailId
-	am.mail.action = MailActionRun
-	am.mailType = AtomosMailWormhole
-	am.from = nil
-	am.name = ""
-	am.arg = nil
-	am.wormholeAction = action
-	am.wormhole = wormhole
-	am.upgrade = nil
-	am.upgradeCount = 0
-	am.mailReply = mailReply{}
-	am.waitCh = make(chan *mailReply, 1)
-}
+//func initWormholeMail(am *atomosMail, action int, wormhole WormholeDaemon) {
+//	am.mail.id = DefaultMailId
+//	am.mail.action = MailActionRun
+//	am.mailType = AtomosMailWormhole
+//	am.from = nil
+//	am.name = ""
+//	am.arg = nil
+//	am.wormholeAction = action
+//	am.wormhole = wormhole
+//	am.upgrade = nil
+//	am.upgradeCount = 0
+//	am.mailReply = mailReply{}
+//	am.waitCh = make(chan *mailReply, 1)
+//}
 
 // 终止邮件
 // Halt Mail
-func initKillMail(am *atomosMail, from ID) {
+func initKillMail(am *atomosMail, from *IDInfo) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionExit
-	am.mailType = AtomosMailHalt
+	am.mailType = MailHalt
 	am.from = from
 	am.name = ""
-	am.upgrade = nil
-	am.upgradeCount = 0
+	//am.upgrade = nil
+	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }

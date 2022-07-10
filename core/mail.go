@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 import (
 	"log"
@@ -94,7 +94,7 @@ func newMailBox(handler MailBoxHandler) *mailBox {
 	return mb
 }
 
-func initMailBox(a *baseAtomos) {
+func initMailBox(a *BaseAtomos) {
 	a.mailbox = newMailBox(MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,

@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 import (
 	"fmt"
@@ -14,7 +14,9 @@ func (x *IDInfo) str() string {
 	case IDType_Element:
 		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
 	case IDType_Cosmos:
-		fallthrough
+		return fmt.Sprintf("%s", x.Cosmos)
+	case IDType_Main:
+		return fmt.Sprintf("Main")
 	default:
 		return fmt.Sprintf("%s", x.Cosmos)
 	}

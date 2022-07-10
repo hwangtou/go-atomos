@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 // CHECKED!
 
@@ -19,7 +19,7 @@ import (
 
 type TaskFn func(taskId uint64, data proto.Message)
 
-type AtomosTasking interface {
+type Task interface {
 	Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
 	AddAfter(d time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
 	Cancel(id uint64) (CancelledTask, *ErrorInfo)
@@ -107,12 +107,12 @@ type CancelledTask struct {
 // Atomos任务管理器
 // 负责管理任务ID计数器和任务容器。
 //
-// Atomos Tasks Manager
+// Atomos Task Manager
 // In charge of the management of the increase task id and the task holder.
-type atomosTasksManager struct {
+type atomosTaskManager struct {
 	// AtomosCore实例的引用。
 	// Reference to baseAtomosos instance.
-	atomos *baseAtomos
+	atomos *BaseAtomos
 
 	// 被用于ID自增和任务增删的锁。
 	// A mutex-lock uses for id increment and tasks management.
@@ -133,9 +133,9 @@ type atomosTasksManager struct {
 // 初始化atomosTasksManager的内容。
 // 没有构造和释构函数，因为atomosTasksManager是Atomos内部使用的。
 //
-// Initialization of atomosTasksManager.
-// No New and Delete function because atomosTasksManager is struct inner baseAtomos.
-func initAtomosTasksManager(at *atomosTasksManager, a *baseAtomos) {
+// Initialization of atomosTaskManager.
+// No New and Delete function because atomosTaskManager is struct inner BaseAtomos.
+func initAtomosTasksManager(at *atomosTaskManager, a *BaseAtomos) {
 	at.atomos = a
 	at.curId = 0
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
@@ -144,30 +144,30 @@ func initAtomosTasksManager(at *atomosTasksManager, a *baseAtomos) {
 // 释放atomosTasksManager对象的内容。
 // 因为atomosTasksManager是thread-safe的，所以可以借助tasks和Atomos是否为空来判断atomos是否执行中。
 //
-// Releasing atomosTasksManager.
-// Because atomosTasksManager is thread-safe, so we can judge atomos is running though whether the task and baseAtomos is nil
+// Releasing atomosTaskManager.
+// Because atomosTaskManager is thread-safe, so we can judge atomos is running though whether the task and BaseAtomos is nil
 // or not.
-func releaseAtomosTask(at *atomosTasksManager) {
+func releaseAtomosTask(at *atomosTaskManager) {
 	at.tasks = nil
 	at.atomos = nil
 }
 
 // 在Atomos开始退出的时候上锁，以避免新的任务请求。
 // Lock at Atomos is going to stop, to prevent new incoming tasks.
-func (at *atomosTasksManager) stopLock() {
+func (at *atomosTaskManager) stopLock() {
 	at.mutex.Lock()
 }
 
 // 在Atomos退出执行完毕时解锁。
 // Unlock after Atomos has already stopped.
-func (at *atomosTasksManager) stopUnlock() {
+func (at *atomosTaskManager) stopUnlock() {
 	at.mutex.Unlock()
 }
 
 // Append
 // 添加任务，并返回可以用于取消的任务id。
 // Append task, and return a cancellable task id.
-func (at *atomosTasksManager) Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(at.atomos, fn, msg)
 	if err != nil {
@@ -177,7 +177,7 @@ func (at *atomosTasksManager) Append(fn TaskFn, msg proto.Message) (id uint64, e
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	// If baseAtomos is nil, Atomos has been stopped, add failed.
+	// If BaseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
 		return 0, NewErrorf(ErrAtomosIsNotRunning,
 			"STOPPED, Append atomos failed, fn=(%T),msg=(%+v)", fn, msg)
@@ -200,7 +200,7 @@ func (at *atomosTasksManager) Append(fn TaskFn, msg proto.Message) (id uint64, e
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return an cancellable task id.
-func (at *atomosTasksManager) AddAfter(after time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(at.atomos, fn, msg)
 	if err != nil {
@@ -210,7 +210,7 @@ func (at *atomosTasksManager) AddAfter(after time.Duration, fn TaskFn, msg proto
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	// If baseAtomos is nil, Atomos has been stopped, add failed.
+	// If BaseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
 		return 0, NewErrorf(ErrAtomosIsNotRunning,
 			"STOPPED, AddAfter failed, after=(%v),fn=(%T),msg=(%+v)", after, fn, msg)
@@ -279,7 +279,7 @@ func (at *atomosTasksManager) AddAfter(after time.Duration, fn TaskFn, msg proto
 
 // 用于Add和AddAfter的检查任务合法性逻辑。
 // Uses in Append and AddAfter for checking task legal.
-func checkTaskFn(a *baseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInfo) {
+func checkTaskFn(a *BaseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInfo) {
 	// Check func type.
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
@@ -357,7 +357,7 @@ func getTaskFnName(fnRawName string) string {
 // Cancel
 // 取消任务。
 // Cancel task.
-func (at *atomosTasksManager) Cancel(id uint64) (CancelledTask, *ErrorInfo) {
+func (at *atomosTaskManager) Cancel(id uint64) (CancelledTask, *ErrorInfo) {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
@@ -366,7 +366,7 @@ func (at *atomosTasksManager) Cancel(id uint64) (CancelledTask, *ErrorInfo) {
 
 // 用于退出Atomos时的清理。
 // For cleaning an stopping atomos.
-func (at *atomosTasksManager) cancelAllSchedulingTasks() map[uint64]CancelledTask {
+func (at *atomosTaskManager) cancelAllSchedulingTasks() map[uint64]CancelledTask {
 	cancels := make(map[uint64]CancelledTask, len(at.tasks))
 	for id, t := range at.tasks {
 		cancel, err := at.cancelTask(id, t)
@@ -388,7 +388,7 @@ func (at *atomosTasksManager) cancelAllSchedulingTasks() map[uint64]CancelledTas
 // Delete two kinds of tasks:
 // 1. delete append atomosTask
 // 2. delete timer atomosTask
-func (at *atomosTasksManager) cancelTask(id uint64, t *atomosTask) (cancel CancelledTask, err *ErrorInfo) {
+func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel CancelledTask, err *ErrorInfo) {
 	if t == nil {
 		ta := at.tasks[id]
 		t = ta
@@ -466,7 +466,7 @@ func (at *atomosTasksManager) cancelTask(id uint64, t *atomosTask) (cancel Cance
 
 // Atomos正式开始处理任务。
 // Atomos is beginning to handle a task.
-func (at *atomosTasksManager) handleTask(am *atomosMail) {
+func (at *atomosTaskManager) handleTask(am *atomosMail) {
 	at.atomos.setBusy()
 	defer func() {
 		// 只有任务执行完毕，Atomos状态仍然为AtomosBusy时，才会把状态设置为AtomosWaiting，因为执行的任务可能会把Atomos终止。
@@ -508,7 +508,7 @@ func (at *atomosTasksManager) handleTask(am *atomosMail) {
 }
 
 // 供给Telnet使用的任务数量统计。
-func (at *atomosTasksManager) getTasksNum() int {
+func (at *atomosTaskManager) getTasksNum() int {
 	at.mutex.Lock()
 	num := len(at.tasks)
 	at.mutex.Unlock()

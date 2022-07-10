@@ -4,28 +4,13 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+
+	"github.com/hwangtou/go-atomos/core"
 )
 
 //
 // Atom
 //
-
-// 开发者需要实现的Atom的接口定义。
-// Atom Interface Definition that developers have to implement.
-
-// Atom
-// 类型
-// Atom type.
-type Atomos interface {
-	//Spawn(self AtomSelf, arg proto.Message) error
-	Halt(from ID, cancels map[uint64]CancelledTask) (saveData proto.Message)
-
-	onReceive(mail *mail)
-	handleMessage(from ID, name string, in proto.Message) (out proto.Message, err *ErrorInfo)
-	handleKill(killAtomMail *atomosMail, cancels map[uint64]CancelledTask) *ErrorInfo
-	handleReload(am *atomosMail) *ErrorInfo
-	handleWormhole(action int, wormhole WormholeDaemon) *ErrorInfo
-}
 
 const RunnableName = "AtomosRunnable"
 
@@ -101,7 +86,7 @@ type ID interface {
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
-	Kill(from ID) *ErrorInfo
+	Kill(from ID) *core.ErrorInfo
 
 	//// 内部使用，如果是本地Atom，会返回本地Atom的引用。
 	//// Inner use only, if Atom is local, it returns the local AtomCore reference.
@@ -113,7 +98,7 @@ type ID interface {
 type CallProtoBuffer interface {
 	// CallNameWithProtoBuffer
 	// 直接接收调用
-	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *ErrorInfo)
+	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *core.ErrorInfo)
 }
 
 type CallJson interface {
@@ -152,60 +137,60 @@ type AtomSelf interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() AtomosLogging
+	Log() core.Logging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() AtomosTasking
+	Task() core.Task
 }
 
 type ParallelSelf interface {
 	ID
 	CosmosSelf() *CosmosProcess
 	KillSelf()
-	Log() *atomosLogsManager
+	Log() core.Logging
 }
 
 type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
 
+////
+//// Wormhole
+////
 //
-// Wormhole
+//// WormholeAtom
+//// 支持WormholeAtom的Atom，可以得到Wormhole的支持。
+//// Implement WormholeAtom interface to gain wormhole support.
+//type WormholeAtom interface {
+//	Atomos
+//	AcceptWorm(control WormholeControl) error
+//	CloseWorm(control WormholeControl)
+//}
+
+//// WormholeId
+//// 是Id接口的延伸，提供向WormholeAtom发送Wormhole的可能。
+//// Extend of Id, it lets send wormhole to WormholeAtom become possible.
+//type WormholeId interface {
+//	ID
+//	Accept(daemon WormholeDaemon) error
+//}
 //
-
-// WormholeAtom
-// 支持WormholeAtom的Atom，可以得到Wormhole的支持。
-// Implement WormholeAtom interface to gain wormhole support.
-type WormholeAtom interface {
-	Atomos
-	AcceptWorm(control WormholeControl) error
-	CloseWorm(control WormholeControl)
-}
-
-// WormholeId
-// 是Id接口的延伸，提供向WormholeAtom发送Wormhole的可能。
-// Extend of Id, it lets send wormhole to WormholeAtom become possible.
-type WormholeId interface {
-	ID
-	Accept(daemon WormholeDaemon) error
-}
-
-// WormholeDaemon
-// 通常包装着wormhole（真实网络连接）。负责接受信息并处理，并提供操作接口。
-// WormholeDaemon generally used to wrap the real connection. It handles message processing,
-// and provides operating methods.
-type WormholeDaemon interface {
-	// Daemon
-	// 加载&卸载
-	// Loaded & Unloaded
-	Daemon(AtomSelf) error
-	WormholeControl
-}
-
-// WormholeControl
-// 向WormholeAtom提供发送和关闭接口。
-// WormholeControl provides Send and Close to WormholeAtom.
-type WormholeControl interface {
-	Send([]byte) error
-	Close(isKickByNew bool) error
-}
+//// WormholeDaemon
+//// 通常包装着wormhole（真实网络连接）。负责接受信息并处理，并提供操作接口。
+//// WormholeDaemon generally used to wrap the real connection. It handles message processing,
+//// and provides operating methods.
+//type WormholeDaemon interface {
+//	// Daemon
+//	// 加载&卸载
+//	// Loaded & Unloaded
+//	Daemon(AtomSelf) error
+//	WormholeControl
+//}
+//
+//// WormholeControl
+//// 向WormholeAtom提供发送和关闭接口。
+//// WormholeControl provides Send and Close to WormholeAtom.
+//type WormholeControl interface {
+//	Send([]byte) error
+//	Close(isKickByNew bool) error
+//}

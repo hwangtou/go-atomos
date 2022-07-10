@@ -6,6 +6,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"sync"
+
+	"github.com/hwangtou/go-atomos/core"
 )
 
 // Atom Error
@@ -57,7 +59,7 @@ type AtomLocal struct {
 	//// 邮箱，也是实现Atom无锁队列的关键。
 	//// Mailbox, the key of lockless queue of Atom.
 	//mailbox *mailBox
-	atomos *baseAtomos
+	atomos *core.BaseAtomos
 
 	//// 任务管理器，用于处理来自Atom内部的任务调派。
 	//// Task Manager, uses to handle Task from inner Atom.
@@ -93,11 +95,11 @@ func (a *AtomLocal) ElementSelf() Element {
 	return a.element
 }
 
-func (a *AtomLocal) Log() AtomosLogging {
+func (a *AtomLocal) Log() core.Logging {
 	return &a.atomos.log
 }
 
-func (a *AtomLocal) Task() AtomosTasking {
+func (a *AtomLocal) Task() core.Task {
 	return &a.atomos.task
 }
 

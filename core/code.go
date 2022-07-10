@@ -1,4 +1,4 @@
-package go_atomos
+package core
 
 const (
 	OK = iota

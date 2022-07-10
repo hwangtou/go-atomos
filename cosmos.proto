@@ -1,45 +1,10 @@
 syntax = "proto3";
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/any.proto";
-
 package go_atomos;
 option go_package = "github.com/hwangtou/go-atomos";
 
-enum IDType {
-  InvalidIDType = 0;
-  Atomos = 1;
-  Element = 2;
-  Cosmos = 3;
-}
-
-message IDInfo {
-  IDType type = 1;
-  string cosmos = 2;
-  string element = 3;
-  string atomos = 4;
-}
-
-//message AtomId {
-//  string node = 1;
-//  string element = 2;
-//  string name = 3;
-//}
-
-enum LogLevel {
-  Debug = 0;
-  Info = 1;
-  Warn = 2;
-  Error = 3;
-  Fatal = 4;
-}
-
-message LogMail {
-  IDInfo id = 1;
-  google.protobuf.Timestamp time = 2;
-  LogLevel level = 3;
-  string message = 4;
-}
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
 
 message Nil {
 }
@@ -135,10 +100,4 @@ message CosmosRemoteMessagingResp {
   bool has = 1;
   google.protobuf.Any reply = 2;
   string error = 3;
-}
-
-message ErrorInfo {
-  int64 code = 1;
-  string message = 2;
-  string stack = 3;
 }
