@@ -96,15 +96,15 @@ func (a *AtomLocal) ElementSelf() Element {
 }
 
 func (a *AtomLocal) Log() core.Logging {
-	return &a.atomos.log
+	return a.atomos.Log()
 }
 
 func (a *AtomLocal) Task() core.Task {
-	return &a.atomos.task
+	return a.atomos.Task()
 }
 
 func (a *AtomLocal) String() string {
-	return a.atomos.id.str()
+	return a.atomos.String()
 }
 
 func (a *AtomLocal) GetVersion() uint64 {
@@ -132,7 +132,7 @@ var atomLocalPool = sync.Pool{
 // AtomLocal implements Id interface directly, so local Id is able to use AtomLocal reference directly.
 
 func (a *AtomLocal) Release() {
-	a.atomos.holder.atomosRelease(a.atomos)
+	//a.atomos.holder.atomosRelease(a.atomos)
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
@@ -151,7 +151,7 @@ func (a *AtomLocal) GetName() string {
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(from ID) *ErrorInfo {
+func (a *AtomLocal) Kill(from ID) *core.ErrorInfo {
 	dev := a.element.current.Developer
 	elemAuth, ok := dev.(ElementCustomizeAuthorization)
 	if !ok || elemAuth == nil {
@@ -186,10 +186,10 @@ func (a *AtomLocal) Kill(from ID) *ErrorInfo {
 func (a *AtomLocal) KillSelf() {
 	//id, elem := a.id, a.element
 	if err := a.pushKillMail(a, false); err != nil {
-		a.atomos.log.Error("KillSelf error, err=%v", err)
+		a.atomos.Log().Error("KillSelf error, err=%v", err)
 		return
 	}
-	a.atomos.log.Info("KillSelf")
+	a.atomos.Log().Info("KillSelf")
 }
 
 //func (a *AtomLocal) Log() *atomLogsManager {
@@ -235,8 +235,8 @@ func allocAtomLocal() *AtomLocal {
 }
 
 func initAtomLocal(name string, a *AtomLocal, e *ElementLocal, current *ElementImplementation, log *loggingMailBox, lv LogLevel) {
-	id := &IDInfo{
-		Type:    IDType_Atomos,
+	id := &core.IDInfo{
+		Type:    core.IDType_Atomos,
 		Cosmos:  e.cosmos.GetName(),
 		Element: e.GetElementName(),
 		Atomos:  name,

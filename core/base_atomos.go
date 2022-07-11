@@ -27,7 +27,7 @@ type BaseAtomos struct {
 	// Mailbox, the key of lockless queue of Atom.
 	mailbox *mailBox
 
-	// 容器
+	// 持有者
 	holder AtomosHolder
 	// 实际上运行的对象
 	instance Atomos
@@ -77,6 +77,10 @@ func releaseAtomos(a *BaseAtomos) {
 
 func deallocAtomos(a *BaseAtomos) {
 	atomosPool.Put(a)
+}
+
+func (a *BaseAtomos) String() string {
+	return a.id.str()
 }
 
 func (a *BaseAtomos) Log() Logging {
@@ -209,9 +213,9 @@ func (a *BaseAtomos) onPanic(mail *mail, trace []byte) {
 	//	am.sendReply(nil, err)
 	//	// Mail then will be dealloc in AtomCore.pushWormholeMail.
 	case MailTask:
-		a.log.Error("Atomos: PANIC when atomos is running task, id=(%s),type=(%v),mail=(%+v)", a.id.str(), am.mailType, am)
+		a.log.Error("Atomos: PANIC when atomos is running task, id=(%s),type=(%v),mail=(%+v)", a.id.ToString(), am.mailType, am)
 	default:
-		a.log.Fatal("Atomos: PANIC unknown message type, id=(%s),type=(%v),mail=(%+v)", a.id.str(), am.mailType, am)
+		a.log.Fatal("Atomos: PANIC unknown message type, id=(%s),type=(%v),mail=(%+v)", a.id.ToString(), am.mailType, am)
 	}
 }
 
@@ -241,7 +245,7 @@ func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 			// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 			// but it's impossible to add task after locking.
-			a.log.Fatal("Atomos: STOPPING task mails have been sent after start closing, id=(%s),mail=(%+v)", a.id.str(), remainMails)
+			a.log.Fatal("Atomos: STOPPING task mails have been sent after start closing, id=(%s),mail=(%+v)", a.id.ToString(), remainMails)
 			t, err := a.task.cancelTask(remainMails.id, nil)
 			if err == nil {
 				cancels[remainMails.id] = t
