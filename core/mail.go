@@ -94,7 +94,7 @@ func newMailBox(handler MailBoxHandler) *mailBox {
 	return mb
 }
 
-func initMailBox(a *BaseAtomos) {
+func newMailBoxWithHandler(a *BaseAtomos) {
 	a.mailbox = newMailBox(MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,
@@ -186,6 +186,10 @@ func (mb *mailBox) pushHead(m *mail) bool {
 	mb.cond.Signal()
 	mb.mutex.Unlock()
 	return true
+}
+
+func (mb *mailBox) Push(m *mail) bool {
+	return mb.pushTail(m)
 }
 
 func (mb *mailBox) pushTail(m *mail) bool {

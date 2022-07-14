@@ -31,7 +31,7 @@ func (h *HelloElement) AtomConstructor() atomos.Atom {
 	return &HelloAtom{}
 }
 
-func (h *HelloElement) Persistence() atomos.ElementPersistence {
+func (h *HelloElement) AutoDataPersistence() atomos.ElementAutoDataPersistence {
 	return nil
 }
 

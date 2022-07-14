@@ -18,7 +18,7 @@ type Logging interface {
 // Atomos Logs Manager
 
 type atomosLoggingManager struct {
-	logging *loggingAtomos
+	logging *LoggingAtomos
 	atomos  *BaseAtomos
 	level   LogLevel
 }
@@ -28,7 +28,7 @@ type atomosLoggingManager struct {
 //
 // Initialization of atomosLoggingManager.
 // No New and Delete function because atomosLoggingManager is struct inner AtomCore.
-func initAtomosLog(l *atomosLoggingManager, log *loggingAtomos, a *BaseAtomos, lv LogLevel) {
+func initAtomosLog(l *atomosLoggingManager, log *LoggingAtomos, a *BaseAtomos, lv LogLevel) {
 	l.logging = log
 	l.atomos = a
 	l.level = lv

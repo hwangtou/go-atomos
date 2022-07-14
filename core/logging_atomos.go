@@ -12,7 +12,7 @@ const defaultLogMailId = 0
 // Cosmos的Log接口。
 // Interface of Cosmos Log.
 
-type loggingAtomos struct {
+type LoggingAtomos struct {
 	log *mailBox
 }
 
@@ -24,8 +24,8 @@ var logMailsPool = sync.Pool{
 	},
 }
 
-func newLoggingAtomos() *loggingAtomos {
-	m := &loggingAtomos{}
+func NewLoggingAtomos() *LoggingAtomos {
+	m := &LoggingAtomos{}
 	m.log = newMailBox(MailBoxHandler{
 		OnReceive: m.onLogMessage,
 		OnPanic:   m.onLogPanic,
@@ -35,11 +35,26 @@ func newLoggingAtomos() *loggingAtomos {
 	return m
 }
 
-func (c *loggingAtomos) stop() {
+func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
+	id := &IDInfo{
+		Type:    IDType_Process,
+		Cosmos:  "",
+		Element: "",
+		Atomos:  "",
+	}
+	c.pushLogging(id, level, fmt.Sprintf(format, args...))
+}
+
+func (c *LoggingAtomos) Close() {
+	c.stop()
+	c.log = nil
+}
+
+func (c *LoggingAtomos) stop() {
 	c.log.waitStop()
 }
 
-func (c *loggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
+func (c *LoggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
 	lm := logMailsPool.Get().(*LogMail)
 	lm.Id = id
 	lm.Time = timestamppb.Now()
@@ -47,21 +62,21 @@ func (c *loggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
 	lm.Message = msg
 	m := newMail(defaultLogMailId, lm)
 	if ok := c.log.pushTail(m); !ok {
-		logWrite(fmt.Sprintf("loggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg), true)
+		LogWrite(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg), true)
 	}
 }
 
 // Logging Atomos的实现。
 // Implementation of Logging Atomos.
 
-func (c *loggingAtomos) onLogMessage(mail *mail) {
+func (c *LoggingAtomos) onLogMessage(mail *mail) {
 	lm := mail.Content.(*LogMail)
 	c.logging(lm)
 	logMailsPool.Put(lm)
 	delMail(mail)
 }
 
-func (c *loggingAtomos) onLogPanic(mail *mail, trace []byte) {
+func (c *LoggingAtomos) onLogPanic(mail *mail, trace []byte) {
 	lm := mail.Content.(*LogMail)
 	c.logging(&LogMail{
 		Id:      lm.Id,
@@ -71,13 +86,13 @@ func (c *loggingAtomos) onLogPanic(mail *mail, trace []byte) {
 	})
 }
 
-func (c *loggingAtomos) onLogStop(killMail, remainMails *mail, num uint32) {
+func (c *LoggingAtomos) onLogStop(killMail, remainMails *mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.onLogMessage(curMail)
 	}
 }
 
-func (c *loggingAtomos) logging(lm *LogMail) {
+func (c *LoggingAtomos) logging(lm *LogMail) {
 	var msg string
 	if id := lm.Id; id != nil {
 		switch id.Type {
@@ -97,23 +112,23 @@ func (c *loggingAtomos) logging(lm *LogMail) {
 	}
 	switch lm.Level {
 	case LogLevel_Debug:
-		logWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Info:
-		logWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Warn:
-		logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
+		LogWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), false)
 	case LogLevel_Error:
-		logWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
+		LogWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	case LogLevel_Fatal:
 		fallthrough
 	default:
-		logWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
+		LogWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg), true)
 	}
 }
 
 // Concrete log to file logic.
 
-func logWrite(msg string, err bool) {
+func LogWrite(msg string, err bool) {
 	if err {
 		os.Stderr.WriteString(msg)
 	} else {

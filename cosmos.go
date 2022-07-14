@@ -61,8 +61,8 @@ func (c *CosmosProcess) atomosRelease(a *baseAtomos) {
 
 // Interface
 
-func (c *CosmosProcess) Local() *CosmosRuntime {
-	return c.runtime
+func (c *CosmosProcess) Local() *CosmosMainFn {
+	return c.main
 }
 
 func (c *CosmosProcess) GetName() string {

@@ -3,8 +3,8 @@ syntax = "proto3";
 package go_atomos;
 option go_package = "github.com/hwangtou/go-atomos";
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/any.proto";
+import "core/atomos.proto";
 
 message Nil {
 }
@@ -14,7 +14,7 @@ message Nil {
 message Config {
   string node = 1;
   string log_path = 2;
-  LogLevel log_level = 3;
+  core.LogLevel log_level = 3;
   CertConfig enable_cert = 4;
   RemoteServerConfig enable_server = 5;
   TelnetServerConfig enable_telnet = 6;
@@ -52,7 +52,7 @@ message CosmosLocalConfig {
 message ElementConfig {
   string name = 1;
   uint64 version = 2;
-  LogLevel log_level = 3;
+  core.LogLevel log_level = 3;
   int32 atom_init_num = 4;
   map<string, AtomMessageConfig> messages = 5;
 }
@@ -90,8 +90,8 @@ message CosmosRemoteGetAtomIdResp {
 }
 
 message CosmosRemoteMessagingReq {
-  IDInfo from = 1;
-  IDInfo to = 2;
+  core.IDInfo from = 1;
+  core.IDInfo to = 2;
   string message = 3;
   google.protobuf.Any args = 4;
 }

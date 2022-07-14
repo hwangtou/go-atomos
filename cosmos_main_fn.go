@@ -5,6 +5,7 @@ package go_atomos
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/hwangtou/go-atomos/core"
 	"runtime/debug"
 	"sync"
 
@@ -13,34 +14,35 @@ import (
 
 // Local Cosmos Instance
 
-type CosmosRuntime struct {
-	mutex      sync.RWMutex
-	cosmosSelf *CosmosProcess
-	runnable   *CosmosRunnable
-	loading    *CosmosRunnable
-	elements   map[string]*ElementLocal
+type CosmosMainFn struct {
+	mutex         sync.RWMutex
+	cosmosProcess *CosmosProcess
+	runnable      *CosmosRunnable
+	loading       *CosmosRunnable
+	elements      map[string]*ElementLocal
 	//mainElem   *ElementLocal
 	mainKillCh chan bool
+	mainId     ID
 	//*mainAtom
 }
 
 // Life cycle
 
-func newCosmosRuntime() *CosmosRuntime {
-	return &CosmosRuntime{}
+func newCosmosMainFn() *CosmosMainFn {
+	return &CosmosMainFn{}
 }
 
 // 初始化Runnable。
 // Initial Runnable.
-func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) *ErrorInfo {
-	self.logInfo("Cosmos.Init")
+func (c *CosmosMainFn) init(self *CosmosProcess, runnable *CosmosRunnable) *core.ErrorInfo {
+	self.sharedLog.PushProcessLog(core.LogLevel_Info, "Cosmos.Init")
 
-	c.cosmosSelf = self
+	c.cosmosProcess = self
 	c.runnable = runnable
 	c.loading = runnable
 	c.elements = make(map[string]*ElementLocal, len(runnable.implements))
-	c.mainElem = newMainElement(self)
-	c.mainAtom = newMainAtom(c.mainElem)
+	//c.mainElem = newMainElement(self)
+	//c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
 
 	if errs := c.checkElements(runnable); len(errs) > 0 {
@@ -85,21 +87,21 @@ func (c *CosmosRuntime) init(self *CosmosSelf, runnable *CosmosRunnable) *ErrorI
 
 // 执行Runnable。
 // Run runnable.
-func (c *CosmosRuntime) run(runnable *CosmosRunnable) *ErrorInfo {
+func (c *CosmosMainFn) run(runnable *CosmosRunnable) *ErrorInfo {
 	//ma := c.mainAtom.instance.(MainId)
-	c.cosmosSelf.logInfo("Cosmos.Run: NOW RUNNING!")
-	runnable.mainScript(c.cosmosSelf, c.mainAtom, c.mainKillCh)
+	c.cosmosProcess.logInfo("Cosmos.Run: NOW RUNNING!")
+	runnable.mainScript(c.cosmosProcess, c.mainAtom, c.mainKillCh)
 	return nil
 }
 
 // 升级
 // Upgrade
-func (c *CosmosRuntime) upgrade(runnable *CosmosRunnable, upgradeCount int) *ErrorInfo {
-	c.cosmosSelf.logInfo("Cosmos.Upgrade")
+func (c *CosmosMainFn) upgrade(runnable *CosmosRunnable, upgradeCount int) *ErrorInfo {
+	c.cosmosProcess.logInfo("Cosmos.Upgrade")
 	c.mutex.Lock()
 	if c.loading != nil {
 		c.mutex.Unlock()
-		err := fmt.Errorf("runnable is upgrading")
+		err := fmt.Errorf("runnable is reloading")
 		return err
 	}
 	c.mutex.Unlock()
@@ -110,10 +112,10 @@ func (c *CosmosRuntime) upgrade(runnable *CosmosRunnable, upgradeCount int) *Err
 	}
 
 	err := func(runnable *CosmosRunnable) error {
-		defer c.cosmosSelf.deferRunnable()
+		defer c.cosmosProcess.deferRunnable()
 		ma := c.mainAtom.instance.(MainId)
-		c.cosmosSelf.logInfo("Cosmos.Upgrade: NOW UPGRADING!")
-		runnable.upgradeScript(c.cosmosSelf, ma, c.mainKillCh)
+		c.cosmosProcess.logInfo("Cosmos.Upgrade: NOW UPGRADING!")
+		runnable.upgradeScript(c.cosmosProcess, ma, c.mainKillCh)
 		return nil
 	}(runnable)
 
@@ -132,25 +134,25 @@ func (c *CosmosRuntime) upgrade(runnable *CosmosRunnable, upgradeCount int) *Err
 	return nil
 }
 
-func (c *CosmosRuntime) stop() bool {
+func (c *CosmosMainFn) stop() bool {
 	select {
 	case c.mainKillCh <- true:
 		return true
 	default:
-		c.cosmosSelf.logInfo("Cosmos.Daemon: Exit error, err=Runnable is blocking")
+		c.cosmosProcess.logInfo("Cosmos.Daemon: Exit error, err=Runnable is blocking")
 		return false
 	}
 }
 
 // 退出Runnable。
 // Exit runnable.
-func (c *CosmosRuntime) close() {
-	c.cosmosSelf.logInfo("Cosmos.Exit: NOW EXITING!")
+func (c *CosmosMainFn) close() {
+	c.cosmosProcess.logInfo("Cosmos.Exit: NOW EXITING!")
 
 	c.mutex.Lock()
 	if c.runnable == nil {
 		c.mutex.Unlock()
-		c.cosmosSelf.logError("Cosmos.Exit: runnable was closed")
+		c.cosmosProcess.logError("Cosmos.Exit: runnable was closed")
 		return
 	}
 	runnable := c.runnable
@@ -164,18 +166,18 @@ func (c *CosmosRuntime) close() {
 	_ = c.mainAtom.pushKillMail(c.mainAtom, true)
 
 	// Close remote.
-	c.cosmosSelf.telnet.close()
-	c.cosmosSelf.remotes.close()
+	c.cosmosProcess.telnet.close()
+	c.cosmosProcess.remotes.close()
 	c.mainKillCh = nil
 	c.mainAtom = nil
 	c.mainElem = nil
 	c.elements = nil
-	c.cosmosSelf = nil
+	c.cosmosProcess = nil
 }
 
 // Element Interface.
 
-func (c *CosmosRuntime) getElement(name string) (elem *ElementLocal, err error) {
+func (c *CosmosMainFn) getElement(name string) (elem *ElementLocal, err error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -183,20 +185,20 @@ func (c *CosmosRuntime) getElement(name string) (elem *ElementLocal, err error) 
 		if c.runnable == nil {
 			err = fmt.Errorf("no runnable")
 		} else {
-			err = fmt.Errorf("upgrading")
+			err = fmt.Errorf("reloading")
 		}
-		c.cosmosSelf.logError("Cosmos.Element: Get, Upgrading, name=%s", name)
+		c.cosmosProcess.logError("Cosmos.Element: Get, Upgrading, name=%s", name)
 		return nil, err
 	}
 	elem, has := c.elements[name]
 	if !has {
 		err = fmt.Errorf("local element not found, name=%s", name)
-		c.cosmosSelf.logError("Cosmos.Element: Get, Cannot get element, name=%s", name)
+		c.cosmosProcess.logError("Cosmos.Element: Get, Cannot get element, name=%s", name)
 		return nil, err
 	}
 	if !elem.avail {
 		err = fmt.Errorf("local element is not avail, name=%s", name)
-		c.cosmosSelf.logError("Cosmos.Element: Get, Not avail now, name=%s", name)
+		c.cosmosProcess.logError("Cosmos.Element: Get, Not avail now, name=%s", name)
 		return nil, err
 	}
 	return elem, nil
@@ -204,34 +206,34 @@ func (c *CosmosRuntime) getElement(name string) (elem *ElementLocal, err error) 
 
 // Element Container Handlers.
 
-func (c *CosmosRuntime) checkElements(runnable *CosmosRunnable) (errs map[string]error) {
+func (c *CosmosMainFn) checkElements(runnable *CosmosRunnable) (errs map[string]error) {
 	errs = map[string]error{}
 	// Pre-initialize all local elements in the Runnable.
 	for _, define := range runnable.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if err := c.setElement(name, define); err != nil {
-			c.cosmosSelf.logError("Cosmos.Check: Load element failed, element=%s,err=%v", name, err)
+			c.cosmosProcess.logError("Cosmos.Check: Load element failed, element=%s,err=%v", name, err)
 			errs[name] = err
 			continue
 		}
 		//// Add the element.
-		c.cosmosSelf.logInfo("Cosmos.Check: Load element succeed, element=%s", name)
+		c.cosmosProcess.logInfo("Cosmos.Check: Load element succeed, element=%s", name)
 	}
 	return
 }
 
-func (c *CosmosRuntime) setElement(name string, define *ElementImplementation) error {
+func (c *CosmosMainFn) setElement(name string, define *ElementImplementation) error {
 	defer func() {
 		if r := recover(); r != nil {
-			c.cosmosSelf.logFatal("Cosmos.Check: Check element panic, name=%s,err=%v,stack=%s",
+			c.cosmosProcess.logFatal("Cosmos.Check: Check element panic, name=%s,err=%v,stack=%s",
 				name, r, string(debug.Stack()))
 		}
 	}()
 	c.mutex.Lock()
 	elem, has := c.elements[name]
 	if !has {
-		elem = newElementLocal(c.cosmosSelf, define)
+		elem = newElementLocal(c.cosmosProcess, define)
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()
@@ -242,30 +244,30 @@ func (c *CosmosRuntime) setElement(name string, define *ElementImplementation) e
 	}
 }
 
-func (c *CosmosRuntime) daemon(isUpgrade bool) {
+func (c *CosmosMainFn) daemon(isUpgrade bool) {
 	for name, elem := range c.elements {
 		go func(n string, e *ElementLocal) {
 			defer func() {
 				if r := recover(); r != nil {
-					c.cosmosSelf.logFatal("Cosmos.Init: Daemon wormhole error, name=%s,err=%v", n, r)
+					c.cosmosProcess.logFatal("Cosmos.Init: Daemon wormhole error, name=%s,err=%v", n, r)
 				}
 			}()
 			if w, ok := e.current.Developer.(ElementWormholeDeveloper); ok {
-				c.cosmosSelf.logInfo("Cosmos.Init: Daemon wormhole, name=%s", n)
+				c.cosmosProcess.logInfo("Cosmos.Init: Daemon wormhole, name=%s", n)
 				w.Daemon(isUpgrade)
 			}
 		}(name, elem)
 	}
 }
 
-func (c *CosmosRuntime) rollback(isUpgrade bool, errs map[string]error) {
+func (c *CosmosMainFn) rollback(isUpgrade bool, errs map[string]error) {
 	for _, define := range c.loading.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			_, failed := errs[name]
 			elem.rollback(isUpgrade, failed)
-			c.cosmosSelf.logInfo("Cosmos.Check: Rollback, element=%s", name)
+			c.cosmosProcess.logInfo("Cosmos.Check: Rollback, element=%s", name)
 		}
 	}
 	c.mutex.Lock()
@@ -276,36 +278,36 @@ func (c *CosmosRuntime) rollback(isUpgrade bool, errs map[string]error) {
 	c.mutex.Unlock()
 }
 
-func (c *CosmosRuntime) commit(isUpgrade bool) {
+func (c *CosmosMainFn) commit(isUpgrade bool) {
 	for _, define := range c.loading.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			elem.commit(isUpgrade)
-			c.cosmosSelf.logInfo("Cosmos.Check: Commit, element=%s", name)
+			c.cosmosProcess.logInfo("Cosmos.Check: Commit, element=%s", name)
 		}
 	}
 }
 
-func (c *CosmosRuntime) loaded() {
+func (c *CosmosMainFn) loaded() {
 	c.mutex.Lock()
 	c.runnable = c.loading
 	c.loading = nil
 	c.mutex.Unlock()
 }
 
-func (c *CosmosRuntime) pushUpgrade(upgradeCount int) {
+func (c *CosmosMainFn) pushUpgrade(upgradeCount int) {
 	for _, define := range c.runnable.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			elem.pushUpgrade(upgradeCount)
-			c.cosmosSelf.logInfo("Cosmos.Check: Commit, element=%s", name)
+			c.cosmosProcess.logInfo("Cosmos.Check: Commit, element=%s", name)
 		}
 	}
 }
 
-func (c *CosmosRuntime) closeElement(runnable *CosmosRunnable) {
+func (c *CosmosMainFn) closeElement(runnable *CosmosRunnable) {
 	wg := sync.WaitGroup{}
 	for i := len(runnable.implementOrder) - 1; i >= 0; i -= 1 {
 		name := runnable.implementOrder[i].Interface.Config.Name
@@ -321,29 +323,29 @@ func (c *CosmosRuntime) closeElement(runnable *CosmosRunnable) {
 					c.mutex.Unlock()
 					wg.Done()
 					if r := recover(); r != nil {
-						c.cosmosSelf.logFatal("Cosmos.Close: Panic, name=%s,reason=%s", name, r)
+						c.cosmosProcess.logFatal("Cosmos.Close: Panic, name=%s,reason=%s", name, r)
 					}
 				}()
 				elem.unload()
-				c.cosmosSelf.logInfo("Cosmos.Close: Closed, element=%s", name)
+				c.cosmosProcess.logInfo("Cosmos.Close: Closed, element=%s", name)
 			}(name)
 		}
 	}
 	wg.Wait()
-	c.cosmosSelf.logInfo("Cosmos.Close: Closed")
+	c.cosmosProcess.logInfo("Cosmos.Close: Closed")
 }
 
 // Atom Interface.
 
-func (c *CosmosRuntime) GetNodeName() string {
-	return c.cosmosSelf.config.Node
+func (c *CosmosMainFn) GetNodeName() string {
+	return c.cosmosProcess.config.Node
 }
 
-func (c *CosmosRuntime) IsLocal() bool {
+func (c *CosmosMainFn) IsLocal() bool {
 	return true
 }
 
-func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (ID, error) {
+func (c *CosmosMainFn) GetAtomId(elemName, atomName string) (ID, error) {
 	// Get element.
 	e, err := c.getElement(elemName)
 	if err != nil {
@@ -353,7 +355,7 @@ func (c *CosmosRuntime) GetAtomId(elemName, atomName string) (ID, error) {
 	return e.GetAtomId(atomName)
 }
 
-func (c *CosmosRuntime) SpawnAtom(elemName, atomName string, arg proto.Message) (ID, error) {
+func (c *CosmosMainFn) SpawnAtom(elemName, atomName string, arg proto.Message) (ID, error) {
 	// Get element.
 	e, err := c.getElement(elemName)
 	if err != nil {
@@ -369,10 +371,10 @@ func (c *CosmosRuntime) SpawnAtom(elemName, atomName string, arg proto.Message) 
 	return i, nil
 }
 
-func (c *CosmosRuntime) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error) {
+func (c *CosmosMainFn) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err error) {
 	return toId.Element().MessagingAtom(fromId, toId, message, args)
 }
 
-func (c *CosmosRuntime) KillAtom(fromId, toId ID) error {
+func (c *CosmosMainFn) KillAtom(fromId, toId ID) error {
 	return toId.Element().KillAtom(fromId, toId)
 }

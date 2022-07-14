@@ -61,7 +61,7 @@ type atomosMail struct {
 
 	// 从哪个Id发来的邮件。
 	// Mail send from which ID.
-	from *IDInfo
+	from ID
 
 	// Message和Task邮件会使用到的，调用的目标对象的名称。
 	// Mail target name, used by Message mail and Task mail.
@@ -71,11 +71,11 @@ type atomosMail struct {
 	// Argument that pass to target, used by Message mail and Task mail.
 	arg proto.Message
 
-	//// 需要升级的Element。
-	//// Upgrade Element.
-	//upgrade      *ElementImplementation
-	//upgradeCount int
-	//
+	// 需要升级的Element。
+	// Upgrade Element.
+	reload  interface{}
+	reloads int
+
 	//wormholeAction int
 	//wormhole       WormholeDaemon
 
@@ -104,8 +104,7 @@ var atomosMailsPool = sync.Pool{
 
 func allocAtomosMail() *atomosMail {
 	am := atomosMailsPool.Get().(*atomosMail)
-	m := newMail(DefaultMailId, am)
-	am.mail = m
+	am.mail = newMail(DefaultMailId, am)
 	return am
 }
 
@@ -116,7 +115,7 @@ func deallocAtomosMail(am *atomosMail) {
 
 // 消息邮件
 // Message Mail
-func initMessageMail(am *atomosMail, from *IDInfo, name string, arg proto.Message) {
+func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionRun
 	am.mailType = MailMessage
@@ -128,7 +127,7 @@ func initMessageMail(am *atomosMail, from *IDInfo, name string, arg proto.Messag
 	} else {
 		am.arg = nil
 	}
-	//am.upgrade = nil
+	//am.reload = nil
 	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
@@ -144,25 +143,25 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 	am.name = name
 	// I think it doesn't have to clone, because Atomos is thread-safe.
 	am.arg = arg
-	//am.upgrade = nil
+	//am.reload = nil
 	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
 
-//// 重载邮件
-//// Reload Mail
-//func initReloadMail(am *atomosMail, elem *ElementImplementation, upgradeCount int) {
-//	am.mail.id = DefaultMailId
-//	am.mail.action = MailActionRun
-//	am.mailType = MailReload
-//	am.from = nil
-//	am.name = ""
-//	am.upgrade = elem
-//	am.upgradeCount = upgradeCount
-//	am.mailReply = mailReply{}
-//	am.waitCh = make(chan *mailReply, 1)
-//}
+// 重载邮件
+// Reload Mail
+func initReloadMail(am *atomosMail, elem interface{}, reloads int) {
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
+	am.mailType = MailReload
+	am.from = nil
+	am.name = ""
+	am.reload = elem
+	am.reloads = reloads
+	am.mailReply = mailReply{}
+	am.waitCh = make(chan *mailReply, 1)
+}
 
 //func initWormholeMail(am *atomosMail, action int, wormhole WormholeDaemon) {
 //	am.mail.id = DefaultMailId
@@ -173,7 +172,7 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 //	am.arg = nil
 //	am.wormholeAction = action
 //	am.wormhole = wormhole
-//	am.upgrade = nil
+//	am.reload = nil
 //	am.upgradeCount = 0
 //	am.mailReply = mailReply{}
 //	am.waitCh = make(chan *mailReply, 1)
@@ -181,13 +180,13 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 
 // 终止邮件
 // Halt Mail
-func initKillMail(am *atomosMail, from *IDInfo) {
+func initKillMail(am *atomosMail, from ID) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
 	am.from = from
 	am.name = ""
-	//am.upgrade = nil
+	//am.reload = nil
 	//am.upgradeCount = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)

@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"github.com/hwangtou/go-atomos/core"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -42,7 +43,7 @@ type ElementInterface struct {
 	AtomMessages map[string]*ElementAtomMessage
 }
 
-type AtomSpawner func(s AtomSelf, a Atomos, arg, data proto.Message) *ErrorInfo
+type AtomSpawner func(s AtomSelf, a core.Atomos, arg, data proto.Message) *core.ErrorInfo
 
 // AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
@@ -51,7 +52,7 @@ type AtomIdConstructor func(ID) ID
 
 // MessageHandler
 // Message处理器
-type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo)
+type MessageHandler func(from ID, to core.Atomos, in proto.Message) (out proto.Message, err *core.ErrorInfo)
 
 // MessageDecoder
 // Message解码器

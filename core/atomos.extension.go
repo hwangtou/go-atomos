@@ -22,6 +22,13 @@ func (x *IDInfo) str() string {
 	}
 }
 
+func (x *IDInfo) IsEqual(r *IDInfo) bool {
+	if x.Type != r.Type {
+		return false
+	}
+	return x.Atomos == r.Atomos && x.Element == r.Element && x.Cosmos == r.Cosmos
+}
+
 func NewError(code int64, message string) *ErrorInfo {
 	return &ErrorInfo{
 		Code:    code,

@@ -21,9 +21,12 @@ const (
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageHandlerPanic
 	ErrAtomKillHandlerPanic
-	ErrAtomUpgradeInvalid
+	ErrAtomKillElementNoImplement
+	ErrAtomKillElementNotImplementAutoDataPersistence
+	ErrAtomReloadInvalid
 	ErrAtomFromIDInvalid
 	ErrAtomToIDInvalid
+	ErrAtomCallDeadLock
 	ErrAtomNotExists
 	ErrAtomExists
 	ErrAtomPersistenceRuntime

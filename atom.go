@@ -56,6 +56,9 @@ const RunnableName = "AtomosRunnable"
 // ID 是Atom的类似句柄的对象。
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
+	core.ID
+
+	getCallChain() []ID
 
 	// Release
 	// 释放Id的引用计数

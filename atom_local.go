@@ -10,25 +10,6 @@ import (
 	"github.com/hwangtou/go-atomos/core"
 )
 
-// Atom Error
-
-//var (
-//	ErrRemoteNotAllowed = errors.New("atomos remote not allowed")
-//
-//	ErrFromNotFound     = errors.New("atomos fromId not found")
-//	ErrAtomNotFound     = errors.New("atomos not found")
-//	ErrAtomExists       = errors.New("atomos exists")
-//	ErrAtomCannotSpawn  = errors.New("atomos cannot spawn")
-//	ErrAtomIsNotRunning = errors.New("atomos is not running")
-//	ErrAtomCannotKill   = errors.New("atomos cannot be killed")
-//	ErrNotWormhole      = errors.New("atomos is not a wormhole")
-//
-//	ErrAtomType             = errors.New("atomos type error")
-//	ErrAtomMessageAtomType  = errors.New("atomos message atomos type error")
-//	ErrAtomMessageArgType   = errors.New("atomos message arg type error")
-//	ErrAtomMessageReplyType = errors.New("atomos message reply type error")
-//)
-
 // Actual Atom
 // The implementations of a local Atom type.
 
@@ -46,45 +27,35 @@ type AtomLocal struct {
 	//// Version of ElementInterface.
 	//version uint64
 
-	//// ElementLocal中的唯一Name。
-	//// Unique Name of atomos in the ElementLocal.
-	//name string
-
-	//// 开发者实现的Atom类型的实例，通过ElementLocal中的AtomCreator方法创建。
-	////
-	//// Atom-type instance that has been created by AtomConstructor method of ElementLocal,
-	//// which is implemented by developer.
-	//instance Atomos
-
 	//// 邮箱，也是实现Atom无锁队列的关键。
 	//// Mailbox, the key of lockless queue of Atom.
 	//mailbox *mailBox
 	atomos *core.BaseAtomos
 
-	//// 任务管理器，用于处理来自Atom内部的任务调派。
-	//// Task Manager, uses to handle Task from inner Atom.
-	//task atomTasksManager
-	//
-	//// 日志管理器，用于处理来自Atom内部的日志。
-	//// Logs Manager, uses to handle Log from inner Atom.
-	//log atomLogsManager
-
-	//// Atom信息的protobuf对象，以便于Atom信息的序列化。
-	//// Protobuf instance of Atom information, for a convenience serialization of Atom information.
-	//atomId *IDInfo
-
-	//// 引用计数，所以任何GetId操作之后都需要Release。
-	//// Reference count, thus we have to Release any Id after GetId.
-	//count int
+	// 引用计数，所以任何GetId操作之后都需要Release。
+	// Reference count, thus we have to Release any Id after GetId.
+	count int
 
 	// 升级次数版本
-	upgrades int
+	reloads int
 
 	// 实际的Id类型
 	id ID
 
 	// 当前实现
 	current *ElementImplementation
+
+	// 调用链
+	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
+	callChain []ID
+}
+
+func (a *AtomLocal) GetIDInfo() *core.IDInfo {
+	return a.atomos.GetIDInfo()
+}
+
+func (a *AtomLocal) getCallChain() []ID {
+	return a.callChain
 }
 
 func (a *AtomLocal) CosmosSelf() *CosmosProcess {
@@ -111,6 +82,23 @@ func (a *AtomLocal) GetVersion() uint64 {
 	return a.current.Interface.Config.Version
 }
 
+func (a *AtomLocal) checkCallChain(fromIdList []ID) bool {
+	for _, fromId := range fromIdList {
+		if fromId.GetIDInfo().IsEqual(a.GetIDInfo()) {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *AtomLocal) addCallChain(fromIdList []ID) {
+	a.callChain = append(fromIdList, a)
+}
+
+func (a *AtomLocal) delCallChain() {
+	a.callChain = nil
+}
+
 // Atom对象的内存池
 // Atom instance pools.
 var atomLocalPool = sync.Pool{
@@ -132,11 +120,12 @@ var atomLocalPool = sync.Pool{
 // AtomLocal implements Id interface directly, so local Id is able to use AtomLocal reference directly.
 
 func (a *AtomLocal) Release() {
+	a.element.atomosRelease(a)
 	//a.atomos.holder.atomosRelease(a.atomos)
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
-	return a.element.cosmos.runtime
+	return a.element.cosmos.main
 }
 
 func (a *AtomLocal) Element() Element {
@@ -144,7 +133,7 @@ func (a *AtomLocal) Element() Element {
 }
 
 func (a *AtomLocal) GetName() string {
-	return a.atomos.id.Atomos
+	return a.atomos.GetIDInfo().Atomos
 }
 
 // Kill
@@ -173,55 +162,16 @@ func (a *AtomLocal) Kill(from ID) *core.ErrorInfo {
 // With AtomSelf, Atom can access its self-cosmos with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provide Log and Tasks method to inner Atom.
 
-//func (a *AtomLocal) CosmosSelf() *CosmosSelf {
-//	return a.element.cosmos
-//}
-//
-//func (a *AtomLocal) ElementSelf() Element {
-//	return a.element
-//}
-
 // KillSelf
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
 	//id, elem := a.id, a.element
 	if err := a.pushKillMail(a, false); err != nil {
-		a.atomos.Log().Error("KillSelf error, err=%v", err)
+		a.Log().Error("KillSelf error, err=%v", err)
 		return
 	}
-	a.atomos.Log().Info("KillSelf")
+	a.Log().Info("KillSelf")
 }
-
-//func (a *AtomLocal) Log() *atomLogsManager {
-//	return &a.log
-//}
-//
-//func (a *AtomLocal) Task() TaskManager {
-//	return &a.task
-//}
-
-//func (a *AtomLocal) CallNameWithProtoBuffer(name string, buf []byte) (proto.Message, *ErrorInfo) {
-//	handler, has := a.element.current.Interface.AtomMessages[name]
-//	if !has {
-//		return nil, ErrAtomMessageAtomType
-//	}
-//	in, err := handler.InDec(buf)
-//	if err != nil {
-//		return nil, ErrAtomMessageArgType
-//	}
-//	return a.pushMessageMail(a, name, in)
-//}
-
-//func (a *AtomLocal) Parallel(fn ParallelFn, msg proto.Message, ids ...ID) {
-//	go func() {
-//		defer func() {
-//			if r := recover(); r != nil {
-//				a.atomos.log.Fatal("Atom.Parallel: Panic, id=%s,reason=%s", a.atomId.str(), r)
-//			}
-//		}()
-//		fn(a, msg, ids...)
-//	}()
-//}
 
 // 内部实现
 // INTERNAL
@@ -230,48 +180,23 @@ func (a *AtomLocal) KillSelf() {
 // Life Cycle
 // Objective-C likes coding style: Alloc/Init/Release/Dealloc
 
-func allocAtomLocal() *AtomLocal {
-	return atomLocalPool.Get().(*AtomLocal)
-}
-
-func initAtomLocal(name string, a *AtomLocal, e *ElementLocal, current *ElementImplementation, log *loggingMailBox, lv LogLevel) {
+func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImplementation, log *core.LoggingAtomos, lv core.LogLevel) {
 	id := &core.IDInfo{
 		Type:    core.IDType_Atomos,
 		Cosmos:  e.cosmos.GetName(),
 		Element: e.GetElementName(),
 		Atomos:  name,
 	}
+	a := atomLocalPool.Get().(*AtomLocal)
 	a.element = e
-	a.atomos = allocBaseAtomos()
-	initBaseAtomos(a.atomos, id, log, lv, e, current.Developer.AtomConstructor())
+	a.atomos = core.NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor())
+	a.reloads = reloads
 	a.id = current.Interface.AtomIdConstructor(a)
 	a.current = current
-	//a.element = es
-	//a.current = current
-	//a.version = current.Interface.Config.Version
-	//a.name = name
-	//a.instance = inst
-	//a.state = AtomosSpawning
-	//a.baseAtomos.id = &IDInfo{
-	//	Type:    IDType_Atomos,
-	//	Cosmos:  a.CosmosSelf().GetName(),
-	//	Element: a.Element().GetElementName(),
-	//	Atomos:  a.name,
-	//}
-	//a.count = 1
-	//a.upgrades = upgrade
-	//a.id = current.Interface.AtomIdConstructor(a)
-	//initAtomLog(&a.log, a)
-	//initAtomTasksManager(&a.task, a)
 }
 
-func releaseAtomLocal(a *AtomLocal) {
-	releaseAtomos(a.atomos)
-	//releaseAtomTask(&a.task)
-	//releaseAtomLog(&a.log)
-}
-
-func deallocAtomLocal(a *AtomLocal) {
+func (a *AtomLocal) deleteAtomLocal() {
+	a.atomos.DeleteAtomos()
 	atomLocalPool.Put(a)
 }
 
@@ -282,39 +207,21 @@ func deallocAtomLocal(a *AtomLocal) {
 // 推送邮件，并管理邮件对象的生命周期。
 // 处理邮件，并设置Atom的运行状态。
 //
-// Push Mail, and manage life cycle of Mail instance.
+// PushProcessLog Mail, and manage life cycle of Mail instance.
 // Handle Mail, and set the state of Atom.
 
 // Message Mail
 
-// TODO: dead-lock loop checking
-func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	am := allocAtomosMail()
-	initMessageMail(am, from, name, args)
-	if ok := a.atomos.mailbox.pushTail(am.mail); !ok {
-		return reply, NewErrorf(ErrAtomosIsNotRunning,
-			"Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args)
-	}
-	replyInterface, err := am.waitReply()
-	deallocAtomosMail(am)
-	if err.Code == ErrAtomosIsNotRunning {
-		return nil, err
-	}
-	reply, ok := replyInterface.(proto.Message)
-	if !ok {
-		//return reply, fmt.Errorf("Atom.Mail: Reply type error, name=%s,args=%+v,reply=%+v",
-		//	name, args, replyInterface)
-		return nil, err
-	}
-	return reply, err
+func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
+	return a.atomos.PushMessageMailAndWaitReply(from, name, args)
 }
 
-func (a *AtomLocal) handleMessage(from ID, name string, args proto.Message) (out proto.Message, err *ErrorInfo) {
-	a.atomos.setBusy()
-	defer a.atomos.setWaiting()
+func (a *AtomLocal) OnMessaging(from core.ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
+	a.atomos.SetBusy()
+	defer a.atomos.SetWaiting()
 	handler := a.current.AtomHandlers[name]
 	if handler == nil {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
+		return nil, core.NewErrorf(core.ErrAtomMessageHandlerNotExists,
 			"Message handler not found, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
 	var stack []byte
@@ -324,10 +231,10 @@ func (a *AtomLocal) handleMessage(from ID, name string, args proto.Message) (out
 				stack = debug.Stack()
 			}
 		}()
-		out, err = handler(from, a.atomos.instance, args)
+		reply, err = handler(from.(ID), a.atomos.GetInstance(), args)
 	}()
 	if len(stack) != 0 {
-		err = NewErrorfWithStack(ErrAtomMessageHandlerPanic, stack,
+		err = core.NewErrorfWithStack(core.ErrAtomMessageHandlerPanic, stack,
 			"Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
 	return
@@ -335,39 +242,45 @@ func (a *AtomLocal) handleMessage(from ID, name string, args proto.Message) (out
 
 // Kill Mail
 
-func (a *AtomLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
-	am := allocAtomosMail()
-	initKillMail(am, from)
-	if ok := a.atomos.mailbox.pushHead(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),wait=(%v)", from, wait)
-	}
-	if wait {
-		_, err := am.waitReply()
-		deallocAtomosMail(am)
-		return err
-	}
-	return nil
+func (a *AtomLocal) pushKillMail(from ID, wait bool) *core.ErrorInfo {
+	return a.atomos.PushKillMailAndWaitReply(from, wait)
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Halt method has been called, while is doing this, Atom is set to Stopping.
-func (a *AtomLocal) handleKill(killAtomMail *atomosMail, cancels map[uint64]CancelledTask) (err *ErrorInfo) {
-	a.atomos.setStopping()
+
+func (a *AtomLocal) OnStopping(from core.ID, cancelled map[uint64]core.CancelledTask) (err *core.ErrorInfo) {
+	//a.atomos.SetStopping()
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewErrorfWithStack(ErrAtomKillHandlerPanic, debug.Stack(),
-				"Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", a.atomos.id, a.atomos.instance, r)
-			a.atomos.log.Error(err.Message)
+			err = core.NewErrorfWithStack(core.ErrAtomKillHandlerPanic, debug.Stack(),
+				"Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", a.atomos.GetIDInfo(), a.atomos.Description(), r)
+			a.Log().Error(err.Message)
 		}
 	}()
-	data := a.atomos.instance.Halt(killAtomMail.from, cancels)
-	if impl := a.element.current; impl != nil {
-		if p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence); ok && p != nil {
-			if err = p.Persistence().SetAtomData(a.atomos.id.Atomos, data); err != nil {
-				a.atomos.log.Error("Kill save atomos failed, id=(%s),instance=(%+v),reason=(%s)", a.atomos.id, a.atomos.instance)
-				return err
-			}
-		}
+	save, data := a.atomos.GetInstance().Halt(from, cancelled)
+	if !save {
+		return nil
+	}
+	// Save data.
+	impl := a.element.current
+	if impl == nil {
+		err = core.NewErrorf(core.ErrAtomKillElementNoImplement,
+			"Save data error, no element implement, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+		a.Log().Fatal(err.Message)
+		return err
+	}
+	p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
+	if !ok || p == nil {
+		err = core.NewErrorf(core.ErrAtomKillElementNotImplementAutoDataPersistence,
+			"Save data error, no element auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+		a.Log().Fatal(err.Message)
+		return err
+	}
+	if err = p.AutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
+		a.Log().Error("Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
+			a.atomos.GetIDInfo(), a.atomos.Description(), err)
+		return err
 	}
 	return err
 }
@@ -376,48 +289,72 @@ func (a *AtomLocal) handleKill(killAtomMail *atomosMail, cancels map[uint64]Canc
 
 // 重载邮件，指定Atom的版本。
 // Reload Mail with specific version.
-func (a *AtomLocal) pushReloadMail(elem *ElementImplementation, upgradeCount int) *ErrorInfo {
-	am := allocAtomosMail()
-	initReloadMail(am, elem, upgradeCount)
-	if ok := a.atomos.mailbox.pushHead(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, upgrade=(%d)", upgradeCount)
-	}
-	_, err := am.waitReply()
-	deallocAtomosMail(am)
-	return err
+func (a *AtomLocal) pushReloadMail(from ID, elem *ElementImplementation, upgrades int) *core.ErrorInfo {
+	return a.atomos.PushReloadMailAndWaitReply(from, elem, upgrades)
 }
 
 // TODO: Test.
 // 注意：Reload伴随着整个Element的Reload，会先调用Atom的Halt，再Spawn。但不会删除正在执行的任务。
 // Notice: Atom reload goes with the Element reload, Halt and Spawn will be called in order. It won't delete tasks.
-func (a *AtomLocal) handleReload(am *atomosMail) *ErrorInfo {
-	a.atomos.setBusy()
-	defer a.atomos.setWaiting()
+
+func (a *AtomLocal) OnReloading(reloadInterface interface{}, reloads int) {
+	a.atomos.SetBusy()
+	defer a.atomos.SetWaiting()
 
 	// 如果没有新的Element，就用旧的Element。
 	// Use old Element if there is no new Element.
-	if am.upgrade == nil {
-		return NewErrorf(ErrAtomUpgradeInvalid, "Upgrade is invalid, mail=(%v)", am)
+	reload, ok := reloadInterface.(*ElementImplementation)
+	if !ok || reload == nil {
+		err := core.NewErrorf(core.ErrAtomReloadInvalid, "Reload is invalid, reload=(%v),reloads=(%d)", reload, reloads)
+		a.Log().Fatal(err.Message)
+		return
 	}
-	if am.upgradeCount == a.upgrades {
-		return nil
+	if reloads == a.reloads {
+		return
 	}
-	a.upgrades = am.upgradeCount
-	upgrade := am.upgrade
-	// 释放邮件。
-	// Dealloc Atom Mail.
-	deallocAtomosMail(am)
+	a.reloads = reloads
+	//// 释放邮件。
+	//// Dealloc Atom Mail.
+	//deallocAtomosMail(am)
 
+	newInstance := reload.Developer.AtomConstructor()
+	a.atomos.GetInstance().Reload(newInstance)
 	// Save old data.
-	//data := a.atomos.instance.Halt(a.element.cosmos.runtime.mainAtom, map[uint64]CancelledTask{})
-	data := a.atomos.instance.Halt(a.element, map[uint64]CancelledTask{})
-	// Restoring data and replace instance.
-	a.atomos.instance = upgrade.Developer.AtomConstructor()
-	if err := upgrade.Interface.AtomSpawner(a, a.atomos.instance, nil, data); err != nil {
-		a.atomos.log.Info("Reload atom failed, id=(%s),inst=(%+v),data=(%+v)", a.atomos.id, a.atomos.instance, data)
-		return err
-	}
-	return nil
+	//data := a.atomos.instance.Halt(a.element.cosmos.main.mainAtom, map[uint64]CancelledTask{})
+	//data := a.atomos.instance.Halt(a.element, map[uint64]CancelledTask{})
+	//// Restoring data and replace instance.
+	//a.atomos.instance = upgrade.Developer.AtomConstructor()
+	//if err := upgrade.Interface.AtomSpawner(a, a.atomos.instance, nil, data); err != nil {
+	//	a.atomos.log.Info("Reload atom failed, id=(%s),inst=(%+v),data=(%+v)", a.atomos.id, a.atomos.instance, data)
+	//	return err
+	//}
+	//return nil
+
+	//save, data := a.atomos.GetInstance().Halt(from, cancelled)
+	//if !save {
+	//	return nil
+	//}
+	//// Save data.
+	//impl := a.element.current
+	//if impl == nil {
+	//	err = core.NewErrorf(core.ErrAtomKillElementNoImplement,
+	//		"Save data error, no element implement, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+	//	a.Log().Fatal(err.Message)
+	//	return err
+	//}
+	//p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
+	//if !ok || p == nil {
+	//	err = core.NewErrorf(core.ErrAtomKillElementNotImplementAutoDataPersistence,
+	//		"Save data error, no element auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+	//	a.Log().Fatal(err.Message)
+	//	return err
+	//}
+	//if err = p.AutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
+	//	a.Log().Error("Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
+	//		a.atomos.GetIDInfo(), a.atomos.Description(), err)
+	//	return err
+	//}
+	//return err
 }
 
 // Wormhole Mail
