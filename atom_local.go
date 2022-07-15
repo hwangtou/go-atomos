@@ -20,7 +20,7 @@ type AtomLocal struct {
 	//
 	// Reference to current ElementLocal instance.
 	// The concrete ElementLocal instance should be read-only, so read-lock is required when access to it.
-	// The reference only be set when atomos load and cosmos upgrade.
+	// The reference only be set when atomos load and cosmos reload.
 	element *ElementLocal
 
 	//// ElementInterface的版本
@@ -323,8 +323,8 @@ func (a *AtomLocal) OnReloading(reloadInterface interface{}, reloads int) {
 	//data := a.atomos.instance.Halt(a.element.cosmos.main.mainAtom, map[uint64]CancelledTask{})
 	//data := a.atomos.instance.Halt(a.element, map[uint64]CancelledTask{})
 	//// Restoring data and replace instance.
-	//a.atomos.instance = upgrade.Developer.AtomConstructor()
-	//if err := upgrade.Interface.AtomSpawner(a, a.atomos.instance, nil, data); err != nil {
+	//a.atomos.instance = reload.Developer.AtomConstructor()
+	//if err := reload.Interface.AtomSpawner(a, a.atomos.instance, nil, data); err != nil {
 	//	a.atomos.log.Info("Reload atom failed, id=(%s),inst=(%+v),data=(%+v)", a.atomos.id, a.atomos.instance, data)
 	//	return err
 	//}

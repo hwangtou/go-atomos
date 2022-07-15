@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/hwangtou/go-atomos/core"
 	"net/http"
 	"net/url"
 	"sync"
@@ -213,7 +214,7 @@ func (o outgoingConn) Disconnected(conn ConnDelegate) {
 	o.watch.Disconnected(conn)
 }
 
-func (h *cosmosRemotesHelper) init() (err error) {
+func (h *cosmosRemotesHelper) init() (err *core.ErrorInfo) {
 	// Config shortcut
 	config := h.self.config
 	// Enable Server

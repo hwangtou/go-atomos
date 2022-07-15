@@ -5,6 +5,9 @@ const (
 
 	ErrFrameworkPanic
 
+	ErrMainFnLoadCertFailed
+	ErrMainFnCheckElementFailed
+
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid
 	ErrCosmosConfigLogPathInvalid

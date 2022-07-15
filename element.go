@@ -76,7 +76,7 @@ type ElementId interface {
 }
 
 type ElementLoadable interface {
-	Load(mainId ElementId, isReload bool) error
+	Load(mainId ElementId, isReload bool) *core.ErrorInfo
 	Unload()
 }
 

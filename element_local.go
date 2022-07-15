@@ -81,29 +81,48 @@ func (e *ElementLocal) String() string {
 	return e.atomos.Description()
 }
 
+func (e *ElementLocal) OnMessaging(from core.ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *ElementLocal) OnReloading(reload interface{}, reloads int) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *ElementLocal) OnStopping(from core.ID, cancelled map[uint64]core.CancelledTask) *core.ErrorInfo {
+	//TODO implement me
+	panic("implement me")
+}
+
 //func (e *ElementLocal) atomosHalt(a *baseAtomos) {
 //}
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(cosmosProcess *CosmosProcess, define *ElementImplementation) *ElementLocal {
+func newElementLocal(process *CosmosProcess, define *ElementImplementation) *ElementLocal {
 	id := &core.IDInfo{
 		Type:    core.IDType_Element,
-		Cosmos:  cosmosProcess.config.Node,
+		Cosmos:  process.config.Node,
 		Element: define.Interface.Name,
 		Atomos:  "",
 	}
 	elem := &ElementLocal{
 		lock:       sync.RWMutex{},
 		avail:      false,
-		cosmos:     cosmosProcess,
+		cosmos:     process,
 		atomos:     nil,
 		current:    nil,
 		reloading:  nil,
 		implements: map[uint64]*ElementImplementation{},
+		atoms:      nil,
 		names:      list.New(),
+		upgrades:   0,
+		log:        nil,
+		logLevel:   0,
 	}
-	elem.atomos = core.NewBaseAtomos(id, cosmosProcess.log, define.Interface.Config.LogLevel, elem, define.Developer.ElementConstructor())
+	elem.atomos = core.NewBaseAtomos(id, process.sharedLog, define.Interface.Config.LogLevel, elem, define.Developer.ElementConstructor())
 	if atomsInitNum, ok := define.Developer.(ElementCustomizeAtomsInitNum); ok {
 		elem.atoms = make(map[string]*AtomLocal, atomsInitNum.GetElementAtomsInitNum())
 	} else {
@@ -112,32 +131,26 @@ func newElementLocal(cosmosProcess *CosmosProcess, define *ElementImplementation
 	return elem
 }
 
-// 加载
-func (e *ElementLocal) setInitDefine(define *ElementImplementation) error {
+func (e *ElementLocal) setElementSetDefine(define *ElementImplementation, reload bool) *core.ErrorInfo {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	e.avail = false
-	e.current = define
-	e.reloading = nil
-	e.implements[define.Interface.Config.Version] = define
+
+	if !reload {
+		e.current = define
+		e.reloading = nil
+		e.implements[define.Interface.Config.Version] = define
+	} else {
+		e.reloading = define
+	}
+
 	if wh, ok := define.Developer.(ElementLoadable); ok {
 		return wh.Load(e.atomos, false)
 	}
 	return nil
 }
 
-func (e *ElementLocal) setUpgradeDefine(define *ElementImplementation) error {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	e.avail = false
-	e.reloading = define
-	if wh, ok := define.Developer.(ElementLoadable); ok {
-		return wh.Load(e.atomos, false)
-	}
-	return nil
-}
-
-func (e *ElementLocal) rollback(isUpgrade, loadFailed bool) {
+func (e *ElementLocal) rollback(isReload, loadFailed bool) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	if !loadFailed {
@@ -151,7 +164,7 @@ func (e *ElementLocal) rollback(isUpgrade, loadFailed bool) {
 			wh.Unload()
 		}
 	}
-	if isUpgrade {
+	if isReload {
 		e.avail = true
 		e.reloading = nil
 	}
@@ -317,7 +330,7 @@ func (e *ElementLocal) elementGetAtom(name string) (*AtomLocal, *core.ErrorInfo)
 
 func (e *ElementLocal) elementCreateAtom(name string, arg proto.Message) (*AtomLocal, *ErrorInfo) {
 	e.lock.RLock()
-	//current, upgrade := e.current, e.reloads
+	//current, reload := e.current, e.reloads
 	current := e.current
 	e.lock.RUnlock()
 	// Alloc an atomos and try setting.

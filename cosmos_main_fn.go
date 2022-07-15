@@ -17,13 +17,32 @@ import (
 type CosmosMainFn struct {
 	mutex         sync.RWMutex
 	cosmosProcess *CosmosProcess
+	config        *Config
 	runnable      *CosmosRunnable
 	loading       *CosmosRunnable
 	elements      map[string]*ElementLocal
 	//mainElem   *ElementLocal
 	mainKillCh chan bool
-	mainId     ID
+	mainId     *core.BaseAtomos
 	//*mainAtom
+	// TLS if exists
+	listenCert *tls.Config
+	clientCert *tls.Config
+}
+
+func (c *CosmosMainFn) OnMessaging(from core.ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CosmosMainFn) OnReloading(reload interface{}, reloads int) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CosmosMainFn) OnStopping(from core.ID, cancelled map[uint64]core.CancelledTask) *core.ErrorInfo {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Life cycle
@@ -32,47 +51,49 @@ func newCosmosMainFn() *CosmosMainFn {
 	return &CosmosMainFn{}
 }
 
+func mainConstructor() core.Atomos {
+}
+
 // 初始化Runnable。
 // Initial Runnable.
-func (c *CosmosMainFn) init(self *CosmosProcess, runnable *CosmosRunnable) *core.ErrorInfo {
-	self.sharedLog.PushProcessLog(core.LogLevel_Info, "Cosmos.Init")
+func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnable *CosmosRunnable) *core.ErrorInfo {
+	process.sharedLog.PushProcessLog(core.LogLevel_Info, "Cosmos.Init")
 
-	c.cosmosProcess = self
+	id := &core.IDInfo{
+		Type:    core.IDType_Main,
+		Cosmos:  process.config.Node,
+		Element: "",
+		Atomos:  "",
+	}
+
+	c.cosmosProcess = process
+	c.config = conf
 	c.runnable = runnable
 	c.loading = runnable
 	c.elements = make(map[string]*ElementLocal, len(runnable.implements))
-	//c.mainElem = newMainElement(self)
+	//c.mainElem = newMainElement(process)
 	//c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
+	c.mainId = core.NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, c, mainConstructor())
 
-	if errs := c.checkElements(runnable); len(errs) > 0 {
-		c.rollback(false, errs)
-		err := fmt.Errorf("runnable check elements failed")
+	if err := c.loadTlsCosmosNodeConfig(process); err != nil {
 		return err
 	}
-	// Enable Cert
-	if self.config.EnableCert != nil {
-		self.logInfo("Cosmos.Init: Enable Cert, cert=%s,key=%s",
-			self.config.EnableCert.CertPath, self.config.EnableCert.KeyPath)
-		pair, err := tls.LoadX509KeyPair(self.config.EnableCert.CertPath, self.config.EnableCert.KeyPath)
-		if err != nil {
-			return err
-		}
-		c.self.listenCert = &tls.Config{
-			Certificates: []tls.Certificate{
-				pair,
-			},
-		}
+
+	// Check for elements.
+	if errs := c.setElementsTransaction(runnable); len(errs) > 0 {
+		c.rollback(false, errs)
+		return core.NewErrorf(core.ErrMainFnCheckElementFailed, "Check element failed, errs=(%v)", errs)
 	}
 	// Init remote to support remote.
-	if err := self.remotes.init(); err != nil {
-		self.logFatal("Cosmos.Init: Init remote error, err=%v", err)
-		c.rollback(false, map[string]error{})
+	if err := process.remotes.init(); err != nil {
+		process.logging(core.LogLevel_Fatal, "Cosmos.Init: Init remote error, err=%v", err)
+		c.rollback(false, map[string]*core.ErrorInfo{})
 		return err
 	}
 	// Init telnet.
-	if err := self.telnet.init(); err != nil {
-		self.logFatal("Cosmos.Init: Init telnet error, err=%v", err)
+	if err := process.telnet.init(); err != nil {
+		process.logFatal("Cosmos.Init: Init telnet error, err=%v", err)
 		c.rollback(false, map[string]error{})
 		return err
 	}
@@ -82,6 +103,34 @@ func (c *CosmosMainFn) init(self *CosmosProcess, runnable *CosmosRunnable) *core
 	c.daemon(false)
 
 	c.loaded()
+	return nil
+}
+
+func (c *CosmosMainFn) loadTlsCosmosNodeConfig(process *CosmosProcess) *core.ErrorInfo {
+	// Enable Cert
+	if c.config.EnableCert == nil {
+		return nil
+	}
+	cert := c.config.EnableCert
+	process.logging(core.LogLevel_Info, "MainFn: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+	pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+	if e != nil {
+		err := core.NewErrorf(core.ErrMainFnLoadCertFailed, "MainFn: Load Cert failed, err=(%v)", e)
+		process.logging(core.LogLevel_Fatal, err.Message)
+		return err
+	}
+	c.listenCert = &tls.Config{
+		Certificates: []tls.Certificate{
+			pair,
+		},
+	}
+	if c.clientCert, err = conf.getClientCertConfig(); err != nil {
+		return err
+	}
+	if c.listenCert, err = conf.getListenCertConfig(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -96,7 +145,7 @@ func (c *CosmosMainFn) run(runnable *CosmosRunnable) *ErrorInfo {
 
 // 升级
 // Upgrade
-func (c *CosmosMainFn) upgrade(runnable *CosmosRunnable, upgradeCount int) *ErrorInfo {
+func (c *CosmosMainFn) reload(runnable *CosmosRunnable, upgradeCount int) *ErrorInfo {
 	c.cosmosProcess.logInfo("Cosmos.Upgrade")
 	c.mutex.Lock()
 	if c.loading != nil {
@@ -105,7 +154,7 @@ func (c *CosmosMainFn) upgrade(runnable *CosmosRunnable, upgradeCount int) *Erro
 		return err
 	}
 	c.mutex.Unlock()
-	if errs := c.checkElements(runnable); len(errs) > 0 {
+	if errs := c.setElementsTransaction(runnable); len(errs) > 0 {
 		c.rollback(true, errs)
 		err := fmt.Errorf("runnable check elements failed")
 		return err
@@ -115,7 +164,7 @@ func (c *CosmosMainFn) upgrade(runnable *CosmosRunnable, upgradeCount int) *Erro
 		defer c.cosmosProcess.deferRunnable()
 		ma := c.mainAtom.instance.(MainId)
 		c.cosmosProcess.logInfo("Cosmos.Upgrade: NOW UPGRADING!")
-		runnable.upgradeScript(c.cosmosProcess, ma, c.mainKillCh)
+		runnable.reloadScript(c.cosmosProcess, ma, c.mainKillCh)
 		return nil
 	}(runnable)
 
@@ -206,19 +255,19 @@ func (c *CosmosMainFn) getElement(name string) (elem *ElementLocal, err error) {
 
 // Element Container Handlers.
 
-func (c *CosmosMainFn) checkElements(runnable *CosmosRunnable) (errs map[string]error) {
+func (c *CosmosMainFn) setElementsTransaction(runnable *CosmosRunnable) (errs map[string]*core.ErrorInfo) {
 	errs = map[string]error{}
 	// Pre-initialize all local elements in the Runnable.
 	for _, define := range runnable.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if err := c.setElement(name, define); err != nil {
-			c.cosmosProcess.logError("Cosmos.Check: Load element failed, element=%s,err=%v", name, err)
+			c.cosmosProcess.logging(core.LogLevel_Fatal, "MainFn: Load element failed, element=%s,err=%v", name, err)
 			errs[name] = err
 			continue
 		}
 		//// Add the element.
-		c.cosmosProcess.logInfo("Cosmos.Check: Load element succeed, element=%s", name)
+		c.cosmosProcess.logging(core.LogLevel_Info, "MainFn: Load element succeed, element=%s", name)
 	}
 	return
 }
@@ -226,7 +275,7 @@ func (c *CosmosMainFn) checkElements(runnable *CosmosRunnable) (errs map[string]
 func (c *CosmosMainFn) setElement(name string, define *ElementImplementation) error {
 	defer func() {
 		if r := recover(); r != nil {
-			c.cosmosProcess.logFatal("Cosmos.Check: Check element panic, name=%s,err=%v,stack=%s",
+			c.cosmosProcess.logging(core.LogLevel_Fatal, "MainFn: Check element panic, name=(%s),err=(%v),stack=(%s)",
 				name, r, string(debug.Stack()))
 		}
 	}()
@@ -237,11 +286,7 @@ func (c *CosmosMainFn) setElement(name string, define *ElementImplementation) er
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()
-	if !has {
-		return elem.setInitDefine(define)
-	} else {
-		return elem.setUpgradeDefine(define)
-	}
+	return elem.setElementSetDefine(define, has)
 }
 
 func (c *CosmosMainFn) daemon(isUpgrade bool) {
@@ -260,18 +305,18 @@ func (c *CosmosMainFn) daemon(isUpgrade bool) {
 	}
 }
 
-func (c *CosmosMainFn) rollback(isUpgrade bool, errs map[string]error) {
+func (c *CosmosMainFn) rollback(isReload bool, errs map[string]*core.ErrorInfo) {
 	for _, define := range c.loading.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			_, failed := errs[name]
-			elem.rollback(isUpgrade, failed)
-			c.cosmosProcess.logInfo("Cosmos.Check: Rollback, element=%s", name)
+			elem.rollback(isReload, failed)
+			c.cosmosProcess.logging(core.LogLevel_Info, "MainFn: Rollback, element=(%s)", name)
 		}
 	}
 	c.mutex.Lock()
-	if !isUpgrade {
+	if !isReload {
 		c.runnable = nil
 	}
 	c.loading = nil

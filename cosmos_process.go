@@ -1,7 +1,6 @@
 package go_atomos
 
 import (
-	"crypto/tls"
 	"fmt"
 	"github.com/hwangtou/go-atomos/core"
 	"os"
@@ -24,11 +23,8 @@ type CosmosProcess struct {
 	// State
 	mutex   sync.Mutex
 	running bool
-	// Config
-	config *Config
-	// TLS if exists
-	clientCert *tls.Config
-	listenCert *tls.Config
+	//// Config
+	//config *Config
 	// A channel focus on Daemon Command.
 	daemonCmdCh chan DaemonCommand
 	reloads     int
@@ -52,11 +48,11 @@ type CosmosProcess struct {
 
 func newCosmosProcess() *CosmosProcess {
 	c := &CosmosProcess{
-		mutex:       sync.Mutex{},
-		running:     false,
-		config:      nil,
-		clientCert:  nil,
-		listenCert:  nil,
+		mutex:   sync.Mutex{},
+		running: false,
+		config:  nil,
+		//clientCert:  nil,
+		//listenCert:  nil,
 		daemonCmdCh: nil,
 		reloads:     0,
 		// Cosmos log is initialized once and available all the time.
@@ -129,7 +125,7 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 					}
 					go func() {
 						// Running
-						err := c.daemonRunnableExecute(*cmd.GetRunnable())
+						err := c.daemonRunnableExecute(conf, *cmd.GetRunnable())
 						if err != nil {
 							c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable failed, err=(%v)", err))
 						} else {
@@ -140,15 +136,15 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 					}()
 				case DaemonCommandReloadRunnable:
 					if !c.isRunning() {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot execute runnable upgrade, because it's not running.")
+						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot execute runnable reload, because it's not running.")
 						break
 					}
 					// Running
 					err := c.daemonRunnableUpgrade(*cmd.GetRunnable())
 					if err != nil {
-						c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable upgrade failed, err=(%v)", err))
+						c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
 					} else {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Execute runnable upgrade succeed")
+						c.logging(core.LogLevel_Info, "CosmosProcess: Execute runnable reload succeed")
 					}
 				}
 			case err := <-daemonCh:
@@ -230,13 +226,6 @@ func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
 	if c.isRunning() {
 		return core.NewError(core.ErrCosmosHasAlreadyRun, "Already running")
 	}
-	c.config = conf
-	if c.clientCert, err = conf.getClientCertConfig(); err != nil {
-		return err
-	}
-	if c.listenCert, err = conf.getListenCertConfig(); err != nil {
-		return err
-	}
 	c.daemonCmdCh = make(chan DaemonCommand)
 	c.main = newCosmosMainFn()
 	c.remotes = newCosmosRemoteHelper(c)
@@ -247,13 +236,13 @@ func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
 
 // 后台驻留执行可执行命令。
 // Daemon execute executable command.
-func (c *CosmosProcess) daemonRunnableExecute(runnable CosmosRunnable) *core.ErrorInfo {
+func (c *CosmosProcess) daemonRunnableExecute(conf *Config, runnable CosmosRunnable) *core.ErrorInfo {
 	if !c.trySetRunning(true) {
 		return core.NewErrorf(core.ErrCosmosHasAlreadyRun, "Execute runnable failed, runnable=(%v)", runnable)
 	}
 	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 	// Make CosmosMainFn initial the content of Runnable, especially the Element information.
-	if err := c.main.init(c, &runnable); err != nil {
+	if err := c.main.loadRunnable(c, conf, &runnable); err != nil {
 		c.trySetRunning(false)
 		return err
 	}
@@ -276,7 +265,7 @@ func (c *CosmosProcess) daemonRunnableExecute(runnable CosmosRunnable) *core.Err
 
 func (c *CosmosProcess) daemonRunnableUpgrade(runnable CosmosRunnable) *core.ErrorInfo {
 	c.reloads += 1
-	return c.main.upgrade(&runnable, c.reloads)
+	return c.main.reload(&runnable, c.reloads)
 }
 
 func (c *CosmosProcess) deferRunnable() {
@@ -315,7 +304,8 @@ type CosmosRunnable struct {
 	implements     map[string]*ElementImplementation
 	implementOrder []*ElementImplementation
 	mainScript     Script
-	upgradeScript  Script
+	mainLogLevel   core.LogLevel
+	reloadScript   Script
 }
 
 func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
@@ -351,7 +341,7 @@ func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {
 }
 
 func (r *CosmosRunnable) SetUpgradeScript(script Script) *CosmosRunnable {
-	r.upgradeScript = script
+	r.reloadScript = script
 	return r
 }
 
@@ -440,7 +430,7 @@ func (c command) Check() *core.ErrorInfo {
 		if c.runnable == nil {
 			return ErrRunnableInvalid
 		}
-		if c.runnable.upgradeScript == nil {
+		if c.runnable.reloadScript == nil {
 			return ErrRunnableInvalid
 		}
 		return nil
