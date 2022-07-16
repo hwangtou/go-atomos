@@ -21,7 +21,7 @@ const (
 // TODO: Reconnect, EnableRemote
 
 type cosmosRemote struct {
-	helper       *cosmosRemotesHelper
+	helper       *cosmosRemoteServer
 	delegate     ConnDelegate
 	mutex        sync.RWMutex
 	enableRemote *RemoteServerConfig
@@ -31,7 +31,7 @@ type cosmosRemote struct {
 	requester *http.Client
 }
 
-func newCosmosRemote(helper *cosmosRemotesHelper, delegate ConnDelegate) *cosmosRemote {
+func newCosmosRemote(helper *cosmosRemoteServer, delegate ConnDelegate) *cosmosRemote {
 	return &cosmosRemote{
 		helper:    helper,
 		delegate:  delegate,

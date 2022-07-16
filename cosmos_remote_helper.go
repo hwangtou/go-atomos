@@ -18,20 +18,20 @@ const (
 
 // Cosmos Remote Helper
 
-type cosmosRemotesHelper struct {
-	self  *CosmosSelf
+type cosmosRemoteServer struct {
+	self  *CosmosMainFn
 	mutex sync.Mutex
 	// Server
-	server  Server
-	enabled bool
+	server Server
+	//enabled bool
 	// State
 	started bool
 	// Conn
 	conn map[string]cosmosConn
 }
 
-func newCosmosRemoteHelper(s *CosmosSelf) *cosmosRemotesHelper {
-	helper := &cosmosRemotesHelper{
+func newCosmosRemoteHelper(s *CosmosMainFn) *cosmosRemoteServer {
+	helper := &cosmosRemoteServer{
 		self:   s,
 		server: Server{},
 		conn:   map[string]cosmosConn{},
@@ -40,7 +40,7 @@ func newCosmosRemoteHelper(s *CosmosSelf) *cosmosRemotesHelper {
 	return helper
 }
 
-func (h *cosmosRemotesHelper) delConn(name string) {
+func (h *cosmosRemoteServer) delConn(name string) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -59,7 +59,7 @@ type incomingConn struct {
 	watch *cosmosRemote
 }
 
-func (h *cosmosRemotesHelper) newIncomingConn(remoteName string, conn *websocket.Conn) (ic *incomingConn, hasOld bool) {
+func (h *cosmosRemoteServer) newIncomingConn(remoteName string, conn *websocket.Conn) (ic *incomingConn, hasOld bool) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -125,7 +125,7 @@ type outgoingConn struct {
 	watch      *cosmosRemote
 }
 
-func (h *cosmosRemotesHelper) newOutgoingConn(remoteName, remoteAddr string) (oc *outgoingConn, ic *incomingConn, hasOld bool) {
+func (h *cosmosRemoteServer) newOutgoingConn(remoteName, remoteAddr string) (oc *outgoingConn, ic *incomingConn, hasOld bool) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -214,32 +214,33 @@ func (o outgoingConn) Disconnected(conn ConnDelegate) {
 	o.watch.Disconnected(conn)
 }
 
-func (h *cosmosRemotesHelper) init() (err *core.ErrorInfo) {
+func (h *cosmosRemoteServer) init() (err *core.ErrorInfo) {
 	// Config shortcut
-	config := h.self.config
+	config := h.self.config.EnableServer
 	// Enable Server
-	if config.EnableServer != nil {
-		h.self.logInfo("Cosmos.Init: Enable Server, host=%s,port=%d",
-			config.EnableServer.Host, config.EnableServer.Port)
-		h.enabled = true
-		if err = h.server.init(config.EnableServer.Host, config.EnableServer.Port); err != nil {
-			return err
-		}
-		h.started = true
-		h.server.start()
+	//h.enabled = true
+	if err = h.server.init(config.Host, config.Port); err != nil {
+		return err
 	}
-	h.started = true
+	//h.started = true
+	//h.server.start()
+	//h.started = true
 	return nil
 }
 
-func (h *cosmosRemotesHelper) close() {
+func (h *cosmosRemoteServer) start() {
+	h.server.start()
+	h.started = true
+}
+
+func (h *cosmosRemoteServer) close() {
 	if h.started {
 		h.server.stop()
 		h.started = false
 	}
 }
 
-func (h *cosmosRemotesHelper) Write(l []byte) (int, error) {
+func (h *cosmosRemoteServer) Write(l []byte) (int, error) {
 	var msg string
 	if len(l) > 0 {
 		msg = string(l[:len(l)-1])
@@ -250,7 +251,7 @@ func (h *cosmosRemotesHelper) Write(l []byte) (int, error) {
 
 // Client
 
-func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr string) (*cosmosRemote, error) {
+func (h *cosmosRemoteServer) getOrConnectRemote(name, addr string) (*cosmosRemote, error) {
 	oc, ic, has := h.newOutgoingConn(name, addr)
 	if has {
 		if oc != nil {
@@ -270,7 +271,7 @@ func (h *cosmosRemotesHelper) getOrConnectRemote(name, addr string) (*cosmosRemo
 	return oc.watch, nil
 }
 
-func (h *cosmosRemotesHelper) getRemote(name string) *cosmosRemote {
+func (h *cosmosRemoteServer) getRemote(name string) *cosmosRemote {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -287,8 +288,8 @@ func (h *cosmosRemotesHelper) getRemote(name string) *cosmosRemote {
 	return nil
 }
 
-func (h *cosmosRemotesHelper) serverStarted() {
+func (h *cosmosRemoteServer) serverStarted() {
 }
 
-func (h *cosmosRemotesHelper) serverStopped() {
+func (h *cosmosRemoteServer) serverStopped() {
 }

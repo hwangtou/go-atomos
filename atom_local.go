@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"container/list"
 	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"sync"
@@ -20,7 +21,7 @@ type AtomLocal struct {
 	//
 	// Reference to current ElementLocal instance.
 	// The concrete ElementLocal instance should be read-only, so read-lock is required when access to it.
-	// The reference only be set when atomos load and cosmos reload.
+	// The reference only be set when atomos load and mainFn reload.
 	element *ElementLocal
 
 	//// ElementInterface的版本
@@ -40,7 +41,8 @@ type AtomLocal struct {
 	reloads int
 
 	// 实际的Id类型
-	id ID
+	id          ID
+	nameElement *list.Element
 
 	// 当前实现
 	current *ElementImplementation
@@ -58,8 +60,8 @@ func (a *AtomLocal) getCallChain() []ID {
 	return a.callChain
 }
 
-func (a *AtomLocal) CosmosSelf() *CosmosProcess {
-	return a.element.cosmos
+func (a *AtomLocal) CosmosSelf() CosmosNode {
+	return a.element.mainFn
 }
 
 func (a *AtomLocal) ElementSelf() Element {
@@ -125,7 +127,7 @@ func (a *AtomLocal) Release() {
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
-	return a.element.cosmos.main
+	return a.element.mainFn
 }
 
 func (a *AtomLocal) Element() Element {
@@ -159,7 +161,7 @@ func (a *AtomLocal) Kill(from ID) *core.ErrorInfo {
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // AtomSelf, a concept that provide Atom resource access to inner Atom.
-// With AtomSelf, Atom can access its self-cosmos with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// With AtomSelf, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provide Log and Tasks method to inner Atom.
 
 // KillSelf
@@ -180,10 +182,10 @@ func (a *AtomLocal) KillSelf() {
 // Life Cycle
 // Objective-C likes coding style: Alloc/Init/Release/Dealloc
 
-func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImplementation, log *core.LoggingAtomos, lv core.LogLevel) {
+func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImplementation, log *core.LoggingAtomos, lv core.LogLevel) *AtomLocal {
 	id := &core.IDInfo{
 		Type:    core.IDType_Atomos,
-		Cosmos:  e.cosmos.GetName(),
+		Cosmos:  e.Cosmos().GetNodeName(),
 		Element: e.GetElementName(),
 		Atomos:  name,
 	}
@@ -193,6 +195,7 @@ func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImp
 	a.reloads = reloads
 	a.id = current.Interface.AtomIdConstructor(a)
 	a.current = current
+	return a
 }
 
 func (a *AtomLocal) deleteAtomLocal() {
@@ -320,7 +323,7 @@ func (a *AtomLocal) OnReloading(reloadInterface interface{}, reloads int) {
 	newInstance := reload.Developer.AtomConstructor()
 	a.atomos.GetInstance().Reload(newInstance)
 	// Save old data.
-	//data := a.atomos.instance.Halt(a.element.cosmos.main.mainAtom, map[uint64]CancelledTask{})
+	//data := a.atomos.instance.Halt(a.element.mainFn.main.mainAtom, map[uint64]CancelledTask{})
 	//data := a.atomos.instance.Halt(a.element, map[uint64]CancelledTask{})
 	//// Restoring data and replace instance.
 	//a.atomos.instance = reload.Developer.AtomConstructor()
@@ -405,17 +408,17 @@ const (
 //	if err := a.pushWormholeMail(wormholeAccept, daemon); err != nil {
 //		return err
 //	}
-//	// Daemon read until return.
+//	// StartRunning read until return.
 //	go func() {
 //		defer func() {
 //			if r := recover(); r != nil {
 //				a.atomos.log.Fatal("Atom.Wormhole: Panic, id=%s,reason=%s", a.atomId.str(), r)
 //			}
 //		}()
-//		a.atomos.log.Info("Atom.Wormhole: Daemon, id=%s", a.atomId.str())
-//		if err := daemon.Daemon(a); err != nil {
+//		a.atomos.log.Info("Atom.Wormhole: StartRunning, id=%s", a.atomId.str())
+//		if err := daemon.StartRunning(a); err != nil {
 //			if err = a.pushWormholeMail(wormholeClose, daemon); err != nil {
-//				a.atomos.log.Error("Atom.Wormhole: Daemon close error, id=%s,err=%s", a.atomId.str(), err)
+//				a.atomos.log.Error("Atom.Wormhole: StartRunning close error, id=%s,err=%s", a.atomId.str(), err)
 //			}
 //		}
 //	}()

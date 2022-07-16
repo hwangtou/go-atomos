@@ -3,12 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"io/ioutil"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config Error
@@ -115,48 +110,48 @@ func (x *Config) Check() *ErrorInfo {
 	return nil
 }
 
-func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
-	cert := x.EnableCert
-	if cert == nil {
-		return nil, nil
-	}
-	if cert.CertPath == "" {
-		return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
-	}
-	caCert, e := ioutil.ReadFile(cert.CertPath)
-	if e != nil {
-		return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Cert file read error, err=(%v)", e)
-	}
-	tlsConfig = &tls.Config{}
-	if cert.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
-		return tlsConfig, nil
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-	// Create TLS configuration with the certificate of the server.
-	tlsConfig.RootCAs = caCertPool
-	return tlsConfig, nil
-}
-
-func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
-	cert := x.EnableCert
-	if cert == nil {
-		return nil, nil
-	}
-	if cert.CertPath == "" {
-		return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
-	}
-	if cert.KeyPath == "" {
-		return nil, NewError(ErrCosmosCertConfigInvalid, "Key path is empty")
-	}
-	tlsConfig = &tls.Config{
-		Certificates: make([]tls.Certificate, 1),
-	}
-	var e error
-	tlsConfig.Certificates[0], e = tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
-	if e != nil {
-		return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Load key pair error, err=(%v)", e)
-	}
-	return
-}
+//func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
+//	//cert := x.EnableCert
+//	////if cert == nil {
+//	////	return nil, nil
+//	////}
+//	////if cert.CertPath == "" {
+//	////	return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
+//	////}
+//	//caCert, e := ioutil.ReadFile(cert.CertPath)
+//	//if e != nil {
+//	//	return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Cert file read error, err=(%v)", e)
+//	//}
+//	//tlsConfig = &tls.Config{}
+//	//if cert.InsecureSkipVerify {
+//	//	tlsConfig.InsecureSkipVerify = true
+//	//	return tlsConfig, nil
+//	//}
+//	//caCertPool := x509.NewCertPool()
+//	//caCertPool.AppendCertsFromPEM(caCert)
+//	//// Create TLS configuration with the certificate of the server.
+//	//tlsConfig.RootCAs = caCertPool
+//	return tlsConfig, nil
+//}
+//
+//func (x *Config) getListenCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
+//	//cert := x.EnableCert
+//	//if cert == nil {
+//	//	return nil, nil
+//	//}
+//	//if cert.CertPath == "" {
+//	//	return nil, NewError(ErrCosmosCertConfigInvalid, "Cert path is empty")
+//	//}
+//	//if cert.KeyPath == "" {
+//	//	return nil, NewError(ErrCosmosCertConfigInvalid, "Key path is empty")
+//	//}
+//	//tlsConfig = &tls.Config{
+//	//	Certificates: make([]tls.Certificate, 1),
+//	//}
+//	//var e error
+//	//tlsConfig.Certificates[0], e = tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+//	//if e != nil {
+//	//	return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Load key pair error, err=(%v)", e)
+//	//}
+//	return
+//}

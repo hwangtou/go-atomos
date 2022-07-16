@@ -119,7 +119,7 @@ type CallJson interface {
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosProcess）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // AtomSelf, a concept that provide Atom resource access to inner Atom.
-// With AtomSelf, Atom can access its self-cosmos with "CosmosProcess", can kill itself use "KillSelf" from inner.
+// With AtomSelf, Atom can access its self-mainFn with "CosmosProcess", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 type AtomSelf interface {
 	ID
@@ -183,10 +183,10 @@ type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
 //// WormholeDaemon generally used to wrap the real connection. It handles message processing,
 //// and provides operating methods.
 //type WormholeDaemon interface {
-//	// Daemon
+//	// StartRunning
 //	// 加载&卸载
 //	// Loaded & Unloaded
-//	Daemon(AtomSelf) error
+//	StartRunning(AtomSelf) error
 //	WormholeControl
 //}
 //

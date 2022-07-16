@@ -76,7 +76,8 @@ type ElementId interface {
 }
 
 type ElementLoadable interface {
-	Load(mainId ElementId, isReload bool) *core.ErrorInfo
+	Load(mainId ElementId) *core.ErrorInfo
+	Reload(mainId ElementId, oldRunnable CosmosRunnable) *core.ErrorInfo
 	Unload()
 }
 
@@ -130,8 +131,8 @@ type ElementDeveloper interface {
 	ElementConstructor() core.Atomos
 }
 
-type ElementWormholeDeveloper interface {
-	Daemon(isUpgrade bool)
+type ElementStartRunning interface {
+	StartRunning(isUpgrade bool)
 }
 
 type ElementAutoDataPersistence interface {

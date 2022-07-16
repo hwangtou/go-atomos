@@ -35,7 +35,7 @@ const (
 
 type Conn struct {
 	delegate ConnDelegate
-	helper   *cosmosRemotesHelper
+	helper   *cosmosRemoteServer
 
 	conn         *websocket.Conn
 	sender       chan *msg
@@ -50,7 +50,7 @@ type msg struct {
 	msgBuf  []byte
 }
 
-func newConn(h *cosmosRemotesHelper, delegate ConnDelegate, conn *websocket.Conn) *Conn {
+func newConn(h *cosmosRemoteServer, delegate ConnDelegate, conn *websocket.Conn) *Conn {
 	return &Conn{
 		delegate:     delegate,
 		helper:       h,

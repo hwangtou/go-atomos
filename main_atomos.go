@@ -85,11 +85,11 @@ package go_atomos
 //func newMainAtom(e *ElementLocal) *mainAtom {
 //	a := allocAtomLocal()
 //	e.current.Developer.(*mainElement).atom = a
-//	initAtomLocal(a, e, MainAtomName, e.current, e.upgrades)
+//	initAtomLocal(a, e, MainAtomName, e.current, e.reloads)
 //	a.state = AtomosWaiting
 //	e.atoms[MainAtomName] = a
 //	_ = e.elementSpawningAtom(a, e.current, nil, nil)
-//	a.element.cosmos.logInfo("Cosmos.Main: MainId is spawning")
+//	a.element.mainFn.logInfo("Cosmos.Main: MainId is spawning")
 //	return a.instance.(*mainAtom)
 //}
 //

@@ -7,6 +7,11 @@ const (
 
 	ErrMainFnLoadCertFailed
 	ErrMainFnCheckElementFailed
+	ErrMainFnRunnableNotFound
+	ErrMainFnIsReloading
+	ErrMainFnElementNotFound
+	ErrMainFnElementIsInvalid
+	ErrMainFnReloadFailed
 
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid

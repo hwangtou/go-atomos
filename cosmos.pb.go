@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.26.0-devel
 // 	protoc        v3.19.4
-// source: cosmos.proto
+// source: mainFn.proto
 
 package go_atomos
 

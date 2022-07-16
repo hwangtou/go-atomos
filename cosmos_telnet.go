@@ -12,23 +12,25 @@ import (
 	"runtime/debug"
 	"strings"
 	"unicode"
+
+	"github.com/hwangtou/go-atomos/core"
 )
 
 type cosmosTelnet struct {
-	self     *CosmosSelf
+	self     *CosmosProcess
 	enabled  bool
 	started  bool
 	listener net.Listener
 	config   *TelnetServerConfig
 }
 
-func newCosmosTelnet(self *CosmosSelf) *cosmosTelnet {
+func newCosmosTelnet(self *CosmosProcess) *cosmosTelnet {
 	return &cosmosTelnet{
 		self: self,
 	}
 }
 
-func (t *cosmosTelnet) init() (err error) {
+func (t *cosmosTelnet) init() (err *core.ErrorInfo) {
 	// Config shortcut
 	config := t.self.config
 	// Enable Server
@@ -49,20 +51,20 @@ func (t *cosmosTelnet) init() (err error) {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					t.self.logFatal("Cosmos.Telnet: Panic, err=%v", r)
+					t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Panic, err=%v", r)
 				}
 			}()
 			for {
 				conn, err := t.listener.Accept()
 				if err != nil {
-					t.self.logFatal("Cosmos.Telnet: Accept failed, err=%v", err)
+					t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Accept failed, err=%v", err)
 					return
 				}
 				go func(c net.Conn) {
-					t.self.logFatal("Cosmos.Telnet: Accepted conn, conn=%s", c.RemoteAddr())
+					t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Accepted conn, conn=%s", c.RemoteAddr())
 					defer func() {
 						if r := recover(); r != nil {
-							t.self.logFatal("Cosmos.Telnet: Conn panic, err=%v,stack=%s", r, string(debug.Stack()))
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Conn panic, err=%v,stack=%s", r, string(debug.Stack()))
 						}
 					}()
 					defer c.Close()
@@ -75,13 +77,13 @@ func (t *cosmosTelnet) init() (err error) {
 						usernameByte, _, err := reader.ReadLine()
 						if err != nil {
 							c.Write([]byte("Read username failed.\n"))
-							t.self.logFatal("Cosmos.Telnet: Read username failed, err=%v", err)
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Read username failed, err=%v", err)
 							return
 						}
 						username := string(usernameByte)
 						if username == "" {
 							c.Write([]byte("Username should not be blank.\n"))
-							t.self.logFatal("Cosmos.Telnet: Username should not be blank.")
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Username should not be blank.")
 							return
 						}
 						// Passwd
@@ -89,14 +91,14 @@ func (t *cosmosTelnet) init() (err error) {
 						passwdByte, _, err := reader.ReadLine()
 						if err != nil {
 							c.Write([]byte("Read password failed.\n"))
-							t.self.logFatal("Cosmos.Telnet: Read password failed, err=%v", err)
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Read password failed, err=%v", err)
 							return
 						}
 						passwd := string(passwdByte)
 						// Auth
 						if admin.Username != username || admin.Password != passwd {
 							c.Write([]byte("Invalid username or password.\n"))
-							t.self.logFatal("Cosmos.Telnet: Invalid username or password")
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Invalid username or password")
 							return
 						}
 					}
@@ -108,7 +110,7 @@ func (t *cosmosTelnet) init() (err error) {
 						msg, isPrefix, err := reader.ReadLine()
 						if err != nil {
 							c.Write([]byte("Conn panic.\n"))
-							t.self.logFatal("Cosmos.Telnet: Conn panic, err=%v", err)
+							t.self.logging(core.LogLevel_Fatal, "Cosmos.Telnet: Conn panic, err=%v", err)
 							return
 						}
 						cmdLine += string(msg)

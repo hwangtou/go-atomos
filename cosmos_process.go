@@ -40,29 +40,31 @@ type CosmosProcess struct {
 
 	// 集群助手，帮助访问远程的Cosmos。
 	// Cluster helper helps access to remote Cosmos.
-	remotes *cosmosRemotesHelper
+	remotes *cosmosRemoteServer
 
 	// Telnet
 	telnet *cosmosTelnet
 }
 
-func newCosmosProcess() *CosmosProcess {
+func newCosmosProcess() (*CosmosProcess, *core.ErrorInfo) {
 	c := &CosmosProcess{
-		mutex:   sync.Mutex{},
-		running: false,
-		config:  nil,
-		//clientCert:  nil,
-		//listenCert:  nil,
+		mutex:       sync.Mutex{},
+		running:     false,
 		daemonCmdCh: nil,
 		reloads:     0,
-		// Cosmos log is initialized once and available all the time.
-		sharedLog: core.NewLoggingAtomos(),
-		main:      nil,
-		remotes:   nil,
-		telnet:    nil,
+		sharedLog:   nil,
+		main:        nil,
+		remotes:     nil,
+		telnet:      nil,
+	}
+	// Cosmos log is initialized once and available all the time.
+	c.sharedLog = core.NewLoggingAtomos()
+	c.telnet = newCosmosTelnet(c)
+	if err := c.telnet.init(); err != nil {
+		return nil, err
 	}
 
-	return c
+	return c, nil
 }
 
 // Script
@@ -140,7 +142,7 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 						break
 					}
 					// Running
-					err := c.daemonRunnableUpgrade(*cmd.GetRunnable())
+					err := c.daemonRunnableReload(*cmd.GetRunnable())
 					if err != nil {
 						c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
 					} else {
@@ -214,7 +216,7 @@ func (c *CosmosProcess) Close() {
 
 //////////////////////////////////////////////////
 ////////////
-// Daemon
+// StartRunning
 
 // Daemon initialize.
 func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
@@ -228,8 +230,7 @@ func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
 	}
 	c.daemonCmdCh = make(chan DaemonCommand)
 	c.main = newCosmosMainFn()
-	c.remotes = newCosmosRemoteHelper(c)
-	c.telnet = newCosmosTelnet(c)
+	//c.remotes = newCosmosRemoteHelper(c)
 
 	return nil
 }
@@ -263,7 +264,7 @@ func (c *CosmosProcess) daemonRunnableExecute(conf *Config, runnable CosmosRunna
 	return nil
 }
 
-func (c *CosmosProcess) daemonRunnableUpgrade(runnable CosmosRunnable) *core.ErrorInfo {
+func (c *CosmosProcess) daemonRunnableReload(runnable CosmosRunnable) *core.ErrorInfo {
 	c.reloads += 1
 	return c.main.reload(&runnable, c.reloads)
 }
@@ -367,9 +368,9 @@ const (
 )
 
 //var (
-//	ErrDaemonIsRunning = errors.New("cosmos daemon is running")
-//	ErrDaemonIsBusy    = errors.New("cosmos daemon is busy")
-//	ErrRunnableInvalid = errors.New("cosmos runnable invalid")
+//	ErrDaemonIsRunning = errors.New("mainFn daemon is running")
+//	ErrDaemonIsBusy    = errors.New("mainFn daemon is busy")
+//	ErrRunnableInvalid = errors.New("mainFn runnable invalid")
 //)
 
 func NewRunnableCommand(runnable *CosmosRunnable) DaemonCommand {
