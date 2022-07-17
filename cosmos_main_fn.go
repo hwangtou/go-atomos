@@ -5,12 +5,15 @@ package go_atomos
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/hwangtou/go-atomos/core"
 	"io/ioutil"
 	"runtime/debug"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
+)
+
+const (
+	MainFnElementName = "MainFn"
 )
 
 // Local Cosmos Instance
@@ -21,37 +24,123 @@ type CosmosMainFn struct {
 	runnable *CosmosRunnable
 	loading  *CosmosRunnable
 
+	atomos *BaseAtomos
+	id     ID
+
 	elements map[string]*ElementLocal
 	mutex    sync.RWMutex
 
 	mainKillCh chan bool
-	mainId     *core.BaseAtomos
+	//mainId     *BaseAtomos
 	//*mainAtom
 
 	// TLS if exists
 	listenCert *tls.Config
 	clientCert *tls.Config
-	// Cosmos Server
-	remoteServer *cosmosRemoteServer
+	//// Cosmos Server
+	//remoteServer *cosmosRemoteServer
 }
+
+// Implementation of CosmosNode
+
+func (c *CosmosMainFn) GetNodeName() string {
+	return c.config.Node
+}
+
+func (c *CosmosMainFn) IsLocal() bool {
+	return true
+}
+
+func (c *CosmosMainFn) GetElementAtomId(elem, name string) (ID, *ErrorInfo) {
+	return c, nil
+}
+
+func (c *CosmosMainFn) SpawnElementAtom(_, _ string, _ proto.Message) (ID, *ErrorInfo) {
+	return nil, NewError(ErrMainFnCannotSpawn, "Cannot spawn main")
+}
+
+func (c *CosmosMainFn) GetAtomId(_ string) (ID, *ErrorInfo) {
+	return c, nil
+}
+
+func (c *CosmosMainFn) SpawnAtom(_ string, _ proto.Message) (*AtomLocal, *ErrorInfo) {
+	return nil, NewError(ErrMainFnCannotSpawn, "Cannot spawn main")
+}
+
+func (c *CosmosMainFn) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return toId.Element().MessageAtom(fromId, toId, message, args)
+}
+
+func (c *CosmosMainFn) KillAtom(fromId, toId ID) *ErrorInfo {
+	return toId.Element().KillAtom(fromId, toId)
+}
+
+// Implementation of ID
+
+func (c *CosmosMainFn) GetIDInfo() *IDInfo {
+	return c.atomos.GetIDInfo()
+}
+
+func (c *CosmosMainFn) getCallChain() []ID {
+	return nil
+}
+
+func (c *CosmosMainFn) Release() {
+}
+
+func (c *CosmosMainFn) Cosmos() CosmosNode {
+	return c
+}
+
+func (c *CosmosMainFn) Element() Element {
+	return c
+}
+
+func (c *CosmosMainFn) GetName() string {
+	return MainFnElementName
+}
+
+func (c *CosmosMainFn) Kill(from ID) *ErrorInfo {
+	return NewError(ErrMainFnCannotKill, "Cannot kill main")
+}
+
+func (c *CosmosMainFn) String() string {
+	return MainFnElementName
+}
+
+func (e *CosmosMainFn) Log() Logging {
+	return e.atomos.Log()
+}
+
+func (e *CosmosMainFn) Task() Task {
+	return e.atomos.Task()
+}
+
+// Implementation of atomos.Element
+
+func (c *CosmosMainFn) GetElementName() string {
+	return MainFnElementName
+}
+
+// Atomos
 
 func (c *CosmosMainFn) Description() string {
 	return c.config.Node
 }
 
-func (c *CosmosMainFn) Halt(from core.ID, cancels map[uint64]core.CancelledTask) (save bool, data proto.Message) {
+func (c *CosmosMainFn) Halt(from ID, cancels map[uint64]CancelledTask) (save bool, data proto.Message) {
 }
 
-func (c *CosmosMainFn) Reload(newInstance core.Atomos) {
+func (c *CosmosMainFn) Reload(newInstance Atomos) {
 }
 
-func (c *CosmosMainFn) OnMessaging(from core.ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
+func (c *CosmosMainFn) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 }
 
 func (c *CosmosMainFn) OnReloading(reload interface{}, reloads int) {
 }
 
-func (c *CosmosMainFn) OnStopping(from core.ID, cancelled map[uint64]core.CancelledTask) *core.ErrorInfo {
+func (c *CosmosMainFn) OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo {
 }
 
 // Life cycle
@@ -62,11 +151,11 @@ func newCosmosMainFn() *CosmosMainFn {
 
 // 初始化Runnable。
 // Initial Runnable.
-func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnable *CosmosRunnable) *core.ErrorInfo {
-	process.sharedLog.PushProcessLog(core.LogLevel_Info, "MainFn: Load runnable")
+func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnable *CosmosRunnable) *ErrorInfo {
+	process.sharedLog.PushProcessLog(LogLevel_Info, "MainFn: Load runnable")
 
-	id := &core.IDInfo{
-		Type:    core.IDType_Main,
+	id := &IDInfo{
+		Type:    IDType_Main,
 		Cosmos:  c.config.Node,
 		Element: "",
 		Atomos:  "",
@@ -78,7 +167,7 @@ func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnab
 	c.loading = runnable
 	c.elements = make(map[string]*ElementLocal, len(runnable.implements))
 	c.mainKillCh = make(chan bool)
-	c.mainId = core.NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, c, c)
+	c.mainId = NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, a, a)
 
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	if err := c.loadTlsCosmosNodeSupport(); err != nil {
@@ -92,12 +181,12 @@ func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnab
 	// 事务式加载Elements。
 	if errs := c.loadElementsTransaction(runnable); len(errs) > 0 {
 		c.rollback(false, errs)
-		return core.NewErrorf(core.ErrMainFnCheckElementFailed, "MainFn: Check element failed, errs=(%v)", errs)
+		return NewErrorf(ErrMainFnCheckElementFailed, "MainFn: Check element failed, errs=(%v)", errs)
 	}
 	//// Init telnet.
 	//if err := process.telnet.init(); err != nil {
-	//	process.logging(core.LogLevel_Fatal, "MainFn: Init telnet error, err=%v", err)
-	//	c.rollback(false, map[string]*core.ErrorInfo{})
+	//	process.logging(LogLevel_Fatal, "MainFn: Init telnet error, err=%v", err)
+	//	c.rollback(false, map[string]*ErrorInfo{})
 	//	return err
 	//}
 	c.commit(false)
@@ -110,14 +199,14 @@ func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnab
 	return nil
 }
 
-func (c *CosmosMainFn) loadRemoteCosmosServerSupport() *core.ErrorInfo {
+func (c *CosmosMainFn) loadRemoteCosmosServerSupport() *ErrorInfo {
 	if c.config.EnableServer == nil {
 		return nil
 	}
 	// Enable Server
-	c.process.logging(core.LogLevel_Info, "MainFn: Enable Server, host=(%s),port=(%d)",
+	c.process.logging(LogLevel_Info, "MainFn: Enable Server, host=(%s),port=(%d)",
 		c.config.EnableServer.Host, c.config.EnableServer.Port)
-	c.remoteServer = newCosmosRemoteHelper(c)
+	c.remoteServer = newCosmosRemoteHelper(a)
 	if err := c.remoteServer.init(); err != nil {
 		return err
 	}
@@ -130,24 +219,24 @@ func (c *CosmosMainFn) startRemoteCosmosServer() {
 	}
 }
 
-func (c *CosmosMainFn) loadTlsCosmosNodeSupport() *core.ErrorInfo {
+func (c *CosmosMainFn) loadTlsCosmosNodeSupport() *ErrorInfo {
 	// Check enable Cert.
 	if c.config.EnableCert == nil {
 		return nil
 	}
 	cert := c.config.EnableCert
 	if cert.CertPath == "" {
-		return core.NewError(core.ErrCosmosCertConfigInvalid, "MainFn: Cert path is empty")
+		return NewError(ErrCosmosCertConfigInvalid, "MainFn: Cert path is empty")
 	}
 	if cert.KeyPath == "" {
-		return core.NewError(core.ErrCosmosCertConfigInvalid, "MainFn: Key path is empty")
+		return NewError(ErrCosmosCertConfigInvalid, "MainFn: Key path is empty")
 	}
 	// Load Key Pair.
-	c.process.logging(core.LogLevel_Info, "MainFn: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+	c.process.logging(LogLevel_Info, "MainFn: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
 	pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
 	if e != nil {
-		err := core.NewErrorf(core.ErrMainFnLoadCertFailed, "MainFn: Load Key Pair failed, err=(%v)", e)
-		c.process.logging(core.LogLevel_Fatal, err.Message)
+		err := NewErrorf(ErrMainFnLoadCertFailed, "MainFn: Load Key Pair failed, err=(%v)", e)
+		c.process.logging(LogLevel_Fatal, err.Message)
 		return err
 	}
 	c.listenCert = &tls.Config{
@@ -158,7 +247,7 @@ func (c *CosmosMainFn) loadTlsCosmosNodeSupport() *core.ErrorInfo {
 	// Load Cert.
 	caCert, e := ioutil.ReadFile(cert.CertPath)
 	if e != nil {
-		return core.NewErrorf(core.ErrCosmosCertConfigInvalid, "MainFn: Cert file read error, err=(%v)", e)
+		return NewErrorf(ErrCosmosCertConfigInvalid, "MainFn: Cert file read error, err=(%v)", e)
 	}
 	tlsConfig := &tls.Config{}
 	if cert.InsecureSkipVerify {
@@ -177,41 +266,41 @@ func (c *CosmosMainFn) loadTlsCosmosNodeSupport() *core.ErrorInfo {
 
 // 执行Runnable。
 // Run runnable.
-func (c *CosmosMainFn) run(runnable *CosmosRunnable) *core.ErrorInfo {
+func (c *CosmosMainFn) run(runnable *CosmosRunnable) *ErrorInfo {
 	//ma := c.mainAtom.instance.(MainId)
-	c.process.logging(core.LogLevel_Info, "MainFn: NOW RUNNING!")
+	c.process.logging(LogLevel_Info, "MainFn: NOW RUNNING!")
 	runnable.mainScript(c.process, c.mainId, c.mainKillCh)
 	return nil
 }
 
 // 升级
 // Upgrade
-func (c *CosmosMainFn) reload(runnable *CosmosRunnable, reloads int) *core.ErrorInfo {
-	c.process.logging(core.LogLevel_Info, "MainFn: Reload")
+func (c *CosmosMainFn) reload(runnable *CosmosRunnable, reloads int) *ErrorInfo {
+	c.process.logging(LogLevel_Info, "MainFn: Reload")
 	c.mutex.Lock()
 	if c.loading != nil {
 		c.mutex.Unlock()
-		err := core.NewError(core.ErrMainFnIsReloading, "MainFn: Is reloading")
-		c.process.logging(core.LogLevel_Fatal, err.Message)
+		err := NewError(ErrMainFnIsReloading, "MainFn: Is reloading")
+		c.process.logging(LogLevel_Fatal, err.Message)
 		return err
 	}
 	c.mutex.Unlock()
 	if errs := c.loadElementsTransaction(runnable); len(errs) > 0 {
 		c.rollback(true, errs)
-		err := core.NewErrorf(core.ErrMainFnReloadFailed, "MainFn: Reloading failed, errs=(%v)", errs)
+		err := NewErrorf(ErrMainFnReloadFailed, "MainFn: Reloading failed, errs=(%v)", errs)
 		return err
 	}
 
-	err := func(runnable *CosmosRunnable) *core.ErrorInfo {
+	err := func(runnable *CosmosRunnable) *ErrorInfo {
 		defer c.process.deferRunnable()
 		ma := c.mainAtom.instance.(MainId)
-		c.process.logging(core.LogLevel_Info, "MainFn: NOW RELOADING!")
+		c.process.logging(LogLevel_Info, "MainFn: NOW RELOADING!")
 		runnable.reloadScript(c.process, ma, c.mainKillCh)
 		return nil
 	}(runnable)
 
 	if err != nil {
-		c.rollback(true, map[string]*core.ErrorInfo{})
+		c.rollback(true, map[string]*ErrorInfo{})
 		return err
 	}
 	c.commit(true)
@@ -230,7 +319,7 @@ func (c *CosmosMainFn) stop() bool {
 	case c.mainKillCh <- true:
 		return true
 	default:
-		c.process.logging(core.LogLevel_Info, "MainFn: Exit error, err=(Runnable is blocking)")
+		c.process.logging(LogLevel_Info, "MainFn: Exit error, err=(Runnable is blocking)")
 		return false
 	}
 }
@@ -238,12 +327,12 @@ func (c *CosmosMainFn) stop() bool {
 // 退出Runnable。
 // Exit runnable.
 func (c *CosmosMainFn) close() {
-	c.process.logging(core.LogLevel_Info, "MainFn: NOW EXITING!")
+	c.process.logging(LogLevel_Info, "MainFn: NOW EXITING!")
 
 	c.mutex.Lock()
 	if c.runnable == nil {
 		c.mutex.Unlock()
-		c.process.logging(core.LogLevel_Error, "Cosmos.Exit: Runnable is not running")
+		c.process.logging(LogLevel_Error, "Cosmos.Exit: Runnable is not running")
 		return
 	}
 	runnable := c.runnable
@@ -268,27 +357,27 @@ func (c *CosmosMainFn) close() {
 
 // Element Interface.
 
-func (c *CosmosMainFn) getElement(name string) (elem *ElementLocal, err *core.ErrorInfo) {
+func (c *CosmosMainFn) getElement(name string) (elem *ElementLocal, err *ErrorInfo) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil || c.loading != nil {
 		if c.runnable == nil {
-			err = core.NewError(core.ErrMainFnRunnableNotFound, "MainFn: Runnable not found")
+			err = NewError(ErrMainFnRunnableNotFound, "MainFn: Runnable not found")
 		} else {
-			err = core.NewError(core.ErrMainFnIsReloading, "MainFn: Runnable reloading")
+			err = NewError(ErrMainFnIsReloading, "MainFn: Runnable reloading")
 		}
-		c.process.logging(core.LogLevel_Error, err.Message)
+		c.process.logging(LogLevel_Error, err.Message)
 		return nil, err
 	}
 	elem, has := c.elements[name]
 	if !has {
-		err = core.NewErrorf(core.ErrMainFnElementNotFound, "MainFn: Local element not found, name=(%s)", name)
+		err = NewErrorf(ErrMainFnElementNotFound, "MainFn: Local element not found, name=(%s)", name)
 		return nil, err
 	}
 	if !elem.avail {
-		err = core.NewErrorf(core.ErrMainFnElementIsInvalid, "MainFn: Local element is invalid, name=(%s)", name)
-		c.process.logging(core.LogLevel_Error, err.Message)
+		err = NewErrorf(ErrMainFnElementIsInvalid, "MainFn: Local element is invalid, name=(%s)", name)
+		c.process.logging(LogLevel_Error, err.Message)
 		return nil, err
 	}
 	return elem, nil
@@ -296,34 +385,34 @@ func (c *CosmosMainFn) getElement(name string) (elem *ElementLocal, err *core.Er
 
 // Element Container Handlers.
 
-func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable) (errs map[string]*core.ErrorInfo) {
-	errs = map[string]*core.ErrorInfo{}
+func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable) (errs map[string]*ErrorInfo) {
+	errs = map[string]*ErrorInfo{}
 	// Pre-initialize all local elements in the Runnable.
 	for _, define := range runnable.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if err := c.loadElement(name, define); err != nil {
-			c.process.logging(core.LogLevel_Fatal, "MainFn: Load element failed, element=%s,err=%v", name, err)
+			c.process.logging(LogLevel_Fatal, "MainFn: Load element failed, element=%s,err=%v", name, err)
 			errs[name] = err
 			continue
 		}
 		//// Add the element.
-		c.process.logging(core.LogLevel_Info, "MainFn: Load element succeed, element=%s", name)
+		c.process.logging(LogLevel_Info, "MainFn: Load element succeed, element=%s", name)
 	}
 	return
 }
 
-func (c *CosmosMainFn) loadElement(name string, define *ElementImplementation) *core.ErrorInfo {
+func (c *CosmosMainFn) loadElement(name string, define *ElementImplementation) *ErrorInfo {
 	defer func() {
 		if r := recover(); r != nil {
-			c.process.logging(core.LogLevel_Fatal, "MainFn: Check element panic, name=(%s),err=(%v),stack=(%s)",
+			c.process.logging(LogLevel_Fatal, "MainFn: Check element panic, name=(%s),err=(%v),stack=(%s)",
 				name, r, string(debug.Stack()))
 		}
 	}()
 	c.mutex.Lock()
 	elem, has := c.elements[name]
 	if !has {
-		elem = newElementLocal(c, define)
+		elem = newElementLocal(a, define)
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()
@@ -335,25 +424,25 @@ func (c *CosmosMainFn) daemon(isReload bool) {
 		go func(n string, e *ElementLocal) {
 			defer func() {
 				if r := recover(); r != nil {
-					c.process.logging(core.LogLevel_Fatal, "MainFn: Start running PANIC, name=(%s),err=(%v)", n, r)
+					c.process.logging(LogLevel_Fatal, "MainFn: Start running PANIC, name=(%s),err=(%v)", n, r)
 				}
 			}()
 			if w, ok := e.current.Developer.(ElementStartRunning); ok {
-				c.process.logging(core.LogLevel_Info, "MainFn: Start running, name=(%s)", n)
+				c.process.logging(LogLevel_Info, "MainFn: Start running, name=(%s)", n)
 				w.StartRunning(isReload)
 			}
 		}(name, elem)
 	}
 }
 
-func (c *CosmosMainFn) rollback(isReload bool, errs map[string]*core.ErrorInfo) {
+func (c *CosmosMainFn) rollback(isReload bool, errs map[string]*ErrorInfo) {
 	for _, define := range c.loading.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			_, failed := errs[name]
 			elem.rollback(isReload, failed)
-			c.process.logging(core.LogLevel_Info, "MainFn: Rollback, element=(%s)", name)
+			c.process.logging(LogLevel_Info, "MainFn: Rollback, element=(%s)", name)
 		}
 	}
 	c.mutex.Lock()
@@ -370,7 +459,7 @@ func (c *CosmosMainFn) commit(isReload bool) {
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			elem.commit(isReload)
-			c.process.logging(core.LogLevel_Info, "MainFn: Commit, element=(%s)", name)
+			c.process.logging(LogLevel_Info, "MainFn: Commit, element=(%s)", name)
 		}
 	}
 }
@@ -388,7 +477,7 @@ func (c *CosmosMainFn) pushAtomosReload(reloads int) {
 		name := define.Interface.Config.Name
 		if elem, has := c.elements[name]; has {
 			elem.pushReload(reloads)
-			c.process.logging(core.LogLevel_Info, "MainFn: Push atomos reloaded, element=(%s)", name)
+			c.process.logging(LogLevel_Info, "MainFn: Push atomos reloaded, element=(%s)", name)
 		}
 	}
 }
@@ -409,57 +498,16 @@ func (c *CosmosMainFn) unloadElement(runnable *CosmosRunnable) {
 					c.mutex.Unlock()
 					wg.Done()
 					if r := recover(); r != nil {
-						c.process.logging(core.LogLevel_Fatal, "MainFn: Close element PANIC, name=(%s),reason=(%s)", name, r)
+						c.process.logging(LogLevel_Fatal, "MainFn: Close element PANIC, name=(%s),reason=(%s)", name, r)
 					}
 				}()
 				elem.unload()
-				c.process.logging(core.LogLevel_Info, "MainFn: Closed, element=(%s)", name)
+				c.process.logging(LogLevel_Info, "MainFn: Closed, element=(%s)", name)
 			}(name)
 		}
 	}
 	wg.Wait()
-	c.process.logging(core.LogLevel_Info, "MainFn: Closed")
+	c.process.logging(LogLevel_Info, "MainFn: Closed")
 }
 
 // Atom Interface.
-
-func (c *CosmosMainFn) GetNodeName() string {
-	return c.config.Node
-}
-
-func (c *CosmosMainFn) IsLocal() bool {
-	return true
-}
-
-func (c *CosmosMainFn) GetAtomId(elemName, atomName string) (ID, *core.ErrorInfo) {
-	// Get element.
-	e, err := c.getElement(elemName)
-	if err != nil {
-		return nil, err
-	}
-	// Get atomos.
-	return e.GetAtomId(atomName)
-}
-
-func (c *CosmosMainFn) SpawnAtom(elemName, atomName string, arg proto.Message) (ID, *core.ErrorInfo) {
-	// Get element.
-	e, err := c.getElement(elemName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Try spawning.
-	i, err := e.SpawnAtom(atomName, arg)
-	if err != nil {
-		return nil, err
-	}
-	return i, nil
-}
-
-func (c *CosmosMainFn) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
-	return toId.Element().MessagingAtom(fromId, toId, message, args)
-}
-
-func (c *CosmosMainFn) KillAtom(fromId, toId ID) *core.ErrorInfo {
-	return toId.Element().KillAtom(fromId, toId)
-}

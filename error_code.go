@@ -12,6 +12,8 @@ const (
 	ErrMainFnElementNotFound
 	ErrMainFnElementIsInvalid
 	ErrMainFnReloadFailed
+	ErrMainFnCannotKill
+	ErrMainFnCannotSpawn
 
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid

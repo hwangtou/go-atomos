@@ -4,8 +4,6 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
-
-	"github.com/hwangtou/go-atomos/core"
 )
 
 //
@@ -13,38 +11,6 @@ import (
 //
 
 const RunnableName = "AtomosRunnable"
-
-//// 可以被重载的Atom类型
-//// Reloadable Atom type.
-//type AtomReloadable interface {
-//	// 旧的Atom实例在Reload前被调用，通知Atom准备重载。
-//	// Calls the old Atom before it is going to be reloaded.
-//	WillReload()
-//
-//	// 新的Atom实例在Reload后被调用，通知Atom已经重载。
-//	// Calls the new Atom after it has already been reloaded.
-//	DoReload()
-//}
-//
-//// 有状态的Atom
-//// 充分发挥protobuf的优势，在Atom非运行时，可以能够保存和恢复所有数据，所以千万不要把数据放在闭包中。
-////
-//// Stateful Atom
-//// Take advantage of protobuf, Atom can save and recovery all data of itself, so never to take data
-//// reference into closure.
-//type AtomStateful interface {
-//	Atom
-//	proto.Message
-//}
-//
-//// 无状态的Atom
-//// 这种Atom没有需要保存和恢复的东西。
-////
-//// Stateless Atom
-//// Such a type of Atom, is no need to save or recovery anything.
-//type AtomStateless interface {
-//	Atom
-//}
 
 // 暴露给Atom开发者使用的Atom接口。
 // Some methods of Atom interface that expose Atom developers to use.
@@ -56,7 +22,7 @@ const RunnableName = "AtomosRunnable"
 // ID 是Atom的类似句柄的对象。
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
-	core.ID
+	GetIDInfo() *IDInfo
 
 	getCallChain() []ID
 
@@ -89,7 +55,7 @@ type ID interface {
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
-	Kill(from ID) *core.ErrorInfo
+	Kill(from ID) *ErrorInfo
 
 	//// 内部使用，如果是本地Atom，会返回本地Atom的引用。
 	//// Inner use only, if Atom is local, it returns the local AtomCore reference.
@@ -101,7 +67,7 @@ type ID interface {
 type CallProtoBuffer interface {
 	// CallNameWithProtoBuffer
 	// 直接接收调用
-	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *core.ErrorInfo)
+	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *ErrorInfo)
 }
 
 type CallJson interface {
@@ -140,12 +106,12 @@ type AtomSelf interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() core.Logging
+	Log() Logging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() core.Task
+	Task() Task
 }
 
 type ParallelSelf interface {
@@ -153,7 +119,7 @@ type ParallelSelf interface {
 	CosmosMainFn() *CosmosMainFn
 	ElementSelf() *ElementLocal
 	KillSelf()
-	Log() core.Logging
+	Log() Logging
 }
 
 type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)

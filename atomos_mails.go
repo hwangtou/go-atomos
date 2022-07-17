@@ -74,7 +74,7 @@ type atomosMail struct {
 
 	// 需要升级的Element。
 	// Upgrade Element.
-	reload  Atomos
+	reload  AtomosReloadable
 	reloads int
 
 	//wormholeAction int
@@ -152,7 +152,7 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 
 // 重载邮件
 // Reload Mail
-func initReloadMail(am *atomosMail, newInstance Atomos, reloads int) {
+func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionRun
 	am.mailType = MailReload

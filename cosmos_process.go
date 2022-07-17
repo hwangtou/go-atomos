@@ -2,7 +2,6 @@ package go_atomos
 
 import (
 	"fmt"
-	"github.com/hwangtou/go-atomos/core"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -30,7 +29,7 @@ type CosmosProcess struct {
 	reloads     int
 
 	//atomos *baseAtomos
-	sharedLog *core.LoggingAtomos
+	sharedLog *LoggingAtomos
 
 	// CosmosRunnable & CosmosMainFn.
 	// 可运行Cosmos & Cosmos运行时。
@@ -46,7 +45,7 @@ type CosmosProcess struct {
 	telnet *cosmosTelnet
 }
 
-func newCosmosProcess() (*CosmosProcess, *core.ErrorInfo) {
+func newCosmosProcess() (*CosmosProcess, *ErrorInfo) {
 	c := &CosmosProcess{
 		mutex:       sync.Mutex{},
 		running:     false,
@@ -58,7 +57,7 @@ func newCosmosProcess() (*CosmosProcess, *core.ErrorInfo) {
 		telnet:      nil,
 	}
 	// Cosmos log is initialized once and available all the time.
-	c.sharedLog = core.NewLoggingAtomos()
+	c.sharedLog = NewLoggingAtomos()
 	c.telnet = newCosmosTelnet(c)
 	if err := c.telnet.init(); err != nil {
 		return nil, err
@@ -78,7 +77,7 @@ type Script func(process *CosmosProcess, mainId ID, killSignal chan bool)
 // Daemon
 // DaemonWithRunnable会一直阻塞直至收到终结信号，或者脚本已经执行完毕。
 // DaemonWithRunnable will block until stop signal received or script terminated.
-func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
+func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *ErrorInfo) {
 	if err := c.daemonInit(conf); err != nil {
 		return nil, err
 	}
@@ -86,7 +85,7 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 	runCh := make(chan struct{}, 1)
 	go func() {
 		defer func() {
-			c.logging(core.LogLevel_Info, "CosmosProcess: Exited, bye!")
+			c.logging(LogLevel_Info, "CosmosProcess: Exited, bye!")
 		}()
 		defer func() {
 			closeCh <- struct{}{}
@@ -98,17 +97,17 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 			select {
 			case cmd := <-c.daemonCmdCh:
 				if cmd == nil {
-					c.logging(core.LogLevel_Fatal, "CosmosProcess: Invalid runnable")
+					c.logging(LogLevel_Fatal, "CosmosProcess: Invalid runnable")
 					break
 				}
 				if err := cmd.Check(); err != nil {
-					c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Invalid runnable, err=(%v)", err))
+					c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Invalid runnable, err=(%v)", err))
 					break
 				}
 				switch cmd.Type() {
 				case DaemonCommandExit:
 					if !c.isRunning() {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					if c.main.stop() {
@@ -116,44 +115,44 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 					}
 				case DaemonCommandStopRunnable:
 					if !c.isRunning() {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					c.main.stop()
 				case DaemonCommandExecuteRunnable:
 					if c.isRunning() {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot execute runnable, because it's running")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable, because it's running")
 						break
 					}
 					go func() {
 						// Running
 						err := c.daemonRunnableExecute(conf, *cmd.GetRunnable())
 						if err != nil {
-							c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable failed, err=(%v)", err))
+							c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable failed, err=(%v)", err))
 						} else {
-							c.logging(core.LogLevel_Info, "CosmosProcess: Execute runnable succeed.")
+							c.logging(LogLevel_Info, "CosmosProcess: Execute runnable succeed.")
 						}
 						// Stopped
 						daemonCh <- err
 					}()
 				case DaemonCommandReloadRunnable:
 					if !c.isRunning() {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Cannot execute runnable reload, because it's not running.")
+						c.logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable reload, because it's not running.")
 						break
 					}
 					// Running
 					err := c.daemonRunnableReload(*cmd.GetRunnable())
 					if err != nil {
-						c.logging(core.LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
+						c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
 					} else {
-						c.logging(core.LogLevel_Info, "CosmosProcess: Execute runnable reload succeed")
+						c.logging(LogLevel_Info, "CosmosProcess: Execute runnable reload succeed")
 					}
 				}
 			case err := <-daemonCh:
 				if err != nil {
-					c.logging(core.LogLevel_Error, fmt.Sprintf("CosmosProcess: Exited, err=(%v)", err))
+					c.logging(LogLevel_Error, fmt.Sprintf("CosmosProcess: Exited, err=(%v)", err))
 				} else {
-					c.logging(core.LogLevel_Info, "CosmosProcess: Exited")
+					c.logging(LogLevel_Info, "CosmosProcess: Exited")
 				}
 				if exit {
 					return
@@ -165,15 +164,15 @@ func (c *CosmosProcess) Daemon(conf *Config) (chan struct{}, *core.ErrorInfo) {
 	return closeCh, nil
 }
 
-func (c *CosmosProcess) Send(command DaemonCommand) *core.ErrorInfo {
+func (c *CosmosProcess) Send(command DaemonCommand) *ErrorInfo {
 	select {
 	case c.daemonCmdCh <- command:
 		return nil
 	default:
 		if c.daemonCmdCh == nil {
-			return core.NewErrorf(core.ErrCosmosIsClosed, "Send to close, cmd=(%v)", command)
+			return NewErrorf(ErrCosmosIsClosed, "Send to close, cmd=(%v)", command)
 		} else {
-			return core.NewErrorf(core.ErrCosmosIsBusy, "Send to busy, cmd=(%v)", command)
+			return NewErrorf(ErrCosmosIsBusy, "Send to busy, cmd=(%v)", command)
 		}
 	}
 }
@@ -216,14 +215,14 @@ func (c *CosmosProcess) Close() {
 // StartRunning
 
 // Daemon initialize.
-func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
+func (c *CosmosProcess) daemonInit(conf *Config) (err *ErrorInfo) {
 	if err = conf.Check(); err != nil {
 		return err
 	}
 
 	// Init
 	if c.isRunning() {
-		return core.NewError(core.ErrCosmosHasAlreadyRun, "Already running")
+		return NewError(ErrCosmosHasAlreadyRun, "Already running")
 	}
 	c.daemonCmdCh = make(chan DaemonCommand)
 	c.main = newCosmosMainFn()
@@ -234,9 +233,9 @@ func (c *CosmosProcess) daemonInit(conf *Config) (err *core.ErrorInfo) {
 
 // 后台驻留执行可执行命令。
 // Daemon execute executable command.
-func (c *CosmosProcess) daemonRunnableExecute(conf *Config, runnable CosmosRunnable) *core.ErrorInfo {
+func (c *CosmosProcess) daemonRunnableExecute(conf *Config, runnable CosmosRunnable) *ErrorInfo {
 	if !c.trySetRunning(true) {
-		return core.NewErrorf(core.ErrCosmosHasAlreadyRun, "Execute runnable failed, runnable=(%v)", runnable)
+		return NewErrorf(ErrCosmosHasAlreadyRun, "Execute runnable failed, runnable=(%v)", runnable)
 	}
 	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 	// Make CosmosMainFn initial the content of Runnable, especially the Element information.
@@ -261,14 +260,14 @@ func (c *CosmosProcess) daemonRunnableExecute(conf *Config, runnable CosmosRunna
 	return nil
 }
 
-func (c *CosmosProcess) daemonRunnableReload(runnable CosmosRunnable) *core.ErrorInfo {
+func (c *CosmosProcess) daemonRunnableReload(runnable CosmosRunnable) *ErrorInfo {
 	c.reloads += 1
 	return c.main.reload(&runnable, c.reloads)
 }
 
 func (c *CosmosProcess) deferRunnable() {
 	if r := recover(); r != nil {
-		c.logging(core.LogLevel_Fatal, fmt.Sprintf("Cosmos.Defer: SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack())))
+		c.logging(LogLevel_Fatal, fmt.Sprintf("Cosmos.Defer: SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack())))
 	}
 }
 
@@ -288,7 +287,7 @@ func (c *CosmosProcess) isRunning() bool {
 	return c.running
 }
 
-func (c *CosmosProcess) logging(level core.LogLevel, fmt string, args ...interface{}) {
+func (c *CosmosProcess) logging(level LogLevel, fmt string, args ...interface{}) {
 	c.sharedLog.PushProcessLog(level, fmt, args)
 }
 
@@ -302,7 +301,7 @@ type CosmosRunnable struct {
 	implements     map[string]*ElementImplementation
 	implementOrder []*ElementImplementation
 	mainScript     Script
-	mainLogLevel   core.LogLevel
+	mainLogLevel   LogLevel
 	reloadScript   Script
 }
 
@@ -349,7 +348,7 @@ func (r *CosmosRunnable) SetUpgradeScript(script Script) *CosmosRunnable {
 type DaemonCommand interface {
 	Type() DaemonCommandType
 	GetRunnable() *CosmosRunnable
-	Check() *core.ErrorInfo
+	Check() *ErrorInfo
 }
 
 // 命令类型
@@ -412,7 +411,7 @@ func (c command) GetRunnable() *CosmosRunnable {
 	return c.runnable
 }
 
-func (c command) Check() *core.ErrorInfo {
+func (c command) Check() *ErrorInfo {
 	switch c.cmdType {
 	case DaemonCommandExit, DaemonCommandStopRunnable:
 		return nil

@@ -8,23 +8,23 @@ import (
 
 type TestAtomosHolder struct {
 	T *testing.T
-	i *TestAtomosInstance
 }
 
 func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v),instance=(%v)", from, a.state, name, args, t.i.reload)
+	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", from, a.state, name, args)
 	switch name {
 	case "panic":
-		_ = (*TestAtomosHolder)(nil).i
+		_ = (*TestAtomosHolder)(nil).T
 	}
 	return
 }
 
-func (t *TestAtomosHolder) OnReloading(oldInstance, newInstance Atomos, reloads int) {
-	o, n := oldInstance.(*TestAtomosInstance), newInstance.(*TestAtomosInstance)
-	t.i = n
+func (t *TestAtomosHolder) OnReloading(oldInstance Atomos, reloadObject AtomosReloadable) (newInstance Atomos) {
+	o := oldInstance.(*TestAtomosInstance)
+	n := reloadObject.(*TestAtomosInstance)
 	t.T.Logf("OnReloading: state=(%v),oldInstanceReload=(%d),newInstanceReload=(%d),reloads=(%v)",
-		a.state, o.reload, n.reload, reloads)
+		a.state, o.reload, n.reload, a.reloads)
+	return n
 }
 
 func (t *TestAtomosHolder) OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo {
@@ -65,8 +65,8 @@ func TestBaseAtomos(t *testing.T) {
 	}
 	log := NewLoggingAtomos()
 	instance := &TestAtomosInstance{T: t, reload: 1}
-	holder := &TestAtomosHolder{T: t, i: instance}
-	atom := NewBaseAtomos(id, log, LogLevel_Debug, holder, instance)
+	holder := &TestAtomosHolder{T: t}
+	atom := NewBaseAtomos(id, log, LogLevel_Debug, holder, instance, 1)
 	a = atom
 	// Push Message
 	reply, err := a.PushMessageMailAndWaitReply(nil, "message", nil)
@@ -93,5 +93,13 @@ func TestBaseAtomos(t *testing.T) {
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "send_after_halt", nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
-	time.Sleep(10 * time.Second)
+	time.Sleep(1 * time.Second)
+}
+
+// TODO
+func TestBaseAtomosReferenceCount(t *testing.T) {
+}
+
+// TODO
+func TestBaseAtomosTask(t *testing.T) {
 }

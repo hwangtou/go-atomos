@@ -3,7 +3,6 @@ package go_atomos
 // CHECKED!
 
 import (
-	"github.com/hwangtou/go-atomos/core"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,34 +32,34 @@ type Element interface {
 	// GetAtomId
 	// 通过Atom名称获取指定的Atom的Id。
 	// Get AtomId by name of Atom.
-	GetAtomId(atomName string) (ID, *core.ErrorInfo)
+	GetAtomId(atomName string) (ID, *ErrorInfo)
 
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *core.ErrorInfo)
+	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *ErrorInfo)
 
-	// MessagingAtom
+	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
-	MessagingAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *core.ErrorInfo)
+	MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
 	// KillAtom
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
-	KillAtom(fromId, toId ID) *core.ErrorInfo
+	KillAtom(fromId, toId ID) *ErrorInfo
 }
 
 type ElementId interface {
 	// Log
 	// Atom日志。
 	// Atom Logs.
-	Log() core.Logging
+	Log() Logging
 
 	// Task
 	// Atom任务
 	// Atom Tasks.
-	Task() core.Task
+	Task() Task
 
 	//// Connect
 	//// To remote CosmosNode.
@@ -76,8 +75,8 @@ type ElementId interface {
 }
 
 type ElementLoadable interface {
-	Load(mainId ElementId) *core.ErrorInfo
-	Reload(mainId ElementId, atomos core.Atomos) *core.ErrorInfo
+	Load(mainId ElementId) *ErrorInfo
+	Reload(mainId ElementId, atomos Atomos) *ErrorInfo
 	Unload()
 }
 
@@ -90,7 +89,7 @@ type ElementCustomizeAtomsInitNum interface {
 }
 
 type ElementCustomizeLogLevel interface {
-	GetElementLogLevel() core.LogLevel
+	GetElementLogLevel() LogLevel
 }
 
 type ElementCustomizeAutoDataPersistence interface {
@@ -109,7 +108,7 @@ type ElementCustomizeAuthorization interface {
 	// Whether the Atom can be killed by the ID or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
 	// TODO: 以后考虑改成AtomCanAdmin，就改个名字。
-	AtomCanKill(ID) *core.ErrorInfo
+	AtomCanKill(ID) *ErrorInfo
 }
 
 // ElementDeveloper
@@ -128,8 +127,8 @@ type ElementDeveloper interface {
 	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
 	// Atom Constructor.
 	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
-	AtomConstructor() core.Atomos
-	ElementConstructor() core.Atomos
+	AtomConstructor() Atomos
+	ElementConstructor() Atomos
 }
 
 type ElementStartRunning interface {
@@ -141,12 +140,12 @@ type AtomAutoDataPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetAtomData(name string) (proto.Message, *core.ErrorInfo)
+	GetAtomData(name string) (proto.Message, *ErrorInfo)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetAtomData(name string, data proto.Message) *core.ErrorInfo
+	SetAtomData(name string, data proto.Message) *ErrorInfo
 }
 
 type ElementAutoDataPersistence interface {
@@ -154,12 +153,12 @@ type ElementAutoDataPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetElementData(name string) (proto.Message, *core.ErrorInfo)
+	GetElementData(name string) (proto.Message, *ErrorInfo)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetElementData(name string, data proto.Message) *core.ErrorInfo
+	SetElementData(name string, data proto.Message) *ErrorInfo
 }
 
 // TODO:

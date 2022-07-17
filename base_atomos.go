@@ -12,11 +12,14 @@ type AtomosHolder interface {
 
 	// OnReloading
 	// 通知新的Holder正在更新中
-	OnReloading(oldInstance, newInstance Atomos, reloads int)
+	OnReloading(oldInstance Atomos, reloadObject AtomosReloadable) (newInstance Atomos)
 
 	// OnStopping
 	// 停止中
 	OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo
+}
+
+type AtomosReloadable interface {
 }
 
 type BaseAtomos struct {
@@ -39,6 +42,8 @@ type BaseAtomos struct {
 	holder AtomosHolder
 	// 实际上运行的对象
 	instance Atomos
+	// 升级次数版本
+	reloads int
 
 	// 任务管理器，用于处理来自Atom内部的任务调派。
 	// Task Manager, uses to handle Task from inner Atom.
@@ -62,7 +67,7 @@ var atomosPool = sync.Pool{
 	},
 }
 
-func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHolder, inst Atomos) *BaseAtomos {
+func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHolder, inst Atomos, reloads int) *BaseAtomos {
 	a := atomosPool.Get().(*BaseAtomos)
 	a.id = id
 	a.state = AtomosHalt
@@ -71,6 +76,7 @@ func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHol
 	a.mailbox.start()
 	a.holder = holder
 	a.instance = inst
+	a.reloads = reloads
 	initAtomosLog(&a.log, log, a, lv)
 	initAtomosTasksManager(&a.task, a)
 	//a.refCount = 1
@@ -97,11 +103,11 @@ func (a *BaseAtomos) GetInstance() Atomos {
 	return a.instance
 }
 
-func (a *BaseAtomos) ReloadInstance(newInstance Atomos) (oldInstance Atomos) {
-	oldInstance = a.instance
-	a.instance = newInstance
-	return oldInstance
-}
+//func (a *BaseAtomos) ReloadInstance(newInstance Atomos) (oldInstance Atomos) {
+//	oldInstance = a.instance
+//	a.instance = newInstance
+//	return oldInstance
+//}
 
 func (a *BaseAtomos) Description() string {
 	return a.instance.Description()
@@ -150,7 +156,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInf
 	return nil
 }
 
-func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload Atomos, reloads int) (err *ErrorInfo) {
+func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload AtomosReloadable, reloads int) (err *ErrorInfo) {
 	am := allocAtomosMail()
 	initReloadMail(am, reload, reloads)
 	if ok := a.mailbox.pushHead(am.mail); !ok {
@@ -262,10 +268,11 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		a.task.handleTask(am)
 		// Mail dealloc in atomosTaskManager.handleTask and cancels.
 	case MailReload:
-		oldInstance := a.instance
-		a.instance = am.reload
-		a.holder.OnReloading(oldInstance, a.instance, am.reloads)
-		//err := a.instance.handleReload(am)
+		if am.reloads == a.reloads {
+			break
+		}
+		a.reloads = am.reloads
+		a.instance = a.holder.OnReloading(a.instance, am.reload)
 		am.sendReply(nil, nil)
 		// Mail dealloc in AtomCore.pushReloadMail.
 	//case AtomosMailWormhole:
@@ -362,6 +369,5 @@ func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 
 	// Handle Kill and Reply Kill.
 	err := a.holder.OnStopping(killAtomMail.from, cancels)
-	//err := a.instance.handleKill(killAtomMail, cancels)
 	killAtomMail.sendReply(nil, err)
 }
