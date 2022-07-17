@@ -4,7 +4,7 @@
 // 	protoc        v3.19.4
 // source: atomos.proto
 
-package core
+package go_atomos
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

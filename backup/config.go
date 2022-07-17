@@ -96,7 +96,7 @@ func ConfigFromYaml(filepath string) (*Config, error) {
 	return conf, nil
 }
 
-func (x *Config) Check() *ErrorInfo {
+func (x *Config) Check() *core.ErrorInfo {
 	if x == nil {
 		return NewError(ErrCosmosConfigInvalid, "No configuration")
 	}

@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 import (
 	"fmt"
@@ -76,13 +76,17 @@ func (c *LoggingAtomos) onLogMessage(mail *mail) {
 	delMail(mail)
 }
 
-func (c *LoggingAtomos) onLogPanic(mail *mail, trace []byte) {
+func (c *LoggingAtomos) onLogPanic(mail *mail, info *ErrorInfo) {
 	lm := mail.Content.(*LogMail)
+	var message string
+	if info != nil {
+		message = info.Message
+	}
 	c.logging(&LogMail{
 		Id:      lm.Id,
 		Time:    lm.Time,
 		Level:   LogLevel_Fatal,
-		Message: string(trace),
+		Message: message,
 	})
 }
 

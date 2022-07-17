@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 import (
 	"fmt"
@@ -62,5 +62,11 @@ func NewErrorfWithStack(code int64, stack []byte, format string, args ...interfa
 }
 
 func (x *ErrorInfo) Error() string {
+	if x == nil {
+		return ""
+	}
+	if len(x.Stack) > 0 {
+		return fmt.Sprintf("%s\n%s", x.Message, x.Stack)
+	}
 	return x.Message
 }

@@ -77,7 +77,7 @@ type ElementId interface {
 
 type ElementLoadable interface {
 	Load(mainId ElementId) *core.ErrorInfo
-	Reload(mainId ElementId, oldRunnable CosmosRunnable) *core.ErrorInfo
+	Reload(mainId ElementId, atomos core.Atomos) *core.ErrorInfo
 	Unload()
 }
 
@@ -98,7 +98,8 @@ type ElementCustomizeAutoDataPersistence interface {
 	// 数据持久化助手
 	// Data Persistence Helper
 	// If returns nil, that means the element is not under control of helper.
-	AutoDataPersistence() ElementAutoDataPersistence
+	AtomAutoDataPersistence() AtomAutoDataPersistence
+	ElementAutoDataPersistence() ElementAutoDataPersistence
 }
 
 type ElementCustomizeAuthorization interface {
@@ -135,7 +136,7 @@ type ElementStartRunning interface {
 	StartRunning(isUpgrade bool)
 }
 
-type ElementAutoDataPersistence interface {
+type AtomAutoDataPersistence interface {
 	// GetAtomData
 	// 读取Atom
 	// Get Atom.
@@ -146,6 +147,19 @@ type ElementAutoDataPersistence interface {
 	// 保存Atom
 	// Save Atom.
 	SetAtomData(name string, data proto.Message) *core.ErrorInfo
+}
+
+type ElementAutoDataPersistence interface {
+	// GetAtomData
+	// 读取Atom
+	// Get Atom.
+	// 没有数据时error应该返回nil。
+	GetElementData(name string) (proto.Message, *core.ErrorInfo)
+
+	// SetAtomData
+	// 保存Atom
+	// Save Atom.
+	SetElementData(name string, data proto.Message) *core.ErrorInfo
 }
 
 // TODO:

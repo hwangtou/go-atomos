@@ -24,26 +24,22 @@ type AtomLocal struct {
 	// The reference only be set when atomos load and mainFn reload.
 	element *ElementLocal
 
-	//// ElementInterface的版本
-	//// Version of ElementInterface.
-	//version uint64
-
 	//// 邮箱，也是实现Atom无锁队列的关键。
 	//// Mailbox, the key of lockless queue of Atom.
 	//mailbox *mailBox
 	atomos *core.BaseAtomos
 
+	// 实际的Id类型
+	id ID
 	// 引用计数，所以任何GetId操作之后都需要Release。
 	// Reference count, thus we have to Release any Id after GetId.
 	count int
 
-	// 升级次数版本
-	reloads int
-
-	// 实际的Id类型
-	id          ID
+	// Element的List容器的Element
 	nameElement *list.Element
 
+	// 升级次数版本
+	reloads int
 	// 当前实现
 	current *ElementImplementation
 
@@ -52,20 +48,96 @@ type AtomLocal struct {
 	callChain []ID
 }
 
+// Implementation of core.ID
+
 func (a *AtomLocal) GetIDInfo() *core.IDInfo {
 	return a.atomos.GetIDInfo()
 }
+
+//
+// Implementation of atomos.ID
+//
+// Id，相当于Atom的句柄的概念。
+// 通过Id，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
+// 直接用AtomLocal继承Id，因此本地的Id直接使用AtomLocal的引用即可。
+//
+// Id, a concept similar to file descriptor of an atomos.
+// With Id, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
+// then the AtomCanKill method judge kill it or not.
+// AtomLocal implements Id interface directly, so local Id is able to use AtomLocal reference directly.
 
 func (a *AtomLocal) getCallChain() []ID {
 	return a.callChain
 }
 
-func (a *AtomLocal) CosmosSelf() CosmosNode {
+func (a *AtomLocal) Release() {
+	a.element.atomosRelease(a)
+	//a.atomos.holder.atomosRelease(a.atomos)
+}
+
+func (a *AtomLocal) Cosmos() CosmosNode {
 	return a.element.mainFn
 }
 
-func (a *AtomLocal) ElementSelf() Element {
+func (a *AtomLocal) Element() Element {
 	return a.element
+}
+
+func (a *AtomLocal) GetName() string {
+	return a.atomos.GetIDInfo().Atomos
+}
+
+//func (a *AtomLocal) GetVersion() uint64 {
+//	return a.current.Interface.Config.Version
+//}
+
+// Kill
+// 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
+// write Kill signal from other AtomLocal or from Main Script.
+// 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
+func (a *AtomLocal) Kill(from ID) *core.ErrorInfo {
+	dev := a.element.current.Developer
+	elemAuth, ok := dev.(ElementCustomizeAuthorization)
+	if !ok || elemAuth == nil {
+		return nil
+	}
+	if err := elemAuth.AtomCanKill(from); err != nil {
+		return err
+	}
+	return a.pushKillMail(from, true)
+}
+
+func (a *AtomLocal) String() string {
+	return a.atomos.String()
+}
+
+// Implementation of atomos.AtomSelf
+// Implementation of atomos.ParallelSelf
+//
+// AtomSelf，是Atom内部可以访问的Atom资源的概念。
+// 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
+//
+// AtomSelf, a concept that provide Atom resource access to inner Atom.
+// With AtomSelf, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// It also provide Log and Tasks method to inner Atom.
+
+func (a *AtomLocal) CosmosMainFn() *CosmosMainFn {
+	return a.element.mainFn
+}
+
+func (a *AtomLocal) ElementSelf() *ElementLocal {
+	return a.element
+}
+
+// KillSelf
+// Atom kill itself from inner
+func (a *AtomLocal) KillSelf() {
+	//id, elem := a.id, a.element
+	if err := a.pushKillMail(a, false); err != nil {
+		a.Log().Error("KillSelf error, err=%v", err)
+		return
+	}
+	a.Log().Info("KillSelf")
 }
 
 func (a *AtomLocal) Log() core.Logging {
@@ -76,13 +148,7 @@ func (a *AtomLocal) Task() core.Task {
 	return a.atomos.Task()
 }
 
-func (a *AtomLocal) String() string {
-	return a.atomos.String()
-}
-
-func (a *AtomLocal) GetVersion() uint64 {
-	return a.current.Interface.Config.Version
-}
+// Check chain.
 
 func (a *AtomLocal) checkCallChain(fromIdList []ID) bool {
 	for _, fromId := range fromIdList {
@@ -109,78 +175,11 @@ var atomLocalPool = sync.Pool{
 	},
 }
 
-//
-// Implementation of Id
-//
-// Id，相当于Atom的句柄的概念。
-// 通过Id，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
-// 直接用AtomLocal继承Id，因此本地的Id直接使用AtomLocal的引用即可。
-//
-// Id, a concept similar to file descriptor of an atomos.
-// With Id, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
-// then the AtomCanKill method judge kill it or not.
-// AtomLocal implements Id interface directly, so local Id is able to use AtomLocal reference directly.
-
-func (a *AtomLocal) Release() {
-	a.element.atomosRelease(a)
-	//a.atomos.holder.atomosRelease(a.atomos)
-}
-
-func (a *AtomLocal) Cosmos() CosmosNode {
-	return a.element.mainFn
-}
-
-func (a *AtomLocal) Element() Element {
-	return a.element
-}
-
-func (a *AtomLocal) GetName() string {
-	return a.atomos.GetIDInfo().Atomos
-}
-
-// Kill
-// 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
-// write Kill signal from other AtomLocal or from Main Script.
-// 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(from ID) *core.ErrorInfo {
-	dev := a.element.current.Developer
-	elemAuth, ok := dev.(ElementCustomizeAuthorization)
-	if !ok || elemAuth == nil {
-		return nil
-	}
-	if err := elemAuth.AtomCanKill(from); err != nil {
-		return err
-	}
-	return a.pushKillMail(from, true)
-}
-
-//
-// Implementation of AtomSelf
-//
-// AtomSelf，是Atom内部可以访问的Atom资源的概念。
-// 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
-//
-// AtomSelf, a concept that provide Atom resource access to inner Atom.
-// With AtomSelf, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
-// It also provide Log and Tasks method to inner Atom.
-
-// KillSelf
-// Atom kill itself from inner
-func (a *AtomLocal) KillSelf() {
-	//id, elem := a.id, a.element
-	if err := a.pushKillMail(a, false); err != nil {
-		a.Log().Error("KillSelf error, err=%v", err)
-		return
-	}
-	a.Log().Info("KillSelf")
-}
-
 // 内部实现
 // INTERNAL
 
 // 生命周期相关
 // Life Cycle
-// Objective-C likes coding style: Alloc/Init/Release/Dealloc
 
 func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImplementation, log *core.LoggingAtomos, lv core.LogLevel) *AtomLocal {
 	id := &core.IDInfo{
@@ -280,7 +279,7 @@ func (a *AtomLocal) OnStopping(from core.ID, cancelled map[uint64]core.Cancelled
 		a.Log().Fatal(err.Message)
 		return err
 	}
-	if err = p.AutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
+	if err = p.AtomAutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
 		a.Log().Error("Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
 			a.atomos.GetIDInfo(), a.atomos.Description(), err)
 		return err
@@ -316,111 +315,8 @@ func (a *AtomLocal) OnReloading(reloadInterface interface{}, reloads int) {
 		return
 	}
 	a.reloads = reloads
-	//// 释放邮件。
-	//// Dealloc Atom Mail.
-	//deallocAtomosMail(am)
 
-	newInstance := reload.Developer.AtomConstructor()
-	a.atomos.GetInstance().Reload(newInstance)
-	// Save old data.
-	//data := a.atomos.instance.Halt(a.element.mainFn.main.mainAtom, map[uint64]CancelledTask{})
-	//data := a.atomos.instance.Halt(a.element, map[uint64]CancelledTask{})
-	//// Restoring data and replace instance.
-	//a.atomos.instance = reload.Developer.AtomConstructor()
-	//if err := reload.Interface.AtomSpawner(a, a.atomos.instance, nil, data); err != nil {
-	//	a.atomos.log.Info("Reload atom failed, id=(%s),inst=(%+v),data=(%+v)", a.atomos.id, a.atomos.instance, data)
-	//	return err
-	//}
-	//return nil
-
-	//save, data := a.atomos.GetInstance().Halt(from, cancelled)
-	//if !save {
-	//	return nil
-	//}
-	//// Save data.
-	//impl := a.element.current
-	//if impl == nil {
-	//	err = core.NewErrorf(core.ErrAtomKillElementNoImplement,
-	//		"Save data error, no element implement, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
-	//	a.Log().Fatal(err.Message)
-	//	return err
-	//}
-	//p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
-	//if !ok || p == nil {
-	//	err = core.NewErrorf(core.ErrAtomKillElementNotImplementAutoDataPersistence,
-	//		"Save data error, no element auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
-	//	a.Log().Fatal(err.Message)
-	//	return err
-	//}
-	//if err = p.AutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
-	//	a.Log().Error("Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
-	//		a.atomos.GetIDInfo(), a.atomos.Description(), err)
-	//	return err
-	//}
-	//return err
+	newAtom := reload.Developer.AtomConstructor()
+	oldAtom := a.atomos.ReloadInstance(newAtom)
+	newAtom.Reload(oldAtom)
 }
-
-// Wormhole Mail
-
-const (
-	// 接受新的wormhole
-	wormholeAccept = iota
-
-	// 关闭旧的Wormhole
-	wormholeClose
-)
-
-//// WormholeElement向WormholeAtom发送WormholeDaemon。
-//// WormholeElement sends WormholeDaemon to WormholeAtom.
-//func (a *AtomLocal) pushWormholeMail(action int, wormhole WormholeDaemon) error {
-//	am := allocAtomosMail()
-//	initWormholeMail(am, action, wormhole)
-//	if ok := a.atomos.mailbox.pushHead(am.mail); !ok {
-//		return ErrAtomIsNotRunning
-//	}
-//	_, err := am.waitReply()
-//	deallocAtomosMail(am)
-//	return err
-//}
-//
-//func (a *AtomLocal) handleWormhole(action int, wormhole WormholeDaemon) *ErrorInfo {
-//	a.atomos.setBusy()
-//	defer a.atomos.setWaiting()
-//
-//	wa, ok := a.atomos.instance.(WormholeAtom)
-//	if !ok {
-//		return ErrNotWormhole
-//	}
-//	var err error
-//	switch action {
-//	case wormholeAccept:
-//		err = wa.AcceptWorm(wormhole)
-//	case wormholeClose:
-//		wa.CloseWorm(wormhole)
-//	default:
-//		err = ErrAtomMessageArgType
-//	}
-//	return err
-//}
-//
-//// WormholeId Implementation.
-//func (a *AtomLocal) Accept(daemon WormholeDaemon) error {
-//	if err := a.pushWormholeMail(wormholeAccept, daemon); err != nil {
-//		return err
-//	}
-//	// StartRunning read until return.
-//	go func() {
-//		defer func() {
-//			if r := recover(); r != nil {
-//				a.atomos.log.Fatal("Atom.Wormhole: Panic, id=%s,reason=%s", a.atomId.str(), r)
-//			}
-//		}()
-//		a.atomos.log.Info("Atom.Wormhole: StartRunning, id=%s", a.atomId.str())
-//		if err := daemon.StartRunning(a); err != nil {
-//			if err = a.pushWormholeMail(wormholeClose, daemon); err != nil {
-//				a.atomos.log.Error("Atom.Wormhole: StartRunning close error, id=%s,err=%s", a.atomId.str(), err)
-//			}
-//		}
-//	}()
-//	return nil
-//}

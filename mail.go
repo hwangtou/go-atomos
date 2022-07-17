@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 import (
 	"log"
@@ -58,7 +58,7 @@ func (m *mail) reset() {
 // Mail Box
 
 type MailBoxOnReceiveFn func(mail *mail)
-type MailBoxOnPanicFn func(mail *mail, trace []byte)
+type MailBoxOnPanicFn func(mail *mail, err *ErrorInfo)
 type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
 
 type MailBoxHandler struct {
@@ -270,10 +270,11 @@ func (mb *mailBox) loop() {
 					// Only should AtomMailMessage and AtomMailTask 3rd-part logic
 					// throws exception to here, otherwise it must be a bug of framework.
 					traceMsg := debug.Stack()
-					log.Printf("recovering from 3rd-part logic\nreason=%s\ntrace=%s", r, traceMsg)
+					log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
 					//curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
 					// todo
-					mb.handler.OnPanic(curMail, traceMsg)
+					err := NewErrorfWithStack(ErrAtomosPanic, traceMsg, "Recovering from developer logic, reason=(%v)", r)
+					mb.handler.OnPanic(curMail, err)
 				}
 			}()
 			for {

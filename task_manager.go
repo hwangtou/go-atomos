@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 // CHECKED!
 
@@ -422,7 +422,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 				// Might only happen on the edge of scheduled time has reached,
 				// the period between time.AfterFunc has executed the function,
 				// and the function still have acquired the mutex.
-				at.atomos.log.Info("AtomosTask: Cancel on the edge")
+				at.atomos.log.Info("AtomosTask: Atomos has halted")
 			}
 			cancel.Id = id
 			cancel.Name = t.mail.name
@@ -467,16 +467,16 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 // Atomos正式开始处理任务。
 // Atomos is beginning to handle a task.
 func (at *atomosTaskManager) handleTask(am *atomosMail) {
-	at.atomos.SetBusy()
-	defer func() {
-		// 只有任务执行完毕，Atomos状态仍然为AtomosBusy时，才会把状态设置为AtomosWaiting，因为执行的任务可能会把Atomos终止。
-		// Only after the task executed and atomos state is still AtomosBusy, will this "SetWaiting" method call,
-		// because the task may stop the Atomos.
-		if at.atomos.GetState() == AtomosBusy {
-			at.atomos.SetWaiting()
-		}
-	}()
-	defer deallocAtomosMail(am)
+	//at.atomos.SetBusy()
+	//defer func() {
+	//	// 只有任务执行完毕，Atomos状态仍然为AtomosBusy时，才会把状态设置为AtomosWaiting，因为执行的任务可能会把Atomos终止。
+	//	// Only after the task executed and atomos state is still AtomosBusy, will this "SetWaiting" method call,
+	//	// because the task may stop the Atomos.
+	//	if at.atomos.GetState() == AtomosBusy {
+	//		at.atomos.SetWaiting()
+	//	}
+	//}()
+	//defer deallocAtomosMail(am)
 	// 用反射来执行任务函数。
 	// Executing task method using reflect.
 	instValue := reflect.ValueOf(at.atomos.instance)
@@ -491,12 +491,12 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 		return
 	}
 	var val []reflect.Value
-	var id = reflect.ValueOf(am.id)
+	var id = reflect.ValueOf(am.mail.id)
 	var arg reflect.Value
 	if am.arg != nil {
 		arg = reflect.ValueOf(am.arg)
 	} else {
-		arg = reflect.ValueOf((proto.Message)(nil))
+		arg = reflect.New(method.Type().In(1)).Elem() // reflect.ValueOf((proto.Message)(nil))
 	}
 	switch inNum {
 	case 1:

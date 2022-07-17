@@ -16,7 +16,8 @@ type ElementImplementation struct {
 
 	Interface *ElementInterface
 
-	AtomHandlers map[string]MessageHandler
+	AtomHandlers    map[string]MessageHandler
+	ElementHandlers map[string]MessageHandler
 }
 
 // ElementInterface

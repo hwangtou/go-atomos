@@ -81,10 +81,10 @@ type ID interface {
 	// Name of the Atom.
 	GetName() string
 
-	// GetVersion
-	// ElementInterface的版本。
-	// Version of ElementInterface.
-	GetVersion() uint64
+	//// GetVersion
+	//// ElementInterface的版本。
+	//// Version of ElementInterface.
+	//GetVersion() uint64
 
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
@@ -127,10 +127,10 @@ type AtomSelf interface {
 	// CosmosProcess
 	// 获取Atom的CosmosProcess。
 	// Access to the CosmosProcess of the Atom.
-	CosmosSelf() *CosmosProcess
+	CosmosMainFn() *CosmosMainFn
 
 	// TODO
-	ElementSelf() Element
+	ElementSelf() *ElementLocal
 
 	// KillSelf
 	// Atom从内部杀死自己。
@@ -150,7 +150,8 @@ type AtomSelf interface {
 
 type ParallelSelf interface {
 	ID
-	CosmosSelf() *CosmosProcess
+	CosmosMainFn() *CosmosMainFn
+	ElementSelf() *ElementLocal
 	KillSelf()
 	Log() core.Logging
 }

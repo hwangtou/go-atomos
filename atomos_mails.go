@@ -1,8 +1,9 @@
-package core
+package go_atomos
 
 // CHECKED!
 
 import (
+	"log"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -73,7 +74,7 @@ type atomosMail struct {
 
 	// 需要升级的Element。
 	// Upgrade Element.
-	reload  interface{}
+	reload  Atomos
 	reloads int
 
 	//wormholeAction int
@@ -127,8 +128,8 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
-	//am.reload = nil
-	//am.upgradeCount = 0
+	am.reload = nil
+	am.reloads = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -143,40 +144,26 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 	am.name = name
 	// I think it doesn't have to clone, because Atomos is thread-safe.
 	am.arg = arg
-	//am.reload = nil
-	//am.upgradeCount = 0
+	am.reload = nil
+	am.reloads = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 // 重载邮件
 // Reload Mail
-func initReloadMail(am *atomosMail, elem interface{}, reloads int) {
+func initReloadMail(am *atomosMail, newInstance Atomos, reloads int) {
 	am.mail.id = DefaultMailId
 	am.mail.action = MailActionRun
 	am.mailType = MailReload
 	am.from = nil
 	am.name = ""
-	am.reload = elem
+	am.arg = nil
+	am.reload = newInstance
 	am.reloads = reloads
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
-
-//func initWormholeMail(am *atomosMail, action int, wormhole WormholeDaemon) {
-//	am.mail.id = DefaultMailId
-//	am.mail.action = MailActionRun
-//	am.mailType = AtomosMailWormhole
-//	am.from = nil
-//	am.name = ""
-//	am.arg = nil
-//	am.wormholeAction = action
-//	am.wormhole = wormhole
-//	am.reload = nil
-//	am.upgradeCount = 0
-//	am.mailReply = mailReply{}
-//	am.waitCh = make(chan *mailReply, 1)
-//}
 
 // 终止邮件
 // Halt Mail
@@ -186,8 +173,8 @@ func initKillMail(am *atomosMail, from ID) {
 	am.mailType = MailHalt
 	am.from = from
 	am.name = ""
-	//am.reload = nil
-	//am.upgradeCount = 0
+	am.reload = nil
+	am.reloads = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -208,6 +195,7 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	if m.waitCh != nil {
 		m.waitCh <- &m.mailReply
 		m.waitCh = nil
+		log.Println("mail=", m)
 	} else {
 		panic("atomosMail: sendReply waitCh has been replied")
 	}

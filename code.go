@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 const (
 	OK = iota
@@ -20,6 +20,11 @@ const (
 	ErrCosmosHasAlreadyRun
 	ErrCosmosIsBusy
 	ErrCosmosIsClosed
+
+	ErrElementReloadInvalid
+	ErrElementMessageHandlerNotExists
+	ErrElementMessageHandlerPanic
+	ErrElementKillHandlerPanic
 
 	ErrAtomosPanic
 	ErrAtomosIsNotRunning

@@ -1,4 +1,4 @@
-package core
+package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -6,10 +6,16 @@ import (
 )
 
 type AtomosHolder interface {
-	//atomosHalt(a *BaseAtomos)
-	//atomosRelease(a *BaseAtomos)
+	// OnMessaging
+	// 收到消息
 	OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	OnReloading(reload interface{}, reloads int)
+
+	// OnReloading
+	// 通知新的Holder正在更新中
+	OnReloading(oldInstance, newInstance Atomos, reloads int)
+
+	// OnStopping
+	// 停止中
 	OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo
 }
 
@@ -62,15 +68,18 @@ func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHol
 	a.state = AtomosHalt
 	a.logging = log
 	newMailBoxWithHandler(a)
+	a.mailbox.start()
 	a.holder = holder
 	a.instance = inst
 	initAtomosLog(&a.log, log, a, lv)
 	initAtomosTasksManager(&a.task, a)
 	//a.refCount = 1
+	a.state = AtomosWaiting
 	return a
 }
 
 func (a *BaseAtomos) DeleteAtomos() {
+	a.mailbox.waitStop()
 	releaseAtomosTask(&a.task)
 	releaseAtomosLog(&a.log)
 	atomosPool.Put(a)
@@ -86,6 +95,12 @@ func (a *BaseAtomos) String() string {
 
 func (a *BaseAtomos) GetInstance() Atomos {
 	return a.instance
+}
+
+func (a *BaseAtomos) ReloadInstance(newInstance Atomos) (oldInstance Atomos) {
+	oldInstance = a.instance
+	a.instance = newInstance
+	return oldInstance
 }
 
 func (a *BaseAtomos) Description() string {
@@ -109,7 +124,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 	}
 	replyInterface, err := am.waitReply()
 	deallocAtomosMail(am)
-	if err.Code == ErrAtomosIsNotRunning {
+	if err != nil && err.Code == ErrAtomosIsNotRunning {
 		return nil, err
 	}
 	reply, ok := replyInterface.(proto.Message)
@@ -135,9 +150,9 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInf
 	return nil
 }
 
-func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, elem interface{}, reloads int) (err *ErrorInfo) {
+func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload Atomos, reloads int) (err *ErrorInfo) {
 	am := allocAtomosMail()
-	initReloadMail(am, elem, reloads)
+	initReloadMail(am, reload, reloads)
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),reloads=(%d)", from, reloads)
 	}
@@ -229,6 +244,12 @@ func (a *BaseAtomos) SetHalt() {
 func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.Content.(*atomosMail)
 	defer deallocAtomosMail(am)
+	// TODO: Debug Only.
+	if a.state != AtomosWaiting {
+		panic("")
+	}
+	a.SetBusy()
+	defer a.SetWaiting()
 	switch am.mailType {
 	case MailMessage:
 		resp, err := a.holder.OnMessaging(am.from, am.name, am.arg)
@@ -241,9 +262,11 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		a.task.handleTask(am)
 		// Mail dealloc in atomosTaskManager.handleTask and cancels.
 	case MailReload:
-		a.holder.OnReloading(am.reload, am.reloads)
+		oldInstance := a.instance
+		a.instance = am.reload
+		a.holder.OnReloading(oldInstance, a.instance, am.reloads)
 		//err := a.instance.handleReload(am)
-		//am.sendReply(nil, err)
+		am.sendReply(nil, nil)
 		// Mail dealloc in AtomCore.pushReloadMail.
 	//case AtomosMailWormhole:
 	//	err := a.instance.handleWormhole(am.wormholeAction, am.wormhole)
@@ -256,11 +279,17 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
-func (a *BaseAtomos) onPanic(mail *mail, trace []byte) {
+func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
 	am := mail.Content.(*atomosMail)
 	defer deallocAtomosMail(am)
+
+	if !a.IsNotHalt() {
+		return
+	}
+	a.SetBusy()
+	defer a.SetWaiting()
 	// Try to reply here, to prevent mail non-reply, and stub.
-	err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
+	//err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
 	switch am.mailType {
 	case MailMessage:
 		am.sendReply(nil, err)
@@ -286,6 +315,10 @@ func (a *BaseAtomos) onPanic(mail *mail, trace []byte) {
 func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
+
+	if !a.IsNotHalt() {
+		return
+	}
 
 	a.SetStopping()
 	//defer a.holder.atomosHalt(a)

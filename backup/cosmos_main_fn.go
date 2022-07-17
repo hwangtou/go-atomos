@@ -16,16 +16,18 @@ import (
 // Local Cosmos Instance
 
 type CosmosMainFn struct {
-	mutex    sync.RWMutex
 	process  *CosmosProcess
 	config   *Config
 	runnable *CosmosRunnable
 	loading  *CosmosRunnable
+
 	elements map[string]*ElementLocal
-	//mainElem   *ElementLocal
+	mutex    sync.RWMutex
+
 	mainKillCh chan bool
 	mainId     *core.BaseAtomos
 	//*mainAtom
+
 	// TLS if exists
 	listenCert *tls.Config
 	clientCert *tls.Config
@@ -33,29 +35,29 @@ type CosmosMainFn struct {
 	remoteServer *cosmosRemoteServer
 }
 
+func (c *CosmosMainFn) Description() string {
+	return c.config.Node
+}
+
+func (c *CosmosMainFn) Halt(from core.ID, cancels map[uint64]core.CancelledTask) (save bool, data proto.Message) {
+}
+
+func (c *CosmosMainFn) Reload(newInstance core.Atomos) {
+}
+
 func (c *CosmosMainFn) OnMessaging(from core.ID, name string, args proto.Message) (reply proto.Message, err *core.ErrorInfo) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (c *CosmosMainFn) OnReloading(reload interface{}, reloads int) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (c *CosmosMainFn) OnStopping(from core.ID, cancelled map[uint64]core.CancelledTask) *core.ErrorInfo {
-	//TODO implement me
-	panic("implement me")
 }
 
 // Life cycle
 
 func newCosmosMainFn() *CosmosMainFn {
 	return &CosmosMainFn{}
-}
-
-func mainConstructor() core.Atomos {
-	return core.NewBaseAtomos()
 }
 
 // 初始化Runnable。
@@ -75,19 +77,19 @@ func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnab
 	c.runnable = runnable
 	c.loading = runnable
 	c.elements = make(map[string]*ElementLocal, len(runnable.implements))
-	//c.mainElem = newMainElement(process)
-	//c.mainAtom = newMainAtom(c.mainElem)
 	c.mainKillCh = make(chan bool)
-	c.mainId = core.NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, c, mainConstructor())
+	c.mainId = core.NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, c, c)
 
+	// 加载TLS Cosmos Node支持，用于加密链接。
 	if err := c.loadTlsCosmosNodeSupport(); err != nil {
 		return err
 	}
+	// 加载远端Cosmos服务支持。
 	if err := c.loadRemoteCosmosServerSupport(); err != nil {
 		return err
 	}
 
-	// Check for elements.
+	// 事务式加载Elements。
 	if errs := c.loadElementsTransaction(runnable); len(errs) > 0 {
 		c.rollback(false, errs)
 		return core.NewErrorf(core.ErrMainFnCheckElementFailed, "MainFn: Check element failed, errs=(%v)", errs)
@@ -249,17 +251,17 @@ func (c *CosmosMainFn) close() {
 	c.mutex.Unlock()
 
 	// Unload local elements and its atomos.
-	c.closeElement(runnable)
-	// After Runnable Script terminated.
-	// Close main.
-	_ = c.mainAtom.pushKillMail(c.mainAtom, true)
+	c.unloadElement(runnable)
+	//// After Runnable Script terminated.
+	//// Close main.
+	//_ = c.mainAtom.pushKillMail(c.mainAtom, true)
 
 	// Close remote.
-	c.process.telnet.close()
+	//c.process.telnet.close()
 	c.process.remotes.close()
 	c.mainKillCh = nil
-	c.mainAtom = nil
-	c.mainElem = nil
+	//c.mainAtom = nil
+	//c.mainElem = nil
 	c.elements = nil
 	c.process = nil
 }
@@ -325,7 +327,7 @@ func (c *CosmosMainFn) loadElement(name string, define *ElementImplementation) *
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()
-	return elem.loadElementSetDefine(define, elem, has)
+	return elem.loadElementSetDefine(define, elem)
 }
 
 func (c *CosmosMainFn) daemon(isReload bool) {
@@ -391,7 +393,7 @@ func (c *CosmosMainFn) pushAtomosReload(reloads int) {
 	}
 }
 
-func (c *CosmosMainFn) closeElement(runnable *CosmosRunnable) {
+func (c *CosmosMainFn) unloadElement(runnable *CosmosRunnable) {
 	wg := sync.WaitGroup{}
 	for i := len(runnable.implementOrder) - 1; i >= 0; i -= 1 {
 		name := runnable.implementOrder[i].Interface.Config.Name

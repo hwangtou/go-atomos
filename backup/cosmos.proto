@@ -4,7 +4,7 @@ package go_atomos;
 option go_package = "github.com/hwangtou/go-atomos";
 
 import "google/protobuf/any.proto";
-import "core/atomos.proto";
+import "atomos.proto";
 
 message Nil {
 }

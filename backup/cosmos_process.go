@@ -70,7 +70,7 @@ func newCosmosProcess() (*CosmosProcess, *core.ErrorInfo) {
 // Script
 // Runnable相关入口脚本
 // Entrance script of runnable.
-type Script func(process *CosmosProcess, mainId MainId, killSignal chan bool)
+type Script func(process *CosmosProcess, mainId ID, killSignal chan bool)
 
 // Cosmos生命周期
 // Cosmos Life Cycle
@@ -209,9 +209,6 @@ func (c *CosmosProcess) Close() {
 		c.log = nil
 	}
 	c.daemonCmdCh = nil
-	c.clientCert = nil
-	c.listenCert = nil
-	c.config = nil
 }
 
 //////////////////////////////////////////////////
