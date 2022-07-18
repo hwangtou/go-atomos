@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"fmt"
+	"strings"
 )
 
 func (x *IDInfo) str() string {
@@ -33,7 +34,7 @@ func NewError(code int64, message string) *ErrorInfo {
 	return &ErrorInfo{
 		Code:    code,
 		Message: message,
-		Stack:   "",
+		Stacks:  nil,
 	}
 }
 
@@ -41,32 +42,45 @@ func NewErrorf(code int64, format string, args ...interface{}) *ErrorInfo {
 	return &ErrorInfo{
 		Code:    code,
 		Message: fmt.Sprintf(format, args...),
-		Stack:   "",
+		Stacks:  nil,
 	}
 }
 
-func NewErrorWithStack(code int64, stack, message string) *ErrorInfo {
-	return &ErrorInfo{
-		Code:    code,
-		Message: message,
-		Stack:   stack,
-	}
+func (x *ErrorInfo) AddStack(id *IDInfo, stack []byte) *ErrorInfo {
+	x.Stacks = append(x.Stacks, &ErrorStackInfo{
+		Id:    id,
+		Stack: stack,
+	})
+	return x
 }
 
-func NewErrorfWithStack(code int64, stack []byte, format string, args ...interface{}) *ErrorInfo {
-	return &ErrorInfo{
-		Code:    code,
-		Message: fmt.Sprintf(format, args...),
-		Stack:   string(stack),
-	}
-}
+//func NewErrorWithStack(code int64, stack, message string) *ErrorInfo {
+//	return &ErrorInfo{
+//		Code:    code,
+//		Message: message,
+//		Stack:   stack,
+//	}
+//}
+//
+//func NewErrorfWithStack(code int64, stack []byte, format string, args ...interface{}) *ErrorInfo {
+//	return &ErrorInfo{
+//		Code:    code,
+//		Message: fmt.Sprintf(format, args...),
+//		Stack:   string(stack),
+//	}
+//}
 
 func (x *ErrorInfo) Error() string {
 	if x == nil {
 		return ""
 	}
-	if len(x.Stack) > 0 {
-		return fmt.Sprintf("%s\n%s", x.Message, x.Stack)
+	if len(x.Stacks) > 0 {
+		var stacks strings.Builder
+		for i, stack := range x.Stacks {
+			stacks.WriteString(fmt.Sprintf("Stack[%d]: %s\n", i, stack.Id.str()))
+			stacks.Write(stack.Stack)
+		}
+		return fmt.Sprintf("%s\n%s", x.Message, stacks.String())
 	}
 	return x.Message
 }

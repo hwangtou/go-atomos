@@ -54,7 +54,7 @@ type CosmosNode interface {
 //	panic("implement me")
 //}
 //
-//func (c *CosmosProcess) atomosRelease(a *baseAtomos) {
+//func (c *CosmosProcess) elementAtomRelease(a *baseAtomos) {
 //	//TODO implement me
 //	panic("implement me")
 //}

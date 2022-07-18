@@ -34,6 +34,8 @@ type Element interface {
 	// Get AtomId by name of Atom.
 	GetAtomId(atomName string) (ID, *ErrorInfo)
 
+	GetAtomsNum() int
+
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
@@ -48,30 +50,6 @@ type Element interface {
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
 	KillAtom(fromId, toId ID) *ErrorInfo
-}
-
-type ElementId interface {
-	// Log
-	// Atom日志。
-	// Atom Logs.
-	Log() Logging
-
-	// Task
-	// Atom任务
-	// Atom Tasks.
-	Task() Task
-
-	//// Connect
-	//// To remote CosmosNode.
-	//Connect(name, addr string) (CosmosNode, error)
-	//
-	//// Config
-	//// Clone of Config
-	//Config() *Config
-	//
-	//// CustomizeConfig
-	//// Get Customize Config.
-	//CustomizeConfig(name string) (string, error)
 }
 
 type ElementLoadable interface {
@@ -93,7 +71,7 @@ type ElementCustomizeLogLevel interface {
 }
 
 type ElementCustomizeAutoDataPersistence interface {
-	// Persistence
+	// AtomAutoDataPersistence
 	// 数据持久化助手
 	// Data Persistence Helper
 	// If returns nil, that means the element is not under control of helper.

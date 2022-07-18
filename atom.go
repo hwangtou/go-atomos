@@ -77,52 +77,44 @@ type CallJson interface {
 }
 
 //
-// AtomSelf
+// SelfID
 //
 
-// AtomSelf
+// SelfID
 // 是Atom内部可以访问的Atom资源的概念。
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosProcess）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
-// AtomSelf, a concept that provide Atom resource access to inner Atom.
-// With AtomSelf, Atom can access its self-mainFn with "CosmosProcess", can kill itself use "KillSelf" from inner.
+// SelfID, a concept that provide Atom resource access to inner Atom.
+// With SelfID, Atom can access its self-mainFn with "CosmosProcess", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
-type AtomSelf interface {
+type SelfID interface {
 	ID
+	AtomosUtilities
 
-	// CosmosProcess
+	// CosmosMainFn
 	// 获取Atom的CosmosProcess。
 	// Access to the CosmosProcess of the Atom.
 	CosmosMainFn() *CosmosMainFn
 
-	// TODO
-	ElementSelf() *ElementLocal
+	ElementLocal() *ElementLocal
 
 	// KillSelf
 	// Atom从内部杀死自己。
 	// Atom kills itself from inner.
 	KillSelf()
-
-	// Log
-	// Atom日志。
-	// Atom Logs.
-	Log() Logging
-
-	// Task
-	// Atom任务
-	// Atom Tasks.
-	Task() Task
 }
 
-type ParallelSelf interface {
-	ID
-	CosmosMainFn() *CosmosMainFn
-	ElementSelf() *ElementLocal
-	KillSelf()
-	Log() Logging
-}
+//type ParallelSelf interface {
+//	ID
+//	CosmosMainFn() *CosmosMainFn
+//	ElementSelf() *ElementLocal
+//	KillSelf()
+//	Log() Logging
+//}
 
-type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
+type ParallelFn func(self SelfID, message proto.Message, id ...ID)
+
+//type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
 
 ////
 //// Wormhole
@@ -153,7 +145,7 @@ type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
 //	// StartRunning
 //	// 加载&卸载
 //	// Loaded & Unloaded
-//	StartRunning(AtomSelf) error
+//	StartRunning(SelfID) error
 //	WormholeControl
 //}
 //

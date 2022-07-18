@@ -43,7 +43,7 @@ type ElementInterface struct {
 	AtomMessages map[string]*ElementAtomMessage
 }
 
-type AtomSpawner func(s AtomSelf, a Atomos, arg, data proto.Message) *ErrorInfo
+type AtomSpawner func(s SelfID, a Atomos, arg, data proto.Message) *ErrorInfo
 
 // AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。

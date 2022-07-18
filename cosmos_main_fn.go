@@ -25,7 +25,7 @@ type CosmosMainFn struct {
 	loading  *CosmosRunnable
 
 	atomos *BaseAtomos
-	id     ID
+	//id     ID
 
 	elements map[string]*ElementLocal
 	mutex    sync.RWMutex
@@ -165,9 +165,10 @@ func (c *CosmosMainFn) loadRunnable(process *CosmosProcess, conf *Config, runnab
 	c.config = conf
 	c.runnable = runnable
 	c.loading = runnable
+	c.atomos = NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, a, a)
+	c.id = c
 	c.elements = make(map[string]*ElementLocal, len(runnable.implements))
 	c.mainKillCh = make(chan bool)
-	c.mainId = NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, a, a)
 
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	if err := c.loadTlsCosmosNodeSupport(); err != nil {
@@ -273,8 +274,8 @@ func (c *CosmosMainFn) run(runnable *CosmosRunnable) *ErrorInfo {
 	return nil
 }
 
-// 升级
-// Upgrade
+// 重载
+// Reload
 func (c *CosmosMainFn) reload(runnable *CosmosRunnable, reloads int) *ErrorInfo {
 	c.process.logging(LogLevel_Info, "MainFn: Reload")
 	c.mutex.Lock()
@@ -412,7 +413,7 @@ func (c *CosmosMainFn) loadElement(name string, define *ElementImplementation) *
 	c.mutex.Lock()
 	elem, has := c.elements[name]
 	if !has {
-		elem = newElementLocal(a, define)
+		elem = newElementLocal(c, define)
 		c.elements[name] = elem
 	}
 	c.mutex.Unlock()

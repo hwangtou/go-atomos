@@ -84,8 +84,12 @@ func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHol
 	return a
 }
 
-func (a *BaseAtomos) DeleteAtomos() {
-	a.mailbox.waitStop()
+func (a *BaseAtomos) DeleteAtomos(wait bool) {
+	if wait {
+		a.mailbox.waitStop()
+	} else {
+		a.mailbox.stop()
+	}
 	releaseAtomosTask(&a.task)
 	releaseAtomosLog(&a.log)
 	atomosPool.Put(a)
@@ -219,27 +223,30 @@ func (as AtomosState) String() string {
 // 各种状态
 // State of Atom
 
-func (a *BaseAtomos) IsNotHalt() bool {
+func (a *BaseAtomos) isNotHalt() bool {
 	return a.state > AtomosHalt
 }
 
 func (a *BaseAtomos) GetState() AtomosState {
 	return a.state
 }
+func (a *BaseAtomos) setSpawning() {
+	a.state = AtomosSpawning
+}
 
-func (a *BaseAtomos) SetBusy() {
+func (a *BaseAtomos) setBusy() {
 	a.state = AtomosBusy
 }
 
-func (a *BaseAtomos) SetWaiting() {
+func (a *BaseAtomos) setWaiting() {
 	a.state = AtomosWaiting
 }
 
-func (a *BaseAtomos) SetStopping() {
+func (a *BaseAtomos) setStopping() {
 	a.state = AtomosStopping
 }
 
-func (a *BaseAtomos) SetHalt() {
+func (a *BaseAtomos) setHalt() {
 	a.state = AtomosHalt
 }
 
@@ -254,8 +261,8 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 	if a.state != AtomosWaiting {
 		panic("")
 	}
-	a.SetBusy()
-	defer a.SetWaiting()
+	a.setBusy()
+	defer a.setWaiting()
 	switch am.mailType {
 	case MailMessage:
 		resp, err := a.holder.OnMessaging(am.from, am.name, am.arg)
@@ -290,11 +297,11 @@ func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
 	am := mail.Content.(*atomosMail)
 	defer deallocAtomosMail(am)
 
-	if !a.IsNotHalt() {
+	if !a.isNotHalt() {
 		return
 	}
-	a.SetBusy()
-	defer a.SetWaiting()
+	a.setBusy()
+	defer a.setWaiting()
 	// Try to reply here, to prevent mail non-reply, and stub.
 	//err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
 	switch am.mailType {
@@ -323,13 +330,13 @@ func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
-	if !a.IsNotHalt() {
+	if !a.isNotHalt() {
 		return
 	}
 
-	a.SetStopping()
+	a.setStopping()
 	//defer a.holder.atomosHalt(a)
-	defer a.SetHalt()
+	defer a.setHalt()
 
 	killAtomMail := killMail.Content.(*atomosMail)
 	defer deallocAtomosMail(killAtomMail)

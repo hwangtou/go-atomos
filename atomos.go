@@ -18,3 +18,15 @@ type Atomos interface {
 	// 新的Atomos会收到调用，把旧的有用的东西转移到newInstance，旧的会被废弃。
 	Reload(oldInstance Atomos)
 }
+
+type AtomosUtilities interface {
+	// Log
+	// Atom日志。
+	// Atom Logs.
+	Log() Logging
+
+	// Task
+	// Atom任务
+	// Atom Tasks.
+	Task() Task
+}

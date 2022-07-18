@@ -467,13 +467,13 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 // Atomos正式开始处理任务。
 // Atomos is beginning to handle a task.
 func (at *atomosTaskManager) handleTask(am *atomosMail) {
-	//at.atomos.SetBusy()
+	//at.atomos.setBusy()
 	//defer func() {
 	//	// 只有任务执行完毕，Atomos状态仍然为AtomosBusy时，才会把状态设置为AtomosWaiting，因为执行的任务可能会把Atomos终止。
-	//	// Only after the task executed and atomos state is still AtomosBusy, will this "SetWaiting" method call,
+	//	// Only after the task executed and atomos state is still AtomosBusy, will this "setWaiting" method call,
 	//	// because the task may stop the Atomos.
 	//	if at.atomos.GetState() == AtomosBusy {
-	//		at.atomos.SetWaiting()
+	//		at.atomos.setWaiting()
 	//	}
 	//}()
 	//defer deallocAtomosMail(am)

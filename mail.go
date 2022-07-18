@@ -273,7 +273,9 @@ func (mb *mailBox) loop() {
 					log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
 					//curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
 					// todo
-					err := NewErrorfWithStack(ErrAtomosPanic, traceMsg, "Recovering from developer logic, reason=(%v)", r)
+					err := NewErrorf(ErrAtomosPanic,
+						"Recovering from developer logic, reason=(%v)", r).
+						AddStack(nil, traceMsg)
 					mb.handler.OnPanic(curMail, err)
 				}
 			}()

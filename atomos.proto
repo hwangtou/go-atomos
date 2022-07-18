@@ -46,7 +46,12 @@ message LogMail {
 message ErrorInfo {
   int64 code = 1;
   string message = 2;
-  string stack = 3;
+  repeated ErrorStackInfo stacks = 3;
+}
+
+message ErrorStackInfo {
+  IDInfo id = 1;
+  bytes stack = 2;
 }
 
 message Nil {
