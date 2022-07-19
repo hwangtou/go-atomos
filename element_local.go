@@ -79,7 +79,7 @@ func newElementLocal(mainFn *CosmosMainFn, impl *ElementImplementation) *Element
 	return elem
 }
 
-func (e *ElementLocal) initElementLocal(define *ElementImplementation, reloads int) *ErrorInfo {
+func (e *ElementLocal) initElementLocal(define *ElementImplementation, reloads int) { // *ErrorInfo {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	e.avail = false
@@ -100,7 +100,7 @@ func (e *ElementLocal) initElementLocal(define *ElementImplementation, reloads i
 	//		return wh.Reload(e.atomos, e.atomos)
 	//	}
 	//}
-	return nil
+	//return nil
 }
 
 func (e *ElementLocal) rollback(isReload, loadFailed bool) {
@@ -365,8 +365,10 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	return err
 }
 
-func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) *ErrorInfo {
-	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
+func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) {
+	if err := e.atomos.PushReloadMailAndWaitReply(from, impl, reloads); err != nil {
+		e.Log().Fatal("Push reload failed, err=(%v)", err)
+	}
 }
 
 func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloadable) (newElement Atomos) {

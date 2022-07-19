@@ -75,15 +75,12 @@ func newCosmosMainFn(process *CosmosProcess, conf *Config, runnable *CosmosRunna
 
 // 初始化Runnable。
 // Initial Runnable.
-func (c *CosmosMainFn) initCosmosMainFn(process *CosmosProcess, conf *Config, runnable *CosmosRunnable) *ErrorInfo {
+func (c *CosmosMainFn) initCosmosMainFn(conf *Config, runnable *CosmosRunnable) *ErrorInfo {
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	// loadTlsCosmosNodeSupport()
-	if err := func() *ErrorInfo {
-		// Check enable Cert.
-		if c.config.EnableCert == nil {
-			return nil
-		}
-		cert := c.config.EnableCert
+	// Check enable Cert.
+	var listenCert, clientCert *tls.Config
+	if cert := conf.EnableCert; cert != nil {
 		if cert.CertPath == "" {
 			return NewError(ErrCosmosCertConfigInvalid, "MainFn: Cert path is empty")
 		}
@@ -91,14 +88,14 @@ func (c *CosmosMainFn) initCosmosMainFn(process *CosmosProcess, conf *Config, ru
 			return NewError(ErrCosmosCertConfigInvalid, "MainFn: Key path is empty")
 		}
 		// Load Key Pair.
-		c.process.logging(LogLevel_Info, "MainFn: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+		c.Log().Info("MainFn: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
 		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
 		if e != nil {
 			err := NewErrorf(ErrMainFnLoadCertFailed, "MainFn: Load Key Pair failed, err=(%v)", e)
-			c.process.logging(LogLevel_Fatal, err.Message)
+			c.Log().Fatal(err.Message)
 			return err
 		}
-		c.listenCert = &tls.Config{
+		listenCert = &tls.Config{
 			Certificates: []tls.Certificate{
 				pair,
 			},
@@ -111,50 +108,34 @@ func (c *CosmosMainFn) initCosmosMainFn(process *CosmosProcess, conf *Config, ru
 		tlsConfig := &tls.Config{}
 		if cert.InsecureSkipVerify {
 			tlsConfig.InsecureSkipVerify = true
-			c.clientCert = tlsConfig
-			return nil
+			clientCert = tlsConfig
+		} else {
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			// Create TLS configuration with the certificate of the server.
+			tlsConfig.RootCAs = caCertPool
+			clientCert = tlsConfig
 		}
-		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
-		// Create TLS configuration with the certificate of the server.
-		tlsConfig.RootCAs = caCertPool
-		c.clientCert = tlsConfig
-
-		return nil
-	}(); err != nil {
-		return err
 	}
 
-	// 加载远端Cosmos服务支持。
-	// loadRemoteCosmosServerSupport
-	if err := func() *ErrorInfo {
-		if c.config.EnableServer == nil {
-			return nil
-		}
-		// Enable Server
-		c.process.logging(LogLevel_Info, "MainFn: Enable Server, host=(%s),port=(%d)",
-			c.config.EnableServer.Host, c.config.EnableServer.Port)
-		c.remoteServer = newCosmosRemoteHelper(a)
-		if err := c.remoteServer.init(); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		return err
-	}
+	//// 加载远端Cosmos服务支持。
+	//// loadRemoteCosmosServerSupport
+	//if server := conf.EnableServer; server != nil {
+	//	// Enable Server
+	//	c.Log().Info("MainFn: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
+	//	c.remoteServer = newCosmosRemoteHelper(a)
+	//	if err := c.remoteServer.init(); err != nil {
+	//		return nil, err
+	//	}
+	//}
 
 	// 事务式加载Elements。
-	if errs := c.loadElementsTransaction(runnable, false); len(errs) > 0 {
-		c.loadElementsTransactionRollback(false, errs)
-		return NewErrorf(ErrMainFnCheckElementFailed, "MainFn: Check element failed, errs=(%v)", errs)
-	}
-	//// Init telnet.
-	//if err := process.telnet.init(); err != nil {
-	//	process.logging(LogLevel_Fatal, "MainFn: Init telnet error, err=%v", err)
-	//	c.loadElementsTransactionRollback(false, map[string]*ErrorInfo{})
-	//	return err
+	c.loadElementsTransaction(runnable) //, false); len(errs) > 0 {
+	//	//c.loadElementsTransactionRollback(false, errs)
+	//	return NewErrorf(ErrMainFnCheckElementFailed, "MainFn: Check element failed, errs=(%v)", errs)
 	//}
 	c.loadElementsTransactionCommit(false)
+	c.listenCert, c.clientCert = listenCert, clientCert
 	c.startRemoteCosmosServer()
 
 	// Set loaded.
@@ -515,17 +496,17 @@ func (c *CosmosMainFn) OnReloading(oldElement Atomos, reloadObject AtomosReloada
 
 // Load elements.
 
-func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable, reload bool) (errs map[string]*ErrorInfo) {
-	errs = map[string]*ErrorInfo{}
+func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable) { //, reload bool) (errs map[string]*ErrorInfo) {
+	//errs = map[string]*ErrorInfo{}
 	// Pre-initialize all local elements in the Runnable.
 	for _, define := range runnable.implementOrder {
 		// Create local element.
 		name := define.Interface.Config.Name
 		// loadElement
-		if err := func(name string, define *ElementImplementation) *ErrorInfo {
+		func(name string, define *ElementImplementation) {
 			defer func() {
 				if r := recover(); r != nil {
-					c.process.logging(LogLevel_Fatal, "MainFn: Check element panic, name=(%s),err=(%v),stack=(%s)",
+					c.Log().Fatal("MainFn: Check element panic, name=(%s),err=(%v),stack=(%s)",
 						name, r, string(debug.Stack()))
 				}
 			}()
@@ -537,15 +518,15 @@ func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable, reload 
 			}
 			c.mutex.Unlock()
 			if !has {
-				return elem.initElementLocal(define, c.atomos.reloads)
+				elem.initElementLocal(define, c.atomos.reloads)
 			} else {
-				return elem.pushReloadMail(c, define, c.atomos.reloads)
+				elem.pushReloadMail(c, define, c.atomos.reloads)
 			}
-		}(name, define); err != nil {
-			c.process.logging(LogLevel_Fatal, "MainFn: Load element failed, element=%s,err=%v", name, err)
-			errs[name] = err
-			continue
-		}
+		}(name, define) //; err != nil {
+		//	c.process.logging(LogLevel_Fatal, "MainFn: Load element failed, element=(%s),err=(%v)", name, err)
+		//	errs[name] = err
+		//	continue
+		//}
 
 		//// Add the element.
 		c.process.logging(LogLevel_Info, "MainFn: Load element succeed, element=%s", name)
@@ -553,26 +534,26 @@ func (c *CosmosMainFn) loadElementsTransaction(runnable *CosmosRunnable, reload 
 	return
 }
 
-func (c *CosmosMainFn) loadElementsTransactionRollback(isReload bool, errs map[string]*ErrorInfo) {
-	for _, define := range c.loading.implementOrder {
-		// Create local element.
-		name := define.Interface.Config.Name
-		c.mutex.RLock()
-		elem, has := c.elements[name]
-		c.mutex.RUnlock()
-		if has {
-			_, failed := errs[name]
-			elem.rollback(isReload, failed)
-			c.process.logging(LogLevel_Info, "MainFn: Rollback, element=(%s)", name)
-		}
-	}
-	c.mutex.Lock()
-	if !isReload {
-		c.runnable = nil
-	}
-	c.loading = nil
-	c.mutex.Unlock()
-}
+//func (c *CosmosMainFn) loadElementsTransactionRollback(isReload bool, errs map[string]*ErrorInfo) {
+//	for _, define := range c.loading.implementOrder {
+//		// Create local element.
+//		name := define.Interface.Config.Name
+//		c.mutex.RLock()
+//		elem, has := c.elements[name]
+//		c.mutex.RUnlock()
+//		if has {
+//			_, failed := errs[name]
+//			elem.rollback(isReload, failed)
+//			c.process.logging(LogLevel_Info, "MainFn: Rollback, element=(%s)", name)
+//		}
+//	}
+//	c.mutex.Lock()
+//	if !isReload {
+//		c.runnable = nil
+//	}
+//	c.loading = nil
+//	c.mutex.Unlock()
+//}
 
 func (c *CosmosMainFn) loadElementsTransactionCommit(isReload bool) {
 	for _, define := range c.loading.implementOrder {

@@ -86,7 +86,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 		defer func() {
 			closeCh <- struct{}{}
 		}()
-		daemonCh := make(chan error, 1)
+		daemonCh := make(chan *ErrorInfo, 1)
 		for {
 			exit := false
 			runCh <- struct{}{}
@@ -97,7 +97,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					break
 				}
 				if err := cmd.Check(); err != nil {
-					c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Invalid runnable, err=(%v)", err))
+					c.logging(LogLevel_Fatal, "CosmosProcess: MainFn config check failed, err=(%v)", err.Message)
 					break
 				}
 				switch cmd.Type() {
@@ -109,7 +109,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					select {
 					case c.main.mainKillCh <- true:
 						exit = true
-						c.main.pushKillMail(nil, true)
+						//c.main.pushKillMail(nil, true)
 					default:
 						c.logging(LogLevel_Info, "MainFn: Exit error, err=(Runnable is blocking)")
 					}
@@ -120,7 +120,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					}
 					select {
 					case c.main.mainKillCh <- true:
-						c.main.pushKillMail(nil, true)
+						//c.main.pushKillMail(nil, true)
 					default:
 						c.logging(LogLevel_Info, "MainFn: Exit error, err=(Runnable is blocking)")
 					}
@@ -146,7 +146,8 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					// Daemon execute executable command.
 					// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 					// Make CosmosMainFn initial the content of Runnable, especially the Element information.
-					if err = c.main.initCosmosMainFn(c, conf, runnable); err != nil {
+					err := c.main.initCosmosMainFn(conf, runnable)
+					if err != nil {
 						c.logging(LogLevel_Fatal, "CosmosProcess: MainFn init failed, err=(%v)", err.Message)
 						c.trySetRunning(false)
 						break
@@ -188,6 +189,12 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 						break
 					}
 					// Run main.
+					err := c.main.initCosmosMainFn(conf, runnable)
+					if err != nil {
+						c.logging(LogLevel_Fatal, "CosmosProcess: MainFn init failed, err=(%v)", err.Message)
+						c.trySetRunning(false)
+						break
+					}
 
 					// Running
 					c.reloads += 1
