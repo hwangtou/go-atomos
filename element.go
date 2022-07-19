@@ -52,11 +52,11 @@ type Element interface {
 	KillAtom(fromId, toId ID) *ErrorInfo
 }
 
-type ElementLoadable interface {
-	Load(mainId ElementId) *ErrorInfo
-	Reload(mainId ElementId, atomos Atomos) *ErrorInfo
-	Unload()
-}
+//type ElementLoadable interface {
+//	Load(mainId ElementId) *ErrorInfo
+//	Reload(mainId ElementId, atomos Atomos) *ErrorInfo
+//	Unload()
+//}
 
 type ElementCustomizeVersion interface {
 	GetElementVersion() uint64

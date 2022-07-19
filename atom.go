@@ -96,12 +96,16 @@ type SelfID interface {
 	// Access to the CosmosProcess of the Atom.
 	CosmosMainFn() *CosmosMainFn
 
-	ElementLocal() *ElementLocal
+	//ElementLocal() *ElementLocal
 
 	// KillSelf
 	// Atom从内部杀死自己。
 	// Atom kills itself from inner.
 	KillSelf()
+}
+
+type ElementSelfID interface {
+	SelfID
 }
 
 //type ParallelSelf interface {

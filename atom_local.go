@@ -163,6 +163,16 @@ func (a *AtomLocal) KillSelf() {
 	a.Log().Info("KillSelf")
 }
 
+// Implementation of AtomosUtilities
+
+func (a *AtomLocal) Log() Logging {
+	return a.atomos.Log()
+}
+
+func (a *AtomLocal) Task() Task {
+	return a.atomos.Task()
+}
+
 // Check chain.
 
 func (a *AtomLocal) checkCallChain(fromIdList []ID) bool {
@@ -295,16 +305,6 @@ func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (
 	newAtom = reload.Developer.AtomConstructor()
 	newAtom.Reload(oldAtom)
 	return newAtom
-}
-
-// Implementation of AtomosUtilities
-
-func (a *AtomLocal) Log() Logging {
-	return a.atomos.Log()
-}
-
-func (a *AtomLocal) Task() Task {
-	return a.atomos.Task()
 }
 
 // Element

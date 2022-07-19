@@ -5,6 +5,8 @@ const (
 
 	ErrFrameworkPanic
 
+	ErrProcessRunnableInvalid
+
 	ErrMainFnLoadCertFailed
 	ErrMainFnCheckElementFailed
 	ErrMainFnRunnableNotFound
@@ -14,6 +16,7 @@ const (
 	ErrMainFnReloadFailed
 	ErrMainFnCannotKill
 	ErrMainFnCannotSpawn
+	ErrMainFnCannotMessage
 
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid

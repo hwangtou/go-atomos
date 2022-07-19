@@ -79,6 +79,50 @@ func newElementLocal(mainFn *CosmosMainFn, impl *ElementImplementation) *Element
 	return elem
 }
 
+func (e *ElementLocal) initElementLocal(define *ElementImplementation, reloads int) *ErrorInfo {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	e.avail = false
+
+	e.atomos.reloads = reloads
+	//if !reload {
+	e.current = define
+	e.reloading = nil
+	//e.implements[define.Interface.Config.Version] = define
+	//} else {
+	//	e.reloading = define
+	//}
+
+	//if wh, ok := define.Developer.(ElementLoadable); ok {
+	//	if !reload {
+	//		return wh.Load(e.atomos)
+	//	} else {
+	//		return wh.Reload(e.atomos, e.atomos)
+	//	}
+	//}
+	return nil
+}
+
+func (e *ElementLocal) rollback(isReload, loadFailed bool) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	//if !loadFailed {
+	//	var dev ElementDeveloper
+	//	if e.reloading != nil {
+	//		dev = e.reloading.Developer
+	//	} else {
+	//		dev = e.current.Developer
+	//	}
+	//	if wh, ok := dev.(ElementLoadable); ok {
+	//		wh.Unload()
+	//	}
+	//}
+	if isReload {
+		e.avail = true
+		e.reloading = nil
+	}
+}
+
 //
 // Implementation of ID
 //
@@ -112,7 +156,7 @@ func (e *ElementLocal) Element() Element {
 }
 
 func (e *ElementLocal) GetName() string {
-	return e.atomos.GetIDInfo().Element
+	return e.GetIDInfo().Element
 }
 
 func (e *ElementLocal) Kill(from ID) *ErrorInfo {
@@ -137,46 +181,18 @@ func (e *ElementLocal) CosmosMainFn() *CosmosMainFn {
 	return e.mainFn
 }
 
-func (e *ElementLocal) ElementLocal() *ElementLocal {
-	return e
-}
+//func (e *ElementLocal) ElementLocal() *ElementLocal {
+//	return e
+//}
 
 // KillSelf
 // Atom kill itself from inner
 func (e *ElementLocal) KillSelf() {
-	//id, elem := a.id, a.element
 	if err := e.pushKillMail(e, false); err != nil {
 		e.Log().Error("KillSelf error, err=%v", err)
 		return
 	}
 	e.Log().Info("KillSelf")
-}
-
-func (e *ElementLocal) Log() Logging {
-	return e.atomos.Log()
-}
-
-func (e *ElementLocal) Task() Task {
-	return e.atomos.Task()
-}
-
-// Check chain.
-
-func (e *ElementLocal) checkCallChain(fromIdList []ID) bool {
-	for _, fromId := range fromIdList {
-		if fromId.GetIDInfo().IsEqual(e.GetIDInfo()) {
-			return false
-		}
-	}
-	return true
-}
-
-func (e *ElementLocal) addCallChain(fromIdList []ID) {
-	e.callChain = append(fromIdList, e)
-}
-
-func (e *ElementLocal) delCallChain() {
-	e.callChain = nil
 }
 
 // Implementation of Element
@@ -244,6 +260,35 @@ func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
 	return a.pushKillMail(fromId, true)
 }
 
+// Implementation of AtomosUtilities
+
+func (e *ElementLocal) Log() Logging {
+	return e.atomos.Log()
+}
+
+func (e *ElementLocal) Task() Task {
+	return e.atomos.Task()
+}
+
+// Check chain.
+
+func (e *ElementLocal) checkCallChain(fromIdList []ID) bool {
+	for _, fromId := range fromIdList {
+		if fromId.GetIDInfo().IsEqual(e.GetIDInfo()) {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *ElementLocal) addCallChain(fromIdList []ID) {
+	e.callChain = append(fromIdList, e)
+}
+
+func (e *ElementLocal) delCallChain() {
+	e.callChain = nil
+}
+
 // 内部实现
 // INTERNAL
 
@@ -288,7 +333,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	defer func() {
 		if r := recover(); r != nil {
 			err = NewErrorf(ErrElementKillHandlerPanic,
-				"ElementHandler: Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", e.atomos.GetIDInfo(), e.atomos.Description(), r).
+				"ElementHandler: Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", e.GetIDInfo(), e.atomos.Description(), r).
 				AddStack(e.GetIDInfo(), debug.Stack())
 			e.Log().Error(err.Message)
 		}
@@ -301,27 +346,27 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	impl := e.current
 	if impl == nil {
 		err = NewErrorf(ErrAtomKillElementNoImplement,
-			"ElementHandler: Save data error, no element implement, id=(%s),element=(%+v)", e.atomos.GetIDInfo(), e)
+			"ElementHandler: Save data error, no element implement, id=(%s),element=(%+v)", e.GetIDInfo(), e)
 		e.Log().Fatal(err.Message)
 		return err
 	}
 	p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || p == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"ElementHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", e.atomos.GetIDInfo(), e)
+			"ElementHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", e.GetIDInfo(), e)
 		e.Log().Fatal(err.Message)
 		return err
 	}
 	if err = p.ElementAutoDataPersistence().SetElementData(e.GetName(), data); err != nil {
 		e.Log().Error("ElementHandler: Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
-			e.atomos.GetIDInfo(), e.atomos.Description(), err)
+			e.GetIDInfo(), e.atomos.Description(), err)
 		return err
 	}
 	return err
 }
 
-func (e *ElementLocal) pushReloadMail(from ID, elem *ElementImplementation, upgrades int) *ErrorInfo {
-	return e.atomos.PushReloadMailAndWaitReply(from, elem, upgrades)
+func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) *ErrorInfo {
+	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
 }
 
 func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloadable) (newElement Atomos) {
@@ -418,131 +463,4 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	}
 	e.lock.Unlock()
 	atom.deleteAtomLocal(false)
-}
-
-// TODO
-
-func (e *ElementLocal) loadElementSetDefine(define *ElementImplementation, reload bool) *ErrorInfo {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	e.avail = false
-
-	if !reload {
-		e.current = define
-		e.reloading = nil
-		//e.implements[define.Interface.Config.Version] = define
-	} else {
-		e.reloading = define
-	}
-
-	if wh, ok := define.Developer.(ElementLoadable); ok {
-		if !reload {
-			return wh.Load(e.atomos)
-		} else {
-			return wh.Reload(e.atomos, e.atomos)
-		}
-	}
-	return nil
-}
-
-func (e *ElementLocal) rollback(isReload, loadFailed bool) {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	if !loadFailed {
-		var dev ElementDeveloper
-		if e.reloading != nil {
-			dev = e.reloading.Developer
-		} else {
-			dev = e.current.Developer
-		}
-		if wh, ok := dev.(ElementLoadable); ok {
-			wh.Unload()
-		}
-	}
-	if isReload {
-		e.avail = true
-		e.reloading = nil
-	}
-}
-
-// For reloading only.
-func (e *ElementLocal) commit(isReload bool) {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	e.avail = true
-	if isReload {
-		e.current = e.reloading
-		e.reloading = nil
-		//if _, has := e.implements[e.current.Interface.Config.Version]; !has {
-		//	e.implements[e.current.Interface.Config.Version] = e.current
-		//}
-	}
-}
-
-// 重载Element，需要指定一个版本的ElementImplementation。
-// Reload element, specific version of ElementImplementation is needed.
-func (e *ElementLocal) pushReload(reloads int) {
-	e.lock.Lock()
-	atomNameList := make([]string, 0, e.names.Len())
-	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
-		atomNameList = append(atomNameList, nameElem.Value.(string))
-	}
-	e.lock.Unlock()
-	wg := sync.WaitGroup{}
-	for _, name := range atomNameList {
-		wg.Add(1)
-		go func(name string) {
-			defer func() {
-				wg.Done()
-				if r := recover(); r != nil {
-					e.Log().Fatal("Element.Reload: Panic, name=%s,reason=%s", name, r)
-				}
-			}()
-			e.lock.Lock()
-			atom, has := e.atoms[name]
-			e.lock.Unlock()
-			if !has {
-				return
-			}
-			e.Log().Info("Element.Reload: Reloading atomos, name=%s", name)
-			err := atom.pushReloadMail(e, e.current, reloads)
-			if err != nil {
-				e.Log().Error("Element.Reload: PushProcessLog reload failed, name=%s,err=%v", name, err)
-			}
-		}(name)
-	}
-	wg.Wait()
-}
-
-func (e *ElementLocal) unload() {
-	e.lock.Lock()
-	atomNameList := make([]string, 0, e.names.Len())
-	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
-		atomNameList = append(atomNameList, nameElem.Value.(string))
-	}
-	e.lock.Unlock()
-	wg := sync.WaitGroup{}
-	for _, name := range atomNameList {
-		wg.Add(1)
-		go func(name string) {
-			defer func() {
-				wg.Done()
-				if r := recover(); r != nil {
-					e.Log().Fatal("Element.Unload: Panic, name=%s,reason=%s", name, r)
-				}
-			}()
-			e.lock.Lock()
-			atom, has := e.atoms[name]
-			e.lock.Unlock()
-			if !has {
-				return
-			}
-			e.Log().Info("Element.Unload: Kill atomos, name=%s", name)
-			err := atom.pushKillMail(e, true)
-			if err != nil {
-				e.Log().Error("Element.Unload: Kill atomos error, name=%s,err=%v", name, err)
-			}
-		}(name)
-	}
-	wg.Wait()
 }

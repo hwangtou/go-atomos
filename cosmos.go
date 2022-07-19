@@ -59,8 +59,8 @@ type CosmosNode interface {
 //	panic("implement me")
 //}
 
-// Interface
-
-func (c *CosmosProcess) Local() *CosmosMainFn {
-	return c.main
-}
+//// Interface
+//
+//func (c *CosmosProcess) Local() *CosmosMainFn {
+//	return c.main
+//}

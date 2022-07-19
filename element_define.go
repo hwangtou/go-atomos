@@ -32,23 +32,30 @@ type ElementInterface struct {
 	Config *ElementConfig
 
 	// AtomSpawner
-	AtomSpawner AtomSpawner
+
+	ElementSpawner ElementSpawner
+	AtomSpawner    AtomSpawner
 
 	// AtomId的构造器。
 	// Constructor of AtomId.
-	AtomIdConstructor AtomIdConstructor
+	//AtomIdConstructor AtomIdConstructor
+
+	ElementIDConstructor IDConstructor
+	AtomIDConstructor    IDConstructor
 
 	// 一个存储Atom的Call方法的容器。
 	// A holder to store all the Message method of Atom.
 	AtomMessages map[string]*ElementAtomMessage
 }
 
+type ElementSpawner func(s ElementSelfID, a Atomos, arg, data proto.Message) *ErrorInfo
 type AtomSpawner func(s SelfID, a Atomos, arg, data proto.Message) *ErrorInfo
 
 // AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
 // Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
-type AtomIdConstructor func(ID) ID
+//type AtomIdConstructor func(ID) ID
+type IDConstructor func(ID) ID
 
 // MessageHandler
 // Message处理器

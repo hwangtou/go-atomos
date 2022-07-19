@@ -96,20 +96,6 @@ func ConfigFromYaml(filepath string) (*Config, error) {
 	return conf, nil
 }
 
-func (x *Config) Check() *core.ErrorInfo {
-	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "No configuration")
-	}
-	if x.Node == "" {
-		return NewError(ErrCosmosConfigNodeNameInvalid, "Node name is empty")
-	}
-	if x.LogPath == "" {
-		return NewError(ErrCosmosConfigLogPathInvalid, "Log path is empty")
-	}
-	// TODO: Try open log file
-	return nil
-}
-
 //func (x *Config) getClientCertConfig() (tlsConfig *tls.Config, err *ErrorInfo) {
 //	//cert := x.EnableCert
 //	////if cert == nil {
