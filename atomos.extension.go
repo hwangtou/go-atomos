@@ -54,22 +54,6 @@ func (x *ErrorInfo) AddStack(id *IDInfo, stack []byte) *ErrorInfo {
 	return x
 }
 
-//func NewErrorWithStack(code int64, stack, message string) *ErrorInfo {
-//	return &ErrorInfo{
-//		Code:    code,
-//		Message: message,
-//		Stack:   stack,
-//	}
-//}
-//
-//func NewErrorfWithStack(code int64, stack []byte, format string, args ...interface{}) *ErrorInfo {
-//	return &ErrorInfo{
-//		Code:    code,
-//		Message: fmt.Sprintf(format, args...),
-//		Stack:   string(stack),
-//	}
-//}
-
 func (x *ErrorInfo) Error() string {
 	if x == nil {
 		return ""

@@ -7,16 +7,16 @@ import (
 // Cosmos生命周期
 // Cosmos Life Cycle
 
-type CosmosCycle interface {
-	Daemon(*Config) (chan struct{}, *ErrorInfo)
-	Send(DaemonCommand) *ErrorInfo
-	WaitKillSignal()
-	Close()
-}
-
-func NewCosmosCycle() (CosmosCycle, *ErrorInfo) {
-	return newCosmosProcess()
-}
+//type CosmosCycle interface {
+//	Daemon(*Config) (chan struct{}, *ErrorInfo)
+//	Send(DaemonCommand) *ErrorInfo
+//	WaitKillSignal()
+//	Close()
+//}
+//
+//func NewCosmosCycle() (CosmosCycle, *ErrorInfo) {
+//	return newCosmosProcess()
+//}
 
 // Cosmos节点需要支持的接口内容
 // 仅供生成器内部使用
@@ -61,6 +61,43 @@ type CosmosNode interface {
 
 //// Interface
 //
-//func (c *CosmosProcess) Local() *CosmosMainFn {
+//func (c *CosmosProcess) Local() *CosmosMain {
 //	return c.main
 //}
+
+type CosmosMain struct {
+	config  *Config
+	process *CosmosProcess
+}
+
+func (c CosmosMain) GetNodeName() string {
+	return c.config.Node
+}
+
+func (c CosmosMain) IsLocal() bool {
+	return true
+}
+
+func (c CosmosMain) GetElementAtomId(elem, name string) (ID, *ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c CosmosMain) SpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c CosmosMain) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c CosmosMain) KillAtom(fromId, toId ID) *ErrorInfo {
+	//TODO implement me
+	panic("implement me")
+}
+
+type CosmosProcess struct {
+	sharedLog *LoggingAtomos
+}

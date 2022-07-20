@@ -154,9 +154,10 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInf
 	}
 	if wait {
 		_, err := am.waitReply()
-		deallocAtomosMail(am)
+		//deallocAtomosMail(am)
 		return err
 	}
+	//deallocAtomosMail(am)
 	return nil
 }
 
@@ -256,7 +257,6 @@ func (a *BaseAtomos) setHalt() {
 // Handle mailbox messages.
 func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.Content.(*atomosMail)
-	defer deallocAtomosMail(am)
 	// TODO: Debug Only.
 	if a.state != AtomosWaiting {
 		panic("")
@@ -289,13 +289,14 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 	default:
 		a.log.Fatal("Atomos: Received unknown message type, type=(%v),mail=(%+v)", am.mailType, am)
 	}
+	//deallocAtomosMail(am)
 }
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
 func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
 	am := mail.Content.(*atomosMail)
-	defer deallocAtomosMail(am)
+	//defer deallocAtomosMail(am)
 
 	if !a.isNotHalt() {
 		return
@@ -326,7 +327,7 @@ func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
 
 // 处理邮箱退出。
 // Handle mailbox stops.
-func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
+func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
@@ -335,43 +336,44 @@ func (a *BaseAtomos) onStop(killMail, remainMails *mail, num uint32) {
 	}
 
 	a.setStopping()
-	//defer a.holder.atomosHalt(a)
 	defer a.setHalt()
 
 	killAtomMail := killMail.Content.(*atomosMail)
-	defer deallocAtomosMail(killAtomMail)
+	//defer deallocAtomosMail(killAtomMail)
 	cancels := a.task.cancelAllSchedulingTasks()
-	for ; remainMails != nil; remainMails = remainMails.next {
-		err := NewErrorf(ErrAtomosIsNotRunning, "Atomos is stopping, mail=(%+v)", remainMails)
-		remainAtomMail := remainMails.Content.(*atomosMail)
-		switch remainAtomMail.mailType {
-		case MailHalt:
-			remainAtomMail.sendReply(nil, err)
-			// Mail dealloc in AtomCore.pushKillMail.
-		case MailMessage:
-			remainAtomMail.sendReply(nil, err)
-			// Mail dealloc in AtomCore.pushMessageMail.
-		case MailTask:
-			// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
-			// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
-			// but it's impossible to add task after locking.
-			a.log.Fatal("Atomos: STOPPING task mails have been sent after start closing, id=(%s),mail=(%+v)", a.id.str(), remainMails)
-			t, err := a.task.cancelTask(remainMails.id, nil)
-			if err == nil {
-				cancels[remainMails.id] = t
+	for ; remainMail != nil; remainMail = remainMail.next {
+		func(remainMail *mail) {
+			err := NewErrorf(ErrAtomosIsNotRunning, "Atomos is stopping, mail=(%+v)", remainMail)
+			remainAtomMail := remainMail.Content.(*atomosMail)
+			//defer deallocAtomosMail(remainAtomMail)
+			switch remainAtomMail.mailType {
+			case MailHalt:
+				remainAtomMail.sendReply(nil, err)
+				// Mail dealloc in AtomCore.pushKillMail.
+			case MailMessage:
+				remainAtomMail.sendReply(nil, err)
+				// Mail dealloc in AtomCore.pushMessageMail.
+			case MailTask:
+				// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
+				// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
+				// but it's impossible to add task after locking.
+				a.log.Fatal("Atomos: STOPPING task mails have been sent after start closing, id=(%s),mail=(%+v)", a.id.str(), remainMail)
+				t, err := a.task.cancelTask(remainMail.id, nil)
+				if err == nil {
+					cancels[remainMail.id] = t
+				}
+				// Mail dealloc in atomosTaskManager.cancelTask.
+			case MailReload:
+				remainAtomMail.sendReply(nil, err)
+				// Mail dealloc in AtomCore.pushReloadMail.
+			//case AtomosMailWormhole:
+			//	remainAtomMail.sendReply(nil, err)
+			//// Mail dealloc in AtomCore.pushWormholeMail.
+			default:
+				a.log.Fatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
+					remainAtomMail.mailType, remainAtomMail)
 			}
-			// Mail dealloc in atomosTaskManager.cancelTask.
-		case MailReload:
-			remainAtomMail.sendReply(nil, err)
-			// Mail dealloc in AtomCore.pushReloadMail.
-		//case AtomosMailWormhole:
-		//	remainAtomMail.sendReply(nil, err)
-		//// Mail dealloc in AtomCore.pushWormholeMail.
-		default:
-			a.log.Fatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
-				remainAtomMail.mailType, remainAtomMail)
-		}
-		defer deallocAtomosMail(remainAtomMail)
+		}(remainMail)
 	}
 
 	// Handle Kill and Reply Kill.

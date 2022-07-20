@@ -91,10 +91,10 @@ type SelfID interface {
 	ID
 	AtomosUtilities
 
-	// CosmosMainFn
+	// CosmosMain
 	// 获取Atom的CosmosProcess。
 	// Access to the CosmosProcess of the Atom.
-	CosmosMainFn() *CosmosMainFn
+	CosmosMainFn() *CosmosMain
 
 	//ElementLocal() *ElementLocal
 
@@ -110,7 +110,7 @@ type ElementSelfID interface {
 
 //type ParallelSelf interface {
 //	ID
-//	CosmosMainFn() *CosmosMainFn
+//	CosmosMain() *CosmosMain
 //	ElementSelf() *ElementLocal
 //	KillSelf()
 //	Log() Logging

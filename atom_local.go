@@ -144,7 +144,7 @@ func (a *AtomLocal) String() string {
 // With SelfID, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (a *AtomLocal) CosmosMainFn() *CosmosMainFn {
+func (a *AtomLocal) CosmosMainFn() *CosmosMain {
 	return a.element.mainFn
 }
 
@@ -224,13 +224,14 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 				stack = debug.Stack()
 			}
 		}()
-		reply, err = handler(from.(ID), a.atomos.GetInstance(), args)
+		fromID, _ := from.(ID)
+		reply, err = handler(fromID, a.atomos.GetInstance(), args)
 	}()
 	if len(stack) != 0 {
 		err = NewErrorf(ErrAtomMessageHandlerPanic,
 			"Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args).
 			AddStack(a.GetIDInfo(), stack)
-	} else if len(err.Stacks) > 0 {
+	} else if err != nil && len(err.Stacks) > 0 {
 		err = err.AddStack(a.GetIDInfo(), debug.Stack())
 	}
 	return

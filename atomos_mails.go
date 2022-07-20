@@ -3,7 +3,6 @@ package go_atomos
 // CHECKED!
 
 import (
-	"log"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -195,7 +194,6 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	if m.waitCh != nil {
 		m.waitCh <- &m.mailReply
 		m.waitCh = nil
-		log.Println("mail=", m)
 	} else {
 		panic("atomosMail: sendReply waitCh has been replied")
 	}

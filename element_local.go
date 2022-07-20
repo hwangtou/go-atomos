@@ -16,7 +16,7 @@ import (
 type ElementLocal struct {
 	// CosmosSelf引用。
 	// Reference to CosmosSelf.
-	mainFn *CosmosMainFn
+	mainFn *CosmosMain
 
 	// 基础Atomos，也是实现Atom无锁队列的关键。
 	// Base atomos, the key of lockless queue of Atom.
@@ -51,7 +51,7 @@ type ElementLocal struct {
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(mainFn *CosmosMainFn, impl *ElementImplementation) *ElementLocal {
+func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLocal {
 	id := &IDInfo{
 		Type:    IDType_Element,
 		Cosmos:  mainFn.config.Node,
@@ -177,7 +177,7 @@ func (e *ElementLocal) String() string {
 // With SelfID, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (e *ElementLocal) CosmosMainFn() *CosmosMainFn {
+func (e *ElementLocal) CosmosMainFn() *CosmosMain {
 	return e.mainFn
 }
 
@@ -319,7 +319,7 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 		err = NewErrorf(ErrElementMessageHandlerPanic,
 			"ElementLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args).
 			AddStack(e.GetIDInfo(), stack)
-	} else if len(err.Stacks) > 0 {
+	} else if err != nil && len(err.Stacks) > 0 {
 		err = err.AddStack(e.GetIDInfo(), debug.Stack())
 	}
 	return
