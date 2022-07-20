@@ -61,7 +61,7 @@ func (x *ErrorInfo) Error() string {
 	if len(x.Stacks) > 0 {
 		var stacks strings.Builder
 		for i, stack := range x.Stacks {
-			stacks.WriteString(fmt.Sprintf("Stack[%d]: %s\n", i, stack.Id.str()))
+			stacks.WriteString(fmt.Sprintf("Chain[%d]: %s\n", i, stack.Id.str()))
 			stacks.Write(stack.Stack)
 		}
 		return fmt.Sprintf("%s\n%s", x.Message, stacks.String())

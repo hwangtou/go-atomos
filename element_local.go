@@ -35,8 +35,8 @@ type ElementLocal struct {
 	// Lock.
 	lock sync.RWMutex
 
-	// Available or Reloading
-	avail bool
+	//// Available or Reloading
+	//avail bool
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
 	current, reloading *ElementImplementation
@@ -59,12 +59,12 @@ func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLo
 		Atomos:  "",
 	}
 	elem := &ElementLocal{
-		mainFn:    mainFn,
-		atomos:    nil,
-		atoms:     nil,
-		names:     list.New(),
-		lock:      sync.RWMutex{},
-		avail:     false,
+		mainFn: mainFn,
+		atomos: nil,
+		atoms:  nil,
+		names:  list.New(),
+		lock:   sync.RWMutex{},
+		//avail:     false,
 		current:   nil,
 		reloading: nil,
 		callChain: nil,
@@ -79,48 +79,25 @@ func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLo
 	return elem
 }
 
-func (e *ElementLocal) initElementLocal(define *ElementImplementation, reloads int) { // *ErrorInfo {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	e.avail = false
-
-	e.atomos.reloads = reloads
-	//if !reload {
-	e.current = define
-	e.reloading = nil
-	//e.implements[define.Interface.Config.Version] = define
-	//} else {
-	//	e.reloading = define
-	//}
-
-	//if wh, ok := define.Developer.(ElementLoadable); ok {
-	//	if !reload {
-	//		return wh.Load(e.atomos)
-	//	} else {
-	//		return wh.Reload(e.atomos, e.atomos)
-	//	}
-	//}
-	//return nil
+// First time loading.
+func (e *ElementLocal) load(impl *ElementImplementation) *ErrorInfo {
+	if e.current != nil {
+		err := NewErrorf(ErrElementLoaded, "ElementLocal: Load a loaded element, name=(%s)", e.atomos.GetIDInfo().Element)
+		e.Log().Fatal(err.Message)
+		return err
+	}
+	if e.reloading != nil {
+		err := NewErrorf(ErrElementLoaded, "ElementLocal: Load a reloading element, name=(%s)", e.atomos.GetIDInfo().Element)
+		e.Log().Fatal(err.Message)
+		return err
+	}
+	e.Log().Info("ElementLocal: Load element, name=(%s)", e.atomos.GetIDInfo().Element)
+	e.current = impl
+	return nil
 }
 
-func (e *ElementLocal) rollback(isReload, loadFailed bool) {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	//if !loadFailed {
-	//	var dev ElementDeveloper
-	//	if e.reloading != nil {
-	//		dev = e.reloading.Developer
-	//	} else {
-	//		dev = e.current.Developer
-	//	}
-	//	if wh, ok := dev.(ElementLoadable); ok {
-	//		wh.Unload()
-	//	}
-	//}
-	if isReload {
-		e.avail = true
-		e.reloading = nil
-	}
+// Reload.
+func (e *ElementLocal) reload() {
 }
 
 //
@@ -181,10 +158,6 @@ func (e *ElementLocal) CosmosMainFn() *CosmosMain {
 	return e.mainFn
 }
 
-//func (e *ElementLocal) ElementLocal() *ElementLocal {
-//	return e
-//}
-
 // KillSelf
 // Atom kill itself from inner
 func (e *ElementLocal) KillSelf() {
@@ -231,13 +204,6 @@ func (e *ElementLocal) MessageAtom(fromId, toId ID, name string, args proto.Mess
 		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromId, toId, name, args)
 	}
-	// Dead Lock Checker.
-	if !a.checkCallChain(fromId.getCallChain()) {
-		return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-			fromId.getCallChain(), toId, name, args)
-	}
-	a.addCallChain(fromId.getCallChain())
-	defer a.delCallChain()
 	// PushProcessLog.
 	return a.pushMessageMail(fromId, name, args)
 }
@@ -297,6 +263,15 @@ func (e *ElementLocal) delCallChain() {
 // TODO: Performance tracer.
 
 func (e *ElementLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	// Dead Lock Checker.
+	if from != nil {
+		if !e.checkCallChain(from.getCallChain()) {
+			return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
+				from.getCallChain(), e, name, args)
+		}
+		e.addCallChain(from.getCallChain())
+		defer e.delCallChain()
+	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
 }
 
@@ -313,7 +288,8 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 				stack = debug.Stack()
 			}
 		}()
-		reply, err = handler(from.(ID), e.atomos.GetInstance(), args)
+		fromID, _ := from.(ID)
+		reply, err = handler(fromID, e.atomos.GetInstance(), args)
 	}()
 	if len(stack) != 0 {
 		err = NewErrorf(ErrElementMessageHandlerPanic,
@@ -365,10 +341,8 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	return err
 }
 
-func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) {
-	if err := e.atomos.PushReloadMailAndWaitReply(from, impl, reloads); err != nil {
-		e.Log().Fatal("Push reload failed, err=(%v)", err)
-	}
+func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) *ErrorInfo {
+	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
 }
 
 func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloadable) (newElement Atomos) {
@@ -430,8 +404,8 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 	if has {
 		atom.deleteAtomLocal(false)
 		atom = oldAtom
-		atom.count += 1
 	}
+	atom.count += 1
 
 	// Atom的Spawn逻辑。
 	atom.atomos.setSpawning()

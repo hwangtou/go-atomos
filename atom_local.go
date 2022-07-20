@@ -208,6 +208,15 @@ func (a *AtomLocal) delCallChain() {
 // Message Mail
 
 func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	// Dead Lock Checker.
+	if from != nil {
+		if !a.checkCallChain(from.getCallChain()) {
+			return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
+				from.getCallChain(), a, name, args)
+		}
+		a.addCallChain(from.getCallChain())
+		defer a.delCallChain()
+	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, args)
 }
 

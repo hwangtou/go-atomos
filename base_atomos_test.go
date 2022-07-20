@@ -80,20 +80,20 @@ func TestBaseAtomos(t *testing.T) {
 	// Push Reload
 	err = a.PushReloadMailAndWaitReply(nil, &TestAtomosInstance{T: t, reload: 2}, 2)
 	t.Logf("PushReloadMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "message", nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
-	//// Push Message Panic
-	//reply, err = a.PushMessageMailAndWaitReply(nil, "panic", nil)
-	//t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
+	// Push Message Panic
+	reply, err = a.PushMessageMailAndWaitReply(nil, "panic", nil)
+	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
 	// Push Kill
 	err = a.PushKillMailAndWaitReply(nil, true)
 	t.Logf("PushKillMailAndWaitReply: state=(%v),err=(%v)", a.GetState(), err)
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "send_after_halt", nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 }
 
 // TODO

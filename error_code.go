@@ -26,6 +26,7 @@ const (
 	ErrCosmosIsBusy
 	ErrCosmosIsClosed
 
+	ErrElementLoaded
 	ErrElementReloadInvalid
 	ErrElementMessageHandlerNotExists
 	ErrElementMessageHandlerPanic
