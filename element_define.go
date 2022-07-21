@@ -12,7 +12,6 @@ import (
 // ElementImplementation in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementImplementation struct {
 	Developer ElementDeveloper
-
 	Interface *ElementInterface
 
 	AtomHandlers    map[string]MessageHandler

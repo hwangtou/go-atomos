@@ -19,7 +19,7 @@ type AtomLocal struct {
 	//
 	// Reference to current ElementLocal instance.
 	// The concrete ElementLocal instance should be read-only, so read-lock is required when access to it.
-	// The reference only be set when atomos load and mainFn reload.
+	// The reference only be set when atomos load and main reload.
 	element *ElementLocal
 
 	// 基础Atomos，也是实现Atom无锁队列的关键。
@@ -104,7 +104,7 @@ func (a *AtomLocal) Release() {
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
-	return a.element.mainFn
+	return a.element.main
 }
 
 func (a *AtomLocal) Element() Element {
@@ -141,11 +141,11 @@ func (a *AtomLocal) String() string {
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // SelfID, a concept that provide Atom resource access to inner Atom.
-// With SelfID, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// With SelfID, Atom can access its self-main with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (a *AtomLocal) CosmosMainFn() *CosmosMain {
-	return a.element.mainFn
+func (a *AtomLocal) CosmosMain() *CosmosMain {
+	return a.element.main
 }
 
 func (a *AtomLocal) ElementLocal() *ElementLocal {

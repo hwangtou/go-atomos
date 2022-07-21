@@ -85,7 +85,7 @@ type CallJson interface {
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosProcess）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // SelfID, a concept that provide Atom resource access to inner Atom.
-// With SelfID, Atom can access its self-mainFn with "CosmosProcess", can kill itself use "KillSelf" from inner.
+// With SelfID, Atom can access its self-main with "CosmosProcess", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 type SelfID interface {
 	ID
@@ -94,7 +94,7 @@ type SelfID interface {
 	// CosmosMain
 	// 获取Atom的CosmosProcess。
 	// Access to the CosmosProcess of the Atom.
-	CosmosMainFn() *CosmosMain
+	CosmosMain() *CosmosMain
 
 	//ElementLocal() *ElementLocal
 

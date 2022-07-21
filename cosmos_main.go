@@ -1,0 +1,533 @@
+package go_atomos
+
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"google.golang.org/protobuf/proto"
+	"io/ioutil"
+	"sync"
+)
+
+type CosmosMain struct {
+	process *CosmosProcess
+
+	// Config
+	runnable   *CosmosRunnable
+	mainKillCh chan bool
+
+	atomos *BaseAtomos
+
+	// Elements
+	elements map[string]*ElementLocal
+	mutex    sync.RWMutex
+
+	// TLS if exists
+	listenCert *tls.Config
+	clientCert *tls.Config
+	//// Cosmos Server
+	//remoteServer *cosmosRemoteServer
+
+	// 调用链
+	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
+	callChain []ID
+}
+
+// 生命周期相关
+// Life cycle
+
+func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain {
+	process.sharedLog.PushProcessLog(LogLevel_Info, "Main: Loading")
+	id := &IDInfo{
+		Type:    IDType_Main,
+		Cosmos:  runnable.config.Node,
+		Element: MainElementName,
+		Atomos:  "",
+	}
+	mainFn := &CosmosMain{
+		process:    process,
+		runnable:   runnable,
+		atomos:     nil,
+		mainKillCh: make(chan bool),
+		elements:   make(map[string]*ElementLocal, len(runnable.implements)),
+		mutex:      sync.RWMutex{},
+		listenCert: nil,
+		clientCert: nil,
+		callChain:  nil,
+	}
+	mainFn.atomos = NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, mainFn, mainFn, 0)
+	return mainFn
+}
+
+// Load Runnable
+
+type runnableLoadingHelper struct {
+	config *Config
+
+	spawnElement, reloadElement, delElement []*ElementImplementation
+
+	// TLS if exists
+	listenCert, clientCert *tls.Config
+	//// Cosmos Server
+	//remoteServer *cosmosRemoteServer
+}
+
+func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
+	helper := &runnableLoadingHelper{
+		listenCert: c.listenCert,
+		clientCert: c.clientCert,
+	}
+
+	// Element
+	if oldRunnable == nil {
+		// All are cosmosElementSpawn elements.
+		for _, impl := range newRunnable.implementOrder {
+			helper.spawnElement = append(helper.spawnElement, impl)
+		}
+	} else {
+		for _, newImpl := range newRunnable.implementOrder {
+			_, has := oldRunnable.implements[newImpl.Interface.Name]
+			if has {
+				helper.reloadElement = append(helper.reloadElement, newImpl)
+			} else {
+				helper.spawnElement = append(helper.spawnElement, newImpl)
+			}
+		}
+		for _, oldImpl := range oldRunnable.implementOrder {
+			_, has := newRunnable.implements[oldImpl.Interface.Name]
+			if !has {
+				helper.delElement = append(helper.delElement, oldImpl)
+			}
+		}
+	}
+
+	// 加载TLS Cosmos Node支持，用于加密链接。
+	// loadTlsCosmosNodeSupport()
+	// Check enable Cert.
+	if cert := newRunnable.config.EnableCert; cert != nil {
+		if cert.CertPath == "" {
+			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Cert path is empty")
+		}
+		if cert.KeyPath == "" {
+			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Key path is empty")
+		}
+		// Load Key Pair.
+		c.Log().Info("Main: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+		if e != nil {
+			err := NewErrorf(ErrMainFnLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
+			c.Log().Fatal(err.Message)
+			return nil, err
+		}
+		helper.listenCert = &tls.Config{
+			Certificates: []tls.Certificate{
+				pair,
+			},
+		}
+		// Load Cert.
+		caCert, e := ioutil.ReadFile(cert.CertPath)
+		if e != nil {
+			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Main: Cert file read error, err=(%v)", e)
+		}
+		tlsConfig := &tls.Config{}
+		if cert.InsecureSkipVerify {
+			tlsConfig.InsecureSkipVerify = true
+			helper.clientCert = tlsConfig
+		} else {
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			// Create TLS configuration with the certificate of the server.
+			tlsConfig.RootCAs = caCertPool
+			helper.clientCert = tlsConfig
+		}
+	} else {
+		helper.listenCert = nil
+		helper.clientCert = nil
+	}
+
+	// 加载远端Cosmos服务支持。
+	// loadRemoteCosmosServerSupport
+	if server := newRunnable.config.EnableServer; server != nil {
+		// Enable Server
+		c.Log().Info("Main: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
+		if oldRunnable != nil && oldRunnable.config.EnableServer.IsEqual(newRunnable.config.EnableServer) {
+			goto noServerReconnect
+		}
+		//c.remoteServer = newCosmosRemoteHelper(a)
+		//if err := c.remoteServer.init(); err != nil {
+		//	return nil, err
+		//}
+	noServerReconnect:
+		// TODO: UpdateLogic
+	}
+
+	return helper, nil
+}
+
+// Implementation of ID
+
+func (c *CosmosMain) GetIDInfo() *IDInfo {
+	return c.atomos.GetIDInfo()
+}
+
+func (c *CosmosMain) getCallChain() []ID {
+	return c.callChain
+}
+
+func (c *CosmosMain) Release() {
+}
+
+func (c *CosmosMain) Cosmos() CosmosNode {
+	return c
+}
+
+func (c *CosmosMain) Element() Element {
+	return c
+}
+
+func (c *CosmosMain) GetName() string {
+	return c.GetIDInfo().Element
+}
+
+func (c *CosmosMain) Kill(from ID) *ErrorInfo {
+	return NewError(ErrMainFnCannotKill, "Cannot kill main")
+}
+
+func (c *CosmosMain) String() string {
+	return c.atomos.Description()
+}
+
+// Implementation of atomos.SelfID
+// Implementation of atomos.ParallelSelf
+//
+// SelfID，是Atom内部可以访问的Atom资源的概念。
+// 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
+//
+// SelfID, a concept that provide Atom resource access to inner Atom.
+// With SelfID, Atom can access its self-main with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// It also provides Log and Tasks method to inner Atom.
+
+func (e *CosmosMain) CosmosMain() *CosmosMain {
+	return e
+}
+
+//func (e *CosmosMain) ElementLocal() *ElementLocal {
+//	return e
+//}
+
+// KillSelf
+// Atom kill itself from inner
+func (e *CosmosMain) KillSelf() {
+	if err := e.pushKillMail(e, false); err != nil {
+		e.Log().Error("KillSelf error, err=%v", err)
+		return
+	}
+	e.Log().Info("KillSelf")
+}
+
+// Check chain.
+
+func (e *CosmosMain) checkCallChain(fromIdList []ID) bool {
+	for _, fromId := range fromIdList {
+		if fromId.GetIDInfo().IsEqual(e.GetIDInfo()) {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *CosmosMain) addCallChain(fromIdList []ID) {
+	e.callChain = append(fromIdList, e)
+}
+
+func (e *CosmosMain) delCallChain() {
+	e.callChain = nil
+}
+
+// Implementation of CosmosNode
+
+func (c *CosmosMain) GetNodeName() string {
+	return c.GetIDInfo().Cosmos
+}
+
+func (c *CosmosMain) IsLocal() bool {
+	return true
+}
+
+func (c *CosmosMain) GetElementAtomId(elem, name string) (ID, *ErrorInfo) {
+	element, err := c.getElement(elem)
+	if err != nil {
+		return nil, err
+	}
+	return element.GetAtomId(name)
+}
+
+func (c *CosmosMain) SpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
+	element, err := c.getElement(elem)
+	if err != nil {
+		return nil, err
+	}
+	return element.SpawnAtom(name, arg)
+}
+
+// Implementation of Element
+
+func (c *CosmosMain) GetElementName() string {
+	return MainElementName
+}
+
+func (c *CosmosMain) GetAtomId(_ string) (ID, *ErrorInfo) {
+	return c, nil
+}
+
+func (c *CosmosMain) GetAtomsNum() int {
+	return 1
+}
+
+func (c *CosmosMain) SpawnAtom(_ string, _ proto.Message) (*AtomLocal, *ErrorInfo) {
+	return nil, NewError(ErrMainFnCannotSpawn, "Cannot cosmosElementSpawn main")
+}
+
+func (c *CosmosMain) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return toId.Element().MessageAtom(fromId, toId, message, args)
+}
+
+func (c *CosmosMain) KillAtom(fromId, toId ID) *ErrorInfo {
+	return toId.Element().KillAtom(fromId, toId)
+}
+
+// Implementation of AtomosUtilities
+
+func (e *CosmosMain) Log() Logging {
+	return e.atomos.Log()
+}
+
+func (e *CosmosMain) Task() Task {
+	return e.atomos.Task()
+}
+
+// Main as an Atomos
+
+func (c *CosmosMain) Description() string {
+	return c.GetIDInfo().str()
+}
+
+func (c *CosmosMain) Halt(from ID, cancels map[uint64]CancelledTask) (save bool, data proto.Message) {
+	c.Log().Fatal("Main: Halt of CosmosMain should not be called.")
+	return false, nil
+}
+
+func (c *CosmosMain) Reload(newInstance Atomos) {
+	c.Log().Fatal("Main: Reload of CosmosMain should not be called.")
+}
+
+// 内部实现
+// INTERNAL
+
+// 邮箱控制器相关
+// Mailbox Handler
+// TODO: Performance tracer.
+
+//func (e *CosmosMain) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+//	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
+//}
+
+func (e *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return nil, NewError(ErrMainFnCannotMessage, "Main: Cannot send message.")
+}
+
+func (e *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
+	return e.atomos.PushKillMailAndWaitReply(from, wait)
+}
+
+func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
+	c.Log().Info("Main: NOW EXITING!")
+
+	// Unload local elements and its atomos.
+	for i := len(c.runnable.implementOrder) - 1; i >= 0; i -= 1 {
+		name := c.runnable.implementOrder[i].Interface.Config.Name
+		elem, has := c.elements[name]
+		if !has {
+			continue
+		}
+		err := elem.pushKillMail(c, true)
+		if err != nil {
+			c.Log().Error("Main: Exiting kill element error, element=(%s),err=(%v)", name, err.Message)
+		}
+	}
+
+	//// After Runnable Script terminated.
+
+	//c.process.remotes.close()
+	c.callChain = nil
+	c.clientCert = nil
+	c.listenCert = nil
+	c.mainKillCh = nil
+	c.elements = nil
+	c.runnable = nil
+	c.process = nil
+	return nil
+}
+
+func (e *CosmosMain) pushReloadMail(from ID, impl *CosmosRunnable, reloads int) *ErrorInfo {
+	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
+}
+
+func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadable) (newElement Atomos) {
+	// Actually, atomos of CosmosMain has nothing to change.
+	// Here will return oldElement directly, and OnReload function of CosmosMain won't be executed.
+	newElement = oldElement
+	// 如果没有新的Element，就用旧的Element。
+	// Use old Element if there is no new Element.
+	newRunnable, ok := reloadObject.(*CosmosRunnable)
+	if !ok || newRunnable == nil {
+		err := NewErrorf(ErrElementReloadInvalid, "Reload is invalid, newRunnable=(%v),reloads=(%d)", newRunnable, c.atomos.reloads)
+		c.Log().Fatal(err.Message)
+		return
+	}
+	c.Log().Info("Main: NOW RELOADING!")
+
+	helper, err := c.newRunnableLoadingHelper(c.runnable, newRunnable)
+	if err != nil {
+		c.Log().Fatal(err.Message)
+		return
+	}
+
+	if err = c.trySpawningElements(helper); err != nil {
+		c.Log().Fatal(err.Message)
+		return
+	}
+
+	// NOTICE: Spawning might fail, it might cause reloads count increase, but actually reload failed. TODO
+	// NOTICE: After spawning, reload won't stop, no matter what error happens.
+
+	c.listenCert = helper.listenCert
+	c.clientCert = helper.clientCert
+	//c.remote = helper.remote
+
+	// Reload
+	for _, define := range helper.reloadElement {
+		// Create local element.
+		name := define.Interface.Config.Name
+		c.mutex.RLock()
+		elem, has := c.elements[name]
+		c.mutex.RUnlock()
+		if !has {
+			c.Log().Fatal("Main: Reload is reloading not exists element, name=(%s)", name)
+			continue
+		}
+		err := elem.pushReloadMail(c, define, c.atomos.reloads)
+		if err != nil {
+			c.Log().Fatal("Main: Reload sent reload failed, name=(%s),err=(%v)", name, err)
+		}
+	}
+
+	// Halt
+	for _, define := range helper.delElement {
+		// Create local element.
+		name := define.Interface.Config.Name
+		c.mutex.RLock()
+		elem, has := c.elements[name]
+		c.mutex.RUnlock()
+		if !has {
+			c.Log().Fatal("Main: Reload is halting not exists element, name=(%s)", name)
+			continue
+		}
+		err := elem.pushKillMail(c, true)
+		if err != nil {
+			c.Log().Fatal("Main: Reload sent halt failed, name=(%s),err=(%v)", name, err)
+		}
+	}
+
+	// Execute newRunnable script after reloading all elements and atomos.
+	if err := func(runnable *CosmosRunnable) (err *ErrorInfo) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = NewErrorf(ErrMainFnReloadFailed, "Main: Reload script CRASH! reason=(%s)", r)
+				c.Log().Fatal(err.Message)
+			}
+		}()
+		runnable.reloadScript(c)
+		return
+	}(newRunnable); err != nil {
+		c.Log().Fatal("Main: Reload failed, err=(%v)", err)
+	}
+
+	c.Log().Info("Main: RELOADED!")
+	return
+}
+
+// Element Inner
+
+func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if c.runnable == nil {
+		err = NewError(ErrMainFnRunnableNotFound, "MainFn: It's not running.")
+		return nil, err
+	}
+	elem, has := c.elements[name]
+	if !has {
+		err = NewErrorf(ErrMainFnElementNotFound, "MainFn: Local element not found, name=(%s)", name)
+		return nil, err
+	}
+	return elem, nil
+}
+
+func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *ErrorInfo) {
+	// Spawn
+	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
+	var loaded []*ElementLocal
+	for _, impl := range helper.spawnElement {
+		elem, e := c.cosmosElementSpawn(impl, nil)
+		if e != nil {
+			err = e
+			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", elem.GetName(), err)
+			break
+		}
+		loaded = append(loaded, elem)
+	}
+	if err != nil {
+		for _, elem := range loaded {
+			if err := elem.pushKillMail(c, true); err != nil {
+				c.Log().Fatal("Main: Spawning element failed, kill error, name=(%s),err=(%v)", elem.GetName(), err)
+			}
+		}
+		c.Log().Fatal("Main: Spawning element has rollback")
+		return
+	}
+	return nil
+}
+
+func (c *CosmosMain) cosmosElementSpawn(i *ElementImplementation, arg proto.Message) (*ElementLocal, *ErrorInfo) {
+	name := i.Interface.Config.Name
+	defer func() {
+		if r := recover(); r != nil {
+			c.Log().Fatal("Main: Spawn new element PANIC, name=(%s),err=(%v)", name, r)
+		}
+	}()
+
+	elem := newElementLocal(c, i)
+
+	c.mutex.Lock()
+	_, has := c.elements[name]
+	if !has {
+		c.elements[name] = elem
+	}
+	c.mutex.Unlock()
+	if has {
+		return nil, NewErrorf(ErrElementLoaded, "ElementSpawner: Element exists, name=(%s)", name)
+	}
+
+	elem.atomos.setSpawning()
+	err := elem.cosmosElementSpawn(i, arg)
+	if err != nil {
+		elem.atomos.setHalt()
+		c.mutex.Lock()
+		delete(c.elements, name)
+		c.mutex.Unlock()
+		return nil, err
+	}
+	elem.atomos.setWaiting()
+	return elem, nil
+}

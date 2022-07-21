@@ -68,3 +68,13 @@ func (x *ErrorInfo) Error() string {
 	}
 	return x.Message
 }
+
+func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
+	if x.Host != server.Host {
+		return false
+	}
+	if x.Port != server.Port {
+		return false
+	}
+	return true
+}

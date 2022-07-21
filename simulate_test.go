@@ -8,22 +8,73 @@ import (
 
 // Fake Data
 
-func newTestFakeCosmosMain(_ *testing.T) *CosmosMain {
+func newTestFakeCosmosProcess(_ *testing.T) *CosmosProcess {
+	return &CosmosProcess{
+		sharedLog: NewLoggingAtomos(),
+	}
+}
+
+func newTestFakeCosmosMain(t *testing.T) *CosmosMain {
 	cosmosMain := &CosmosMain{
-		config: &Config{
-			Node:         "testNode",
-			LogPath:      "",
-			LogLevel:     0,
-			EnableCert:   nil,
-			EnableServer: nil,
-			EnableTelnet: nil,
-			Customize:    nil,
-		},
-		process: &CosmosProcess{
-			sharedLog: NewLoggingAtomos(),
-		},
+		process: newTestFakeCosmosProcess(t),
 	}
 	return cosmosMain
+}
+
+func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
+	runnable := &CosmosRunnable{
+		config:         newTestFakeCosmosMainConfig(),
+		interfaces:     nil,
+		interfaceOrder: nil,
+		implements:     nil,
+		implementOrder: nil,
+		mainScript: func(main *CosmosMain, killSignal chan bool) {
+			main.Log().Info("Executing Main Script")
+			defer main.Log().Info("Defer Main Script")
+
+			elem, err := main.getElement("testElement")
+			main.Log().Info("MainScript: Get element, elem=(%v),err=(%v)", elem, err)
+
+			// Push Element Message.
+			reply, err := elem.pushMessageMail(nil, "testMessage", nil)
+			if err != nil {
+				t.Errorf("MainScript: TestMessage Failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
+				return
+			}
+			main.Log().Info("MainScript: TestMessage Succeed, state=(%v),reply=(%v)", elem.atomos.GetState(), reply)
+
+			// Spawn Atom.
+			atom, err := elem.SpawnAtom("testAtomA", nil)
+			if err != nil {
+				t.Errorf("MainScript: Spawn failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
+				return
+			}
+			atom.Release()
+
+			main.Log().Info("Executing Main Script is Waiting Kill")
+			<-killSignal
+			main.Log().Info("Executing Main Script has been killed")
+		},
+		mainLogLevel: 0,
+		reloadScript: func(main *CosmosMain) {
+			main.Log().Info("Executing Reload Script")
+			defer main.Log().Info("Defer Reload Script")
+		},
+	}
+	runnable.AddElementImplementation(newTestFakeElement(t))
+	return runnable
+}
+
+func newTestFakeCosmosMainConfig() *Config {
+	return &Config{
+		Node:         "testNode",
+		LogPath:      "",
+		LogLevel:     0,
+		EnableCert:   nil,
+		EnableServer: nil,
+		EnableTelnet: nil,
+		Customize:    nil,
+	}
 }
 
 func newTestFakeElement(t *testing.T) *ElementImplementation {
@@ -42,14 +93,14 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 				ta := a.(*testElement)
 				ta.t = t
 				ta.self = s
-				ta.t.Log("AtomSpawner")
+				ta.self.Log().Info("ElementSpawner")
 				return nil
 			},
 			AtomSpawner: func(s SelfID, a Atomos, arg, data proto.Message) *ErrorInfo {
 				ta := a.(*testAtomos)
 				ta.t = t
 				ta.self = s
-				ta.t.Log("AtomSpawner")
+				ta.self.Log().Info("AtomSpawner")
 				return nil
 			},
 			ElementIDConstructor: func(id ID) ID {
@@ -103,12 +154,12 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 		},
 		ElementHandlers: map[string]MessageHandler{
 			"testMessage": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
-				to.(*testElement).self.Log().Info("AtomHandlers: testMessage, from=(%v),to=(%v),in=(%v)", from, to, in)
+				to.(*testElement).self.Log().Info("ElementHandlers: testMessage, from=(%v),to=(%v),in=(%v)", from, to, in)
 				return nil, nil
 			},
 			"testTask": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
 				ta := to.(*testElement)
-				ta.self.Log().Info("AtomHandlers: testTask, from=(%v),to=(%v),in=(%v)", from, to, in)
+				ta.self.Log().Info("ElementHandlers: testTask, from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
 				taskId, err := ta.self.Task().Append(ta.Tasking, nil)
 				if err != nil {
@@ -138,7 +189,7 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 			},
 			"testDeadLoop": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
 				ta := to.(*testElement)
-				ta.self.Log().Info("AtomHandlers: testDeadLoop, from=(%v),to=(%v),in=(%v)", from, to, in)
+				ta.self.Log().Info("ElementHandlers: testDeadLoop, from=(%v),to=(%v),in=(%v)", from, to, in)
 				return testElem.pushMessageMail(testAtom, "testMessage", nil)
 			},
 		},
@@ -169,13 +220,16 @@ func (t testAtomos) Description() string {
 }
 
 func (t *testAtomos) Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message) {
-	t.t.Logf("Halt: from=(%v),cancelled=(%v)", from, cancelled)
+	t.self.Log().Info("Halt: from=(%v),cancelled=(%v)", from, cancelled)
 	return false, nil
 }
 
 func (t *testAtomos) Reload(oldInstance Atomos) {
+	// Transform
 	t.t = oldInstance.(*testAtomos).t
-	t.t.Logf("Reload: oldInstance=(%v)", oldInstance)
+	t.self = oldInstance.(*testAtomos).self
+	// Log
+	t.self.Log().Info("Reload: oldInstance=(%v)", oldInstance)
 }
 
 func (t *testAtomos) Tasking(id uint64, _ proto.Message) {
@@ -194,10 +248,16 @@ func (t testElement) Description() string {
 }
 
 func (t testElement) Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message) {
+	t.self.Log().Info("Halt: from=(%v),cancelled=(%v)", from, cancelled)
 	return false, nil
 }
 
-func (t testElement) Reload(oldInstance Atomos) {
+func (t *testElement) Reload(oldInstance Atomos) {
+	// Transform
+	t.t = oldInstance.(*testElement).t
+	t.self = oldInstance.(*testElement).self
+	// Log
+	t.self.Log().Info("Reload: oldInstance=(%v)", oldInstance)
 }
 
 func (t *testElement) Tasking(id uint64, _ proto.Message) {

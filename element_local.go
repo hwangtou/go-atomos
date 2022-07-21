@@ -16,7 +16,7 @@ import (
 type ElementLocal struct {
 	// CosmosSelf引用。
 	// Reference to CosmosSelf.
-	mainFn *CosmosMain
+	main *CosmosMain
 
 	// 基础Atomos，也是实现Atom无锁队列的关键。
 	// Base atomos, the key of lockless queue of Atom.
@@ -39,7 +39,7 @@ type ElementLocal struct {
 	//avail bool
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
-	current, reloading *ElementImplementation
+	current *ElementImplementation
 
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
@@ -54,19 +54,17 @@ type ElementLocal struct {
 func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLocal {
 	id := &IDInfo{
 		Type:    IDType_Element,
-		Cosmos:  mainFn.config.Node,
+		Cosmos:  mainFn.runnable.config.Node,
 		Element: impl.Interface.Name,
 		Atomos:  "",
 	}
 	elem := &ElementLocal{
-		mainFn: mainFn,
-		atomos: nil,
-		atoms:  nil,
-		names:  list.New(),
-		lock:   sync.RWMutex{},
-		//avail:     false,
-		current:   nil,
-		reloading: nil,
+		main:      mainFn,
+		atomos:    nil,
+		atoms:     nil,
+		names:     list.New(),
+		lock:      sync.RWMutex{},
+		current:   impl,
 		callChain: nil,
 	}
 	log, logLevel := mainFn.process.sharedLog, impl.Interface.Config.LogLevel
@@ -77,27 +75,6 @@ func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLo
 		elem.atoms = map[string]*AtomLocal{}
 	}
 	return elem
-}
-
-// First time loading.
-func (e *ElementLocal) load(impl *ElementImplementation) *ErrorInfo {
-	if e.current != nil {
-		err := NewErrorf(ErrElementLoaded, "ElementLocal: Load a loaded element, name=(%s)", e.atomos.GetIDInfo().Element)
-		e.Log().Fatal(err.Message)
-		return err
-	}
-	if e.reloading != nil {
-		err := NewErrorf(ErrElementLoaded, "ElementLocal: Load a reloading element, name=(%s)", e.atomos.GetIDInfo().Element)
-		e.Log().Fatal(err.Message)
-		return err
-	}
-	e.Log().Info("ElementLocal: Load element, name=(%s)", e.atomos.GetIDInfo().Element)
-	e.current = impl
-	return nil
-}
-
-// Reload.
-func (e *ElementLocal) reload() {
 }
 
 //
@@ -125,7 +102,7 @@ func (e *ElementLocal) Release() {
 }
 
 func (e *ElementLocal) Cosmos() CosmosNode {
-	return e.mainFn
+	return e.main
 }
 
 func (e *ElementLocal) Element() Element {
@@ -151,11 +128,11 @@ func (e *ElementLocal) String() string {
 // 通过AtomSelf，Atom内部可以访问到自己的Cosmos（CosmosSelf）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
 //
 // SelfID, a concept that provide Atom resource access to inner Atom.
-// With SelfID, Atom can access its self-mainFn with "CosmosSelf", can kill itself use "KillSelf" from inner.
+// With SelfID, Atom can access its self-main with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (e *ElementLocal) CosmosMainFn() *CosmosMain {
-	return e.mainFn
+func (e *ElementLocal) CosmosMain() *CosmosMain {
+	return e.main
 }
 
 // KillSelf
@@ -306,18 +283,34 @@ func (e *ElementLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
 }
 
 func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = NewErrorf(ErrElementKillHandlerPanic,
-				"ElementHandler: Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", e.GetIDInfo(), e.atomos.Description(), r).
-				AddStack(e.GetIDInfo(), debug.Stack())
-			e.Log().Error(err.Message)
+	//defer func() {
+	//	if r := recover(); r != nil {
+	//		err = NewErrorf(ErrElementKillHandlerPanic,
+	//			"ElementHandler: Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", e.GetIDInfo(), e.atomos.Description(), r).
+	//			AddStack(e.GetIDInfo(), debug.Stack())
+	//		e.Log().Error(err.Message)
+	//	}
+	//}()
+
+	// Atomos
+	// Send Kill to all atoms.
+	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
+		name := nameElem.Value.(string)
+		atom := e.atoms[name]
+		e.Log().Info("ElementLocal: Kill atomos, name=(%s)", name)
+		err := atom.pushKillMail(e, true)
+		if err != nil {
+			e.Log().Error("ElementLocal: Kill atomos failed, name=(%s),err=(%v)", name, err)
 		}
-	}()
+	}
+	e.Log().Info("ElementLocal: Atoms killed, element=(%s)", e.GetName())
+
+	// Element
 	save, data := e.atomos.GetInstance().Halt(from, cancelled)
 	if !save {
 		return nil
 	}
+
 	// Save data.
 	impl := e.current
 	if impl == nil {
@@ -357,6 +350,20 @@ func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloada
 
 	newElement = reload.Developer.ElementConstructor()
 	newElement.Reload(oldElement)
+
+	// Send Reload to all atoms.
+	// 重载Element，需要指定一个版本的ElementImplementation。
+	// Reload element, specific version of ElementImplementation is needed.
+	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
+		name := nameElem.Value.(string)
+		atom := e.atoms[name]
+		e.Log().Info("ElementLocal: Reloading atomos, name=(%s)", name)
+		err := atom.pushReloadMail(e, reload, e.atomos.reloads)
+		if err != nil {
+			e.Log().Error("ElementLocal: Reloading atomos failed, name=(%s),err=(%v)", name, err)
+		}
+	}
+	e.Log().Info("ElementLocal: Atoms reloaded, element=(%s)", e.GetName())
 	return newElement
 }
 
@@ -439,4 +446,28 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	}
 	e.lock.Unlock()
 	atom.deleteAtomLocal(false)
+}
+
+func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation, arg proto.Message) *ErrorInfo {
+	// Get data and Spawning.
+	var data proto.Message
+	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
+	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
+	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
+	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
+	if ok && persistence != nil {
+		name := a.GetName()
+		d, err := persistence.ElementAutoDataPersistence().GetElementData(name)
+		if err != nil {
+			return err
+		}
+		//if d == nil && arg == nil {
+		//	return NewErrorf(ErrElementSpawnArgInvalid, "Spawn element without arg, name=(%s)", name)
+		//}
+		data = d
+	}
+	if err := current.Interface.ElementSpawner(a, a.atomos.instance, arg, data); err != nil {
+		return err
+	}
+	return nil
 }

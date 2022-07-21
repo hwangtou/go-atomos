@@ -13,16 +13,9 @@ func TestElementLocal(t *testing.T) {
 	elem := newElementLocal(main, impl)
 	elem.Log().Info("TestElementLocal")
 
-	// Element Load.
-	err := elem.load(impl)
-	if err != nil {
-		t.Errorf("PushMessage: Load failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
-		return
-	}
-
 	// Spawn.
 	elem.atomos.setSpawning()
-	err = impl.Interface.ElementSpawner(elem, elem.atomos.instance, nil, nil)
+	err := impl.Interface.ElementSpawner(elem, elem.atomos.instance, nil, nil)
 	if err != nil {
 		t.Errorf("ElementSpawner: Failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
 		return

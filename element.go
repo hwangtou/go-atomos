@@ -109,9 +109,9 @@ type ElementDeveloper interface {
 	ElementConstructor() Atomos
 }
 
-type ElementStartRunning interface {
-	StartRunning(isUpgrade bool)
-}
+//type ElementStartRunning interface {
+//	StartRunning(isUpgrade bool)
+//}
 
 type AtomAutoDataPersistence interface {
 	// GetAtomData

@@ -31,6 +31,7 @@ const (
 	ErrElementMessageHandlerNotExists
 	ErrElementMessageHandlerPanic
 	ErrElementKillHandlerPanic
+	ErrElementSpawnArgInvalid
 
 	ErrAtomosPanic
 	ErrAtomosIsNotRunning
@@ -45,11 +46,11 @@ const (
 	ErrAtomReloadInvalid
 	ErrAtomFromIDInvalid
 	ErrAtomToIDInvalid
+	ErrAtomSpawnArgInvalid
 	ErrAtomCallDeadLock
 	ErrAtomNotExists
 	ErrAtomExists
 	ErrAtomPersistenceRuntime
-	ErrAtomSpawnArgInvalid
 
 	ErrElementCannotKill
 )
