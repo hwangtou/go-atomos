@@ -2,6 +2,8 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/runtime/protoimpl"
+	"sync"
 	"testing"
 	"time"
 )
@@ -16,7 +18,33 @@ func newTestFakeCosmosProcess(_ *testing.T) *CosmosProcess {
 
 func newTestFakeCosmosMain(t *testing.T) *CosmosMain {
 	cosmosMain := &CosmosMain{
-		process: newTestFakeCosmosProcess(t),
+		process:    newTestFakeCosmosProcess(t),
+		runnable:   newTestFakeRunnable(t),
+		mainKillCh: nil,
+		atomos: &BaseAtomos{
+			id: &IDInfo{
+				state:         protoimpl.MessageState{},
+				sizeCache:     0,
+				unknownFields: nil,
+				Type:          0,
+				Cosmos:        "",
+				Element:       "",
+				Atomos:        "",
+			},
+			state:    0,
+			logging:  nil,
+			mailbox:  nil,
+			holder:   nil,
+			instance: nil,
+			reloads:  0,
+			task:     atomosTaskManager{},
+			log:      atomosLoggingManager{},
+		},
+		elements:   nil,
+		mutex:      sync.RWMutex{},
+		listenCert: nil,
+		clientCert: nil,
+		callChain:  nil,
 	}
 	return cosmosMain
 }
