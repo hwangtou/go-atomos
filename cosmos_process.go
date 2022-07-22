@@ -69,9 +69,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 		mainExitCh := make(chan *ErrorInfo, 1)
 		exit := false
 		for {
-			if exit {
-				runCh <- struct{}{}
-			}
+			runCh <- struct{}{}
 			select {
 			case cmd := <-c.cmdCh:
 				if cmd == nil {
