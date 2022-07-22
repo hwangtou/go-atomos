@@ -27,14 +27,14 @@ type CosmosProcess struct {
 	daemonCmdCh chan DaemonCommand
 	reloads     int
 
-	//atomos *baseAtomos
-	sharedLog *LoggingAtomos
+	////atomos *baseAtomos
+	//sharedLog *LoggingAtomos
 
-	// CosmosRunnable & CosmosMainFn.
-	// 可运行Cosmos & Cosmos运行时。
-
-	// Loads at DaemonWithRunnable or Runnable.
-	main *CosmosMainFn
+	//// CosmosRunnable & CosmosMainFn.
+	//// 可运行Cosmos & Cosmos运行时。
+	//
+	//// Loads at DaemonWithRunnable or Runnable.
+	//main *CosmosMainFn
 
 	//// 集群助手，帮助访问远程的Cosmos。
 	//// Cluster helper helps access to remote Cosmos.

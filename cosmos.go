@@ -47,10 +47,6 @@ type CosmosNode interface {
 	KillAtom(fromId, toId ID) *ErrorInfo
 }
 
-type CosmosProcess struct {
-	sharedLog *LoggingAtomos
-}
-
 //////////////////////////////////////////////////
 ////////////
 // Runnable

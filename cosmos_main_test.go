@@ -11,23 +11,11 @@ func TestCosmosMain(t *testing.T) {
 	main := newCosmosMain(process, runnable)
 	main.Log().Info("TestCosmosMain")
 
-	helper, err := main.newRunnableLoadingHelper(nil, runnable)
+	err := main.onceLoad()
 	if err != nil {
-		main.Log().Fatal(err.Message)
+		main.Log().Info("Main: Reload failed, err=(%v)", err)
 		return
 	}
-
-	if err = main.trySpawningElements(helper); err != nil {
-		main.Log().Fatal(err.Message)
-		return
-	}
-
-	// NOTICE: Spawning might fail, it might cause reloads count increase, but actually reload failed. TODO
-	// NOTICE: After spawning, reload won't stop, no matter what error happens.
-
-	main.listenCert = helper.listenCert
-	main.clientCert = helper.clientCert
-	//main.remote = helper.remote
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)

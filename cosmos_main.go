@@ -60,106 +60,33 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 
 // Load Runnable
 
-type runnableLoadingHelper struct {
-	config *Config
-
-	spawnElement, reloadElement, delElement []*ElementImplementation
-
-	// TLS if exists
-	listenCert, clientCert *tls.Config
-	//// Cosmos Server
-	//remoteServer *cosmosRemoteServer
+func (c *CosmosMain) onceLoad() *ErrorInfo {
+	_, err := c.tryLoadRunnable(c.runnable)
+	if err != nil {
+		c.Log().Info("Main: Once load failed, err=(%v)", err)
+		return err
+	}
+	return nil
 }
 
-func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
-	helper := &runnableLoadingHelper{
-		listenCert: c.listenCert,
-		clientCert: c.clientCert,
+func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
+	helper, err := c.newRunnableLoadingHelper(c.runnable, newRunnable)
+	if err != nil {
+		c.Log().Fatal(err.Message)
+		return nil, err
 	}
 
-	// Element
-	if oldRunnable == nil {
-		// All are cosmosElementSpawn elements.
-		for _, impl := range newRunnable.implementOrder {
-			helper.spawnElement = append(helper.spawnElement, impl)
-		}
-	} else {
-		for _, newImpl := range newRunnable.implementOrder {
-			_, has := oldRunnable.implements[newImpl.Interface.Name]
-			if has {
-				helper.reloadElement = append(helper.reloadElement, newImpl)
-			} else {
-				helper.spawnElement = append(helper.spawnElement, newImpl)
-			}
-		}
-		for _, oldImpl := range oldRunnable.implementOrder {
-			_, has := newRunnable.implements[oldImpl.Interface.Name]
-			if !has {
-				helper.delElement = append(helper.delElement, oldImpl)
-			}
-		}
+	if err = c.trySpawningElements(helper); err != nil {
+		c.Log().Fatal(err.Message)
+		return nil, err
 	}
 
-	// 加载TLS Cosmos Node支持，用于加密链接。
-	// loadTlsCosmosNodeSupport()
-	// Check enable Cert.
-	if cert := newRunnable.config.EnableCert; cert != nil {
-		if cert.CertPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Cert path is empty")
-		}
-		if cert.KeyPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Key path is empty")
-		}
-		// Load Key Pair.
-		c.Log().Info("Main: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
-		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
-		if e != nil {
-			err := NewErrorf(ErrMainFnLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
-			c.Log().Fatal(err.Message)
-			return nil, err
-		}
-		helper.listenCert = &tls.Config{
-			Certificates: []tls.Certificate{
-				pair,
-			},
-		}
-		// Load Cert.
-		caCert, e := ioutil.ReadFile(cert.CertPath)
-		if e != nil {
-			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Main: Cert file read error, err=(%v)", e)
-		}
-		tlsConfig := &tls.Config{}
-		if cert.InsecureSkipVerify {
-			tlsConfig.InsecureSkipVerify = true
-			helper.clientCert = tlsConfig
-		} else {
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM(caCert)
-			// Create TLS configuration with the certificate of the server.
-			tlsConfig.RootCAs = caCertPool
-			helper.clientCert = tlsConfig
-		}
-	} else {
-		helper.listenCert = nil
-		helper.clientCert = nil
-	}
+	// NOTICE: Spawning might fail, it might cause reloads count increase, but actually reload failed. TODO
+	// NOTICE: After spawning, reload won't stop, no matter what error happens.
 
-	// 加载远端Cosmos服务支持。
-	// loadRemoteCosmosServerSupport
-	if server := newRunnable.config.EnableServer; server != nil {
-		// Enable Server
-		c.Log().Info("Main: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
-		if oldRunnable != nil && oldRunnable.config.EnableServer.IsEqual(newRunnable.config.EnableServer) {
-			goto noServerReconnect
-		}
-		//c.remoteServer = newCosmosRemoteHelper(a)
-		//if err := c.remoteServer.init(); err != nil {
-		//	return nil, err
-		//}
-	noServerReconnect:
-		// TODO: UpdateLogic
-	}
-
+	c.listenCert = helper.listenCert
+	c.clientCert = helper.clientCert
+	//c.remote = helper.remote
 	return helper, nil
 }
 
@@ -386,23 +313,11 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	}
 	c.Log().Info("Main: NOW RELOADING!")
 
-	helper, err := c.newRunnableLoadingHelper(c.runnable, newRunnable)
+	helper, err := c.tryLoadRunnable(newRunnable)
 	if err != nil {
-		c.Log().Fatal(err.Message)
+		c.Log().Info("Main: Reload failed, err=(%v)", err)
 		return
 	}
-
-	if err = c.trySpawningElements(helper); err != nil {
-		c.Log().Fatal(err.Message)
-		return
-	}
-
-	// NOTICE: Spawning might fail, it might cause reloads count increase, but actually reload failed. TODO
-	// NOTICE: After spawning, reload won't stop, no matter what error happens.
-
-	c.listenCert = helper.listenCert
-	c.clientCert = helper.clientCert
-	//c.remote = helper.remote
 
 	// Reload
 	for _, define := range helper.reloadElement {
@@ -530,4 +445,109 @@ func (c *CosmosMain) cosmosElementSpawn(i *ElementImplementation, arg proto.Mess
 	}
 	elem.atomos.setWaiting()
 	return elem, nil
+}
+
+// Runnable Loading Helper
+
+type runnableLoadingHelper struct {
+	config *Config
+
+	spawnElement, reloadElement, delElement []*ElementImplementation
+
+	// TLS if exists
+	listenCert, clientCert *tls.Config
+	//// Cosmos Server
+	//remoteServer *cosmosRemoteServer
+}
+
+func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
+	helper := &runnableLoadingHelper{
+		listenCert: c.listenCert,
+		clientCert: c.clientCert,
+	}
+
+	// Element
+	if oldRunnable == nil {
+		// All are cosmosElementSpawn elements.
+		for _, impl := range newRunnable.implementOrder {
+			helper.spawnElement = append(helper.spawnElement, impl)
+		}
+	} else {
+		for _, newImpl := range newRunnable.implementOrder {
+			_, has := oldRunnable.implements[newImpl.Interface.Name]
+			if has {
+				helper.reloadElement = append(helper.reloadElement, newImpl)
+			} else {
+				helper.spawnElement = append(helper.spawnElement, newImpl)
+			}
+		}
+		for _, oldImpl := range oldRunnable.implementOrder {
+			_, has := newRunnable.implements[oldImpl.Interface.Name]
+			if !has {
+				helper.delElement = append(helper.delElement, oldImpl)
+			}
+		}
+	}
+
+	// 加载TLS Cosmos Node支持，用于加密链接。
+	// loadTlsCosmosNodeSupport()
+	// Check enable Cert.
+	if cert := newRunnable.config.EnableCert; cert != nil {
+		if cert.CertPath == "" {
+			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Cert path is empty")
+		}
+		if cert.KeyPath == "" {
+			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Key path is empty")
+		}
+		// Load Key Pair.
+		c.Log().Info("Main: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
+		if e != nil {
+			err := NewErrorf(ErrMainFnLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
+			c.Log().Fatal(err.Message)
+			return nil, err
+		}
+		helper.listenCert = &tls.Config{
+			Certificates: []tls.Certificate{
+				pair,
+			},
+		}
+		// Load Cert.
+		caCert, e := ioutil.ReadFile(cert.CertPath)
+		if e != nil {
+			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Main: Cert file read error, err=(%v)", e)
+		}
+		tlsConfig := &tls.Config{}
+		if cert.InsecureSkipVerify {
+			tlsConfig.InsecureSkipVerify = true
+			helper.clientCert = tlsConfig
+		} else {
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			// Create TLS configuration with the certificate of the server.
+			tlsConfig.RootCAs = caCertPool
+			helper.clientCert = tlsConfig
+		}
+	} else {
+		helper.listenCert = nil
+		helper.clientCert = nil
+	}
+
+	// 加载远端Cosmos服务支持。
+	// loadRemoteCosmosServerSupport
+	if server := newRunnable.config.EnableServer; server != nil {
+		// Enable Server
+		c.Log().Info("Main: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
+		if oldRunnable != nil && oldRunnable.config.EnableServer.IsEqual(newRunnable.config.EnableServer) {
+			goto noServerReconnect
+		}
+		//c.remoteServer = newCosmosRemoteHelper(a)
+		//if err := c.remoteServer.init(); err != nil {
+		//	return nil, err
+		//}
+	noServerReconnect:
+		// TODO: UpdateLogic
+	}
+
+	return helper, nil
 }
