@@ -11,7 +11,7 @@ func TestCosmosMain(t *testing.T) {
 	main := newCosmosMain(process, runnable)
 	main.Log().Info("TestCosmosMain")
 
-	err := main.onceLoad()
+	err := main.onceLoad(runnable)
 	if err != nil {
 		main.Log().Info("Main: Reload failed, err=(%v)", err)
 		return

@@ -10,7 +10,7 @@ var testElem *ElementLocal
 func TestElementLocal(t *testing.T) {
 	main := newTestFakeCosmosMain(t)
 	impl := newTestFakeElement(t)
-	elem := newElementLocal(main, impl)
+	elem := newElementLocal(main, main.runnable, impl)
 	elem.Log().Info("TestElementLocal")
 
 	// Spawn.

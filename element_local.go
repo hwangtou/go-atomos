@@ -51,15 +51,15 @@ type ElementLocal struct {
 
 // 本地Element创建，用于本地Cosmos的创建过程。
 // Create of the Local Element, uses in Local Cosmos creation.
-func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLocal {
+func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementImplementation) *ElementLocal {
 	id := &IDInfo{
 		Type:    IDType_Element,
-		Cosmos:  mainFn.runnable.config.Node,
+		Cosmos:  runnable.config.Node,
 		Element: impl.Interface.Name,
 		Atomos:  "",
 	}
 	elem := &ElementLocal{
-		main:      mainFn,
+		main:      main,
 		atomos:    nil,
 		atoms:     nil,
 		names:     list.New(),
@@ -67,7 +67,7 @@ func newElementLocal(mainFn *CosmosMain, impl *ElementImplementation) *ElementLo
 		current:   impl,
 		callChain: nil,
 	}
-	log, logLevel := mainFn.process.sharedLog, impl.Interface.Config.LogLevel
+	log, logLevel := main.process.sharedLog, impl.Interface.Config.LogLevel
 	elem.atomos = NewBaseAtomos(id, log, logLevel, elem, impl.Developer.ElementConstructor(), 0)
 	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomsInitNum); ok {
 		elem.atoms = make(map[string]*AtomLocal, atomsInitNum.GetElementAtomsInitNum())
@@ -331,6 +331,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 			e.GetIDInfo(), e.atomos.Description(), err)
 		return err
 	}
+
 	return err
 }
 

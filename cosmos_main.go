@@ -45,7 +45,7 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 	}
 	mainFn := &CosmosMain{
 		process:    process,
-		runnable:   runnable,
+		runnable:   nil,
 		atomos:     nil,
 		mainKillCh: make(chan bool),
 		elements:   make(map[string]*ElementLocal, len(runnable.implements)),
@@ -60,8 +60,8 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 
 // Load Runnable
 
-func (c *CosmosMain) onceLoad() *ErrorInfo {
-	_, err := c.tryLoadRunnable(c.runnable)
+func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
+	_, err := c.tryLoadRunnable(runnable)
 	if err != nil {
 		c.Log().Info("Main: Once load failed, err=(%v)", err)
 		return err
@@ -86,6 +86,7 @@ func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoad
 
 	c.listenCert = helper.listenCert
 	c.clientCert = helper.clientCert
+	c.runnable = newRunnable
 	//c.remote = helper.remote
 	return helper, nil
 }
@@ -351,6 +352,9 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 		if err != nil {
 			c.Log().Fatal("Main: Reload sent halt failed, name=(%s),err=(%v)", name, err)
 		}
+		c.mutex.Lock()
+		delete(c.elements, name)
+		c.mutex.Unlock()
 	}
 
 	// Execute newRunnable script after reloading all elements and atomos.
@@ -394,7 +398,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
 	for _, impl := range helper.spawnElement {
-		elem, e := c.cosmosElementSpawn(impl, nil)
+		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl, nil)
 		if e != nil {
 			err = e
 			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", elem.GetName(), err)
@@ -414,7 +418,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	return nil
 }
 
-func (c *CosmosMain) cosmosElementSpawn(i *ElementImplementation, arg proto.Message) (*ElementLocal, *ErrorInfo) {
+func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation, arg proto.Message) (*ElementLocal, *ErrorInfo) {
 	name := i.Interface.Config.Name
 	defer func() {
 		if r := recover(); r != nil {
@@ -422,7 +426,7 @@ func (c *CosmosMain) cosmosElementSpawn(i *ElementImplementation, arg proto.Mess
 		}
 	}()
 
-	elem := newElementLocal(c, i)
+	elem := newElementLocal(c, r, i)
 
 	c.mutex.Lock()
 	_, has := c.elements[name]
@@ -450,7 +454,7 @@ func (c *CosmosMain) cosmosElementSpawn(i *ElementImplementation, arg proto.Mess
 // Runnable Loading Helper
 
 type runnableLoadingHelper struct {
-	config *Config
+	newRunnable *CosmosRunnable
 
 	spawnElement, reloadElement, delElement []*ElementImplementation
 
@@ -462,8 +466,12 @@ type runnableLoadingHelper struct {
 
 func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
 	helper := &runnableLoadingHelper{
-		listenCert: c.listenCert,
-		clientCert: c.clientCert,
+		newRunnable:   newRunnable,
+		spawnElement:  nil,
+		reloadElement: nil,
+		delElement:    nil,
+		listenCert:    c.listenCert,
+		clientCert:    c.clientCert,
 	}
 
 	// Element

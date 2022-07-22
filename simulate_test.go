@@ -61,6 +61,10 @@ func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
 			defer main.Log().Info("Defer Main Script")
 
 			elem, err := main.getElement("testElement")
+			if err != nil {
+				t.Errorf("MainScript: Get element failed, err=(%s)", err)
+				return
+			}
 			main.Log().Info("MainScript: Get element, elem=(%v),err=(%v)", elem, err)
 
 			// Push Element Message.
@@ -79,7 +83,7 @@ func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
 			}
 			atom.Release()
 
-			main.Log().Info("Executing Main Script is Waiting Kill")
+			main.Log().Info("Executing Main Script is waiting Kill")
 			<-killSignal
 			main.Log().Info("Executing Main Script has been killed")
 		},
@@ -96,7 +100,7 @@ func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
 func newTestFakeCosmosMainConfig() *Config {
 	return &Config{
 		Node:         "testNode",
-		LogPath:      "",
+		LogPath:      "/tmp/atomos_test.log",
 		LogLevel:     0,
 		EnableCert:   nil,
 		EnableServer: nil,

@@ -10,7 +10,7 @@ var testAtom *AtomLocal
 func TestAtomLocal(t *testing.T) {
 	main := newTestFakeCosmosMain(t)
 	impl := newTestFakeElement(t)
-	elem := newElementLocal(main, impl)
+	elem := newElementLocal(main, main.runnable, impl)
 
 	// Spawn.
 	atom := newAtomLocal("testAtom", elem, elem.atomos.reloads, impl, elem.atomos.logging, impl.Interface.Config.LogLevel)
