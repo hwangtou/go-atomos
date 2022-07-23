@@ -370,15 +370,25 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 
 	g.P("func Get", elementName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
 	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper("), elementName, "Name, dev)")
+	hasElementSpawn := false
 	for _, method := range service.Methods {
 		if method.GoName != "ElementSpawn" {
 			continue
 		}
+		hasElementSpawn = true
 		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("ErrorInfo"), " {")
 		g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
 		g.P("elem, ok := a.(", elementElementName, ")")
 		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
 		g.P("return elem.Spawn(s, dataT)")
+		g.P("}")
+	}
+	if !hasElementSpawn {
+		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("ErrorInfo"), " {")
+		//g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
+		g.P("elem, ok := a.(", elementElementName, ")")
+		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
+		g.P("return elem.Spawn(s, nil)")
 		g.P("}")
 	}
 	for _, method := range service.Methods {
