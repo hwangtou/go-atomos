@@ -212,6 +212,7 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.Annotate(elementName, service.Location)
 	g.P("type ", elementName, " interface {")
 	g.P(atomosPackage.Ident("Atomos"))
+	hasElementSpawn := false
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if !strings.HasPrefix(methodName, "Element") {
@@ -227,11 +228,14 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 			g.P(method.Comments.Leading.String()[:commentLen-1])
 		}
 		if methodName == "Spawn" {
+			hasElementSpawn = true
 			spawnElementSign(g, method)
 		} else {
 			methodSign(g, method, methodName)
 		}
-
+	}
+	if !hasElementSpawn {
+		spawnElementDefaultSign(g)
 	}
 	g.P("}")
 	g.P()
@@ -484,6 +488,12 @@ const deprecationComment = "// Deprecated: Do not use."
 func spawnElementSign(g *protogen.GeneratedFile, method *protogen.Method) {
 	g.P("Spawn(self ", atomosPackage.Ident("ElementSelfID"),
 		", data *", g.QualifiedGoIdent(method.Output.GoIdent),
+		") *", atomosPackage.Ident("ErrorInfo"))
+}
+
+func spawnElementDefaultSign(g *protogen.GeneratedFile) {
+	g.P("Spawn(self ", atomosPackage.Ident("ElementSelfID"),
+		", data *", atomosPackage.Ident("Nil"),
 		") *", atomosPackage.Ident("ErrorInfo"))
 }
 
