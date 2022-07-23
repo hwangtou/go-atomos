@@ -55,7 +55,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 	id := &IDInfo{
 		Type:    IDType_Element,
 		Cosmos:  runnable.config.Node,
-		Element: impl.Interface.Name,
+		Element: impl.Interface.Config.Name,
 		Atomos:  "",
 	}
 	elem := &ElementLocal{
@@ -69,7 +69,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 	}
 	log, logLevel := main.process.sharedLog, impl.Interface.Config.LogLevel
 	elem.atomos = NewBaseAtomos(id, log, logLevel, elem, impl.Developer.ElementConstructor(), 0)
-	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomsInitNum); ok {
+	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomInitNum); ok {
 		elem.atoms = make(map[string]*AtomLocal, atomsInitNum.GetElementAtomsInitNum())
 	} else {
 		elem.atoms = map[string]*AtomLocal{}
@@ -94,10 +94,6 @@ func (e *ElementLocal) GetIDInfo() *IDInfo {
 	return e.atomos.GetIDInfo()
 }
 
-func (e *ElementLocal) getCallChain() []ID {
-	return e.callChain
-}
-
 func (e *ElementLocal) Release() {
 }
 
@@ -119,6 +115,18 @@ func (e *ElementLocal) Kill(from ID) *ErrorInfo {
 
 func (e *ElementLocal) String() string {
 	return e.atomos.Description()
+}
+
+func (e *ElementLocal) getCallChain() []ID {
+	return e.callChain
+}
+
+func (a *ElementLocal) getElementLocal() *ElementLocal {
+	return a
+}
+
+func (a *ElementLocal) getAtomLocal() *AtomLocal {
+	return nil
 }
 
 // Implementation of atomos.SelfID
@@ -171,13 +179,27 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *E
 	return e.elementAtomSpawn(name, arg, current, persistence)
 }
 
+func (e *ElementLocal) MessageElement(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	if fromId == nil {
+		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
+			fromId, toId, name, args)
+	}
+	a := toId.getElementLocal()
+	if a == nil {
+		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
+			fromId, toId, name, args)
+	}
+	// PushProcessLog.
+	return a.pushMessageMail(fromId, name, args)
+}
+
 func (e *ElementLocal) MessageAtom(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	if fromId == nil {
 		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromId, toId, name, args)
 	}
-	a, ok := toId.(*AtomLocal)
-	if !ok || a == nil {
+	a := toId.getAtomLocal()
+	if a == nil {
 		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromId, toId, name, args)
 	}
@@ -189,8 +211,8 @@ func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
 	if fromId == nil {
 		return NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s)", fromId, toId)
 	}
-	a, ok := toId.(*AtomLocal)
-	if !ok || a == nil {
+	a := toId.getElementLocal()
+	if a == nil {
 		return NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s)", fromId, toId)
 	}
 	// Dead Lock Checker.
@@ -294,7 +316,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 
 	// Atomos
 	// Send Kill to all atoms.
-	for nameElem := e.names.Front(); nameElem != nil; nameElem = nameElem.Next() {
+	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
 		name := nameElem.Value.(string)
 		atom := e.atoms[name]
 		e.Log().Info("ElementLocal: Kill atomos, name=(%s)", name)
@@ -449,7 +471,7 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	atom.deleteAtomLocal(false)
 }
 
-func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation, arg proto.Message) *ErrorInfo {
+func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation) *ErrorInfo {
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -467,7 +489,7 @@ func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation, arg pr
 		//}
 		data = d
 	}
-	if err := current.Interface.ElementSpawner(a, a.atomos.instance, arg, data); err != nil {
+	if err := current.Interface.ElementSpawner(a, a.atomos.instance, data); err != nil {
 		return err
 	}
 	return nil

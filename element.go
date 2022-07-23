@@ -44,6 +44,7 @@ type Element interface {
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
+	MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 	MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
 	// KillAtom
@@ -62,7 +63,7 @@ type ElementCustomizeVersion interface {
 	GetElementVersion() uint64
 }
 
-type ElementCustomizeAtomsInitNum interface {
+type ElementCustomizeAtomInitNum interface {
 	GetElementAtomsInitNum() int
 }
 

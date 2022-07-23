@@ -113,7 +113,6 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 	impl := &ElementImplementation{
 		Developer: &testElementDev{},
 		Interface: &ElementInterface{
-			Name: "testElement",
 			Config: &ElementConfig{
 				Name:        "testElement",
 				Version:     0,
@@ -121,25 +120,19 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 				AtomInitNum: 0,
 				Messages:    nil,
 			},
-			ElementSpawner: func(s ElementSelfID, a Atomos, arg, data proto.Message) *ErrorInfo {
+			ElementSpawner: func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo {
 				ta := a.(*testElement)
 				ta.t = t
 				ta.self = s
 				ta.self.Log().Info("ElementSpawner")
 				return nil
 			},
-			AtomSpawner: func(s SelfID, a Atomos, arg, data proto.Message) *ErrorInfo {
+			AtomSpawner: func(s AtomSelfID, a Atomos, arg, data proto.Message) *ErrorInfo {
 				ta := a.(*testAtomos)
 				ta.t = t
 				ta.self = s
 				ta.self.Log().Info("AtomSpawner")
 				return nil
-			},
-			ElementIDConstructor: func(id ID) ID {
-				return id
-			},
-			AtomIDConstructor: func(id ID) ID {
-				return id
 			},
 			AtomMessages: nil,
 		},

@@ -95,10 +95,6 @@ func (a *AtomLocal) GetIDInfo() *IDInfo {
 	return a.atomos.GetIDInfo()
 }
 
-func (a *AtomLocal) getCallChain() []ID {
-	return a.callChain
-}
-
 func (a *AtomLocal) Release() {
 	a.element.elementAtomRelease(a)
 }
@@ -133,6 +129,18 @@ func (a *AtomLocal) Kill(from ID) *ErrorInfo {
 
 func (a *AtomLocal) String() string {
 	return a.atomos.String()
+}
+
+func (a *AtomLocal) getCallChain() []ID {
+	return a.callChain
+}
+
+func (a *AtomLocal) getElementLocal() *ElementLocal {
+	return nil
+}
+
+func (a *AtomLocal) getAtomLocal() *AtomLocal {
+	return a
 }
 
 // Implementation of SelfID

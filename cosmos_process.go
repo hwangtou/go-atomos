@@ -62,7 +62,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 	closeCh := make(chan struct{}, 1)
 	runCh := make(chan struct{}, 1)
 	go func() {
-		defer c.logging(LogLevel_Info, "CosmosProcess: Exited, bye!")
+		defer c.Logging(LogLevel_Info, "CosmosProcess: Exited, bye!")
 		defer func() {
 			closeCh <- struct{}{}
 		}()
@@ -73,17 +73,17 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 			select {
 			case cmd := <-c.cmdCh:
 				if cmd == nil {
-					c.logging(LogLevel_Fatal, "CosmosProcess: Invalid runnable")
+					c.Logging(LogLevel_Fatal, "CosmosProcess: Invalid runnable")
 					break
 				}
 				if err := cmd.Check(); err != nil {
-					c.logging(LogLevel_Fatal, "CosmosProcess: Main check failed, err=(%v)", err.Message)
+					c.Logging(LogLevel_Fatal, "CosmosProcess: Main check failed, err=(%v)", err.Message)
 					break
 				}
 				switch cmd.Type() {
 				case CommandExit:
 					if !c.isRunning() {
-						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
+						c.Logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					main := c.main
@@ -93,12 +93,12 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 							exit = true
 							//c.main.pushKillMail(nil, true)
 						default:
-							c.logging(LogLevel_Info, "Main: Exit error, err=(Runnable is blocking)")
+							c.Logging(LogLevel_Info, "Main: Exit error, err=(Runnable is blocking)")
 						}
 					}
 				case CommandStopRunnable:
 					if !c.isRunning() {
-						c.logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
+						c.Logging(LogLevel_Info, "CosmosProcess: Cannot stop runnable, because it's not running")
 						break
 					}
 					main := c.main
@@ -107,12 +107,12 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 						case main.mainKillCh <- true:
 							//c.main.pushKillMail(nil, true)
 						default:
-							c.logging(LogLevel_Info, "Main: Exit error, err=(Runnable is blocking)")
+							c.Logging(LogLevel_Info, "Main: Exit error, err=(Runnable is blocking)")
 						}
 					}
 				case CommandExecuteRunnable:
 					if !c.trySetRunning(true) {
-						c.logging(LogLevel_Fatal, "CosmosProcess: Cannot execute runnable, because it's running")
+						c.Logging(LogLevel_Fatal, "CosmosProcess: Cannot execute runnable, because it's running")
 						break
 					}
 					conf := cmd.GetConfig()
@@ -121,7 +121,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					// Check config.
 					var err *ErrorInfo
 					if err = conf.Check(); err != nil {
-						c.logging(LogLevel_Fatal, "CosmosProcess: Main config check failed, err=(%v)", err.Message)
+						c.Logging(LogLevel_Fatal, "CosmosProcess: Main config check failed, err=(%v)", err.Message)
 						c.trySetRunning(false)
 						break
 					}
@@ -134,7 +134,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					// Make CosmosMain initial the content of Runnable, especially the Element information.
 					err = c.main.onceLoad(runnable)
 					if err != nil {
-						c.logging(LogLevel_Fatal, "CosmosProcess: Main init failed, err=(%v)", err.Message)
+						c.Logging(LogLevel_Fatal, "CosmosProcess: Main init failed, err=(%v)", err.Message)
 						c.trySetRunning(false)
 						break
 					}
@@ -148,25 +148,25 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 						}()
 						defer func() {
 							err = c.main.pushKillMail(nil, true)
-							c.logging(LogLevel_Info, "Main: EXITED!")
+							c.Logging(LogLevel_Info, "Main: EXITED!")
 						}()
 
 						// 防止Runnable中的Script崩溃导致程序崩溃。
 						// To prevent panic from the Runnable Script.
 						defer func() {
 							if r := recover(); r != nil {
-								c.logging(LogLevel_Fatal, "Main: Reload script CRASH! reason=(%s)", r)
+								c.Logging(LogLevel_Fatal, "Main: Main script CRASH! reason=(%s)", r)
 							}
 						}()
 						// 执行Runnable。
 						// Execute runnable.
-						c.logging(LogLevel_Info, "Main: NOW RUNNING!")
+						c.Logging(LogLevel_Info, "Main: NOW RUNNING!")
 						runnable.mainScript(c.main, c.main.mainKillCh)
-						c.logging(LogLevel_Info, "Main: Execute runnable succeed.")
+						c.Logging(LogLevel_Info, "Main: Execute runnable succeed.")
 					}()
 				case CommandReloadRunnable:
 					if !c.isRunning() {
-						c.logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable reload, because it's not running.")
+						c.Logging(LogLevel_Info, "CosmosProcess: Cannot execute runnable reload, because it's not running.")
 						break
 					}
 					conf := cmd.GetConfig()
@@ -175,7 +175,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					// Check config.
 					var err *ErrorInfo
 					if err = conf.Check(); err != nil {
-						c.logging(LogLevel_Fatal, "CosmosProcess: Main config check failed, err=(%v)", err.Message)
+						c.Logging(LogLevel_Fatal, "CosmosProcess: Main config check failed, err=(%v)", err.Message)
 						c.trySetRunning(false)
 						break
 					}
@@ -185,17 +185,17 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 						err = c.main.pushReloadMail(nil, runnable, c.main.atomos.reloads+1)
 						//err = c.main.reload(cmd.GetRunnable(), c.reloads)
 						if err != nil {
-							c.logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
+							c.Logging(LogLevel_Fatal, fmt.Sprintf("CosmosProcess: Execute runnable reload failed, err=(%v)", err))
 						} else {
-							c.logging(LogLevel_Info, "CosmosProcess: Execute runnable reload succeed")
+							c.Logging(LogLevel_Info, "CosmosProcess: Execute runnable reload succeed")
 						}
 					}
 				}
 			case err := <-mainExitCh:
 				if err != nil {
-					c.logging(LogLevel_Error, fmt.Sprintf("CosmosProcess: Exited, err=(%v)", err))
+					c.Logging(LogLevel_Error, fmt.Sprintf("CosmosProcess: Exited, err=(%v)", err))
 				} else {
-					c.logging(LogLevel_Info, "CosmosProcess: Exited")
+					c.Logging(LogLevel_Info, "CosmosProcess: Exited")
 				}
 				if exit {
 					return
@@ -233,10 +233,10 @@ func (c *CosmosProcess) WaitKillSignal() {
 				fallthrough
 			case os.Kill:
 				if err := c.Send(NewExitCommand()); err != nil {
-					c.logging(LogLevel_Fatal, "CosmosProcess: WaitKillSignal killed atomos failed, err=(%v)", err)
+					c.Logging(LogLevel_Fatal, "CosmosProcess: WaitKillSignal killed atomos failed, err=(%v)", err)
 					continue
 				}
-				c.logging(LogLevel_Info, "CosmosProcess: WaitKillSignal killed atomos")
+				c.Logging(LogLevel_Info, "CosmosProcess: WaitKillSignal killed atomos")
 				return
 			}
 		}
@@ -269,7 +269,7 @@ func (c *CosmosProcess) isRunning() bool {
 	return c.running
 }
 
-func (c *CosmosProcess) logging(level LogLevel, fmt string, args ...interface{}) {
+func (c *CosmosProcess) Logging(level LogLevel, fmt string, args ...interface{}) {
 	c.sharedLog.PushProcessLog(level, fmt, args...)
 }
 

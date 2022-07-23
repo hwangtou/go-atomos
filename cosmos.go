@@ -15,6 +15,8 @@ type CosmosNode interface {
 
 	IsLocal() bool
 
+	GetElementId(elem string) (ID, *ErrorInfo)
+
 	// GetElementAtomId
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the AtomId of an Atom by Element nodeName and Atom nodeName.
@@ -27,7 +29,8 @@ type CosmosNode interface {
 
 	// MessageAtom
 	// 向一个Atom发送消息。
-	// Send Message to an Atom.
+	// Send Message to an Atom/Element.
+	MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 	MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
 	// KillAtom
@@ -79,6 +82,11 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 		r.implements[i.Interface.Config.Name] = i
 		r.implementOrder = append(r.implementOrder, i)
 	}
+	return r
+}
+
+func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
+	r.config = config
 	return r
 }
 

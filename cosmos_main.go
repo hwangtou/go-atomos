@@ -97,10 +97,6 @@ func (c *CosmosMain) GetIDInfo() *IDInfo {
 	return c.atomos.GetIDInfo()
 }
 
-func (c *CosmosMain) getCallChain() []ID {
-	return c.callChain
-}
-
 func (c *CosmosMain) Release() {
 }
 
@@ -122,6 +118,18 @@ func (c *CosmosMain) Kill(from ID) *ErrorInfo {
 
 func (c *CosmosMain) String() string {
 	return c.atomos.Description()
+}
+
+func (c *CosmosMain) getCallChain() []ID {
+	return c.callChain
+}
+
+func (a *CosmosMain) getElementLocal() *ElementLocal {
+	return nil
+}
+
+func (a *CosmosMain) getAtomLocal() *AtomLocal {
+	return nil
 }
 
 // Implementation of atomos.SelfID
@@ -181,6 +189,10 @@ func (c *CosmosMain) IsLocal() bool {
 	return true
 }
 
+func (c *CosmosMain) GetElementId(elem string) (ID, *ErrorInfo) {
+	return c.getElement(elem)
+}
+
 func (c *CosmosMain) GetElementAtomId(elem, name string) (ID, *ErrorInfo) {
 	element, err := c.getElement(elem)
 	if err != nil {
@@ -213,6 +225,10 @@ func (c *CosmosMain) GetAtomsNum() int {
 
 func (c *CosmosMain) SpawnAtom(_ string, _ proto.Message) (*AtomLocal, *ErrorInfo) {
 	return nil, NewError(ErrMainFnCannotSpawn, "Cannot cosmosElementSpawn main")
+}
+
+func (c *CosmosMain) MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return toId.Element().MessageElement(fromId, toId, message, args)
 }
 
 func (c *CosmosMain) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
@@ -398,7 +414,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
 	for _, impl := range helper.spawnElement {
-		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl, nil)
+		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl)
 		if e != nil {
 			err = e
 			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", elem.GetName(), err)
@@ -418,7 +434,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	return nil
 }
 
-func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation, arg proto.Message) (*ElementLocal, *ErrorInfo) {
+func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (*ElementLocal, *ErrorInfo) {
 	name := i.Interface.Config.Name
 	defer func() {
 		if r := recover(); r != nil {
@@ -439,7 +455,7 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 	}
 
 	elem.atomos.setSpawning()
-	err := elem.cosmosElementSpawn(i, arg)
+	err := elem.cosmosElementSpawn(i)
 	if err != nil {
 		elem.atomos.setHalt()
 		c.mutex.Lock()
@@ -482,7 +498,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		}
 	} else {
 		for _, newImpl := range newRunnable.implementOrder {
-			_, has := oldRunnable.implements[newImpl.Interface.Name]
+			_, has := oldRunnable.implements[newImpl.Interface.Config.Name]
 			if has {
 				helper.reloadElement = append(helper.reloadElement, newImpl)
 			} else {
@@ -490,7 +506,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 			}
 		}
 		for _, oldImpl := range oldRunnable.implementOrder {
-			_, has := newRunnable.implements[oldImpl.Interface.Name]
+			_, has := newRunnable.implements[oldImpl.Interface.Config.Name]
 			if !has {
 				helper.delElement = append(helper.delElement, oldImpl)
 			}

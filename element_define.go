@@ -14,17 +14,17 @@ type ElementImplementation struct {
 	Developer ElementDeveloper
 	Interface *ElementInterface
 
-	AtomHandlers    map[string]MessageHandler
 	ElementHandlers map[string]MessageHandler
+	AtomHandlers    map[string]MessageHandler
 }
 
 // ElementInterface
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
 // ElementInterface in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementInterface struct {
-	// Element的名称。
-	// Name of Element
-	Name string
+	//// Element的名称。
+	//// Name of Element
+	//Name string
 
 	// Element的配置。
 	// Configuration of the Element.
@@ -39,16 +39,17 @@ type ElementInterface struct {
 	// Constructor of AtomId.
 	//AtomIdConstructor AtomIdConstructor
 
-	ElementIDConstructor IDConstructor
-	AtomIDConstructor    IDConstructor
+	//ElementIDConstructor IDConstructor
+	//AtomIDConstructor    IDConstructor
 
 	// 一个存储Atom的Call方法的容器。
 	// A holder to store all the Message method of Atom.
-	AtomMessages map[string]*ElementAtomMessage
+	ElementMessages map[string]*ElementAtomMessage
+	AtomMessages    map[string]*ElementAtomMessage
 }
 
-type ElementSpawner func(s ElementSelfID, a Atomos, arg, data proto.Message) *ErrorInfo
-type AtomSpawner func(s SelfID, a Atomos, arg, data proto.Message) *ErrorInfo
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *ErrorInfo
 
 // AtomIdConstructor
 // AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
@@ -76,16 +77,28 @@ type ElementAtomMessage struct {
 // For creating ElementInterface instance in *_atomos.pb.go.
 func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *ElementInterface {
 	var version uint64
-	// Get version.
+	var logLevel LogLevel
+	var atomInitNum int
 	if customizeVersion, ok := implement.(ElementCustomizeVersion); ok {
 		version = customizeVersion.GetElementVersion()
 	}
+	if customizeLogLevel, ok := implement.(ElementCustomizeLogLevel); ok {
+		logLevel = customizeLogLevel.GetElementLogLevel()
+	}
+	if customizeAtomInitNum, ok := implement.(ElementCustomizeAtomInitNum); ok {
+		atomInitNum = customizeAtomInitNum.GetElementAtomsInitNum()
+	}
 	return &ElementInterface{
 		Config: &ElementConfig{
-			Name:     name,
-			Version:  version,
-			Messages: map[string]*AtomMessageConfig{},
+			Name:        name,
+			Version:     version,
+			LogLevel:    logLevel,
+			AtomInitNum: int32(atomInitNum),
+			Messages:    map[string]*AtomMessageConfig{},
 		},
+		ElementSpawner: nil,
+		AtomSpawner:    nil,
+		AtomMessages:   nil,
 	}
 }
 

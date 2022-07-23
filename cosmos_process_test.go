@@ -35,4 +35,5 @@ func TestCosmosProcess(t *testing.T) {
 
 	cosmos.WaitKillSignal()
 	<-exitCh
+	// TODO: Cannot exit
 }

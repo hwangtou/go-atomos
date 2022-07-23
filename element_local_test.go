@@ -15,7 +15,7 @@ func TestElementLocal(t *testing.T) {
 
 	// Spawn.
 	elem.atomos.setSpawning()
-	err := impl.Interface.ElementSpawner(elem, elem.atomos.instance, nil, nil)
+	err := impl.Interface.ElementSpawner(elem, elem.atomos.instance, nil)
 	if err != nil {
 		t.Errorf("ElementSpawner: Failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
 		return

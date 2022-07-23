@@ -24,8 +24,6 @@ const RunnableName = "AtomosRunnable"
 type ID interface {
 	GetIDInfo() *IDInfo
 
-	getCallChain() []ID
-
 	// Release
 	// 释放Id的引用计数
 	// Release reference count of ID.
@@ -62,6 +60,12 @@ type ID interface {
 	//getLocalAtom() *AtomCore
 
 	String() string
+
+	// Internal
+
+	getCallChain() []ID
+	getElementLocal() *ElementLocal
+	getAtomLocal() *AtomLocal
 }
 
 type CallProtoBuffer interface {
@@ -102,6 +106,10 @@ type SelfID interface {
 	// Atom从内部杀死自己。
 	// Atom kills itself from inner.
 	KillSelf()
+}
+
+type AtomSelfID interface {
+	SelfID
 }
 
 type ElementSelfID interface {
