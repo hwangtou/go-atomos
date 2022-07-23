@@ -189,11 +189,11 @@ func (c *CosmosMain) IsLocal() bool {
 	return true
 }
 
-func (c *CosmosMain) GetElementId(elem string) (ID, *ErrorInfo) {
+func (c *CosmosMain) GetElementID(elem string) (ID, *ErrorInfo) {
 	return c.getElement(elem)
 }
 
-func (c *CosmosMain) GetElementAtomId(elem, name string) (ID, *ErrorInfo) {
+func (c *CosmosMain) GetElementAtomID(elem, name string) (ID, *ErrorInfo) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err

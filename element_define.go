@@ -35,17 +35,17 @@ type ElementInterface struct {
 	ElementSpawner ElementSpawner
 	AtomSpawner    AtomSpawner
 
-	// AtomId的构造器。
-	// Constructor of AtomId.
-	//AtomIdConstructor AtomIdConstructor
-
-	//ElementIDConstructor IDConstructor
-	//AtomIDConstructor    IDConstructor
-
-	// 一个存储Atom的Call方法的容器。
-	// A holder to store all the Message method of Atom.
-	ElementMessages map[string]*ElementAtomMessage
-	AtomMessages    map[string]*ElementAtomMessage
+	//// AtomId的构造器。
+	//// Constructor of AtomId.
+	////AtomIdConstructor AtomIdConstructor
+	//
+	////ElementIDConstructor IDConstructor
+	////AtomIDConstructor    IDConstructor
+	//
+	//// 一个存储Atom的Call方法的容器。
+	//// A holder to store all the Message method of Atom.
+	//ElementMessages map[string]*ElementAtomMessage
+	//AtomMessages    map[string]*ElementAtomMessage
 }
 
 type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo
@@ -98,7 +98,7 @@ func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *Element
 		},
 		ElementSpawner: nil,
 		AtomSpawner:    nil,
-		AtomMessages:   nil,
+		//AtomMessages:   nil,
 	}
 }
 

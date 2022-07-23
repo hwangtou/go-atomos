@@ -20,6 +20,11 @@ option go_package = "examples/hello/api";
 // The greeting service definition.
 // New line
 service Hello {
+  // Spawn Element
+  rpc ElementSpawn (HelloSpawnArg) returns (HelloData) {}
+  // Sends a greeting
+  rpc ElementSayHello (HelloReq) returns (HelloResp) {}
+
   // Spawn
   rpc Spawn (HelloSpawnArg) returns (HelloData) {}
   // Sends a greeting

@@ -15,12 +15,12 @@ type CosmosNode interface {
 
 	IsLocal() bool
 
-	GetElementId(elem string) (ID, *ErrorInfo)
+	GetElementID(elem string) (ID, *ErrorInfo)
 
 	// GetElementAtomId
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the AtomId of an Atom by Element nodeName and Atom nodeName.
-	GetElementAtomId(elem, name string) (ID, *ErrorInfo)
+	GetElementAtomID(elem, name string) (ID, *ErrorInfo)
 
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
