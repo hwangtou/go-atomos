@@ -134,7 +134,7 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 				ta.self.Log().Info("AtomSpawner")
 				return nil
 			},
-			AtomMessages: nil,
+			//AtomMessages: nil,
 		},
 		AtomHandlers: map[string]MessageHandler{
 			"testMessage": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
