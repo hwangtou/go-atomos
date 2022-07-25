@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (x *IDInfo) str() string {
+func (x *IDInfo) Info() string {
 	if x == nil {
 		return "InvalidAtomId"
 	}
@@ -61,7 +61,7 @@ func (x *ErrorInfo) Error() string {
 	if len(x.Stacks) > 0 {
 		var stacks strings.Builder
 		for i, stack := range x.Stacks {
-			stacks.WriteString(fmt.Sprintf("Chain[%d]: %s\n", i, stack.Id.str()))
+			stacks.WriteString(fmt.Sprintf("Chain[%d]: %s\n", i, stack.Id.Info()))
 			stacks.Write(stack.Stack)
 		}
 		return fmt.Sprintf("%s\n%s", x.Message, stacks.String())

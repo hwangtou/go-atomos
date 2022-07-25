@@ -70,13 +70,17 @@ func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
 }
 
 func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
-	helper, err := c.newRunnableLoadingHelper(c.runnable, newRunnable)
+	oldRunnable := c.runnable
+	c.runnable = newRunnable
+	helper, err := c.newRunnableLoadingHelper(oldRunnable, newRunnable)
 	if err != nil {
+		c.runnable = oldRunnable
 		c.Log().Fatal(err.Message)
 		return nil, err
 	}
 
 	if err = c.trySpawningElements(helper); err != nil {
+		c.runnable = oldRunnable
 		c.Log().Fatal(err.Message)
 		return nil, err
 	}
@@ -86,7 +90,6 @@ func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoad
 
 	c.listenCert = helper.listenCert
 	c.clientCert = helper.clientCert
-	c.runnable = newRunnable
 	//c.remote = helper.remote
 	return helper, nil
 }
@@ -252,7 +255,7 @@ func (e *CosmosMain) Task() Task {
 // Main as an Atomos
 
 func (c *CosmosMain) Description() string {
-	return c.GetIDInfo().str()
+	return c.atomos.String()
 }
 
 func (c *CosmosMain) Halt(from ID, cancels map[uint64]CancelledTask) (save bool, data proto.Message) {
@@ -417,7 +420,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl)
 		if e != nil {
 			err = e
-			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", elem.GetName(), err)
+			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", impl.Interface.Config.Name, err)
 			break
 		}
 		loaded = append(loaded, elem)
@@ -430,6 +433,22 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		}
 		c.Log().Fatal("Main: Spawning element has rollback")
 		return
+	}
+	for _, elem := range loaded {
+		s, ok := elem.atomos.instance.(ElementCustomizeStartRunning)
+		if !ok || s == nil {
+			continue
+		}
+		// TODO
+		go func(s ElementCustomizeStartRunning) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = NewErrorf(ErrMainFnStartRunningPanic, "Main: Running PANIC! reason=(%s)", r)
+					c.Log().Fatal(err.Message)
+				}
+			}()
+			s.StartRunning()
+		}(s)
 	}
 	return nil
 }
@@ -455,7 +474,7 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 	}
 
 	elem.atomos.setSpawning()
-	err := elem.cosmosElementSpawn(i)
+	err := elem.cosmosElementSpawn(r, i)
 	if err != nil {
 		elem.atomos.setHalt()
 		c.mutex.Lock()

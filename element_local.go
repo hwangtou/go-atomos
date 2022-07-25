@@ -153,6 +153,17 @@ func (e *ElementLocal) KillSelf() {
 	e.Log().Info("KillSelf")
 }
 
+// Implementation of AtomSelfID
+
+func (e *ElementLocal) Config() map[string]string {
+	return e.main.runnable.config.Customize
+}
+
+func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
+	p, _ := e.atomos.instance.(ElementCustomizeAutoDataPersistence)
+	return p
+}
+
 // Implementation of Element
 
 func (e *ElementLocal) GetElementName() string {
@@ -353,6 +364,11 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 			e.GetIDInfo(), e.atomos.Description(), err)
 		return err
 	}
+	if err = p.Unload(); err != nil {
+		e.Log().Error("ElementHandler: Unload failed, id=(%s),instance=(%+v),err=(%s)",
+			e.GetIDInfo(), e.atomos.Description(), err)
+		return err
+	}
 
 	return err
 }
@@ -471,7 +487,7 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	atom.deleteAtomLocal(false)
 }
 
-func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation) *ErrorInfo {
+func (a *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *ErrorInfo {
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -479,6 +495,9 @@ func (a *ElementLocal) cosmosElementSpawn(current *ElementImplementation) *Error
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
 	if ok && persistence != nil {
+		if err := persistence.Load(a, runnable.config.Customize); err != nil {
+			return err
+		}
 		name := a.GetName()
 		d, err := persistence.ElementAutoDataPersistence().GetElementData(name)
 		if err != nil {

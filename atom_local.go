@@ -171,6 +171,20 @@ func (a *AtomLocal) KillSelf() {
 	a.Log().Info("KillSelf")
 }
 
+// Implementation of AtomSelfID
+
+func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
+	p, ok := a.element.atomos.instance.(ElementCustomizeAutoDataPersistence)
+	if ok || p == nil {
+		return nil
+	}
+	return p.AtomAutoDataPersistence()
+}
+
+func (e *AtomLocal) Config() map[string]string {
+	return e.element.main.runnable.config.Customize
+}
+
 // Implementation of AtomosUtilities
 
 func (a *AtomLocal) Log() Logging {

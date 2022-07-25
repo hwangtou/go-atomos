@@ -14,6 +14,7 @@ const (
 	ErrMainFnElementNotFound
 	ErrMainFnElementIsInvalid
 	ErrMainFnReloadFailed
+	ErrMainFnStartRunningPanic
 	ErrMainFnCannotKill
 	ErrMainFnCannotSpawn
 	ErrMainFnCannotMessage

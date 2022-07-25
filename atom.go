@@ -110,10 +110,16 @@ type SelfID interface {
 
 type AtomSelfID interface {
 	SelfID
+
+	Config() map[string]string
+	Persistence() AtomAutoDataPersistence
 }
 
 type ElementSelfID interface {
 	SelfID
+
+	Config() map[string]string
+	Persistence() ElementCustomizeAutoDataPersistence
 }
 
 //type ParallelSelf interface {
