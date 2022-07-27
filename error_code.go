@@ -7,17 +7,17 @@ const (
 
 	ErrProcessRunnableInvalid
 
-	ErrMainFnLoadCertFailed
-	ErrMainFnCheckElementFailed
-	ErrMainFnRunnableNotFound
-	ErrMainFnIsReloading
-	ErrMainFnElementNotFound
-	ErrMainFnElementIsInvalid
-	ErrMainFnReloadFailed
-	ErrMainFnStartRunningPanic
-	ErrMainFnCannotKill
-	ErrMainFnCannotSpawn
-	ErrMainFnCannotMessage
+	ErrMainLoadCertFailed
+	ErrMainCheckElementFailed
+	ErrMainRunnableNotFound
+	ErrMainIsReloading
+	ErrMainElementNotFound
+	ErrMainElementIsInvalid
+	ErrMainReloadFailed
+	ErrMainStartRunningPanic
+	ErrMainCannotKill
+	ErrMainCannotSpawn
+	ErrMainCannotMessage
 
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid
@@ -36,9 +36,11 @@ const (
 	ErrElementNotImplemented
 
 	ErrAtomosPanic
+	ErrAtomosIsStopping
 	ErrAtomosIsNotRunning
 	ErrAtomosTaskInvalidFn
 	ErrAtomosTaskNotExists
+	ErrAtomosNotSupportWormhole
 
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageHandlerPanic

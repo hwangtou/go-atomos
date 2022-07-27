@@ -111,6 +111,28 @@ func (a *AtomLocal) GetName() string {
 	return a.atomos.GetIDInfo().Atomos
 }
 
+func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	decoderFn, has := a.current.AtomDecoders[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+	}
+	in, err := decoderFn.InDec(buf, protoOrJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	var outBuf []byte
+	out, err := a.pushMessageMail(from, name, in)
+	if out != nil {
+		var e error
+		outBuf, e = proto.Marshal(out)
+		if e != nil {
+			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+		}
+	}
+	return outBuf, err
+}
+
 // Kill
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
@@ -127,7 +149,14 @@ func (a *AtomLocal) Kill(from ID) *ErrorInfo {
 	return a.pushKillMail(from, true)
 }
 
+func (a *AtomLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
+}
+
 func (a *AtomLocal) String() string {
+	if a == nil {
+		return "nil"
+	}
 	return a.atomos.String()
 }
 
@@ -171,7 +200,23 @@ func (a *AtomLocal) KillSelf() {
 	a.Log().Info("KillSelf")
 }
 
+func (a *AtomLocal) Parallel(fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := debug.Stack()
+				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+			}
+		}()
+		fn()
+	}()
+}
+
 // Implementation of AtomSelfID
+
+func (e *AtomLocal) Config() map[string]string {
+	return e.element.main.runnable.config.Customize
+}
 
 func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
 	p, ok := a.element.atomos.instance.(ElementCustomizeAutoDataPersistence)
@@ -181,8 +226,29 @@ func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
 	return p.AtomAutoDataPersistence()
 }
 
-func (e *AtomLocal) Config() map[string]string {
-	return e.element.main.runnable.config.Customize
+func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	handlerFn, has := a.current.AtomHandlers[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name)
+	}
+	decoderFn, has := a.current.AtomDecoders[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+	}
+	in, err := decoderFn.InDec(buf, protoOrJSON)
+	if err != nil {
+		return nil, err
+	}
+	var outBuf []byte
+	out, err := handlerFn(from, a.atomos.instance, in)
+	if out != nil {
+		var e error
+		outBuf, e = proto.Marshal(out)
+		if e != nil {
+			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+		}
+	}
+	return outBuf, err
 }
 
 // Implementation of AtomosUtilities
@@ -337,6 +403,16 @@ func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (
 	newAtom = reload.Developer.AtomConstructor()
 	newAtom.Reload(oldAtom)
 	return newAtom
+}
+
+func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
+	if !ok || holder == nil {
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "ElementLocal: Not supported wormhole, type=(%T)", a.atomos.instance)
+		a.Log().Error(err.Message)
+		return err
+	}
+	return holder.AcceptWormhole(from, wormhole)
 }
 
 // Element

@@ -374,6 +374,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 
 	g.P("func Get", elementName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
 	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper("), elementName, "Name, dev)")
+
 	hasElementSpawn := false
 	for _, method := range service.Methods {
 		if method.GoName != "ElementSpawn" {
@@ -395,6 +396,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("return elem.Spawn(s, nil)")
 		g.P("}")
 	}
+
 	for _, method := range service.Methods {
 		if method.GoName != "Spawn" {
 			continue
@@ -434,6 +436,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("elem := ", atomosPackage.Ident("NewImplementationFromDeveloper"), "(dev)")
 	g.P("elem.Interface = Get", interfaceName, "(dev)")
 	g.P("elem.ElementHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
+
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if !strings.HasPrefix(methodName, "Element") {
@@ -458,6 +461,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("},")
 	}
 	g.P("}")
+
 	g.P("elem.AtomHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
 	for _, method := range service.Methods {
 		methodName := method.GoName
@@ -479,6 +483,49 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("},")
 	}
 	g.P("}")
+
+	g.P("elem.ElementDecoders = map[string]*", atomosPackage.Ident("IOMessageDecoder"), "{")
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Element") {
+			continue
+		}
+		if strings.HasPrefix(methodName, "ElementSpawn") {
+			continue
+		}
+		if strings.HasPrefix(methodName, "Spawn") {
+			continue
+		}
+		methodName = strings.Split(methodName, "Element")[1]
+		if methodName == "" {
+			continue
+		}
+		g.P("\"", methodName, "\": {")
+		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
+		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
+		g.P("},")
+	}
+	g.P("}")
+
+	g.P("elem.AtomDecoders = map[string]*", atomosPackage.Ident("IOMessageDecoder"), "{")
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if strings.HasPrefix(methodName, "Element") {
+			continue
+		}
+		if strings.HasPrefix(methodName, "Spawn") {
+			continue
+		}
+		if methodName == "" {
+			continue
+		}
+		g.P("\"", methodName, "\": {")
+		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
+		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
+		g.P("},")
+	}
+	g.P("}")
+
 	g.P("return elem")
 	g.P("}")
 }

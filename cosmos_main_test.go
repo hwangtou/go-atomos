@@ -29,7 +29,7 @@ func TestCosmosMain(t *testing.T) {
 		if err = func(runnable *CosmosRunnable) (err *ErrorInfo) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = NewErrorf(ErrMainFnReloadFailed, "Main: Main script CRASH! reason=(%s)", r)
+					err = NewErrorf(ErrMainReloadFailed, "Main: Main script CRASH! reason=(%s)", r)
 					main.Log().Fatal(err.Message)
 				}
 			}()

@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"encoding/json"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -16,6 +17,11 @@ type ElementImplementation struct {
 
 	ElementHandlers map[string]MessageHandler
 	AtomHandlers    map[string]MessageHandler
+
+	// 一个存储Atom的Call方法的容器。
+	// A holder to store all the Message method of Atom.
+	ElementDecoders map[string]*IOMessageDecoder
+	AtomDecoders    map[string]*IOMessageDecoder
 }
 
 // ElementInterface
@@ -41,11 +47,6 @@ type ElementInterface struct {
 	//
 	////ElementIDConstructor IDConstructor
 	////AtomIDConstructor    IDConstructor
-	//
-	//// 一个存储Atom的Call方法的容器。
-	//// A holder to store all the Message method of Atom.
-	//ElementMessages map[string]*ElementAtomMessage
-	//AtomMessages    map[string]*ElementAtomMessage
 }
 
 type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo
@@ -63,15 +64,22 @@ type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Messag
 
 // MessageDecoder
 // Message解码器
-type MessageDecoder func(buf []byte) (proto.Message, error)
+type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
+
+//type JSONDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
 
 // ElementAtomMessage
 // Element的Atom的调用信息。
 // Element Atom Message Info.
-type ElementAtomMessage struct {
+type IOMessageDecoder struct {
 	InDec  MessageDecoder
 	OutDec MessageDecoder
 }
+
+//type IOJSONDecoder struct {
+//	InDec  JSONDecoder
+//	OutDec JSONDecoder
+//}
 
 // NewInterfaceFromDeveloper
 // For creating ElementInterface instance in *_atomos.pb.go.
@@ -121,6 +129,22 @@ func MessageToAny(p proto.Message) *anypb.Any {
 	return any
 }
 
-func MessageUnmarshal(b []byte, p proto.Message) (proto.Message, error) {
-	return p, proto.Unmarshal(b, p)
+func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Message, *ErrorInfo) {
+	if protoOrJSON {
+		if err := proto.Unmarshal(b, p); err != nil {
+			return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+		}
+	} else {
+		if err := json.Unmarshal(b, p); err != nil {
+			return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+		}
+	}
+	return p, nil
 }
+
+//func JSONUnmarshal(b []byte, p proto.Message) (proto.Message, *ErrorInfo) {
+//	if err := json.Unmarshal(b, p); err != nil {
+//		return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+//	}
+//	return p, nil
+//}

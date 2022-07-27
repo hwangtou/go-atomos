@@ -50,10 +50,16 @@ type ID interface {
 	//// Version of ElementInterface.
 	//GetVersion() uint64
 
+	MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
 	Kill(from ID) *ErrorInfo
+
+	// SendWormhole
+	// Send wormhole to atomos.
+	SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
 
 	//// 内部使用，如果是本地Atom，会返回本地Atom的引用。
 	//// Inner use only, if Atom is local, it returns the local AtomCore reference.
@@ -68,17 +74,17 @@ type ID interface {
 	getAtomLocal() *AtomLocal
 }
 
-type CallProtoBuffer interface {
-	// CallNameWithProtoBuffer
-	// 直接接收调用
-	CallNameWithProtoBuffer(name string, buf []byte) ([]byte, *ErrorInfo)
-}
+//type CallName interface {
+//	// CallNameWithProtoBuffer
+//	// 直接接收调用
+//	CallName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+//}
 
-type CallJson interface {
-	// CallNameWithJson
-	// 直接接收调用
-	CallNameWithJson(name string, buf []byte) ([]byte, error)
-}
+//type CallJson interface {
+//	// CallNameWithJson
+//	// 直接接收调用
+//	CallNameWithJson(name string, buf []byte) ([]byte, error)
+//}
 
 //
 // SelfID
@@ -106,6 +112,8 @@ type SelfID interface {
 	// Atom从内部杀死自己。
 	// Atom kills itself from inner.
 	KillSelf()
+
+	Parallel(func())
 }
 
 type AtomSelfID interface {
@@ -113,6 +121,8 @@ type AtomSelfID interface {
 
 	Config() map[string]string
 	Persistence() AtomAutoDataPersistence
+
+	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 }
 
 type ElementSelfID interface {
@@ -120,6 +130,8 @@ type ElementSelfID interface {
 
 	Config() map[string]string
 	Persistence() ElementCustomizeAutoDataPersistence
+
+	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 }
 
 //type ParallelSelf interface {
@@ -134,10 +146,13 @@ type ParallelFn func(self SelfID, message proto.Message, id ...ID)
 
 //type ParallelFn func(self ParallelSelf, message proto.Message, id ...ID)
 
-////
-//// Wormhole
-////
 //
+// Wormhole
+//
+
+type AtomosWormhole interface {
+}
+
 //// WormholeAtom
 //// 支持WormholeAtom的Atom，可以得到Wormhole的支持。
 //// Implement WormholeAtom interface to gain wormhole support.
@@ -146,7 +161,7 @@ type ParallelFn func(self SelfID, message proto.Message, id ...ID)
 //	AcceptWorm(control WormholeControl) error
 //	CloseWorm(control WormholeControl)
 //}
-
+//
 //// WormholeId
 //// 是Id接口的延伸，提供向WormholeAtom发送Wormhole的可能。
 //// Extend of Id, it lets send wormhole to WormholeAtom become possible.

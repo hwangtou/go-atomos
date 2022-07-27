@@ -43,6 +43,11 @@ const (
 	// 重载邮件，用于升级Atomos的ElementLocal引用，以实现热更。
 	// Reload Mail, for upgrading ElementLocal reference of an atomos, to support hot-reload feature.
 	MailReload MailType = 3
+
+	// MailWormhole
+	// 虫洞邮件，用于传递不属于"Atomos宇宙"概念的对象。
+	// Wormhole Mail, for transporting non-"Atomos Cosmos" object.
+	MailWormhole MailType = 4
 )
 
 // Atomos邮件
@@ -76,8 +81,7 @@ type atomosMail struct {
 	reload  AtomosReloadable
 	reloads int
 
-	//wormholeAction int
-	//wormhole       WormholeDaemon
+	wormhole AtomosWormhole
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
@@ -129,6 +133,7 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	}
 	am.reload = nil
 	am.reloads = 0
+	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -145,6 +150,7 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 	am.arg = arg
 	am.reload = nil
 	am.reloads = 0
+	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -160,6 +166,23 @@ func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
 	am.arg = nil
 	am.reload = newInstance
 	am.reloads = reloads
+	am.wormhole = nil
+	am.mailReply = mailReply{}
+	am.waitCh = make(chan *mailReply, 1)
+}
+
+// 虫洞邮件
+// Reload Mail
+func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
+	am.mailType = MailWormhole
+	am.from = from
+	am.name = ""
+	am.arg = nil
+	am.reload = nil
+	am.reloads = 0
+	am.wormhole = wormhole
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -174,6 +197,7 @@ func initKillMail(am *atomosMail, from ID) {
 	am.name = ""
 	am.reload = nil
 	am.reloads = 0
+	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }

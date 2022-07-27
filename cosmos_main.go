@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"google.golang.org/protobuf/proto"
 	"io/ioutil"
+	"runtime/debug"
 	"sync"
 )
 
@@ -115,8 +116,16 @@ func (c *CosmosMain) GetName() string {
 	return c.GetIDInfo().Element
 }
 
+func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
+}
+
 func (c *CosmosMain) Kill(from ID) *ErrorInfo {
-	return NewError(ErrMainFnCannotKill, "Cannot kill main")
+	return NewError(ErrMainCannotKill, "Cannot kill main")
+}
+
+func (a *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
 func (c *CosmosMain) String() string {
@@ -161,6 +170,18 @@ func (e *CosmosMain) KillSelf() {
 		return
 	}
 	e.Log().Info("KillSelf")
+}
+
+func (a *CosmosMain) Parallel(fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := debug.Stack()
+				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+			}
+		}()
+		fn()
+	}()
 }
 
 // Check chain.
@@ -227,7 +248,7 @@ func (c *CosmosMain) GetAtomsNum() int {
 }
 
 func (c *CosmosMain) SpawnAtom(_ string, _ proto.Message) (*AtomLocal, *ErrorInfo) {
-	return nil, NewError(ErrMainFnCannotSpawn, "Cannot cosmosElementSpawn main")
+	return nil, NewError(ErrMainCannotSpawn, "Cannot cosmosElementSpawn main")
 }
 
 func (c *CosmosMain) MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
@@ -279,7 +300,7 @@ func (c *CosmosMain) Reload(newInstance Atomos) {
 //}
 
 func (e *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	return nil, NewError(ErrMainFnCannotMessage, "Main: Cannot send message.")
+	return nil, NewError(ErrMainCannotMessage, "Main: Cannot send message.")
 }
 
 func (e *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
@@ -380,7 +401,7 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	if err := func(runnable *CosmosRunnable) (err *ErrorInfo) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewErrorf(ErrMainFnReloadFailed, "Main: Reload script CRASH! reason=(%s)", r)
+				err = NewErrorf(ErrMainReloadFailed, "Main: Reload script CRASH! reason=(%s)", r)
 				c.Log().Fatal(err.Message)
 			}
 		}()
@@ -394,6 +415,16 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	return
 }
 
+func (a *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
+	if !ok || holder == nil {
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosMain: Not supported wormhole, type=(%T)", a.atomos.instance)
+		a.Log().Error(err.Message)
+		return err
+	}
+	return holder.AcceptWormhole(from, wormhole)
+}
+
 // Element Inner
 
 func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo) {
@@ -401,12 +432,12 @@ func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil {
-		err = NewError(ErrMainFnRunnableNotFound, "MainFn: It's not running.")
+		err = NewError(ErrMainRunnableNotFound, "Main: It's not running.")
 		return nil, err
 	}
 	elem, has := c.elements[name]
 	if !has {
-		err = NewErrorf(ErrMainFnElementNotFound, "MainFn: Local element not found, name=(%s)", name)
+		err = NewErrorf(ErrMainElementNotFound, "Main: Local element not found, name=(%s)", name)
 		return nil, err
 	}
 	return elem, nil
@@ -443,7 +474,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		go func(s ElementCustomizeStartRunning) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = NewErrorf(ErrMainFnStartRunningPanic, "Main: Running PANIC! reason=(%s)", r)
+					err = NewErrorf(ErrMainStartRunningPanic, "Main: Running PANIC! reason=(%s)", r)
 					c.Log().Fatal(err.Message)
 				}
 			}()
@@ -546,7 +577,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		c.Log().Info("Main: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
 		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
 		if e != nil {
-			err := NewErrorf(ErrMainFnLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
+			err := NewErrorf(ErrMainLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
 			c.Log().Fatal(err.Message)
 			return nil, err
 		}

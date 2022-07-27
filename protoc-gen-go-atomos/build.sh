@@ -1,6 +1,6 @@
 go build -o protoc-gen-go-atomos/protoc-gen-go-atomos protoc-gen-go-atomos/atomos.go protoc-gen-go-atomos/main.go
 
-GOPATH="/Users/hwangtou/Developer/go"
+GOPATH="/Users/hwangtou/go"
 
 cp protoc-gen-go-atomos/protoc-gen-go "$GOPATH"/bin/protoc-gen-go
 cp protoc-gen-go-atomos/protoc-gen-go-atomos "$GOPATH"/bin/protoc-gen-go-atomos

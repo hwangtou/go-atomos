@@ -109,12 +109,41 @@ func (e *ElementLocal) GetName() string {
 	return e.GetIDInfo().Element
 }
 
+func (a *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	decoderFn, has := a.current.ElementDecoders[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+	}
+	in, err := decoderFn.InDec(buf, protoOrJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	var outBuf []byte
+	out, err := a.pushMessageMail(from, name, in)
+	if out != nil {
+		var e error
+		outBuf, e = proto.Marshal(out)
+		if e != nil {
+			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+		}
+	}
+	return outBuf, err
+}
+
 func (e *ElementLocal) Kill(from ID) *ErrorInfo {
 	return NewError(ErrElementCannotKill, "Cannot kill element")
 }
 
+func (a *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
+}
+
 func (e *ElementLocal) String() string {
-	return e.atomos.Description()
+	if e == nil {
+		return "nil"
+	}
+	return e.atomos.String()
 }
 
 func (e *ElementLocal) getCallChain() []ID {
@@ -153,6 +182,18 @@ func (e *ElementLocal) KillSelf() {
 	e.Log().Info("KillSelf")
 }
 
+func (a *ElementLocal) Parallel(fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := debug.Stack()
+				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+			}
+		}()
+		fn()
+	}()
+}
+
 // Implementation of AtomSelfID
 
 func (e *ElementLocal) Config() map[string]string {
@@ -162,6 +203,31 @@ func (e *ElementLocal) Config() map[string]string {
 func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
 	p, _ := e.atomos.instance.(ElementCustomizeAutoDataPersistence)
 	return p
+}
+
+func (a *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	handlerFn, has := a.current.ElementHandlers[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name)
+	}
+	decoderFn, has := a.current.ElementDecoders[name]
+	if !has {
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+	}
+	in, err := decoderFn.InDec(buf, protoOrJSON)
+	if err != nil {
+		return nil, err
+	}
+	var outBuf []byte
+	out, err := handlerFn(from, a.atomos.instance, in)
+	if out != nil {
+		var e error
+		outBuf, e = proto.Marshal(out)
+		if e != nil {
+			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+		}
+	}
+	return outBuf, err
 }
 
 // Implementation of Element
@@ -338,33 +404,44 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	}
 	e.Log().Info("ElementLocal: Atoms killed, element=(%s)", e.GetName())
 
+	var ok bool
+	var p ElementCustomizeAutoDataPersistence
+
 	// Element
 	save, data := e.atomos.GetInstance().Halt(from, cancelled)
+	impl := e.current
 	if !save {
-		return nil
+		goto autoLoad
 	}
 
 	// Save data.
-	impl := e.current
 	if impl == nil {
 		err = NewErrorf(ErrAtomKillElementNoImplement,
 			"ElementHandler: Save data error, no element implement, id=(%s),element=(%+v)", e.GetIDInfo(), e)
 		e.Log().Fatal(err.Message)
 		return err
 	}
-	p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
+	// Auto Save
+	p, ok = impl.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || p == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
 			"ElementHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", e.GetIDInfo(), e)
 		e.Log().Fatal(err.Message)
-		return err
+		goto autoLoad
 	}
 	if err = p.ElementAutoDataPersistence().SetElementData(e.GetName(), data); err != nil {
 		e.Log().Error("ElementHandler: Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo(), e.atomos.Description(), err)
-		return err
+		goto autoLoad
+		//return err
 	}
-	if err = p.Unload(); err != nil {
+autoLoad:
+	// Auto Load
+	pa, ok := impl.Developer.(ElementCustomizeAutoLoadPersistence)
+	if !ok || pa == nil {
+		return nil
+	}
+	if err = pa.Unload(); err != nil {
 		e.Log().Error("ElementHandler: Unload failed, id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo(), e.atomos.Description(), err)
 		return err
@@ -404,6 +481,16 @@ func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloada
 	}
 	e.Log().Info("ElementLocal: Atoms reloaded, element=(%s)", e.GetName())
 	return newElement
+}
+
+func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
+	if !ok || holder == nil {
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "ElementLocal: Not supported wormhole, type=(%T)", e.atomos.instance)
+		e.Log().Error(err.Message)
+		return err
+	}
+	return holder.AcceptWormhole(from, wormhole)
 }
 
 // Internal
@@ -493,13 +580,16 @@ func (a *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *Ele
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
-	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
-	if ok && persistence != nil {
-		if err := persistence.Load(a, runnable.config.Customize); err != nil {
+	pa, ok := current.Developer.(ElementCustomizeAutoLoadPersistence)
+	if ok && pa != nil {
+		if err := pa.Load(a, runnable.config.Customize); err != nil {
 			return err
 		}
+	}
+	p, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
+	if ok && p != nil {
 		name := a.GetName()
-		d, err := persistence.ElementAutoDataPersistence().GetElementData(name)
+		d, err := p.ElementAutoDataPersistence().GetElementData(name)
 		if err != nil {
 			return err
 		}

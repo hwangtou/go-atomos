@@ -27,6 +27,11 @@ func (t *TestAtomosHolder) OnReloading(oldInstance Atomos, reloadObject AtomosRe
 	return n
 }
 
+func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	t.T.Logf("OnWormhole: wormhole=(%v)", wormhole)
+	return nil
+}
+
 func (t *TestAtomosHolder) OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo {
 	t.T.Logf("OnStopping: from=(%v),state=(%v),cancelled=(%v)", from, a.state, cancelled)
 	return nil
@@ -81,6 +86,9 @@ func TestBaseAtomos(t *testing.T) {
 	err = a.PushReloadMailAndWaitReply(nil, &TestAtomosInstance{T: t, reload: 2}, 2)
 	t.Logf("PushReloadMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
 	time.Sleep(100 * time.Millisecond)
+	// Push Wormhole
+	err = a.PushWormholeMailAndWaitReply(nil, "wormhole_message")
+	t.Logf("PushWormholeMailAndWaitReply: err=(%v)", err)
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "message", nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)

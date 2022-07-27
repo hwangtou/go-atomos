@@ -209,5 +209,33 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 			return a.BuildNet(from, req)
 		},
 	}
+	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+	}
+	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+		"BuildNet": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetResp{}, p)
+			},
+		},
+	}
 	return elem
 }

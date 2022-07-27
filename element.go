@@ -76,10 +76,13 @@ type ElementCustomizeAutoDataPersistence interface {
 	// 数据持久化助手
 	// Data Persistence Helper
 	// If returns nil, that means the element is not under control of helper.
-	Load(self ElementSelfID, config map[string]string) *ErrorInfo
-	Unload() *ErrorInfo
 	AtomAutoDataPersistence() AtomAutoDataPersistence
 	ElementAutoDataPersistence() ElementAutoDataPersistence
+}
+
+type ElementCustomizeAutoLoadPersistence interface {
+	Load(self ElementSelfID, config map[string]string) *ErrorInfo
+	Unload() *ErrorInfo
 }
 
 type ElementCustomizeStartRunning interface {
