@@ -1,71 +1,101 @@
 package elements
 
 import (
-	"errors"
 	"fmt"
 	atomos "github.com/hwangtou/go-atomos"
-	"google.golang.org/protobuf/proto"
-
 	"github.com/hwangtou/go-atomos/examples/hello/api"
+	"google.golang.org/protobuf/proto"
 )
 
-type HelloElement struct {
-	mainId atomos.MainId
+// Constructor
+
+type Hello struct {
 }
 
-func (h *HelloElement) Load(mainId atomos.MainId) error {
-	h.mainId = mainId
-	h.mainId.Log().Info("HelloElement is loading")
-	return nil
+func (h *Hello) ElementConstructor() atomos.Atomos {
+	return &HelloElement{}
 }
 
-func (h *HelloElement) Unload() {
-	h.mainId.Log().Info("HelloElement is unloading")
-}
-
-func (h *HelloElement) Info() (version uint64, logLevel atomos.LogLevel, initNum int) {
-	return 1, atomos.LogLevel_Debug, 10
-}
-
-func (h *HelloElement) AtomConstructor() atomos.Atom {
+func (h *Hello) AtomConstructor() atomos.Atomos {
 	return &HelloAtom{}
 }
 
-func (h *HelloElement) Persistence() atomos.ElementPersistence {
-	return nil
+// Element
+
+type HelloElement struct {
+	self atomos.ElementSelfID
+	data *api.HelloData
 }
 
-func (h *HelloElement) AtomCanKill(id atomos.Id) bool {
-	return true
+func (h *HelloElement) Description() string {
+	return h.self.GetName()
 }
 
-type HelloAtom struct {
-	self atomos.AtomSelf
-}
-
-func (h *HelloAtom) Spawn(self atomos.AtomSelf, arg *api.HelloSpawnArg, data *api.HelloData) error {
+func (h *HelloElement) Spawn(self atomos.ElementSelfID, data *api.HelloData) *atomos.ErrorInfo {
 	h.self = self
+	h.data = data
 	h.self.Log().Info("Spawn")
 	return nil
 }
 
-func (h *HelloAtom) Halt(from atomos.Id, cancels map[uint64]atomos.CancelledTask) (saveData proto.Message) {
+func (h *HelloElement) Halt(from atomos.ID, cancelled map[uint64]atomos.CancelledTask) (save bool, data proto.Message) {
 	h.self.Log().Info("Halt")
+	return false, nil
+}
+
+func (h *HelloElement) Reload(oldInstance atomos.Atomos) {
+	old := oldInstance.(*HelloElement)
+	h.self = old.self
+	h.data = old.data
+}
+
+func (h *HelloElement) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, *atomos.ErrorInfo) {
+	h.self.Log().Info("Hello World!")
+	return &api.HelloResp{}, nil
+}
+
+// Atom
+
+type HelloAtom struct {
+	self atomos.AtomSelfID
+	data *api.HelloData
+}
+
+func (h *HelloAtom) Description() string {
+	return h.self.GetName()
+}
+
+func (h *HelloAtom) Spawn(self atomos.AtomSelfID, arg *api.HelloSpawnArg, data *api.HelloData) *atomos.ErrorInfo {
+	h.self = self
+	h.data = data
+	h.self.Log().Info("Spawn")
 	return nil
 }
 
-func (h *HelloAtom) SayHello(from atomos.Id, in *api.HelloReq) (*api.HelloResp, error) {
-	h.self.Log().Info("Hello, %s", in.Name)
-	return nil, nil
+func (h *HelloAtom) Halt(from atomos.ID, cancelled map[uint64]atomos.CancelledTask) (save bool, data proto.Message) {
+	h.self.Log().Info("Halt")
+	return false, nil
 }
 
-func (h *HelloAtom) BuildNet(from atomos.Id, in *api.BuildNetReq) (*api.BuildNetResp, error) {
+func (h *HelloAtom) Reload(oldInstance atomos.Atomos) {
+	old := oldInstance.(*HelloElement)
+	h.self = old.self
+	h.data = old.data
+}
+
+func (h *HelloAtom) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, *atomos.ErrorInfo) {
+	h.self.Log().Info("Hello World!")
+	return &api.HelloResp{}, nil
+}
+
+func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNetResp, *atomos.ErrorInfo) {
 	nextId := in.Id + 1
 	if nextId == 10 {
-		return nil, errors.New("over")
+		return &api.BuildNetResp{}, nil
 	}
+	h.self.Log().Info("BuildNet: %d", nextId)
 	name := fmt.Sprintf("hello:%d", nextId)
-	helloId, err := api.SpawnHello(h.self.Cosmos(), name, &api.HelloSpawnArg{Id: nextId})
+	helloId, err := api.SpawnHelloAtom(h.self.Cosmos(), name, &api.HelloSpawnArg{Id: nextId})
 	if err != nil {
 		return nil, err
 	}

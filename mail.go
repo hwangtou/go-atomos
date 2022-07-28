@@ -1,14 +1,9 @@
 package go_atomos
 
 import (
-	"errors"
 	"log"
 	"runtime/debug"
 	"sync"
-)
-
-var (
-	ErrMailBoxClosed = errors.New("MailBox: Closed")
 )
 
 // Mail
@@ -63,7 +58,7 @@ func (m *mail) reset() {
 // Mail Box
 
 type MailBoxOnReceiveFn func(mail *mail)
-type MailBoxOnPanicFn func(mail *mail, trace string)
+type MailBoxOnPanicFn func(mail *mail, err *ErrorInfo)
 type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
 
 type MailBoxHandler struct {
@@ -73,7 +68,7 @@ type MailBoxHandler struct {
 }
 
 type mailBox struct {
-	Name    string
+	//Name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
@@ -93,17 +88,19 @@ var mailBoxPool = sync.Pool{
 
 func newMailBox(handler MailBoxHandler) *mailBox {
 	mb := mailBoxPool.Get().(*mailBox)
+	mb.running = false
 	mb.handler = handler
+	mb.head, mb.tail, mb.num = nil, nil, 0
 	return mb
 }
 
-func initMailBox(a *AtomCore) {
+func newMailBoxWithHandler(a *BaseAtomos) {
 	a.mailbox = newMailBox(MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnPanic:   a.onPanic,
 		OnStop:    a.onStop,
 	})
-	a.mailbox.Name = a.name
+	//a.mailbox.Name = a.name
 }
 
 func delMailBox(b *mailBox) {
@@ -191,6 +188,10 @@ func (mb *mailBox) pushHead(m *mail) bool {
 	return true
 }
 
+func (mb *mailBox) Push(m *mail) bool {
+	return mb.pushTail(m)
+}
+
 func (mb *mailBox) pushTail(m *mail) bool {
 	mb.mutex.Lock()
 	if !mb.running {
@@ -268,11 +269,14 @@ func (mb *mailBox) loop() {
 				if r := recover(); r != nil {
 					// Only should AtomMailMessage and AtomMailTask 3rd-part logic
 					// throws exception to here, otherwise it must be a bug of framework.
-					traceMsg := string(debug.Stack())
-					log.Printf("recovering from 3rd-part logic\nreason=%s\ntrace=%s", r, traceMsg)
+					traceMsg := debug.Stack()
+					log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
 					//curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
 					// todo
-					mb.handler.OnPanic(curMail, traceMsg)
+					err := NewErrorf(ErrAtomosPanic,
+						"Recovering from developer logic, reason=(%v)", r).
+						AddStack(nil, traceMsg)
+					mb.handler.OnPanic(curMail, err)
 				}
 			}()
 			for {

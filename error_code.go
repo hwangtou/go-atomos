@@ -1,0 +1,65 @@
+package go_atomos
+
+const (
+	OK = iota
+
+	ErrFrameworkPanic
+
+	ErrProcessRunnableInvalid
+
+	ErrMainLoadCertFailed
+	ErrMainCheckElementFailed
+	ErrMainRunnableNotFound
+	ErrMainIsReloading
+	ErrMainElementNotFound
+	ErrMainElementIsInvalid
+	ErrMainReloadFailed
+	ErrMainStartRunningPanic
+	ErrMainCannotKill
+	ErrMainCannotSpawn
+	ErrMainCannotMessage
+
+	ErrCosmosConfigInvalid
+	ErrCosmosConfigNodeNameInvalid
+	ErrCosmosConfigLogPathInvalid
+	ErrCosmosCertConfigInvalid
+	ErrCosmosHasAlreadyRun
+	ErrCosmosIsBusy
+	ErrCosmosIsClosed
+
+	ErrElementLoaded
+	ErrElementReloadInvalid
+	ErrElementMessageHandlerNotExists
+	ErrElementMessageHandlerPanic
+	ErrElementKillHandlerPanic
+	ErrElementSpawnArgInvalid
+	ErrElementNotImplemented
+
+	ErrAtomosPanic
+	ErrAtomosIsStopping
+	ErrAtomosIsNotRunning
+	ErrAtomosTaskInvalidFn
+	ErrAtomosTaskNotExists
+	ErrAtomosNotSupportWormhole
+
+	ErrAtomMessageHandlerNotExists
+	ErrAtomMessageHandlerPanic
+	ErrAtomKillHandlerPanic
+	ErrAtomKillElementNoImplement
+	ErrAtomKillElementNotImplementAutoDataPersistence
+	ErrAtomReloadInvalid
+	ErrAtomFromIDInvalid
+	ErrAtomToIDInvalid
+	ErrAtomSpawnArgInvalid
+	ErrAtomCallDeadLock
+	ErrAtomNotExists
+	ErrAtomExists
+	ErrAtomPersistenceRuntime
+
+	ErrAtomNotImplemented
+	ErrAtomMessageAtomType
+	ErrAtomMessageArgType
+	ErrAtomMessageReplyType
+
+	ErrElementCannotKill
+)

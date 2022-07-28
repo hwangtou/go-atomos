@@ -24,52 +24,71 @@ import (
 
 const HelloName = "Hello"
 
-// HelloId is the interface of Hello atomos.
+// HelloElementID is the interface of Hello element.
 
-type HelloId interface {
-	go_atomos.Id
+type HelloElementID interface {
+	go_atomos.ID
 
 	// Sends a greeting
-	SayHello(from go_atomos.Id, in *HelloReq) (*HelloResp, error)
+	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
+}
+
+func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.ErrorInfo) {
+	ca, err := c.GetElementID(HelloName)
+	if err != nil {
+		return nil, err
+	}
+	return &helloElementID{ca}, nil
+}
+
+// HelloAtomID is the interface of Hello atom.
+
+type HelloAtomID interface {
+	go_atomos.ID
+
+	// Sends a greeting
+	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 
 	// Build net
-	BuildNet(from go_atomos.Id, in *BuildNetReq) (*BuildNetResp, error)
+	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
 }
 
-func GetHelloId(c go_atomos.CosmosNode, name string) (HelloId, error) {
-	ca, err := c.GetAtomId(HelloName, name)
+func GetHelloAtomID(c go_atomos.CosmosNode, name string) (HelloAtomID, *go_atomos.ErrorInfo) {
+	ca, err := c.GetElementAtomID(HelloName, name)
 	if err != nil {
 		return nil, err
 	}
-	if c, ok := ca.(HelloId); ok {
-		return c, nil
-	} else {
-		return nil, go_atomos.ErrAtomType
-	}
+	return &helloAtomID{ca}, nil
 }
 
-// Hello is the atomos implements of Hello atomos.
+// HelloElement is the atomos implements of Hello element.
 
-type Hello interface {
-	go_atomos.Atom
-	Spawn(self go_atomos.AtomSelf, arg *HelloSpawnArg, data *HelloData) error
-	SayHello(from go_atomos.Id, in *HelloReq) (*HelloResp, error)
-	BuildNet(from go_atomos.Id, in *BuildNetReq) (*BuildNetResp, error)
+type HelloElement interface {
+	go_atomos.Atomos
+	// Spawn Element
+	Spawn(self go_atomos.ElementSelfID, data *HelloData) *go_atomos.ErrorInfo
+	// Sends a greeting
+	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 }
 
-func SpawnHello(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloId, error) {
-	_, err := c.SpawnAtom(HelloName, name, arg)
+// HelloAtom is the atomos implements of Hello atom.
+
+type HelloAtom interface {
+	go_atomos.Atomos
+	// Spawn
+	Spawn(self go_atomos.AtomSelfID, arg *HelloSpawnArg, data *HelloData) *go_atomos.ErrorInfo
+	// Sends a greeting
+	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
+	// Build net
+	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
+}
+
+func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloAtomID, *go_atomos.ErrorInfo) {
+	id, err := c.SpawnElementAtom(HelloName, name, arg)
 	if err != nil {
 		return nil, err
 	}
-	id, err := c.GetAtomId(HelloName, name)
-	if err != nil {
-		return nil, err
-	}
-	if i, ok := id.(HelloId); ok {
-		return i, nil
-	}
-	return nil, go_atomos.ErrAtomType
+	return &helloAtomID{id}, nil
 }
 
 //////
@@ -84,55 +103,68 @@ func SpawnHello(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloI
 // New line
 //
 
-type helloId struct {
-	go_atomos.Id
+type helloElementID struct {
+	go_atomos.ID
 }
 
-func (c *helloId) SayHello(from go_atomos.Id, in *HelloReq) (*HelloResp, error) {
+func (c *helloElementID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo) {
+	r, err := c.Cosmos().MessageElement(from, c, "SayHello", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*HelloResp)
+	if !ok {
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
+	}
+	return reply, err
+}
+
+type helloAtomID struct {
+	go_atomos.ID
+}
+
+func (c *helloAtomID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo) {
 	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
 	if r == nil {
 		return nil, err
 	}
 	reply, ok := r.(*HelloResp)
 	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
 	}
-	return reply, nil
+	return reply, err
 }
 
-func (c *helloId) BuildNet(from go_atomos.Id, in *BuildNetReq) (*BuildNetResp, error) {
+func (c *helloAtomID) BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo) {
 	r, err := c.Cosmos().MessageAtom(from, c, "BuildNet", in)
 	if r == nil {
 		return nil, err
 	}
 	reply, ok := r.(*BuildNetResp)
 	if !ok {
-		return nil, go_atomos.ErrAtomMessageReplyType
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
 	}
-	return reply, nil
+	return reply, err
 }
 
 func GetHelloInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(HelloName, dev)
-	elem.AtomIdConstructor = func(id go_atomos.Id) go_atomos.Id { return &helloId{id} }
-	elem.AtomSpawner = func(s go_atomos.AtomSelf, a go_atomos.Atom, arg, data proto.Message) error {
+	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message) *go_atomos.ErrorInfo {
+		dataT, _ := data.(*HelloData)
+		elem, ok := a.(HelloElement)
+		if !ok {
+			return go_atomos.NewErrorf(go_atomos.ErrElementNotImplemented, "Element not implemented, type=(HelloElement)")
+		}
+		return elem.Spawn(s, dataT)
+	}
+	elem.AtomSpawner = func(s go_atomos.AtomSelfID, a go_atomos.Atomos, arg, data proto.Message) *go_atomos.ErrorInfo {
 		argT, _ := arg.(*HelloSpawnArg)
 		dataT, _ := data.(*HelloData)
-		return a.(Hello).Spawn(s, argT, dataT)
-	}
-	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"SayHello": go_atomos.NewAtomCallConfig(&HelloReq{}, &HelloResp{}),
-		"BuildNet": go_atomos.NewAtomCallConfig(&BuildNetReq{}, &BuildNetResp{}),
-	}
-	elem.AtomMessages = map[string]*go_atomos.ElementAtomMessage{
-		"SayHello": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloReq{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &HelloResp{}) },
-		},
-		"BuildNet": {
-			InDec:  func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &BuildNetReq{}) },
-			OutDec: func(b []byte) (proto.Message, error) { return go_atomos.MessageUnmarshal(b, &BuildNetResp{}) },
-		},
+		atom, ok := a.(HelloAtom)
+		if !ok {
+			return go_atomos.NewErrorf(go_atomos.ErrAtomNotImplemented, "Atom not implemented, type=(HelloAtom)")
+		}
+		return atom.Spawn(s, argT, dataT)
 	}
 	return elem
 }
@@ -140,28 +172,69 @@ func GetHelloInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterfa
 func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetHelloInterface(dev)
-	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
-		"SayHello": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+	elem.ElementHandlers = map[string]go_atomos.MessageHandler{
+		"SayHello": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
 			req, ok := in.(*HelloReq)
 			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
 			}
-			a, ok := to.(Hello)
+			a, ok := to.(HelloElement)
 			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Atom type=(%T)", to)
 			}
 			return a.SayHello(from, req)
 		},
-		"BuildNet": func(from go_atomos.Id, to go_atomos.Atom, in proto.Message) (proto.Message, error) {
+	}
+	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"SayHello": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
+			req, ok := in.(*HelloReq)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
+			}
+			a, ok := to.(HelloAtom)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Atom type=(%T)", to)
+			}
+			return a.SayHello(from, req)
+		},
+		"BuildNet": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
 			req, ok := in.(*BuildNetReq)
 			if !ok {
-				return nil, go_atomos.ErrAtomMessageArgType
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
 			}
-			a, ok := to.(Hello)
+			a, ok := to.(HelloAtom)
 			if !ok {
-				return nil, go_atomos.ErrAtomMessageAtomType
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Atom type=(%T)", to)
 			}
 			return a.BuildNet(from, req)
+		},
+	}
+	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+	}
+	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+		"BuildNet": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetResp{}, p)
+			},
 		},
 	}
 	return elem

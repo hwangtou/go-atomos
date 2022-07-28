@@ -1,16 +1,32 @@
 syntax = "proto3";
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/any.proto";
-
-package go_atomos;
+package core;
 option go_package = "github.com/hwangtou/go-atomos";
 
-message AtomId {
-  string node = 1;
-  string element = 2;
-  string name = 3;
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+enum IDType {
+  InvalidIDType = 0;
+  Process = 1;
+  Main = 2;
+  Cosmos = 3;
+  Element = 4;
+  Atomos = 5;
 }
+
+message IDInfo {
+  IDType type = 1;
+  string cosmos = 2;
+  string element = 3;
+  string atomos = 4;
+}
+
+//message AtomId {
+//  string node = 1;
+//  string element = 2;
+//  string name = 3;
+//}
 
 enum LogLevel {
   Debug = 0;
@@ -21,10 +37,21 @@ enum LogLevel {
 }
 
 message LogMail {
-  AtomId id = 1;
+  IDInfo id = 1;
   google.protobuf.Timestamp time = 2;
   LogLevel level = 3;
   string message = 4;
+}
+
+message ErrorInfo {
+  int64 code = 1;
+  string message = 2;
+  repeated ErrorStackInfo stacks = 3;
+}
+
+message ErrorStackInfo {
+  IDInfo id = 1;
+  bytes stack = 2;
 }
 
 message Nil {
@@ -35,7 +62,7 @@ message Nil {
 message Config {
   string node = 1;
   string log_path = 2;
-  LogLevel log_level = 3;
+  core.LogLevel log_level = 3;
   CertConfig enable_cert = 4;
   RemoteServerConfig enable_server = 5;
   TelnetServerConfig enable_telnet = 6;
@@ -73,7 +100,7 @@ message CosmosLocalConfig {
 message ElementConfig {
   string name = 1;
   uint64 version = 2;
-  LogLevel log_level = 3;
+  core.LogLevel log_level = 3;
   int32 atom_init_num = 4;
   map<string, AtomMessageConfig> messages = 5;
 }
@@ -111,8 +138,8 @@ message CosmosRemoteGetAtomIdResp {
 }
 
 message CosmosRemoteMessagingReq {
-  AtomId from = 1;
-  AtomId to = 2;
+  core.IDInfo from = 1;
+  core.IDInfo to = 2;
   string message = 3;
   google.protobuf.Any args = 4;
 }
