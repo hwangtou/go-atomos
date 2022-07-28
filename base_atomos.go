@@ -357,7 +357,7 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	a.setStopping()
 	defer a.setHalt()
 
-	killAtomMail := killMail.Content.(*atomosMail)
+	killAtomMail, ok := killMail.Content.(*atomosMail)
 	//defer deallocAtomosMail(killAtomMail)
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
@@ -396,6 +396,8 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	}
 
 	// Handle Kill and Reply Kill.
-	err := a.holder.OnStopping(killAtomMail.from, cancels)
-	killAtomMail.sendReply(nil, err)
+	if ok {
+		err := a.holder.OnStopping(killAtomMail.from, cancels)
+		killAtomMail.sendReply(nil, err)
+	}
 }

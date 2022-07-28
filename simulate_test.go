@@ -83,6 +83,14 @@ func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
 			}
 			atom.Release()
 
+			// Spawn for twice.
+			atom, err = elem.SpawnAtom("testAtomA", nil)
+			if err != nil {
+				t.Errorf("MainScript: Spawn failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
+				return
+			}
+			atom.Release()
+
 			main.Log().Info("Executing Main Script is waiting Kill")
 			<-killSignal
 			main.Log().Info("Executing Main Script has been killed")
