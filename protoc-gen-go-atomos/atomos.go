@@ -283,13 +283,15 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 
 	idName := atomName + "ID"
 	// Spawn
-	g.P("func Spawn", atomName, "(c ", atomosPackage.Ident("CosmosNode"),
-		", name string, arg *", spawnArgTypeName, ") (",
-		idName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
-	g.P("id, err := c.SpawnElementAtom(", elementName, "Name, name, arg)")
-	g.P("if err != nil { return nil, err }")
-	g.P("return &", noExport(idName), "{id}, nil")
-	g.P("}")
+	if spawnArgTypeName != "" {
+		g.P("func Spawn", atomName, "(c ", atomosPackage.Ident("CosmosNode"),
+			", name string, arg *", spawnArgTypeName, ") (",
+			idName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+		g.P("id, err := c.SpawnElementAtom(", elementName, "Name, name, arg)")
+		g.P("if err != nil { return nil, err }")
+		g.P("return &", noExport(idName), "{id}, nil")
+		g.P("}")
+	}
 }
 
 func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
