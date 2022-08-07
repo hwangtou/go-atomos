@@ -484,15 +484,16 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	return nil
 }
 
-func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (*ElementLocal, *ErrorInfo) {
+func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *ErrorInfo) {
 	name := i.Interface.Config.Name
 	defer func() {
 		if r := recover(); r != nil {
-			c.Log().Fatal("Main: Spawn new element PANIC, name=(%s),err=(%v)", name, r)
+			err = NewErrorf(ErrFrameworkPanic, "Spawn new element PANIC, name=(%s),err=(%v)", name, r)
+			c.Log().Fatal("Main: %s ,err=(%v)", name, err)
 		}
 	}()
 
-	elem := newElementLocal(c, r, i)
+	elem = newElementLocal(c, r, i)
 
 	c.mutex.Lock()
 	_, has := c.elements[name]
@@ -505,7 +506,7 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 	}
 
 	elem.atomos.setSpawning()
-	err := elem.cosmosElementSpawn(r, i)
+	err = elem.cosmosElementSpawn(r, i)
 	if err != nil {
 		elem.atomos.setHalt()
 		c.mutex.Lock()

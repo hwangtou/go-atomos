@@ -369,7 +369,7 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 	}()
 	if len(stack) != 0 {
 		err = NewErrorf(ErrElementMessageHandlerPanic,
-			"ElementLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args).
+			"ElementLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
 			AddStack(e.GetIDInfo(), stack)
 	} else if err != nil && len(err.Stacks) > 0 {
 		err = err.AddStack(e.GetIDInfo(), debug.Stack())

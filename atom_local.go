@@ -326,7 +326,7 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 	}()
 	if len(stack) != 0 {
 		err = NewErrorf(ErrAtomMessageHandlerPanic,
-			"Message handler PANIC, from=(%s),name=(%s),args=(%v)", from, name, args).
+			"AtomLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
 			AddStack(a.GetIDInfo(), stack)
 	} else if err != nil && len(err.Stacks) > 0 {
 		err = err.AddStack(a.GetIDInfo(), debug.Stack())
