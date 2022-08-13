@@ -55,7 +55,7 @@ func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImp
 	}
 	a := atomLocalPool.Get().(*AtomLocal)
 	a.element = e
-	a.atomos = NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor(), reloads)
+	a.atomos = NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor(name), reloads)
 	//a.id = current.Interface.AtomIdConstructor(a)
 	a.count = 0
 	a.nameElement = nil
@@ -351,6 +351,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 				AddStack(a.GetIDInfo(), debug.Stack())
 			a.Log().Error(err.Message)
 		}
+		a.element.elementAtomStopping(a)
 	}()
 	save, data := a.atomos.GetInstance().Halt(from, cancelled)
 	if !save {
@@ -364,14 +365,21 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 		a.Log().Fatal(err.Message)
 		return err
 	}
-	p, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
-	if !ok || p == nil {
+	persistence, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
+	if !ok || persistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"AtomHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+			"AtomHandler: Save data error, no auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
 		a.Log().Fatal(err.Message)
 		return err
 	}
-	if err = p.AtomAutoDataPersistence().SetAtomData(a.GetName(), data); err != nil {
+	atomPersistence := persistence.AtomAutoDataPersistence()
+	if atomPersistence == nil {
+		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
+			"AtomHandler: Save data error, no atom auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
+		a.Log().Fatal(err.Message)
+		return err
+	}
+	if err = atomPersistence.SetAtomData(a.GetName(), data); err != nil {
 		a.Log().Error("AtomHandler: Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
 			a.atomos.GetIDInfo(), a.atomos.Description(), err)
 		return err
@@ -400,7 +408,7 @@ func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (
 		return
 	}
 
-	newAtom = reload.Developer.AtomConstructor()
+	newAtom = reload.Developer.AtomConstructor(a.GetName())
 	newAtom.Reload(oldAtom)
 	return newAtom
 }
@@ -424,15 +432,18 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	if persistence != nil {
-		name := a.GetName()
-		d, err := persistence.AtomAutoDataPersistence().GetAtomData(name)
-		if err != nil {
-			return err
+		atomPersistence := persistence.AtomAutoDataPersistence()
+		if atomPersistence != nil {
+			name := a.GetName()
+			d, err := atomPersistence.GetAtomData(name)
+			if err != nil {
+				return err
+			}
+			if d == nil && arg == nil {
+				return NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)", name)
+			}
+			data = d
 		}
-		if d == nil && arg == nil {
-			return NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)", name)
-		}
-		data = d
 	}
 	if err := current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
 		return err

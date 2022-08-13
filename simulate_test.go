@@ -233,7 +233,7 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 type testElementDev struct {
 }
 
-func (t testElementDev) AtomConstructor() Atomos {
+func (t testElementDev) AtomConstructor(name string) Atomos {
 	return &testAtomos{}
 }
 

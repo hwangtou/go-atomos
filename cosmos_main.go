@@ -64,7 +64,7 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
 	_, err := c.tryLoadRunnable(runnable)
 	if err != nil {
-		c.Log().Info("Main: Once load failed, err=(%v)", err)
+		c.Log().Fatal("Main: Once load failed, err=(%v)", err)
 		return err
 	}
 	return nil
@@ -487,10 +487,19 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *ErrorInfo) {
 	name := i.Interface.Config.Name
 	defer func() {
+		var stack []byte
 		if r := recover(); r != nil {
-			err = NewErrorf(ErrFrameworkPanic, "Spawn new element PANIC, name=(%s),err=(%v)", name, r)
-			c.Log().Fatal("Main: %s ,err=(%v)", name, err)
+			stack = debug.Stack()
 		}
+		if len(stack) != 0 {
+			err = NewErrorf(ErrFrameworkPanic, "Spawn new element PANIC, name=(%s),err=(%v)", name, r).
+				AddStack(c.GetIDInfo(), stack)
+		} else if err != nil && len(err.Stacks) > 0 {
+			err = err.AddStack(c.GetIDInfo(), debug.Stack())
+		}
+		//if err != nil {
+		//	c.Log().Fatal("Main: %s, err=(%v)", name, err)
+		//}
 	}()
 
 	elem = newElementLocal(c, r, i)

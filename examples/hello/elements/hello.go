@@ -16,7 +16,7 @@ func (h *Hello) ElementConstructor() atomos.Atomos {
 	return &HelloElement{}
 }
 
-func (h *Hello) AtomConstructor() atomos.Atomos {
+func (h *Hello) AtomConstructor(name string) atomos.Atomos {
 	return &HelloAtom{}
 }
 

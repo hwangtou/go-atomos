@@ -25,6 +25,7 @@ type CosmosNode interface {
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
+	// TODO: 如果已经存在，是否应该返回，应该如何返回？
 	SpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo)
 
 	// MessageAtom

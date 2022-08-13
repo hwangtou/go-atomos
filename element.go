@@ -115,7 +115,7 @@ type ElementDeveloper interface {
 	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
 	// Atom Constructor.
 	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
-	AtomConstructor() Atomos
+	AtomConstructor(name string) Atomos
 	ElementConstructor() Atomos
 }
 
@@ -141,12 +141,12 @@ type ElementAutoDataPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetElementData(name string) (proto.Message, *ErrorInfo)
+	GetElementData() (proto.Message, *ErrorInfo)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetElementData(name string, data proto.Message) *ErrorInfo
+	SetElementData(data proto.Message) *ErrorInfo
 }
 
 // TODO:

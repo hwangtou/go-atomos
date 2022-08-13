@@ -109,8 +109,8 @@ func (e *ElementLocal) GetName() string {
 	return e.GetIDInfo().Element
 }
 
-func (a *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
-	decoderFn, has := a.current.ElementDecoders[name]
+func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	decoderFn, has := e.current.ElementDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
 	}
@@ -120,7 +120,7 @@ func (a *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJS
 	}
 
 	var outBuf []byte
-	out, err := a.pushMessageMail(from, name, in)
+	out, err := e.pushMessageMail(from, name, in)
 	if out != nil {
 		var e error
 		outBuf, e = proto.Marshal(out)
@@ -135,8 +135,8 @@ func (e *ElementLocal) Kill(from ID) *ErrorInfo {
 	return NewError(ErrElementCannotKill, "Cannot kill element")
 }
 
-func (a *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
-	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
+func (e *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	return e.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
 func (e *ElementLocal) String() string {
@@ -150,11 +150,11 @@ func (e *ElementLocal) getCallChain() []ID {
 	return e.callChain
 }
 
-func (a *ElementLocal) getElementLocal() *ElementLocal {
-	return a
+func (e *ElementLocal) getElementLocal() *ElementLocal {
+	return e
 }
 
-func (a *ElementLocal) getAtomLocal() *AtomLocal {
+func (e *ElementLocal) getAtomLocal() *AtomLocal {
 	return nil
 }
 
@@ -182,12 +182,12 @@ func (e *ElementLocal) KillSelf() {
 	e.Log().Info("KillSelf")
 }
 
-func (a *ElementLocal) Parallel(fn func()) {
+func (e *ElementLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				stack := debug.Stack()
-				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+				e.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
 			}
 		}()
 		fn()
@@ -205,12 +205,12 @@ func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
 	return p
 }
 
-func (a *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
-	handlerFn, has := a.current.ElementHandlers[name]
+func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	handlerFn, has := e.current.ElementHandlers[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name)
 	}
-	decoderFn, has := a.current.ElementDecoders[name]
+	decoderFn, has := e.current.ElementDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
 	}
@@ -219,7 +219,7 @@ func (a *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, proto
 		return nil, err
 	}
 	var outBuf []byte
-	out, err := handlerFn(from, a.atomos.instance, in)
+	out, err := handlerFn(from, e.atomos.instance, in)
 	if out != nil {
 		var e error
 		outBuf, e = proto.Marshal(out)
@@ -405,7 +405,8 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	e.Log().Info("ElementLocal: Atoms killed, element=(%s)", e.GetName())
 
 	var ok bool
-	var p ElementCustomizeAutoDataPersistence
+	var persistence ElementCustomizeAutoDataPersistence
+	var elemPersistence ElementAutoDataPersistence
 
 	// Element
 	save, data := e.atomos.GetInstance().Halt(from, cancelled)
@@ -422,14 +423,21 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 		return err
 	}
 	// Auto Save
-	p, ok = impl.Developer.(ElementCustomizeAutoDataPersistence)
-	if !ok || p == nil {
+	persistence, ok = impl.Developer.(ElementCustomizeAutoDataPersistence)
+	if !ok || persistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"ElementHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", e.GetIDInfo(), e)
+			"ElementHandler: Save data error, no auto data persistence, id=(%s),element=(%+v)", e.GetIDInfo(), e)
 		e.Log().Fatal(err.Message)
 		goto autoLoad
 	}
-	if err = p.ElementAutoDataPersistence().SetElementData(e.GetName(), data); err != nil {
+	elemPersistence = persistence.ElementAutoDataPersistence()
+	if elemPersistence == nil {
+		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
+			"AtomHandler: Save data error, no element auto data persistence, id=(%s),element=(%+v)", e.GetIDInfo(), e)
+		e.Log().Fatal(err.Message)
+		return err
+	}
+	if err = elemPersistence.SetElementData(data); err != nil {
 		e.Log().Error("ElementHandler: Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo(), e.atomos.Description(), err)
 		goto autoLoad
@@ -528,15 +536,23 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 	e.lock.Unlock()
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
-	if has && oldAtom.atomos.isNotHalt() {
-		atom.deleteAtomLocal(false)
-		return nil, NewErrorf(ErrAtomExists, "Atom exists, name=(%s),arg=(%v)", name, arg)
-	}
-	// If exists and not running, release new and use old.
-	// 如果已经存在，那就不需要新的，用旧的。
 	if has {
-		atom.deleteAtomLocal(false)
-		atom = oldAtom
+		if oldAtom.atomos.isNotHalt() {
+			atom.deleteAtomLocal(false)
+			return oldAtom, NewErrorf(ErrAtomExists, "Atom exists, name=(%s),arg=(%v)", name, arg)
+		} else {
+			//// If exists and not running, release new and use old.
+			//// 如果已经存在，那就不需要新的，用旧的。
+			////if has {
+			//atom.deleteAtomLocal(false)
+			//atom = oldAtom
+			////} else {
+			////	atom.atomos.mailbox.
+			////}
+
+			*oldAtom = *atom
+			atom = oldAtom
+		}
 	}
 	atom.count += 1
 
@@ -574,7 +590,25 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	atom.deleteAtomLocal(false)
 }
 
-func (a *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *ErrorInfo {
+func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
+	if atom.count > 0 {
+		return
+	}
+	e.lock.Lock()
+	name := atom.GetName()
+	_, has := e.atoms[name]
+	if has {
+		delete(e.atoms, name)
+	}
+	if atom.nameElement != nil {
+		e.names.Remove(atom.nameElement)
+		atom.nameElement = nil
+	}
+	e.lock.Unlock()
+	atom.deleteAtomLocal(false)
+}
+
+func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *ErrorInfo {
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -582,23 +616,25 @@ func (a *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *Ele
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	pa, ok := current.Developer.(ElementCustomizeAutoLoadPersistence)
 	if ok && pa != nil {
-		if err := pa.Load(a, runnable.config.Customize); err != nil {
+		if err := pa.Load(e, runnable.config.Customize); err != nil {
 			return err
 		}
 	}
-	p, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
-	if ok && p != nil {
-		name := a.GetName()
-		d, err := p.ElementAutoDataPersistence().GetElementData(name)
-		if err != nil {
-			return err
+	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
+	if ok && persistence != nil {
+		elemPersistence := persistence.ElementAutoDataPersistence()
+		if elemPersistence != nil {
+			d, err := elemPersistence.GetElementData()
+			if err != nil {
+				return err
+			}
+			//if d == nil && arg == nil {
+			//	return NewErrorf(ErrElementSpawnArgInvalid, "Spawn element without arg, name=(%s)", name)
+			//}
+			data = d
 		}
-		//if d == nil && arg == nil {
-		//	return NewErrorf(ErrElementSpawnArgInvalid, "Spawn element without arg, name=(%s)", name)
-		//}
-		data = d
 	}
-	if err := current.Interface.ElementSpawner(a, a.atomos.instance, data); err != nil {
+	if err := current.Interface.ElementSpawner(e, e.atomos.instance, data); err != nil {
 		return err
 	}
 	return nil

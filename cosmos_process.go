@@ -134,7 +134,7 @@ func (c *CosmosProcess) Daemon() (chan struct{}, *ErrorInfo) {
 					// Make CosmosMain initial the content of Runnable, especially the Element information.
 					err = c.main.onceLoad(runnable)
 					if err != nil {
-						c.Logging(LogLevel_Fatal, "CosmosProcess: Main init failed, err=(%v)", err.Message)
+						c.Logging(LogLevel_Fatal, "CosmosProcess: Main init failed") //, err=(%v)", err.Message)
 						c.trySetRunning(false)
 						break
 					}
