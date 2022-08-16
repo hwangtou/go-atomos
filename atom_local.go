@@ -4,7 +4,9 @@ package go_atomos
 
 import (
 	"container/list"
+	"encoding/json"
 	"google.golang.org/protobuf/proto"
+	"reflect"
 	"runtime/debug"
 	"sync"
 )
@@ -123,9 +125,13 @@ func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON 
 
 	var outBuf []byte
 	out, err := a.pushMessageMail(from, name, in)
-	if out != nil {
+	if out != nil && !reflect.ValueOf(out).IsNil() {
 		var e error
-		outBuf, e = proto.Marshal(out)
+		if protoOrJSON {
+			outBuf, e = proto.Marshal(out)
+		} else {
+			outBuf, e = json.Marshal(out)
+		}
 		if e != nil {
 			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
 		}
