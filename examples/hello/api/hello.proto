@@ -31,6 +31,8 @@ service Hello {
   rpc SayHello (HelloReq) returns (HelloResp) {}
   // Build net
   rpc BuildNet (BuildNetReq) returns (BuildNetResp) {}
+  // Make panic
+  rpc MakePanic (MakePanicIn) returns (MakePanicOut) {}
 }
 
 message HelloData {}
@@ -51,4 +53,9 @@ message BuildNetReq {
   int32 id = 1;
 }
 message BuildNetResp {
+}
+
+message MakePanicIn {
+}
+message MakePanicOut {
 }

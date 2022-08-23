@@ -3,13 +3,18 @@ package main
 import (
 	"flag"
 	atomos "github.com/hwangtou/go-atomos"
+	"time"
 )
 
 func main() {
+	defer func() {
+		time.Sleep(1 * time.Second)
+	}()
+
 	// Load runnable.
 	cosmos, err := atomos.NewCosmosProcess()
 	if err != nil {
-		panic(err.Message)
+		cosmos.Logging(atomos.LogLevel_Fatal, "Daemon failed, err=(%v)", err)
 		return
 	}
 	defer cosmos.Close()

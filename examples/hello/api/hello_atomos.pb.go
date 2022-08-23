@@ -51,6 +51,9 @@ type HelloAtomID interface {
 
 	// Build net
 	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
+
+	// Make panic
+	MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo)
 }
 
 func GetHelloAtomID(c go_atomos.CosmosNode, name string) (HelloAtomID, *go_atomos.ErrorInfo) {
@@ -81,6 +84,8 @@ type HelloAtom interface {
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 	// Build net
 	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
+	// Make panic
+	MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo)
 }
 
 func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloAtomID, *go_atomos.ErrorInfo) {
@@ -141,6 +146,18 @@ func (c *helloAtomID) BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetRes
 		return nil, err
 	}
 	reply, ok := r.(*BuildNetResp)
+	if !ok {
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
+	}
+	return reply, err
+}
+
+func (c *helloAtomID) MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo) {
+	r, err := c.Cosmos().MessageAtom(from, c, "MakePanic", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*MakePanicOut)
 	if !ok {
 		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
 	}
@@ -208,6 +225,17 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 			}
 			return a.BuildNet(from, req)
 		},
+		"MakePanic": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
+			req, ok := in.(*MakePanicIn)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
+			}
+			a, ok := to.(HelloAtom)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Atom type=(%T)", to)
+			}
+			return a.MakePanic(from, req)
+		},
 	}
 	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"SayHello": {
@@ -234,6 +262,14 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 			},
 			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
 				return go_atomos.MessageUnmarshal(b, &BuildNetResp{}, p)
+			},
+		},
+		"MakePanic": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &MakePanicIn{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &MakePanicOut{}, p)
 			},
 		},
 	}

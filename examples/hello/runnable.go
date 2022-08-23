@@ -52,7 +52,13 @@ func helloScript(self *atomos.CosmosMain, killCh chan bool) {
 	}
 	self.Log().Info("Main reply, rsp=(%+v)", helloResp)
 	if _, err = helloId.BuildNet(self, &api.BuildNetReq{Id: 0}); err != nil {
-		self.Log().Error("BuildNet failed, err=(%v)", err)
+		self.Log().Error("BuildNet failed, err=(%v)", err.AutoStack(self, nil))
+		return
+	}
+
+	// Panic
+	if _, err := helloId.MakePanic(self, &api.MakePanicIn{}); err != nil {
+		self.Log().Error("Make panic, err=(%v)", err)
 		return
 	}
 	<-killCh // TODO: Think about error exit, block

@@ -1,8 +1,6 @@
 package go_atomos
 
 import (
-	"log"
-	"runtime/debug"
 	"sync"
 )
 
@@ -267,16 +265,16 @@ func (mb *mailBox) loop() {
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					// Only should AtomMailMessage and AtomMailTask 3rd-part logic
-					// throws exception to here, otherwise it must be a bug of framework.
-					traceMsg := debug.Stack()
-					log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
-					//curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
-					// todo
-					err := NewErrorf(ErrAtomosPanic,
-						"Recovering from developer logic, reason=(%v)", r).
-						AddStack(nil, traceMsg)
-					mb.handler.OnPanic(curMail, err)
+					//// Only should AtomMailMessage and AtomMailTask 3rd-part logic
+					//// throws exception to here, otherwise it must be a bug of framework.
+					//traceMsg := debug.Stack()
+					//log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
+					////curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
+					//// todo
+					//err := NewErrorf(ErrAtomosPanic,
+					//	"Recovering from developer logic, reason=(%v)", r).
+					//	AddStack(nil, traceMsg)
+					mb.handler.OnPanic(curMail, nil)
 				}
 			}()
 			for {

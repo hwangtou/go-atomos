@@ -5,8 +5,10 @@ package go_atomos
 import (
 	"container/list"
 	"encoding/json"
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"reflect"
+	"runtime"
 	"runtime/debug"
 	"sync"
 )
@@ -125,7 +127,7 @@ func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON 
 
 	var outBuf []byte
 	out, err := a.pushMessageMail(from, name, in)
-	if out != nil && !reflect.ValueOf(out).IsNil() {
+	if out != nil && reflect.TypeOf(out).Kind() == reflect.Pointer && !reflect.ValueOf(out).IsNil() {
 		var e error
 		if protoOrJSON {
 			outBuf, e = proto.Marshal(out)
@@ -320,23 +322,30 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
 			"AtomHandler: Message handler not found, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
-	var stack []byte
+	//var stack []byte
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				stack = debug.Stack()
+				_, file, line, ok := runtime.Caller(2)
+				if !ok {
+					file, line = "???", 0
+				}
+				if err == nil {
+					err = NewErrorf(ErrFrameworkPanic, "OnMessage, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
+				}
+				err.AddStack(a, file, fmt.Sprintf("%v", r), line, args)
 			}
 		}()
 		fromID, _ := from.(ID)
 		reply, err = handler(fromID, a.atomos.GetInstance(), args)
 	}()
-	if len(stack) != 0 {
-		err = NewErrorf(ErrAtomMessageHandlerPanic,
-			"AtomLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
-			AddStack(a.GetIDInfo(), stack)
-	} else if err != nil && len(err.Stacks) > 0 {
-		err = err.AddStack(a.GetIDInfo(), debug.Stack())
-	}
+	//if len(stack) != 0 {
+	//	err = NewErrorf(ErrAtomMessageHandlerPanic,
+	//		"AtomLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
+	//		AddStack(a.GetIDInfo(), stack)
+	//} else if err != nil && len(err.Stacks) > 0 {
+	//	err = err.AddStack(a.GetIDInfo(), debug.Stack())
+	//}
 	return
 }
 
@@ -352,10 +361,14 @@ func (a *AtomLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
 func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewErrorf(ErrAtomKillHandlerPanic,
-				"AtomHandler: Kill RECOVERED, id=(%s),instance=(%+v),reason=(%s)", a.atomos.GetIDInfo(), a.atomos.Description(), r).
-				AddStack(a.GetIDInfo(), debug.Stack())
-			a.Log().Error(err.Message)
+			_, file, line, ok := runtime.Caller(2)
+			if !ok {
+				file, line = "???", 0
+			}
+			if err == nil {
+				err = NewErrorf(ErrFrameworkPanic, "OnStopping, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
+			}
+			err.AddStack(a, file, fmt.Sprintf("%v", r), line, nil)
 		}
 		a.element.elementAtomStopping(a)
 	}()

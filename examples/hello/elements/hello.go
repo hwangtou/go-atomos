@@ -44,9 +44,8 @@ func (h *HelloElement) Halt(from atomos.ID, cancelled map[uint64]atomos.Cancelle
 }
 
 func (h *HelloElement) Reload(oldInstance atomos.Atomos) {
-	old := oldInstance.(*HelloElement)
-	h.self = old.self
-	h.data = old.data
+	h.self.Log().Info("Reload")
+	*h = *oldInstance.(*HelloElement)
 }
 
 func (h *HelloElement) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, *atomos.ErrorInfo) {
@@ -78,9 +77,8 @@ func (h *HelloAtom) Halt(from atomos.ID, cancelled map[uint64]atomos.CancelledTa
 }
 
 func (h *HelloAtom) Reload(oldInstance atomos.Atomos) {
-	old := oldInstance.(*HelloElement)
-	h.self = old.self
-	h.data = old.data
+	h.self.Log().Info("Reload")
+	*h = *oldInstance.(*HelloAtom)
 }
 
 func (h *HelloAtom) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, *atomos.ErrorInfo) {
@@ -90,8 +88,9 @@ func (h *HelloAtom) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, 
 
 func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNetResp, *atomos.ErrorInfo) {
 	nextId := in.Id + 1
-	if nextId == 10 {
-		return &api.BuildNetResp{}, nil
+	if nextId == 3 {
+		panic("test")
+		//return &api.BuildNetResp{}, nil
 	}
 	h.self.Log().Info("BuildNet: %d", nextId)
 	name := fmt.Sprintf("hello:%d", nextId)
@@ -101,7 +100,15 @@ func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNet
 	}
 	_, err = helloId.BuildNet(h.self, &api.BuildNetReq{Id: nextId})
 	if err != nil {
-		return nil, err
+		//if in.Id == 0 {
+		//	return nil, err
+		//}
+		return nil, err.AutoStack(h.self, in)
 	}
 	return &api.BuildNetResp{}, nil
+}
+
+func (h *HelloAtom) MakePanic(from atomos.ID, in *api.MakePanicIn) (*api.MakePanicOut, *atomos.ErrorInfo) {
+	//TODO implement me
+	panic("implement me")
 }

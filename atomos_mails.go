@@ -219,7 +219,8 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 		m.waitCh <- &m.mailReply
 		m.waitCh = nil
 	} else {
-		panic("atomosMail: sendReply waitCh has been replied")
+		// TODO: 可能会在Panic之后被设置成nil，然后又被继续返回，确认下panic之后的具体调用。
+		//panic("atomosMail: sendReply waitCh has been replied")
 	}
 }
 

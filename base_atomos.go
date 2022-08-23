@@ -278,7 +278,8 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.Content.(*atomosMail)
 	// TODO: Debug Only.
 	if a.state != AtomosWaiting {
-		panic("")
+		// TODO: 检查这种状态
+		//panic("")
 	}
 	a.setBusy()
 	defer a.setWaiting()

@@ -1,7 +1,11 @@
 package go_atomos
 
 import (
+	"encoding/json"
 	"fmt"
+	"google.golang.org/protobuf/proto"
+	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -46,11 +50,34 @@ func NewErrorf(code int64, format string, args ...interface{}) *ErrorInfo {
 	}
 }
 
-func (x *ErrorInfo) AddStack(id *IDInfo, stack []byte) *ErrorInfo {
-	x.Stacks = append(x.Stacks, &ErrorStackInfo{
-		Id:    id,
-		Stack: stack,
+func (x *ErrorInfo) AddStack(id SelfID, file, recoverInfo string, line int, args proto.Message) {
+	// ID Info
+	var idInfo *IDInfo
+	if id != nil && reflect.TypeOf(id).Kind() == reflect.Pointer && !reflect.ValueOf(id).IsNil() {
+		idInfo = id.GetIDInfo()
+	}
+	// Argument
+	var buf, jsonBuf []byte
+	if args != nil && reflect.TypeOf(args).Kind() == reflect.Pointer && !reflect.ValueOf(args).IsNil() {
+		buf, _ = proto.Marshal(args)
+		jsonBuf, _ = json.Marshal(args)
+	}
+	x.Stacks = append(x.Stacks, &ErrorCallerInfo{
+		Id:       idInfo,
+		Reason:   recoverInfo,
+		File:     file,
+		Line:     uint32(line),
+		Args:     buf,
+		ArgsRead: string(jsonBuf),
 	})
+}
+
+func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
+	_, file, line, ok := runtime.Caller(1)
+	if !ok {
+		file, line = "???", 0
+	}
+	x.AddStack(id, file, "", line, args)
 	return x
 }
 
@@ -60,9 +87,15 @@ func (x *ErrorInfo) Error() string {
 	}
 	if len(x.Stacks) > 0 {
 		var stacks strings.Builder
+		n := len(x.Stacks)
 		for i, stack := range x.Stacks {
-			stacks.WriteString(fmt.Sprintf("Chain[%d]: %s\n", i, stack.Id.Info()))
-			stacks.Write(stack.Stack)
+			stacks.WriteString(fmt.Sprintf("Chain[%d] %s -> %s:%d\n", n-i-1, stack.Id.Info(), stack.File, stack.Line))
+			if stack.Reason != "" {
+				stacks.WriteString(fmt.Sprintf("\tRecover: %s\n", stack.Reason))
+			}
+			if stack.ArgsRead != "" {
+				stacks.WriteString(fmt.Sprintf("\tArguments: %s\n", stack.ArgsRead))
+			}
 		}
 		return fmt.Sprintf("%s\n%s", x.Message, stacks.String())
 	}

@@ -16,7 +16,7 @@
 // versions:
 // 	protoc-gen-go v1.26.0-devel
 // 	protoc        v3.19.4
-// source: examples/hello/api/hello.proto
+// source: api/hello.proto
 
 package api
 
@@ -43,7 +43,7 @@ type HelloData struct {
 func (x *HelloData) Reset() {
 	*x = HelloData{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[0]
+		mi := &file_api_hello_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -56,7 +56,7 @@ func (x *HelloData) String() string {
 func (*HelloData) ProtoMessage() {}
 
 func (x *HelloData) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[0]
+	mi := &file_api_hello_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -69,7 +69,7 @@ func (x *HelloData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloData.ProtoReflect.Descriptor instead.
 func (*HelloData) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{0}
+	return file_api_hello_proto_rawDescGZIP(), []int{0}
 }
 
 type HelloSpawnArg struct {
@@ -83,7 +83,7 @@ type HelloSpawnArg struct {
 func (x *HelloSpawnArg) Reset() {
 	*x = HelloSpawnArg{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[1]
+		mi := &file_api_hello_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -96,7 +96,7 @@ func (x *HelloSpawnArg) String() string {
 func (*HelloSpawnArg) ProtoMessage() {}
 
 func (x *HelloSpawnArg) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[1]
+	mi := &file_api_hello_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +109,7 @@ func (x *HelloSpawnArg) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloSpawnArg.ProtoReflect.Descriptor instead.
 func (*HelloSpawnArg) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{1}
+	return file_api_hello_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *HelloSpawnArg) GetId() int32 {
@@ -131,7 +131,7 @@ type HelloReq struct {
 func (x *HelloReq) Reset() {
 	*x = HelloReq{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[2]
+		mi := &file_api_hello_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -144,7 +144,7 @@ func (x *HelloReq) String() string {
 func (*HelloReq) ProtoMessage() {}
 
 func (x *HelloReq) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[2]
+	mi := &file_api_hello_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -157,7 +157,7 @@ func (x *HelloReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloReq.ProtoReflect.Descriptor instead.
 func (*HelloReq) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{2}
+	return file_api_hello_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *HelloReq) GetName() string {
@@ -179,7 +179,7 @@ type HelloResp struct {
 func (x *HelloResp) Reset() {
 	*x = HelloResp{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[3]
+		mi := &file_api_hello_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -192,7 +192,7 @@ func (x *HelloResp) String() string {
 func (*HelloResp) ProtoMessage() {}
 
 func (x *HelloResp) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[3]
+	mi := &file_api_hello_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -205,7 +205,7 @@ func (x *HelloResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloResp.ProtoReflect.Descriptor instead.
 func (*HelloResp) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{3}
+	return file_api_hello_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *HelloResp) GetMessage() string {
@@ -226,7 +226,7 @@ type BuildNetReq struct {
 func (x *BuildNetReq) Reset() {
 	*x = BuildNetReq{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[4]
+		mi := &file_api_hello_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -239,7 +239,7 @@ func (x *BuildNetReq) String() string {
 func (*BuildNetReq) ProtoMessage() {}
 
 func (x *BuildNetReq) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[4]
+	mi := &file_api_hello_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -252,7 +252,7 @@ func (x *BuildNetReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildNetReq.ProtoReflect.Descriptor instead.
 func (*BuildNetReq) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{4}
+	return file_api_hello_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *BuildNetReq) GetId() int32 {
@@ -271,7 +271,7 @@ type BuildNetResp struct {
 func (x *BuildNetResp) Reset() {
 	*x = BuildNetResp{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_examples_hello_api_hello_proto_msgTypes[5]
+		mi := &file_api_hello_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -284,7 +284,7 @@ func (x *BuildNetResp) String() string {
 func (*BuildNetResp) ProtoMessage() {}
 
 func (x *BuildNetResp) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_hello_api_hello_proto_msgTypes[5]
+	mi := &file_api_hello_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,25 +297,102 @@ func (x *BuildNetResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildNetResp.ProtoReflect.Descriptor instead.
 func (*BuildNetResp) Descriptor() ([]byte, []int) {
-	return file_examples_hello_api_hello_proto_rawDescGZIP(), []int{5}
+	return file_api_hello_proto_rawDescGZIP(), []int{5}
 }
 
-var File_examples_hello_api_hello_proto protoreflect.FileDescriptor
+type MakePanicIn struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
 
-var file_examples_hello_api_hello_proto_rawDesc = []byte{
-	0x0a, 0x1e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x12, 0x03, 0x61, 0x70, 0x69, 0x22, 0x0b, 0x0a, 0x09, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x44, 0x61,
-	0x74, 0x61, 0x22, 0x1f, 0x0a, 0x0d, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x53, 0x70, 0x61, 0x77, 0x6e,
-	0x41, 0x72, 0x67, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52,
-	0x02, 0x69, 0x64, 0x22, 0x1e, 0x0a, 0x08, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x71, 0x12,
-	0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
-	0x61, 0x6d, 0x65, 0x22, 0x25, 0x0a, 0x09, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x73, 0x70,
-	0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x1d, 0x0a, 0x0b, 0x42, 0x75,
-	0x69, 0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x71, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x02, 0x69, 0x64, 0x22, 0x0e, 0x0a, 0x0c, 0x42, 0x75, 0x69,
-	0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x73, 0x70, 0x32, 0x80, 0x02, 0x0a, 0x05, 0x48, 0x65,
+func (x *MakePanicIn) Reset() {
+	*x = MakePanicIn{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_hello_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MakePanicIn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MakePanicIn) ProtoMessage() {}
+
+func (x *MakePanicIn) ProtoReflect() protoreflect.Message {
+	mi := &file_api_hello_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MakePanicIn.ProtoReflect.Descriptor instead.
+func (*MakePanicIn) Descriptor() ([]byte, []int) {
+	return file_api_hello_proto_rawDescGZIP(), []int{6}
+}
+
+type MakePanicOut struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *MakePanicOut) Reset() {
+	*x = MakePanicOut{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_hello_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MakePanicOut) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MakePanicOut) ProtoMessage() {}
+
+func (x *MakePanicOut) ProtoReflect() protoreflect.Message {
+	mi := &file_api_hello_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MakePanicOut.ProtoReflect.Descriptor instead.
+func (*MakePanicOut) Descriptor() ([]byte, []int) {
+	return file_api_hello_proto_rawDescGZIP(), []int{7}
+}
+
+var File_api_hello_proto protoreflect.FileDescriptor
+
+var file_api_hello_proto_rawDesc = []byte{
+	0x0a, 0x0f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x12, 0x03, 0x61, 0x70, 0x69, 0x22, 0x0b, 0x0a, 0x09, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x44,
+	0x61, 0x74, 0x61, 0x22, 0x1f, 0x0a, 0x0d, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x53, 0x70, 0x61, 0x77,
+	0x6e, 0x41, 0x72, 0x67, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05,
+	0x52, 0x02, 0x69, 0x64, 0x22, 0x1e, 0x0a, 0x08, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x71,
+	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
+	0x6e, 0x61, 0x6d, 0x65, 0x22, 0x25, 0x0a, 0x09, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x73,
+	0x70, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x1d, 0x0a, 0x0b, 0x42,
+	0x75, 0x69, 0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x71, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x02, 0x69, 0x64, 0x22, 0x0e, 0x0a, 0x0c, 0x42, 0x75,
+	0x69, 0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x73, 0x70, 0x22, 0x0d, 0x0a, 0x0b, 0x4d, 0x61,
+	0x6b, 0x65, 0x50, 0x61, 0x6e, 0x69, 0x63, 0x49, 0x6e, 0x22, 0x0e, 0x0a, 0x0c, 0x4d, 0x61, 0x6b,
+	0x65, 0x50, 0x61, 0x6e, 0x69, 0x63, 0x4f, 0x75, 0x74, 0x32, 0xb4, 0x02, 0x0a, 0x05, 0x48, 0x65,
 	0x6c, 0x6c, 0x6f, 0x12, 0x34, 0x0a, 0x0c, 0x45, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x53, 0x70,
 	0x61, 0x77, 0x6e, 0x12, 0x12, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x53,
 	0x70, 0x61, 0x77, 0x6e, 0x41, 0x72, 0x67, 0x1a, 0x0e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x48, 0x65,
@@ -331,57 +408,64 @@ var file_examples_hello_api_hello_proto_rawDesc = []byte{
 	0x6c, 0x6c, 0x6f, 0x52, 0x65, 0x73, 0x70, 0x22, 0x00, 0x12, 0x31, 0x0a, 0x08, 0x42, 0x75, 0x69,
 	0x6c, 0x64, 0x4e, 0x65, 0x74, 0x12, 0x10, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x42, 0x75, 0x69, 0x6c,
 	0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x71, 0x1a, 0x11, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x42, 0x75,
-	0x69, 0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x73, 0x70, 0x22, 0x00, 0x42, 0x14, 0x5a, 0x12,
-	0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x2f, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x2f, 0x61,
-	0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x69, 0x6c, 0x64, 0x4e, 0x65, 0x74, 0x52, 0x65, 0x73, 0x70, 0x22, 0x00, 0x12, 0x32, 0x0a, 0x09,
+	0x4d, 0x61, 0x6b, 0x65, 0x50, 0x61, 0x6e, 0x69, 0x63, 0x12, 0x10, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x4d, 0x61, 0x6b, 0x65, 0x50, 0x61, 0x6e, 0x69, 0x63, 0x49, 0x6e, 0x1a, 0x11, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x4d, 0x61, 0x6b, 0x65, 0x50, 0x61, 0x6e, 0x69, 0x63, 0x4f, 0x75, 0x74, 0x22, 0x00,
+	0x42, 0x14, 0x5a, 0x12, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x2f, 0x68, 0x65, 0x6c,
+	0x6c, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
-	file_examples_hello_api_hello_proto_rawDescOnce sync.Once
-	file_examples_hello_api_hello_proto_rawDescData = file_examples_hello_api_hello_proto_rawDesc
+	file_api_hello_proto_rawDescOnce sync.Once
+	file_api_hello_proto_rawDescData = file_api_hello_proto_rawDesc
 )
 
-func file_examples_hello_api_hello_proto_rawDescGZIP() []byte {
-	file_examples_hello_api_hello_proto_rawDescOnce.Do(func() {
-		file_examples_hello_api_hello_proto_rawDescData = protoimpl.X.CompressGZIP(file_examples_hello_api_hello_proto_rawDescData)
+func file_api_hello_proto_rawDescGZIP() []byte {
+	file_api_hello_proto_rawDescOnce.Do(func() {
+		file_api_hello_proto_rawDescData = protoimpl.X.CompressGZIP(file_api_hello_proto_rawDescData)
 	})
-	return file_examples_hello_api_hello_proto_rawDescData
+	return file_api_hello_proto_rawDescData
 }
 
-var file_examples_hello_api_hello_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_examples_hello_api_hello_proto_goTypes = []interface{}{
+var file_api_hello_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_api_hello_proto_goTypes = []interface{}{
 	(*HelloData)(nil),     // 0: api.HelloData
 	(*HelloSpawnArg)(nil), // 1: api.HelloSpawnArg
 	(*HelloReq)(nil),      // 2: api.HelloReq
 	(*HelloResp)(nil),     // 3: api.HelloResp
 	(*BuildNetReq)(nil),   // 4: api.BuildNetReq
 	(*BuildNetResp)(nil),  // 5: api.BuildNetResp
+	(*MakePanicIn)(nil),   // 6: api.MakePanicIn
+	(*MakePanicOut)(nil),  // 7: api.MakePanicOut
 }
-var file_examples_hello_api_hello_proto_depIdxs = []int32{
+var file_api_hello_proto_depIdxs = []int32{
 	1, // 0: api.Hello.ElementSpawn:input_type -> api.HelloSpawnArg
 	2, // 1: api.Hello.ElementSayHello:input_type -> api.HelloReq
 	1, // 2: api.Hello.Spawn:input_type -> api.HelloSpawnArg
 	2, // 3: api.Hello.SayHello:input_type -> api.HelloReq
 	4, // 4: api.Hello.BuildNet:input_type -> api.BuildNetReq
-	0, // 5: api.Hello.ElementSpawn:output_type -> api.HelloData
-	3, // 6: api.Hello.ElementSayHello:output_type -> api.HelloResp
-	0, // 7: api.Hello.Spawn:output_type -> api.HelloData
-	3, // 8: api.Hello.SayHello:output_type -> api.HelloResp
-	5, // 9: api.Hello.BuildNet:output_type -> api.BuildNetResp
-	5, // [5:10] is the sub-list for method output_type
-	0, // [0:5] is the sub-list for method input_type
+	6, // 5: api.Hello.MakePanic:input_type -> api.MakePanicIn
+	0, // 6: api.Hello.ElementSpawn:output_type -> api.HelloData
+	3, // 7: api.Hello.ElementSayHello:output_type -> api.HelloResp
+	0, // 8: api.Hello.Spawn:output_type -> api.HelloData
+	3, // 9: api.Hello.SayHello:output_type -> api.HelloResp
+	5, // 10: api.Hello.BuildNet:output_type -> api.BuildNetResp
+	7, // 11: api.Hello.MakePanic:output_type -> api.MakePanicOut
+	6, // [6:12] is the sub-list for method output_type
+	0, // [0:6] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_examples_hello_api_hello_proto_init() }
-func file_examples_hello_api_hello_proto_init() {
-	if File_examples_hello_api_hello_proto != nil {
+func init() { file_api_hello_proto_init() }
+func file_api_hello_proto_init() {
+	if File_api_hello_proto != nil {
 		return
 	}
 	if !protoimpl.UnsafeEnabled {
-		file_examples_hello_api_hello_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*HelloData); i {
 			case 0:
 				return &v.state
@@ -393,7 +477,7 @@ func file_examples_hello_api_hello_proto_init() {
 				return nil
 			}
 		}
-		file_examples_hello_api_hello_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*HelloSpawnArg); i {
 			case 0:
 				return &v.state
@@ -405,7 +489,7 @@ func file_examples_hello_api_hello_proto_init() {
 				return nil
 			}
 		}
-		file_examples_hello_api_hello_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*HelloReq); i {
 			case 0:
 				return &v.state
@@ -417,7 +501,7 @@ func file_examples_hello_api_hello_proto_init() {
 				return nil
 			}
 		}
-		file_examples_hello_api_hello_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*HelloResp); i {
 			case 0:
 				return &v.state
@@ -429,7 +513,7 @@ func file_examples_hello_api_hello_proto_init() {
 				return nil
 			}
 		}
-		file_examples_hello_api_hello_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BuildNetReq); i {
 			case 0:
 				return &v.state
@@ -441,8 +525,32 @@ func file_examples_hello_api_hello_proto_init() {
 				return nil
 			}
 		}
-		file_examples_hello_api_hello_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_api_hello_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BuildNetResp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_hello_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MakePanicIn); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_hello_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MakePanicOut); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -458,18 +566,18 @@ func file_examples_hello_api_hello_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_examples_hello_api_hello_proto_rawDesc,
+			RawDescriptor: file_api_hello_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_examples_hello_api_hello_proto_goTypes,
-		DependencyIndexes: file_examples_hello_api_hello_proto_depIdxs,
-		MessageInfos:      file_examples_hello_api_hello_proto_msgTypes,
+		GoTypes:           file_api_hello_proto_goTypes,
+		DependencyIndexes: file_api_hello_proto_depIdxs,
+		MessageInfos:      file_api_hello_proto_msgTypes,
 	}.Build()
-	File_examples_hello_api_hello_proto = out.File
-	file_examples_hello_api_hello_proto_rawDesc = nil
-	file_examples_hello_api_hello_proto_goTypes = nil
-	file_examples_hello_api_hello_proto_depIdxs = nil
+	File_api_hello_proto = out.File
+	file_api_hello_proto_rawDesc = nil
+	file_api_hello_proto_goTypes = nil
+	file_api_hello_proto_depIdxs = nil
 }

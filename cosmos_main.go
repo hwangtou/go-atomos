@@ -3,8 +3,10 @@ package go_atomos
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"io/ioutil"
+	"runtime"
 	"runtime/debug"
 	"sync"
 )
@@ -487,16 +489,23 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *ErrorInfo) {
 	name := i.Interface.Config.Name
 	defer func() {
-		var stack []byte
-		if r := recover(); r != nil {
-			stack = debug.Stack()
+		//var stack []byte
+		if re := recover(); re != nil {
+			_, file, line, ok := runtime.Caller(2)
+			if !ok {
+				file, line = "???", 0
+			}
+			if err == nil {
+				err = NewErrorf(ErrFrameworkPanic, "SpawnElement, Recover from panic, reason=(%s),file=(%s),line=(%d)", re, file, line)
+			}
+			err.AddStack(c, file, fmt.Sprintf("%v", re), line, nil)
 		}
-		if len(stack) != 0 {
-			err = NewErrorf(ErrFrameworkPanic, "Spawn new element PANIC, name=(%s),err=(%v)", name, r).
-				AddStack(c.GetIDInfo(), stack)
-		} else if err != nil && len(err.Stacks) > 0 {
-			err = err.AddStack(c.GetIDInfo(), debug.Stack())
-		}
+		//if len(stack) != 0 {
+		//	err = NewErrorf(ErrFrameworkPanic, "Spawn new element PANIC, name=(%s),err=(%v)", name, r).
+		//		AddStack(c.GetIDInfo(), stack)
+		//} else if err != nil && len(err.Stacks) > 0 {
+		//	err = err.AddStack(c.GetIDInfo(), debug.Stack())
+		//}
 		//if err != nil {
 		//	c.Log().Fatal("Main: %s, err=(%v)", name, err)
 		//}
