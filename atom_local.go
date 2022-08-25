@@ -141,6 +141,14 @@ func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON 
 	return outBuf, err
 }
 
+func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+	decoderFn, has := a.current.AtomDecoders[name]
+	if !has {
+		return nil, nil
+	}
+	return decoderFn.InDec, decoderFn.OutDec
+}
+
 // Kill
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.

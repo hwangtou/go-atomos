@@ -139,6 +139,14 @@ func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJS
 	return outBuf, err
 }
 
+func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+	decoderFn, has := e.current.ElementDecoders[name]
+	if !has {
+		return nil, nil
+	}
+	return decoderFn.InDec, decoderFn.OutDec
+}
+
 func (e *ElementLocal) Kill(from ID) *ErrorInfo {
 	return NewError(ErrElementCannotKill, "Cannot kill element")
 }

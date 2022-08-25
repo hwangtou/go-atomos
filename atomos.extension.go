@@ -97,7 +97,7 @@ func (x *ErrorInfo) Error() string {
 				stacks.WriteString(fmt.Sprintf("\tArguments: %s\n", stack.ArgsRead))
 			}
 		}
-		return fmt.Sprintf("%s\n%s", x.Message, stacks.String())
+		return fmt.Sprintf("[%v] %s\n%s", x.Code, x.Message, stacks.String())
 	}
 	return x.Message
 }

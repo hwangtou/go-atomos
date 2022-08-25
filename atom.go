@@ -52,6 +52,8 @@ type ID interface {
 
 	MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 
+	DecoderByName(name string) (MessageDecoder, MessageDecoder)
+
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.

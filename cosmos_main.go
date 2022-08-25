@@ -122,6 +122,10 @@ func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON
 	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 }
 
+func (c *CosmosMain) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+	return nil, nil
+}
+
 func (c *CosmosMain) Kill(from ID) *ErrorInfo {
 	return NewError(ErrMainCannotKill, "Cannot kill main")
 }
@@ -491,7 +495,7 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 	defer func() {
 		//var stack []byte
 		if re := recover(); re != nil {
-			_, file, line, ok := runtime.Caller(2)
+			_, file, line, ok := runtime.Caller(4)
 			if !ok {
 				file, line = "???", 0
 			}
