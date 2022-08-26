@@ -384,6 +384,7 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 				if err == nil {
 					err = NewErrorf(ErrFrameworkPanic, "OnMessage, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
 				}
+				err.Panic = string(debug.Stack())
 				err.AddStack(e, file, fmt.Sprintf("%v", r), line, args)
 			}
 		}()

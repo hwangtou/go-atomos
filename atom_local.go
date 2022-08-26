@@ -341,6 +341,7 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 				if err == nil {
 					err = NewErrorf(ErrFrameworkPanic, "OnMessage, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
 				}
+				err.Panic = string(debug.Stack())
 				err.AddStack(a, file, fmt.Sprintf("%v", r), line, args)
 			}
 		}()
@@ -376,6 +377,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 			if err == nil {
 				err = NewErrorf(ErrFrameworkPanic, "OnStopping, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
 			}
+			err.Panic = string(debug.Stack())
 			err.AddStack(a, file, fmt.Sprintf("%v", r), line, nil)
 		}
 		a.element.elementAtomStopping(a)

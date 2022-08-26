@@ -46,7 +46,8 @@ message LogMail {
 message ErrorInfo {
   int64 code = 1;
   string message = 2;
-  repeated ErrorCallerInfo stacks = 3;
+  string panic = 3;
+  repeated ErrorCallerInfo stacks = 4;
 }
 
 message ErrorCallerInfo {

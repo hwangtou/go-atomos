@@ -338,7 +338,8 @@ func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, *E
 		// Check message.
 		if msg != nil {
 			msgType := reflect.TypeOf(msg)
-			if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
+			//if fn1Type.String() != msgType.String() || !msgType.AssignableTo(fn1Type) {
+			if !msgType.ConvertibleTo(fn1Type) || !msgType.AssignableTo(fn1Type) {
 				return 0, NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func message receiver, fnName=(%s),fn1Type=(%T)", fnName, msg)
 			}
 		}
