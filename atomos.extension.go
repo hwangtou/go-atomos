@@ -73,6 +73,9 @@ func (x *ErrorInfo) AddStack(id SelfID, file, recoverInfo string, line int, args
 }
 
 func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
+	if x == nil {
+		return nil
+	}
 	_, file, line, ok := runtime.Caller(1)
 	if !ok {
 		file, line = "???", 0
