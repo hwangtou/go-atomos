@@ -2,12 +2,14 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/user"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -21,36 +23,61 @@ func main() {
 	//log.Println(process)
 	//time.Sleep(10 * time.Second)
 
-	if len(os.Args) == 0 {
-		log.Println("Welcome to Atomos Supervisor!")
-		log.Println("Usage: init|check_config|status")
-		return
-	}
-	switch os.Args[1] {
+	log.Println("Welcome to Atomos Supervisor!")
+
+	var (
+		action     = flag.String("a", "help", "[init|check|status]")
+		userName   = flag.String("u", "", "user name")
+		groupName  = flag.String("g", "", "group name")
+		cosmosName = flag.String("c", "", "cosmos name")
+		nodeNames  = flag.String("n", "", "node name list (separates by ,)")
+	)
+
+	flag.Parse()
+
+	nodeNameList := strings.Split(*nodeNames, ",")
+	switch *action {
 	case "init":
-		if er := initPaths(u, g); er != nil {
+		if *cosmosName == "" || nodeNameList == nil {
+			log.Println("-c or -n is empty")
+			goto help
+		}
+		if *groupName == "" {
+			log.Println("We should know which group is allowed to access, please give a group name with -g argument.")
+			goto help
+		}
+		if *userName == "" {
+			u, er := user.Current()
+			if er != nil {
+				log.Println("Get default user failed,", er)
+				goto help
+			}
+			*userName = u.Username
+		}
+		if er := initPaths(*userName, *groupName, *cosmosName, nodeNameList); er != nil {
 			log.Println("Paths init failed:", er)
 			return
 		}
-	case "check_config":
-		if er := checkConfigs(); er != nil {
-			log.Println("Check configs failed:", er)
+		return
+	case "check":
+		if *cosmosName == "" || nodeNameList == nil {
+			log.Println("-c or -n is empty")
+			goto help
+		}
+		if *groupName == "" {
+			log.Println("We should know which group is allowed to access, please give a group name with -g argument.")
+			goto help
+		}
+		if er := checkPaths(*groupName, *cosmosName, nodeNameList); er != nil {
+			log.Println("Paths check failed:", er)
 			return
 		}
-	default:
-		log.Println("Wrong Usage:", os.Args)
+		return
+	case "status":
 	}
+help:
+	log.Println("Usage: -a [init|check|status] -u {user_name} -g {group_name} -c {cosmos_name} -n {node_name_1,node_name_2,...}")
 }
-
-const (
-	name = "hello_world"
-	u    = "hwangtou"
-	g    = "admin"
-)
-
-var (
-	list = []string{"user_wormhole", "user_core"}
-)
 
 func checkCosmosName(cosmosName string) bool {
 	if cosmosName == "" {
@@ -64,11 +91,11 @@ func checkCosmosName(cosmosName string) bool {
 	return true
 }
 
-func checkProcessName(processName string) bool {
-	if processName == "" {
+func checkNodeName(nodeName string) bool {
+	if nodeName == "" {
 		return false
 	}
-	for _, c := range processName {
+	for _, c := range nodeName {
 		if !('0' <= c && c <= '9' || 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '.' || c == '_') {
 			return false
 		}
@@ -91,7 +118,9 @@ const (
 	EtcPerm = 0770
 )
 
-func initPaths(cosmosUser, cosmosGroup string) error {
+// INIT
+
+func initPaths(cosmosUser, cosmosGroup, cosmosName string, nodeNameList []string) error {
 	if os.Getuid() != 0 {
 		return errors.New("init supervisor should run under root")
 	}
@@ -131,12 +160,12 @@ func initPaths(cosmosUser, cosmosGroup string) error {
 		log.Println("user not in group")
 		return er
 	}
-	if er := initSupervisorPaths(name, u, g); er != nil {
+	if er := initSupervisorPaths(cosmosName, u, g); er != nil {
 		log.Println(er)
 		return er
 	}
-	for _, proc := range list {
-		if er := initProcessesPaths(name, proc, u, g); er != nil {
+	for _, nodeName := range nodeNameList {
+		if er := initNodePaths(cosmosName, nodeName, u, g); er != nil {
 			log.Println(er)
 			return er
 		}
@@ -148,7 +177,7 @@ func initPaths(cosmosUser, cosmosGroup string) error {
 func initSupervisorPaths(cosmosName string, u *user.User, g *user.Group) error {
 	// Check whether cosmos name is legal.
 	// 检查cosmos名称是否合法。
-	if !checkCosmosName(name) {
+	if !checkCosmosName(cosmosName) {
 		return errors.New("invalid cosmos name")
 	}
 
@@ -187,37 +216,41 @@ func initSupervisorPaths(cosmosName string, u *user.User, g *user.Group) error {
 	return nil
 }
 
-func initProcessesPaths(cosmosName, processName string, u *user.User, g *user.Group) error {
+func initNodePaths(cosmosName, nodeName string, u *user.User, g *user.Group) error {
 	// Check whether cosmos name is legal.
 	// 检查cosmos名称是否合法。
-	if !checkProcessName(name) {
-		return errors.New("invalid process name")
+	if !checkNodeName(cosmosName) {
+		return errors.New("invalid node name")
 	}
 
 	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
 	// 检查/var/run/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName+"/"+processName).CreateDirectoryIfNotExist(u, g, VarRunPerm); er != nil {
+	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, VarRunPerm); er != nil {
 		return er
 	}
 	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
 	// 检查/var/log/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName+"/"+processName).CreateDirectoryIfNotExist(u, g, VarLogPerm); er != nil {
+	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, VarLogPerm); er != nil {
 		return er
 	}
 	// Check whether /etc/atomos_{cosmosName} directory exists or not.
 	// 检查/etc/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(EtcPath+AtomosPrefix+cosmosName+"/"+processName).CreateDirectoryIfNotExist(u, g, EtcPerm); er != nil {
+	if er := NewPath(EtcPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, EtcPerm); er != nil {
 		return er
 	}
-	// Create {process}.conf
-	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/" + processName + ".conf")
+	// Create {node}.conf
+	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/" + nodeName + ".conf")
 	if er := confPath.Refresh(); er != nil {
 		return er
 	}
-	conf := &SupervisorConfig{
-		CosmosName: cosmosName,
-		LogPath:    VarLogPath + AtomosPrefix + cosmosName + "/" + processName,
-		LogLevel:   "DEBUG",
+	conf := &NodeConfig{
+		CosmosName:      cosmosName,
+		Node:            nodeName,
+		LogPath:         VarLogPath + AtomosPrefix + cosmosName + "/" + nodeName,
+		LogLevel:        "DEBUG",
+		EnableCert:      nil,
+		EnableServer:    nil,
+		CustomizeConfig: nil,
 	}
 	buf, er := yaml.Marshal(conf)
 	if er != nil {
@@ -229,28 +262,140 @@ func initProcessesPaths(cosmosName, processName string, u *user.User, g *user.Gr
 	return nil
 }
 
-func checkConfigs() error {
-	if er := checkSupervisorConfig(name); er != nil {
+// CHECK
+
+func checkPaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
+	u, er := user.Current()
+	if er != nil {
 		return er
 	}
-	for _, proc := range list {
-		if er := checkProcessesConfig(name, proc); er != nil {
+	// Check group.
+	g, er := user.LookupGroup(cosmosGroup)
+	if er != nil {
+		if _, ok := er.(*user.UnknownGroupError); ok {
+			log.Println("unknown group, err=", er)
+			return er
+		}
+		log.Println("lookup group failed, err=", er)
+		return er
+	}
+	userGroups, er := u.GroupIds()
+	if er != nil {
+		log.Println("iter user group failed, err=", er)
+		return er
+	}
+	inGroup := false
+	for _, gid := range userGroups {
+		if gid == g.Gid {
+			inGroup = true
+			break
+		}
+	}
+	if !inGroup {
+		log.Println("user not in group")
+		return er
+	}
+	if er := checkSupervisorPath(cosmosName, u); er != nil {
+		return er
+	}
+	for _, nodeName := range nodeNameList {
+		if er := checkNodePath(cosmosName, nodeName, u); er != nil {
 			return er
 		}
 	}
+	log.Println("Paths checked")
 	return nil
 }
 
-func checkSupervisorConfig(cosmosName string) error {
-	if !NewPath(EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf").exist() {
-		return errors.New("supervisor config not exist")
+func checkSupervisorPath(cosmosName string, u *user.User) error {
+	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
+	// 检查/var/run/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, VarRunPerm); er != nil {
+		return er
+	}
+	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
+	// 检查/var/log/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, VarLogPerm); er != nil {
+		return er
+	}
+	// Check whether /etc/atomos_{cosmosName} directory exists or not.
+	// 检查/etc/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(EtcPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, EtcPerm); er != nil {
+		return er
+	}
+	// Get supervisor.conf
+	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf")
+	if er := confPath.Refresh(); er != nil {
+		return er
+	}
+	if !confPath.exist() {
+		return errors.New("file not exist")
+	}
+	buf, er := ioutil.ReadFile(confPath.path)
+	if er != nil {
+		return er
+	}
+	conf := &SupervisorConfig{}
+	er = yaml.Unmarshal(buf, conf)
+	if er != nil {
+		return er
+	}
+	if conf.CosmosName != cosmosName {
+		return errors.New("invalid cosmos name")
+	}
+	if conf.LogPath != VarLogPath+AtomosPrefix+cosmosName {
+		log.Println("log path has changed to", conf.LogPath)
 	}
 	return nil
 }
 
-func checkProcessesConfig(cosmosName, procName string) error {
-	if !NewPath(VarRunPath + AtomosPrefix + cosmosName + "/" + procName + ".conf").exist() {
-		return errors.New("supervisor config not exist")
+func checkNodePath(cosmosName, nodeName string, u *user.User) error {
+	// Check whether cosmos name is legal.
+	// 检查cosmos名称是否合法。
+	if !checkNodeName(cosmosName) {
+		return errors.New("invalid node name")
+	}
+
+	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
+	// 检查/var/run/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, VarRunPerm); er != nil {
+		return er
+	}
+	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
+	// 检查/var/log/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, VarLogPerm); er != nil {
+		return er
+	}
+	// Check whether /etc/atomos_{cosmosName} directory exists or not.
+	// 检查/etc/atomos_{cosmosName}目录是否存在。
+	if er := NewPath(EtcPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, EtcPerm); er != nil {
+		return er
+	}
+	// Get {node}.conf
+	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/" + nodeName + ".conf")
+	if er := confPath.Refresh(); er != nil {
+		return er
+	}
+	if !confPath.exist() {
+		return errors.New("file not exist")
+	}
+	buf, er := ioutil.ReadFile(confPath.path)
+	if er != nil {
+		return er
+	}
+	conf := &NodeConfig{}
+	er = yaml.Unmarshal(buf, conf)
+	if er != nil {
+		return er
+	}
+	if conf.CosmosName != cosmosName {
+		return errors.New("invalid cosmos name")
+	}
+	if conf.Node != nodeName {
+		return errors.New("invalid cosmos name")
+	}
+	if conf.LogPath != VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName {
+		log.Println("log path has changed to", conf.LogPath)
 	}
 	return nil
 }
@@ -301,6 +446,42 @@ func (p *Path) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm os.Fi
 			log.Println("confirm owner and mode failed, err=", er)
 			return er
 		}
+	}
+	return nil
+}
+
+func (p *Path) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) error {
+	if er := p.Refresh(); er != nil {
+		log.Println("refresh failed, err=", er)
+		return er
+	}
+	if !p.exist() {
+		return errors.New("directory not exists")
+	}
+	// Owner
+	gidList, er := u.GroupIds()
+	if er != nil {
+		return er
+	}
+	switch stat := p.Sys().(type) {
+	case *syscall.Stat_t:
+		groupOwner := false
+		statGid := strconv.FormatUint(uint64(stat.Gid), 10)
+		for _, gid := range gidList {
+			if gid == statGid {
+				groupOwner = true
+				break
+			}
+		}
+		if !groupOwner {
+			return errors.New("user's group is not owned directory")
+		}
+	default:
+		return errors.New("unsupported file system")
+	}
+	// Mode
+	if p.Mode().Perm() != perm {
+		return errors.New("invalid file mode")
 	}
 	return nil
 }
@@ -367,13 +548,14 @@ type SupervisorConfig struct {
 	LogLevel   string `yaml:"log-level"`
 }
 
-type ProcessConfig struct {
-	Node     string `yaml:"node"`
-	LogPath  string `yaml:"log_path"`
-	LogLevel string `yaml:"log_level"`
+type NodeConfig struct {
+	CosmosName string `yaml:"cosmos-name"`
+	Node       string `yaml:"node"`
+	LogPath    string `yaml:"log-path"`
+	LogLevel   string `yaml:"log-level"`
 
-	EnableCert   *CertConfig         `yaml:"enable_cert"`
-	EnableServer *RemoteServerConfig `yaml:"enable_server"`
+	EnableCert   *CertConfig         `yaml:"enable-cert"`
+	EnableServer *RemoteServerConfig `yaml:"enable-server"`
 
 	CustomizeConfig map[string]string `yaml:"customize"`
 }
