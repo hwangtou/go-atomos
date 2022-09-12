@@ -26,7 +26,7 @@ func main() {
 	log.Println("Welcome to Atomos Supervisor!")
 
 	var (
-		action     = flag.String("a", "help", "[init|check|status]")
+		action     = flag.String("a", "help", "[init|validate|status|start|stop]")
 		userName   = flag.String("u", "", "user name")
 		groupName  = flag.String("g", "", "group name")
 		cosmosName = flag.String("c", "", "cosmos name")
@@ -59,7 +59,7 @@ func main() {
 			return
 		}
 		return
-	case "check":
+	case "validate":
 		if *cosmosName == "" || nodeNameList == nil {
 			log.Println("-c or -n is empty")
 			goto help
@@ -68,15 +68,20 @@ func main() {
 			log.Println("We should know which group is allowed to access, please give a group name with -g argument.")
 			goto help
 		}
-		if er := checkPaths(*groupName, *cosmosName, nodeNameList); er != nil {
-			log.Println("Paths check failed:", er)
+		if er := validatePaths(*groupName, *cosmosName, nodeNameList); er != nil {
+			log.Println("Paths validate failed:", er)
 			return
 		}
 		return
 	case "status":
+		if *cosmosName == "" || nodeNameList == nil {
+			log.Println("-c or -n is empty")
+			goto help
+		}
+		NewPath(VarRunPath + AtomosPrefix + cosmosName)
 	}
 help:
-	log.Println("Usage: -a [init|check|status] -u {user_name} -g {group_name} -c {cosmos_name} -n {node_name_1,node_name_2,...}")
+	log.Println("Usage: -a [init|validate|status] -u {user_name} -g {group_name} -c {cosmos_name} -n {node_name_1,node_name_2,...}")
 }
 
 func checkCosmosName(cosmosName string) bool {
@@ -264,7 +269,7 @@ func initNodePaths(cosmosName, nodeName string, u *user.User, g *user.Group) err
 
 // CHECK
 
-func checkPaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
+func validatePaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
 	u, er := user.Current()
 	if er != nil {
 		return er
@@ -295,11 +300,11 @@ func checkPaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
 		log.Println("user not in group")
 		return er
 	}
-	if er := checkSupervisorPath(cosmosName, u); er != nil {
+	if er := validateSupervisorPath(cosmosName, u); er != nil {
 		return er
 	}
 	for _, nodeName := range nodeNameList {
-		if er := checkNodePath(cosmosName, nodeName, u); er != nil {
+		if er := validateNodePath(cosmosName, nodeName, u); er != nil {
 			return er
 		}
 	}
@@ -307,7 +312,7 @@ func checkPaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
 	return nil
 }
 
-func checkSupervisorPath(cosmosName string, u *user.User) error {
+func validateSupervisorPath(cosmosName string, u *user.User) error {
 	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
 	// 检查/var/run/atomos_{cosmosName}目录是否存在。
 	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, VarRunPerm); er != nil {
@@ -349,7 +354,7 @@ func checkSupervisorPath(cosmosName string, u *user.User) error {
 	return nil
 }
 
-func checkNodePath(cosmosName, nodeName string, u *user.User) error {
+func validateNodePath(cosmosName, nodeName string, u *user.User) error {
 	// Check whether cosmos name is legal.
 	// 检查cosmos名称是否合法。
 	if !checkNodeName(cosmosName) {
