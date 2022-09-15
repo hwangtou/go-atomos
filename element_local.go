@@ -95,6 +95,9 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 // AtomLocal implements ID interface directly, so local ID is able to use AtomLocal reference directly.
 
 func (e *ElementLocal) GetIDInfo() *IDInfo {
+	if e == nil {
+		return nil
+	}
 	return e.atomos.GetIDInfo()
 }
 

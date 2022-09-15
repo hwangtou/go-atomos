@@ -21,7 +21,9 @@ type TaskFn func(taskId uint64, data proto.Message)
 
 type Task interface {
 	Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
+	AppendMethod(fnName string, msg proto.Message) (id uint64, err *ErrorInfo)
 	AddAfter(d time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
+	AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *ErrorInfo)
 	Cancel(id uint64) (CancelledTask, *ErrorInfo)
 }
 
@@ -197,6 +199,36 @@ func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, er
 	return at.curId, nil
 }
 
+func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
+	// Check if illegal before scheduling.
+	err = checkTaskFnByName(at.atomos, fnName, msg)
+	if err != nil {
+		return 0, err
+	}
+
+	at.mutex.Lock()
+	defer at.mutex.Unlock()
+
+	// If BaseAtomos is nil, Atomos has been stopped, add failed.
+	if at.atomos == nil {
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, Append atomos failed, fn=(%s),msg=(%+v)", fnName, msg)
+	}
+
+	// Id increment.
+	at.curId += 1
+
+	// Load the Atomos mail.
+	am := allocAtomosMail()
+	initTaskMail(am, at.curId, fnName, msg)
+	// Append to the tail of Atomos mailbox immediately.
+	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, Append mailbox failed, fn=(%s),msg=(%+v)", fnName, msg)
+	}
+	return at.curId, nil
+}
+
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return an cancellable task id.
@@ -214,6 +246,83 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.
 	if at.atomos == nil {
 		return 0, NewErrorf(ErrAtomosIsNotRunning,
 			"STOPPED, AddAfter failed, after=(%v),fn=(%T),msg=(%+v)", after, fn, msg)
+	}
+
+	// Increment
+	at.curId += 1
+	curId := at.curId
+
+	// Load the Atomos mail.
+	am := allocAtomosMail()
+	initTaskMail(am, at.curId, fnName, msg)
+	// But not append to the mailbox, now is to create a timer task.
+	t := &atomosTask{}
+	at.tasks[curId] = t
+	t.id = curId
+	t.mail = am
+	// Set the task to state TaskScheduling, and try to add mail to mailbox after duartion.
+	t.timerState = TaskScheduling
+	t.timer = time.AfterFunc(after, func() {
+		at.mutex.Lock()
+		defer at.mutex.Unlock()
+		it, has := at.tasks[t.id]
+		if !has {
+			// 当且仅当发生在边缘的情况，任务计时器还未成功被取消，但任务已经被移出容器的情况。
+			// It should only happen at the edge of the timer has been triggered,
+			// but the TimerTask has been cancelled.
+			return
+		}
+		switch it.timerState {
+		// 任务已被取消。
+		// 正常来说这段代码不会触发到，除非框架逻辑有问题。
+		// Task has been cancelled.
+		// This switch-case is unreachable unless framework has bug.
+		case TaskCancelled:
+			if ta, has := at.tasks[it.id]; has {
+				delete(at.tasks, it.id)
+				deallocAtomosMail(ta.mail)
+				// FRAMEWORK LEVEL ERROR
+				// Because it should not happen, once a TimerTask has been cancelled,
+				// it will be removed, thread-safely, immediately.
+				at.atomos.log.Fatal("AtomosTask: AddAfter, FRAMEWORK ERROR, timer cancel")
+			}
+			return
+
+		// 任务正在排程。
+		// 这段代码符合正常功能的期待。
+		// Task is scheduling.
+		// This code is expected.
+		case TaskScheduling:
+			it.timerState = TaskMailing
+			delete(at.tasks, it.id)
+			if ok := at.atomos.mailbox.pushHead(am.mail); !ok {
+				at.atomos.log.Fatal("AtomosTask: AddAfter, atomos is not running")
+			}
+
+		// FRAMEWORK LEVEL ERROR
+		// Because it should not happen, once a TimerTask has been executed,
+		// it will be removed, thread-safely, immediately.
+		default:
+			at.atomos.log.Fatal("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
+		}
+	})
+	return curId, nil
+}
+
+func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
+	// Check if illegal before scheduling.
+	err = checkTaskFnByName(at.atomos, fnName, msg)
+	if err != nil {
+		return 0, err
+	}
+
+	at.mutex.Lock()
+	defer at.mutex.Unlock()
+
+	// If BaseAtomos is nil, Atomos has been stopped, add failed.
+	if at.atomos == nil {
+		return 0, NewErrorf(ErrAtomosIsNotRunning,
+			"STOPPED, AddAfter failed, after=(%v),fn=(%s),msg=(%+v)", after, fnName, msg)
 	}
 
 	// Increment
@@ -306,6 +415,17 @@ func checkTaskFn(a *BaseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInf
 	}
 	_, err := checkFnArgs(fnType, fnName, msg)
 	return fnName, err
+}
+
+func checkTaskFnByName(a *BaseAtomos, fnName string, msg proto.Message) *ErrorInfo {
+	// 检查instance是否存在该名称的方法。
+	instValue := reflect.ValueOf(a.instance)
+	method := instValue.MethodByName(fnName)
+	if !method.IsValid() {
+		return NewErrorf(ErrAtomosTaskInvalidFn, "Invalid task func value, fnType=(%s)", fnName)
+	}
+	_, err := checkFnArgs(method.Type(), fnName, msg)
+	return err
 }
 
 func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, *ErrorInfo) {

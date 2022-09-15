@@ -100,6 +100,9 @@ func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoad
 // Implementation of ID
 
 func (c *CosmosMain) GetIDInfo() *IDInfo {
+	if c == nil {
+		return nil
+	}
 	return c.atomos.GetIDInfo()
 }
 

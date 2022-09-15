@@ -96,6 +96,9 @@ var atomLocalPool = sync.Pool{
 // AtomLocal implements ID interface directly, so local ID is able to use AtomLocal reference directly.
 
 func (a *AtomLocal) GetIDInfo() *IDInfo {
+	if a == nil {
+		return nil
+	}
 	return a.atomos.GetIDInfo()
 }
 
