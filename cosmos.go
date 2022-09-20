@@ -13,31 +13,31 @@ import (
 type CosmosNode interface {
 	GetNodeName() string
 
-	IsLocal() bool
+	CosmosIsLocal() bool
 
-	GetElementID(elem string) (ID, *ErrorInfo)
+	CosmosGetElementID(elem string) (ID, *ErrorInfo)
 
-	// GetElementAtomId
+	// GetElementAtomID
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
-	// Get the AtomId of an Atom by Element nodeName and Atom nodeName.
-	GetElementAtomID(elem, name string) (ID, *ErrorInfo)
+	// Get the AtomID of an Atom by Element nodeName and Atom nodeName.
+
+	CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo)
 
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
-	SpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo)
+
+	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom/Element.
-	MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
-	// KillAtom
-	// 向一个Atom发送Kill。
-	// Send Kill to an Atom.
-	KillAtom(fromId, toId ID) *ErrorInfo
+	CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+
+	CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo)
 }
 
 //////////////////////////////////////////////////

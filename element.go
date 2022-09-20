@@ -44,13 +44,16 @@ type Element interface {
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
-	MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+
+	MessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	MessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+
+	ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo)
 
 	// KillAtom
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
-	KillAtom(fromId, toId ID) *ErrorInfo
+	KillAtom(fromID, toID ID) *ErrorInfo
 }
 
 //type ElementLoadable interface {

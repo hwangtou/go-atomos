@@ -10,6 +10,10 @@ type AtomosHolder interface {
 	// 收到消息
 	OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo)
 
+	// OnScaling
+	// 负载均衡决策
+	OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo)
+
 	// OnReloading
 	// 通知新的Holder正在更新中
 	OnReloading(oldInstance Atomos, reloadObject AtomosReloadable) (newInstance Atomos)
@@ -152,6 +156,21 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 		return nil, err
 	}
 	return reply, err
+}
+
+func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args proto.Message) (ID, *ErrorInfo) {
+	am := allocAtomosMail()
+	initScaleMail(am, from, message, args)
+	if ok := a.mailbox.pushTail(am.mail); !ok {
+		return nil, NewErrorf(ErrAtomosIsNotRunning,
+			"Atomos is not running, from=(%s),message=(%s),args=(%v)", from, message, args)
+	}
+	id, err := am.waitReplyID()
+	deallocAtomosMail(am)
+	if err != nil && err.Code == ErrAtomosIsNotRunning {
+		return nil, err
+	}
+	return id, err
 }
 
 func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInfo) {
@@ -306,6 +325,10 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		err := a.holder.OnWormhole(am.from, am.wormhole)
 		am.sendReply(nil, err)
 		// Mail dealloc in AtomCore.pushWormholeMail.
+	case MailScale:
+		id, err := a.holder.OnScaling(am.from, am.name, am.arg)
+		am.sendReplyID(id, err)
+		// Mail dealloc in AtomCore.pushScaleMail.
 	default:
 		a.log.Fatal("Atomos: Received unknown message type, type=(%v),mail=(%+v)", am.mailType, am)
 	}

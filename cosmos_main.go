@@ -35,6 +35,10 @@ type CosmosMain struct {
 	callChain []ID
 }
 
+func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+	return nil, NewError(ErrAtomCannotScale, "Main: Cannot scale.")
+}
+
 // 生命周期相关
 // Life cycle
 
@@ -114,11 +118,15 @@ func (c *CosmosMain) Cosmos() CosmosNode {
 }
 
 func (c *CosmosMain) Element() Element {
-	return c
+	return nil
 }
 
 func (c *CosmosMain) GetName() string {
-	return c.GetIDInfo().Element
+	return c.GetIDInfo().Cosmos
+}
+
+func (c *CosmosMain) State() AtomosState {
+	return c.atomos.state
 }
 
 func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
@@ -218,15 +226,15 @@ func (c *CosmosMain) GetNodeName() string {
 	return c.GetIDInfo().Cosmos
 }
 
-func (c *CosmosMain) IsLocal() bool {
+func (c *CosmosMain) CosmosIsLocal() bool {
 	return true
 }
 
-func (c *CosmosMain) GetElementID(elem string) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosGetElementID(elem string) (ID, *ErrorInfo) {
 	return c.getElement(elem)
 }
 
-func (c *CosmosMain) GetElementAtomID(elem, name string) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err
@@ -234,7 +242,7 @@ func (c *CosmosMain) GetElementAtomID(elem, name string) (ID, *ErrorInfo) {
 	return element.GetAtomId(name)
 }
 
-func (c *CosmosMain) SpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err
@@ -242,34 +250,20 @@ func (c *CosmosMain) SpawnElementAtom(elem, name string, arg proto.Message) (ID,
 	return element.SpawnAtom(name, arg)
 }
 
-// Implementation of Element
-
-func (c *CosmosMain) GetElementName() string {
-	return MainElementName
-}
-
-func (c *CosmosMain) GetAtomId(_ string) (ID, *ErrorInfo) {
-	return c, nil
-}
-
-func (c *CosmosMain) GetAtomsNum() int {
-	return 1
-}
-
-func (c *CosmosMain) SpawnAtom(_ string, _ proto.Message) (*AtomLocal, *ErrorInfo) {
-	return nil, NewError(ErrMainCannotSpawn, "Cannot cosmosElementSpawn main")
-}
-
-func (c *CosmosMain) MessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) CosmosMessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	return toId.Element().MessageElement(fromId, toId, message, args)
 }
 
-func (c *CosmosMain) MessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) CosmosMessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	return toId.Element().MessageAtom(fromId, toId, message, args)
 }
 
-func (c *CosmosMain) KillAtom(fromId, toId ID) *ErrorInfo {
-	return toId.Element().KillAtom(fromId, toId)
+func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo) {
+	element, err := c.getElement(elem)
+	if err != nil {
+		return nil, err
+	}
+	return element.ScaleGetAtomID(fromID, message, args)
 }
 
 // Implementation of AtomosUtilities

@@ -179,6 +179,10 @@ func (a *AtomLocal) String() string {
 	return a.atomos.String()
 }
 
+func (a *AtomLocal) State() AtomosState {
+	return a.atomos.state
+}
+
 func (a *AtomLocal) getCallChain() []ID {
 	return a.callChain
 }
@@ -359,6 +363,10 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 	//	err = err.AddStack(a.GetIDInfo(), debug.Stack())
 	//}
 	return
+}
+
+func (a *AtomLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+	return nil, NewError(ErrAtomCannotScale, "OnScaling, atom not supported")
 }
 
 // Kill Mail

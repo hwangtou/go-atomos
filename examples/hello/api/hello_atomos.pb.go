@@ -31,20 +31,29 @@ type HelloElementID interface {
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
+
+	ScaleBonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 }
 
 func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.ErrorInfo) {
-	ca, err := c.GetElementID(HelloName)
+	ca, err := c.CosmosGetElementID(HelloName)
 	if err != nil {
 		return nil, err
 	}
 	return &helloElementID{ca}, nil
 }
 
+/////////////////////////////////
+////////// Atom: Hello //////////
+/////////////////////////////////
+
 // HelloAtomID is the interface of Hello atom.
 
 type HelloAtomID interface {
 	go_atomos.ID
+
+	// Scale
+	Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
@@ -57,7 +66,7 @@ type HelloAtomID interface {
 }
 
 func GetHelloAtomID(c go_atomos.CosmosNode, name string) (HelloAtomID, *go_atomos.ErrorInfo) {
-	ca, err := c.GetElementAtomID(HelloName, name)
+	ca, err := c.CosmosGetElementAtomID(HelloName, name)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +81,9 @@ type HelloElement interface {
 	Spawn(self go_atomos.ElementSelfID, data *HelloData) *go_atomos.ErrorInfo
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
+
+	// Scale
+	ScaleBonjour(from go_atomos.ID, in *BonjourReq) (HelloAtomID, *go_atomos.ErrorInfo)
 }
 
 // HelloAtom is the atomos implements of Hello atom.
@@ -86,10 +98,13 @@ type HelloAtom interface {
 	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
 	// Make panic
 	MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo)
+
+	// Scale
+	Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 }
 
 func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloAtomID, *go_atomos.ErrorInfo) {
-	id, err := c.SpawnElementAtom(HelloName, name, arg)
+	id, err := c.CosmosSpawnElementAtom(HelloName, name, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +128,7 @@ type helloElementID struct {
 }
 
 func (c *helloElementID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo) {
-	r, err := c.Cosmos().MessageElement(from, c, "SayHello", in)
+	r, err := c.Cosmos().CosmosMessageElement(from, c, "SayHello", in)
 	if r == nil {
 		return nil, err
 	}
@@ -124,12 +139,45 @@ func (c *helloElementID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, 
 	return reply, err
 }
 
+func (c *helloElementID) ScaleBonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo) {
+	id, err := c.Cosmos().CosmosScaleElementGetAtomID(from, HelloName, "Bonjour", in)
+	if err != nil {
+		return nil, err
+	}
+	defer id.Release()
+	r, err := c.Cosmos().CosmosMessageAtom(from, id, "Bonjour", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*BonjourResp)
+	if !ok {
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
+	}
+	return reply, err
+}
+
+/////////////////////////////////
+////////// Atom: Hello //////////
+/////////////////////////////////
+
 type helloAtomID struct {
 	go_atomos.ID
 }
 
+func (c *helloAtomID) Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo) {
+	r, err := c.Cosmos().CosmosMessageAtom(from, c, "Bonjour", in)
+	if r == nil {
+		return nil, err
+	}
+	reply, ok := r.(*BonjourResp)
+	if !ok {
+		return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageReplyType, "Reply type=(%T)", r)
+	}
+	return reply, err
+}
+
 func (c *helloAtomID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo) {
-	r, err := c.Cosmos().MessageAtom(from, c, "SayHello", in)
+	r, err := c.Cosmos().CosmosMessageAtom(from, c, "SayHello", in)
 	if r == nil {
 		return nil, err
 	}
@@ -141,7 +189,7 @@ func (c *helloAtomID) SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go
 }
 
 func (c *helloAtomID) BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo) {
-	r, err := c.Cosmos().MessageAtom(from, c, "BuildNet", in)
+	r, err := c.Cosmos().CosmosMessageAtom(from, c, "BuildNet", in)
 	if r == nil {
 		return nil, err
 	}
@@ -153,7 +201,7 @@ func (c *helloAtomID) BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetRes
 }
 
 func (c *helloAtomID) MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo) {
-	r, err := c.Cosmos().MessageAtom(from, c, "MakePanic", in)
+	r, err := c.Cosmos().CosmosMessageAtom(from, c, "MakePanic", in)
 	if r == nil {
 		return nil, err
 	}
@@ -203,6 +251,17 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 		},
 	}
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
+		"Bonjour": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
+			req, ok := in.(*BonjourReq)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
+			}
+			a, ok := to.(HelloAtom)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Atom type=(%T)", to)
+			}
+			return a.Bonjour(from, req)
+		},
 		"SayHello": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.ErrorInfo) {
 			req, ok := in.(*HelloReq)
 			if !ok {
@@ -237,6 +296,19 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 			return a.MakePanic(from, req)
 		},
 	}
+	elem.ScaleHandlers = map[string]go_atomos.ScaleHandler{
+		"Bonjour": func(from go_atomos.ID, e go_atomos.Atomos, message string, in proto.Message) (id go_atomos.ID, err *go_atomos.ErrorInfo) {
+			req, ok := in.(*BonjourReq)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageArgType, "Arg type=(%T)", in)
+			}
+			a, ok := e.(HelloElement)
+			if !ok {
+				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Element type=(%T)", e)
+			}
+			return a.ScaleBonjour(from, req)
+		},
+	}
 	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"SayHello": {
 			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
@@ -248,6 +320,14 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 		},
 	}
 	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"Bonjour": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
+			},
+		},
 		"SayHello": {
 			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
 				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)

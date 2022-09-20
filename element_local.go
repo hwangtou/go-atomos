@@ -39,6 +39,8 @@ type ElementLocal struct {
 	// Lock.
 	lock sync.RWMutex
 
+	scale *list.List
+
 	//// Available or Reloading
 	//avail bool
 	// 当前ElementImplementation的引用。
@@ -68,13 +70,15 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		atoms:     nil,
 		names:     list.New(),
 		lock:      sync.RWMutex{},
+		scale:     list.New(),
 		current:   impl,
 		callChain: nil,
 	}
 	log, logLevel := main.process.sharedLog, impl.Interface.Config.LogLevel
 	elem.atomos = NewBaseAtomos(id, log, logLevel, elem, impl.Developer.ElementConstructor(), 0)
 	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomInitNum); ok {
-		elem.atoms = make(map[string]*AtomLocal, atomsInitNum.GetElementAtomsInitNum())
+		num := atomsInitNum.GetElementAtomsInitNum()
+		elem.atoms = make(map[string]*AtomLocal, num)
 	} else {
 		elem.atoms = map[string]*AtomLocal{}
 	}
@@ -114,6 +118,10 @@ func (e *ElementLocal) Element() Element {
 
 func (e *ElementLocal) GetName() string {
 	return e.GetIDInfo().Element
+}
+
+func (e *ElementLocal) State() AtomosState {
+	return e.atomos.state
 }
 
 func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
@@ -249,6 +257,10 @@ func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, proto
 	return outBuf, err
 }
 
+func (e *ElementLocal) GetAllScaleAtoms() {
+	// Should Only Call Inside Element.
+}
+
 // Implementation of Element
 
 func (e *ElementLocal) GetElementName() string {
@@ -301,6 +313,14 @@ func (e *ElementLocal) MessageAtom(fromId, toId ID, name string, args proto.Mess
 	}
 	// PushProcessLog.
 	return a.pushMessageMail(fromId, name, args)
+}
+
+func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo) {
+	if fromID == nil {
+		return nil, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),message=(%s),args=(%v)",
+			fromID, message, args)
+	}
+	return e.pushScaleMail(fromID, message, args)
 }
 
 func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
@@ -397,6 +417,42 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 	//if len(stack) != 0 {
 	//	err = NewErrorf(ErrElementMessageHandlerPanic,
 	//		"ElementLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
+	//		AddStack(e.GetIDInfo(), stack)
+	//} else if err != nil && len(err.Stacks) > 0 {
+	//	err = err.AddStack(e.GetIDInfo(), debug.Stack())
+	//}
+	return
+}
+
+func (e *ElementLocal) pushScaleMail(from ID, message string, args proto.Message) (ID, *ErrorInfo) {
+	return e.atomos.PushScaleMailAndWaitReply(from, message, args)
+}
+func (e *ElementLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+	handler := e.current.ScaleHandlers[name]
+	if handler == nil {
+		return nil, NewErrorf(ErrElementScaleHandlerNotExists,
+			"ElementLocal: Scale handler not found, from=(%s),name=(%s),args=(%v)", from, name, args)
+	}
+	//var stack []byte
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				_, file, line, ok := runtime.Caller(2)
+				if !ok {
+					file, line = "???", 0
+				}
+				if err == nil {
+					err = NewErrorf(ErrFrameworkPanic, "OnScale, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
+				}
+				err.Panic = string(debug.Stack())
+				err.AddStack(e, file, fmt.Sprintf("%v", r), line, args)
+			}
+		}()
+		id, err = handler(from, e.atomos.instance, name, args)
+	}()
+	//if len(stack) != 0 {
+	//	err = NewErrorf(ErrElementScaleHandlerPanic,
+	//		"ElementLocal: Scale handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
 	//		AddStack(e.GetIDInfo(), stack)
 	//} else if err != nil && len(err.Stacks) > 0 {
 	//	err = err.AddStack(e.GetIDInfo(), debug.Stack())

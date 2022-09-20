@@ -41,9 +41,11 @@ type ID interface {
 	Element() Element
 
 	// GetName
-	// Atom的名称。
-	// Name of the Atom.
+	// ID名称。
+	// Name of the ID.
 	GetName() string
+
+	State() AtomosState
 
 	//// GetVersion
 	//// ElementInterface的版本。

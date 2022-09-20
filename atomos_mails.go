@@ -48,6 +48,10 @@ const (
 	// 虫洞邮件，用于传递不属于"Atomos宇宙"概念的对象。
 	// Wormhole Mail, for transporting non-"Atomos Cosmos" object.
 	MailWormhole MailType = 4
+
+	// MailScale
+	// Scale邮件。
+	MailScale MailType = 5
 )
 
 // Atomos邮件
@@ -138,6 +142,27 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	am.waitCh = make(chan *mailReply, 1)
 }
 
+// Scale邮件
+// Scale Mail
+func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
+	am.mail.id = DefaultMailId
+	am.mail.action = MailActionRun
+	am.mailType = MailScale
+	am.from = from
+	am.name = name
+	// I think it has to be cloned, because argument is passing between atomos.
+	if arg != nil {
+		am.arg = proto.Clone(arg)
+	} else {
+		am.arg = nil
+	}
+	am.reload = nil
+	am.reloads = 0
+	am.wormhole = nil
+	am.mailReply = mailReply{}
+	am.waitCh = make(chan *mailReply, 1)
+}
+
 // 任务邮件
 // Task Mail
 func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message) {
@@ -206,6 +231,7 @@ func initKillMail(am *atomosMail, from ID) {
 // Mail Reply
 type mailReply struct {
 	resp proto.Message
+	id   ID
 	err  *ErrorInfo
 }
 
@@ -224,6 +250,18 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	}
 }
 
+func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
+	m.mailReply.id = id
+	m.mailReply.err = err
+	if m.waitCh != nil {
+		m.waitCh <- &m.mailReply
+		m.waitCh = nil
+	} else {
+		// TODO: 可能会在Panic之后被设置成nil，然后又被继续返回，确认下panic之后的具体调用。
+		//panic("atomosMail: sendReply waitCh has been replied")
+	}
+}
+
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
 func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
@@ -232,4 +270,14 @@ func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
 	resp = reply.resp
 	err = reply.err
 	return resp, err
+}
+
+// TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
+func (m *atomosMail) waitReplyID() (id ID, err *ErrorInfo) {
+	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
+	reply := <-m.waitCh
+	// Wait channel must be empty before delete a mail.
+	id = reply.id
+	err = reply.err
+	return id, err
 }

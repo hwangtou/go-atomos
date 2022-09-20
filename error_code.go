@@ -30,6 +30,7 @@ const (
 	ErrElementLoaded
 	ErrElementReloadInvalid
 	ErrElementMessageHandlerNotExists
+	ErrElementScaleHandlerNotExists
 	ErrElementMessageHandlerPanic
 	ErrElementKillHandlerPanic
 	ErrElementSpawnArgInvalid
@@ -55,6 +56,7 @@ const (
 	ErrAtomNotExists
 	ErrAtomExists
 	ErrAtomPersistenceRuntime
+	ErrAtomCannotScale
 
 	ErrAtomNotImplemented
 	ErrAtomMessageAtomType

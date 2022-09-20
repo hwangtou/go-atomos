@@ -19,6 +19,10 @@ func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message)
 	return
 }
 
+func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+	panic("not supported")
+}
+
 func (t *TestAtomosHolder) OnReloading(oldInstance Atomos, reloadObject AtomosReloadable) (newInstance Atomos) {
 	o := oldInstance.(*TestAtomosInstance)
 	n := reloadObject.(*TestAtomosInstance)

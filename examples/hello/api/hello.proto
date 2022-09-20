@@ -25,6 +25,9 @@ service Hello {
   // Sends a greeting
   rpc ElementSayHello (HelloReq) returns (HelloResp) {}
 
+  // Scale
+  rpc ScaleBonjour (BonjourReq) returns (BonjourResp) {}
+
   // Spawn
   rpc Spawn (HelloSpawnArg) returns (HelloData) {}
   // Sends a greeting
@@ -58,4 +61,9 @@ message BuildNetResp {
 message MakePanicIn {
 }
 message MakePanicOut {
+}
+
+message BonjourReq {
+}
+message BonjourResp {
 }

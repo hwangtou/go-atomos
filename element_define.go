@@ -17,6 +17,7 @@ type ElementImplementation struct {
 
 	ElementHandlers map[string]MessageHandler
 	AtomHandlers    map[string]MessageHandler
+	ScaleHandlers   map[string]ScaleHandler
 
 	// 一个存储Atom的Call方法的容器。
 	// A holder to store all the Message method of Atom.
@@ -52,10 +53,11 @@ type ElementInterface struct {
 type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo
 type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *ErrorInfo
 
-// AtomIdConstructor
-// AtomId构造器的函数类型，CosmosNode可以是Local和Remote。
+type ScaleHandler func(from ID, e Atomos, message string, in proto.Message) (id ID, err *ErrorInfo)
+
+// IDConstructor
+// Id构造器的函数类型，CosmosNode可以是Local和Remote。
 // Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
-//type AtomIdConstructor func(ID) ID
 type IDConstructor func(ID) ID
 
 // MessageHandler
@@ -71,6 +73,7 @@ type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInf
 // ElementAtomMessage
 // Element的Atom的调用信息。
 // Element Atom Message Info.
+
 type IOMessageDecoder struct {
 	InDec  MessageDecoder
 	OutDec MessageDecoder
@@ -116,6 +119,7 @@ func NewImplementationFromDeveloper(developer ElementDeveloper) *ElementImplemen
 	}
 }
 
+// NewAtomCallConfig
 // For creating AtomMessageConfig instance in ElementInterface of *_atomos.pb.go.
 func NewAtomCallConfig(in, out proto.Message) *AtomMessageConfig {
 	return &AtomMessageConfig{
@@ -125,8 +129,8 @@ func NewAtomCallConfig(in, out proto.Message) *AtomMessageConfig {
 }
 
 func MessageToAny(p proto.Message) *anypb.Any {
-	any, _ := anypb.New(p)
-	return any
+	a, _ := anypb.New(p)
+	return a
 }
 
 func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Message, *ErrorInfo) {

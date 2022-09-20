@@ -5,6 +5,8 @@ import (
 	atomos "github.com/hwangtou/go-atomos"
 	"github.com/hwangtou/go-atomos/examples/hello/api"
 	"google.golang.org/protobuf/proto"
+	"strconv"
+	"time"
 )
 
 // Constructor
@@ -25,6 +27,9 @@ func (h *Hello) AtomConstructor(name string) atomos.Atomos {
 type HelloElement struct {
 	self atomos.ElementSelfID
 	data *api.HelloData
+
+	scaleID int
+	scale   []api.HelloAtomID
 }
 
 func (h *HelloElement) Description() string {
@@ -34,6 +39,7 @@ func (h *HelloElement) Description() string {
 func (h *HelloElement) Spawn(self atomos.ElementSelfID, data *api.HelloData) *atomos.ErrorInfo {
 	h.self = self
 	h.data = data
+	h.scale = nil
 	h.self.Log().Info("Spawn")
 	return nil
 }
@@ -51,6 +57,24 @@ func (h *HelloElement) Reload(oldInstance atomos.Atomos) {
 func (h *HelloElement) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, *atomos.ErrorInfo) {
 	h.self.Log().Info("Hello World!")
 	return &api.HelloResp{}, nil
+}
+
+func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (api.HelloAtomID, *atomos.ErrorInfo) {
+	// 不是一个完美的测试方法，因为scale中的waiting的atom，可能是上一个请求创建出来还未被使用的。
+	for _, id := range h.scale {
+		if id.State() == atomos.AtomosWaiting {
+			return id, nil
+		}
+	}
+	id, err := api.SpawnHelloAtom(h.self.CosmosMain(), strconv.FormatInt(int64(h.scaleID), 10), &api.HelloSpawnArg{
+		Id: int32(h.scaleID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	h.scale = append(h.scale, id)
+	h.scaleID += 1
+	return id, nil
 }
 
 // Atom
@@ -109,6 +133,12 @@ func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNet
 }
 
 func (h *HelloAtom) MakePanic(from atomos.ID, in *api.MakePanicIn) (*api.MakePanicOut, *atomos.ErrorInfo) {
-	//TODO implement me
-	panic("implement me")
+	panic("make panic")
+}
+
+func (h *HelloAtom) Bonjour(from atomos.ID, in *api.BonjourReq) (*api.BonjourResp, *atomos.ErrorInfo) {
+	h.self.Log().Info("Bonjour, %s", h.self.GetName())
+	time.Sleep(5 * time.Second)
+	//h.self.Log().Info("Bye, %s", h.self.GetName())
+	return &api.BonjourResp{}, nil
 }
