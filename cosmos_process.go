@@ -221,7 +221,7 @@ func (c *CosmosProcess) Send(command Command) *ErrorInfo {
 }
 
 func (c *CosmosProcess) WaitKillSignal() {
-	ch := make(chan os.Signal)
+	ch := make(chan os.Signal, 1)
 	signal.Notify(ch)
 	defer signal.Stop(ch)
 	for {

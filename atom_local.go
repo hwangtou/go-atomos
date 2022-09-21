@@ -159,11 +159,10 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 func (a *AtomLocal) Kill(from ID) *ErrorInfo {
 	dev := a.element.current.Developer
 	elemAuth, ok := dev.(ElementCustomizeAuthorization)
-	if !ok || elemAuth == nil {
-		return nil
-	}
-	if err := elemAuth.AtomCanKill(from); err != nil {
-		return err
+	if ok && elemAuth != nil {
+		if err := elemAuth.AtomCanKill(from); err != nil {
+			return err
+		}
 	}
 	return a.pushKillMail(from, true)
 }

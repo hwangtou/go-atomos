@@ -25,50 +25,51 @@ func helloScript(self *atomos.CosmosMain, killCh chan bool) {
 	}
 	self.Log().Info("Get element succeed, id=(%v)", helloElementId.GetIDInfo())
 
-	//// Send Element
-	//helloResp, err := helloElementId.SayHello(self, &api.HelloReq{Name: "Atomos"})
-	//if err != nil {
-	//	self.Log().Error("SayHello failed, err=(%v)", err)
-	//	return
-	//}
-	//self.Log().Info("Main reply, rsp=(%+v)", helloResp)
-	//
-	//// Spawn
-	//helloId, err := api.SpawnHelloAtom(self.Cosmos(), "hello", nil)
-	//if err != nil {
-	//	self.Log().Error("Spawn failed, err=(%v)", err)
-	//	return
-	//}
-	//self.Log().Info("Spawn succeed, id=(%v)", helloId.GetIDInfo())
-	//
-	//// Get
-	//helloId, err = api.GetHelloAtomID(self.Cosmos(), "hello")
-	//if err != nil {
-	//	self.Log().Error("Get failed, err=(%v)", err)
-	//	return
-	//}
-	//self.Log().Info("Get succeed, id=(%v)", helloId.GetIDInfo())
-	//
-	//// Send
-	//helloResp, err = helloId.SayHello(self, &api.HelloReq{Name: "Atomos"})
-	//if err != nil {
-	//	self.Log().Error("SayHello failed, err=(%v)", err)
-	//	return
-	//}
-	//self.Log().Info("Main reply, rsp=(%+v)", helloResp)
-	//if _, err = helloId.BuildNet(self, &api.BuildNetReq{Id: 0}); err != nil {
-	//	self.Log().Error("BuildNet failed, err=(%v)", err.AutoStack(self, nil))
-	//	return
-	//}
-	//
-	//// Panic
-	//if _, err := helloId.MakePanic(self, &api.MakePanicIn{}); err != nil {
-	//	self.Log().Error("Make panic, err=(%v)", err)
-	//	return
-	//}
+	// Send Element
+	helloResp, err := helloElementId.SayHello(self, &api.HelloReq{Name: "Atomos"})
+	if err != nil {
+		self.Log().Error("SayHello failed, err=(%v)", err)
+		return
+	}
+	self.Log().Info("Main reply, rsp=(%+v)", helloResp)
 
-	for i := 0; i < 1000100; i += 1 {
-		time.Sleep(1 * time.Millisecond)
+	// Spawn
+	helloId, err := api.SpawnHelloAtom(self.Cosmos(), "hello", nil)
+	if err != nil {
+		self.Log().Error("Spawn failed, err=(%v)", err)
+		return
+	}
+	self.Log().Info("Spawn succeed, id=(%v)", helloId.GetIDInfo())
+
+	// Get
+	helloId, err = api.GetHelloAtomID(self.Cosmos(), "hello")
+	if err != nil {
+		self.Log().Error("Get failed, err=(%v)", err)
+		return
+	}
+	self.Log().Info("Get succeed, id=(%v)", helloId.GetIDInfo())
+
+	// Send
+	helloResp, err = helloId.SayHello(self, &api.HelloReq{Name: "Atomos"})
+	if err != nil {
+		self.Log().Error("SayHello failed, err=(%v)", err)
+		return
+	}
+	self.Log().Info("Main reply, rsp=(%+v)", helloResp)
+	if _, err = helloId.BuildNet(self, &api.BuildNetReq{Id: 0}); err != nil {
+		self.Log().Error("BuildNet failed, err=(%v)", err.AutoStack(self, nil))
+		return
+	}
+
+	// Panic
+	if _, err := helloId.MakePanic(self, &api.MakePanicIn{}); err != nil {
+		self.Log().Error("Make panic, err=(%v)", err)
+		return
+	}
+
+	// Scale 100K
+	for i := 0; i < 100000; i += 1 {
+		time.Sleep(1 * time.Microsecond)
 		go func() {
 			_, err = helloElementId.ScaleBonjour(self, &api.BonjourReq{})
 			if err != nil {
@@ -77,6 +78,11 @@ func helloScript(self *atomos.CosmosMain, killCh chan bool) {
 			}
 		}()
 	}
+	// RAM USAGE
+	// 1000(315)     -> 11.0MB - 5.2MB   => 5.8MB/315=18K
+	// 10000(6614)   -> 95.9MB - 18.5MB  => 77.4MB/6614=11K
+	// 100000(11710) -> 562.1MB - 79.3MB => 482.8MB/11710=41K
 
+	// TODO: BUG，如果是外部Kill的情况，运行到这里就能正常退出。但如果是脚本执行完的情况，就会出现不退出，也KIll不了的问题。
 	<-killCh // TODO: Think about error exit, block
 }

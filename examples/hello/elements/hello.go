@@ -5,6 +5,7 @@ import (
 	atomos "github.com/hwangtou/go-atomos"
 	"github.com/hwangtou/go-atomos/examples/hello/api"
 	"google.golang.org/protobuf/proto"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -29,7 +30,7 @@ type HelloElement struct {
 	data *api.HelloData
 
 	scaleID int
-	scale   []api.HelloAtomID
+	scale   map[string]api.HelloAtomID
 }
 
 func (h *HelloElement) Description() string {
@@ -39,8 +40,10 @@ func (h *HelloElement) Description() string {
 func (h *HelloElement) Spawn(self atomos.ElementSelfID, data *api.HelloData) *atomos.ErrorInfo {
 	h.self = self
 	h.data = data
-	h.scale = nil
+	h.scale = map[string]api.HelloAtomID{}
 	h.self.Log().Info("Spawn")
+
+	h.self.Task().AddAfter(5*time.Second, h.CheckClear, nil)
 	return nil
 }
 
@@ -61,20 +64,41 @@ func (h *HelloElement) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloRes
 
 func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (api.HelloAtomID, *atomos.ErrorInfo) {
 	// 不是一个完美的测试方法，因为scale中的waiting的atom，可能是上一个请求创建出来还未被使用的。
-	for _, id := range h.scale {
-		if id.State() == atomos.AtomosWaiting {
+	for name, id := range h.scale {
+		switch id.State() {
+		case atomos.AtomosWaiting:
 			return id, nil
+		case atomos.AtomosHalt:
+			delete(h.scale, name)
 		}
 	}
-	id, err := api.SpawnHelloAtom(h.self.CosmosMain(), strconv.FormatInt(int64(h.scaleID), 10), &api.HelloSpawnArg{
+	name := strconv.FormatInt(int64(h.scaleID), 10)
+	id, err := api.SpawnHelloAtom(h.self.CosmosMain(), name, &api.HelloSpawnArg{
 		Id: int32(h.scaleID),
 	})
 	if err != nil {
 		return nil, err
 	}
-	h.scale = append(h.scale, id)
+	h.scale[name] = id
 	h.scaleID += 1
 	return id, nil
+}
+
+func (h *HelloElement) CheckClear(id uint64, data proto.Message) {
+	h.self.Task().AddAfter(5*time.Second, h.CheckClear, nil)
+	h.self.Log().Info("CheckClear scaleID=(%d)", h.scaleID)
+	for name, atomID := range h.scale {
+		switch atomID.State() {
+		case atomos.AtomosWaiting:
+			if err := atomID.Kill(h.self); err != nil {
+				h.self.Log().Info("Kill failed, err=(%v)", err)
+			}
+		case atomos.AtomosHalt:
+			delete(h.scale, name)
+			h.self.Log().Info("Delete, name=(%s)", name)
+		}
+	}
+	runtime.GC()
 }
 
 // Atom
@@ -82,6 +106,8 @@ func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (api.Hel
 type HelloAtom struct {
 	self atomos.AtomSelfID
 	data *api.HelloData
+
+	updated int64
 }
 
 func (h *HelloAtom) Description() string {
@@ -137,8 +163,8 @@ func (h *HelloAtom) MakePanic(from atomos.ID, in *api.MakePanicIn) (*api.MakePan
 }
 
 func (h *HelloAtom) Bonjour(from atomos.ID, in *api.BonjourReq) (*api.BonjourResp, *atomos.ErrorInfo) {
-	h.self.Log().Info("Bonjour, %s", h.self.GetName())
-	time.Sleep(5 * time.Second)
+	//h.self.Log().Info("Bonjour, %s", h.self.GetName())
+	time.Sleep(1 * time.Second)
 	//h.self.Log().Info("Bye, %s", h.self.GetName())
 	return &api.BonjourResp{}, nil
 }
