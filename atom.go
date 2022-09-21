@@ -118,24 +118,22 @@ type SelfID interface {
 	KillSelf()
 
 	Parallel(func())
+
+	Config() map[string]string
+
+	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 }
 
 type AtomSelfID interface {
 	SelfID
 
-	Config() map[string]string
 	Persistence() AtomAutoDataPersistence
-
-	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 }
 
 type ElementSelfID interface {
 	SelfID
 
-	Config() map[string]string
 	Persistence() ElementCustomizeAutoDataPersistence
-
-	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
 }
 
 //type ParallelSelf interface {
