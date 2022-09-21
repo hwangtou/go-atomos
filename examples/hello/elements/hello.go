@@ -138,9 +138,9 @@ func (h *HelloAtom) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, 
 
 func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNetResp, *atomos.ErrorInfo) {
 	nextId := in.Id + 1
-	if nextId == 3 {
-		panic("test")
-		//return &api.BuildNetResp{}, nil
+	if nextId == 10 {
+		//panic("test")
+		return &api.BuildNetResp{}, nil
 	}
 	h.self.Log().Info("BuildNet: %d", nextId)
 	name := fmt.Sprintf("hello:%d", nextId)
@@ -163,8 +163,8 @@ func (h *HelloAtom) MakePanic(from atomos.ID, in *api.MakePanicIn) (*api.MakePan
 }
 
 func (h *HelloAtom) Bonjour(from atomos.ID, in *api.BonjourReq) (*api.BonjourResp, *atomos.ErrorInfo) {
-	//h.self.Log().Info("Bonjour, %s", h.self.GetName())
+	h.self.Log().Info("Bonjour, %s", h.self.GetName())
 	time.Sleep(1 * time.Second)
-	//h.self.Log().Info("Bye, %s", h.self.GetName())
+	h.self.Log().Info("Bye, %s", h.self.GetName())
 	return &api.BonjourResp{}, nil
 }

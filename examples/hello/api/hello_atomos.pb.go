@@ -14,13 +14,14 @@ import (
 //// INTERFACES
 //
 
-////////////////////////////////////
-////////// Element: Hello //////////
-////////////////////////////////////
 //
 // The greeting service definition.
 // New line
 //
+
+////////////////////////////////////
+////////// Element: Hello //////////
+////////////////////////////////////
 
 const HelloName = "Hello"
 
@@ -32,6 +33,9 @@ type HelloElementID interface {
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 
+	// Scale Methods
+
+	// Scale Bonjour
 	ScaleBonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 }
 
@@ -52,9 +56,6 @@ func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.Error
 type HelloAtomID interface {
 	go_atomos.ID
 
-	// Scale
-	Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
-
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 
@@ -63,6 +64,11 @@ type HelloAtomID interface {
 
 	// Make panic
 	MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo)
+
+	// Scale Methods
+
+	// Scale Bonjour
+	Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 }
 
 func GetHelloAtomID(c go_atomos.CosmosNode, name string) (HelloAtomID, *go_atomos.ErrorInfo) {
@@ -82,7 +88,9 @@ type HelloElement interface {
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.ErrorInfo)
 
-	// Scale
+	// Scale Methods
+
+	// Scale Bonjour
 	ScaleBonjour(from go_atomos.ID, in *BonjourReq) (HelloAtomID, *go_atomos.ErrorInfo)
 }
 
@@ -98,8 +106,7 @@ type HelloAtom interface {
 	BuildNet(from go_atomos.ID, in *BuildNetReq) (*BuildNetResp, *go_atomos.ErrorInfo)
 	// Make panic
 	MakePanic(from go_atomos.ID, in *MakePanicIn) (*MakePanicOut, *go_atomos.ErrorInfo)
-
-	// Scale
+	// Scale Bonjour
 	Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo)
 }
 
@@ -118,10 +125,6 @@ func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (He
 ////////////////////////////////////
 ////////// Element: Hello //////////
 ////////////////////////////////////
-//
-// The greeting service definition.
-// New line
-//
 
 type helloElementID struct {
 	go_atomos.ID

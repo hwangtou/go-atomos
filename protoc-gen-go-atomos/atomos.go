@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -48,9 +49,15 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 			gen.Error(errors.New("cannot use element name \"Main\""))
 			continue
 		}
-		elementTitle(g, service)
 		// ID
+		if len(service.Comments.Leading.String()) > 0 {
+			g.P("//")
+			g.P(service.Comments.Leading.String(), "//")
+		}
+		g.P()
+		genTitle(g, service, "Element", service.GoName)
 		genElementIDInterface(g, service)
+		genTitle(g, service, "Atom", service.GoName)
 		genAtomIDInterface(g, service)
 		// Interface
 		genElementInterface(g, service)
@@ -67,25 +74,21 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 			gen.Error(errors.New("cannot use element name \"Main\""))
 			continue
 		}
-		elementTitle(g, service)
+		genTitle(g, service, "Element", service.GoName)
 		genElementIdInternal(g, service)
+		genTitle(g, service, "Atom", service.GoName)
 		genAtomIdInternal(g, service)
 		genImplement(file, g, service)
 	}
 }
 
-func elementTitle(g *protogen.GeneratedFile, service *protogen.Service) {
-	elementName := service.GoName
-	head, tail := "////////// Element: ", " //////////"
-	nameLen := len(elementName) + len(head) + len(tail)
+func genTitle(g *protogen.GeneratedFile, service *protogen.Service, prefix, name string) {
+	head, tail := fmt.Sprintf("////////// %s: ", prefix), " //////////"
+	nameLen := len(name) + len(head) + len(tail)
 	c := strings.Repeat("/", nameLen)
 	g.P(c)
-	g.P(head, elementName, tail)
+	g.P(head, name, tail)
 	g.P(c)
-	if len(service.Comments.Leading.String()) > 0 {
-		g.P("//")
-		g.P(service.Comments.Leading.String(), "//")
-	}
 	g.P()
 }
 
@@ -105,6 +108,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 	g.Annotate(elementIDName, service.Location)
 	g.P("type ", elementIDName, " interface {")
 	g.P(atomosPackage.Ident("ID"))
+	// Element Methods
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if !strings.HasPrefix(methodName, "Element") {
@@ -116,9 +120,37 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Split(methodName, "Element")[1]
+		methodName = strings.TrimPrefix(methodName, "Element")
 		if methodName == "" {
 			continue
+		}
+		g.Annotate(elementIDName+"."+methodName, method.Location)
+		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
+		}
+		g.P()
+		commentLen := len(method.Comments.Leading.String())
+		if commentLen > 0 {
+			g.P(method.Comments.Leading.String()[:commentLen-1])
+		}
+		methodSign(g, method, methodName)
+		g.P()
+	}
+	// Scale Methods
+	hasScale := false
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		if strings.Trim(methodName, "Scale") == "" {
+			continue
+		}
+		if !hasScale {
+			g.P()
+			g.P("// Scale Methods")
+			g.P()
+			hasScale = true
 		}
 		g.Annotate(elementIDName+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
@@ -140,7 +172,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 		g.P(deprecationComment)
 	}
 	g.P("func Get", elementIDName, " (c ", atomosPackage.Ident("CosmosNode"), ") (", elementIDName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
-	g.P("ca, err := c.GetElementID(", elementName, "Name)")
+	g.P("ca, err := c.CosmosGetElementID(", elementName, "Name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("return &", noExport(elementIDName), "{ca}, nil")
 	g.P("}")
@@ -161,9 +193,13 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.Annotate(atomNameID, service.Location)
 	g.P("type ", atomNameID, " interface {")
 	g.P(atomosPackage.Ident("ID"))
+	// Atom
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if strings.HasPrefix(methodName, "Element") {
+			continue
+		}
+		if strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
 		if strings.HasPrefix(methodName, "Spawn") {
@@ -171,6 +207,35 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		if methodName == "" {
 			continue
+		}
+		g.Annotate(atomNameID+"."+methodName, method.Location)
+		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
+		}
+		g.P()
+		commentLen := len(method.Comments.Leading.String())
+		if commentLen > 0 {
+			g.P(method.Comments.Leading.String()[:commentLen-1])
+		}
+		methodSign(g, method, methodName)
+		g.P()
+	}
+	// Scale
+	hasScale := false
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		methodName = strings.TrimPrefix(methodName, "Scale")
+		if methodName == "" {
+			continue
+		}
+		if !hasScale {
+			g.P()
+			g.P("// Scale Methods")
+			g.P()
+			hasScale = true
 		}
 		g.Annotate(atomNameID+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
@@ -192,7 +257,7 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P(deprecationComment)
 	}
 	g.P("func Get", atomNameID, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", atomNameID, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
-	g.P("ca, err := c.GetElementAtomID(", atomName, "Name, name)")
+	g.P("ca, err := c.CosmosGetElementAtomID(", atomName, "Name, name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("return &", noExport(atomNameID), "{ca}, nil")
 	g.P("}")
@@ -213,6 +278,7 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("type ", elementName, " interface {")
 	g.P(atomosPackage.Ident("Atomos"))
 	hasElementSpawn := false
+	// Element
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if !strings.HasPrefix(methodName, "Element") {
@@ -233,6 +299,29 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		} else {
 			methodSign(g, method, methodName)
 		}
+	}
+	// Scale
+	hasScale := false
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		if !hasScale {
+			g.P()
+			g.P("// Scale Methods")
+			g.P()
+			hasScale = true
+		}
+		g.Annotate(elementName+"."+methodName, method.Location)
+		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
+		}
+		commentLen := len(method.Comments.Leading.String())
+		if commentLen > 0 {
+			g.P(method.Comments.Leading.String()[:commentLen-1])
+		}
+		elementScaleSign(g, method, service.GoName, methodName)
 	}
 	if !hasElementSpawn {
 		spawnElementDefaultSign(g)
@@ -256,12 +345,15 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("type ", atomName, " interface {")
 	g.P(atomosPackage.Ident("Atomos"))
 	var spawnArgTypeName string
+	// Atom
 	for _, method := range service.Methods {
 		methodName := method.GoName
 		if strings.HasPrefix(methodName, "Element") {
 			continue
 		}
-		methodName = strings.TrimPrefix(methodName, "Element")
+		if strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
 		g.Annotate(atomName+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
@@ -276,7 +368,23 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		} else {
 			methodSign(g, method, methodName)
 		}
-
+	}
+	// Scale
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		methodName = strings.Trim(methodName, "Scale")
+		g.Annotate(atomName+"."+methodName, method.Location)
+		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
+		}
+		commentLen := len(method.Comments.Leading.String())
+		if commentLen > 0 {
+			g.P(method.Comments.Leading.String()[:commentLen-1])
+		}
+		methodSign(g, method, methodName)
 	}
 	g.P("}")
 	g.P()
@@ -287,7 +395,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("func Spawn", atomName, "(c ", atomosPackage.Ident("CosmosNode"),
 			", name string, arg *", spawnArgTypeName, ") (",
 			idName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
-		g.P("id, err := c.SpawnElementAtom(", elementName, "Name, name, arg)")
+		g.P("id, err := c.CosmosSpawnElementAtom(", elementName, "Name, name, arg)")
 		g.P("if err != nil { return nil, err }")
 		g.P("return &", noExport(idName), "{id}, nil")
 		g.P("}")
@@ -315,7 +423,7 @@ func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Split(methodName, "Element")[1]
+		methodName = strings.Trim(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -323,7 +431,29 @@ func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
 			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
-		g.P("r, err := c.Cosmos().MessageElement(from, c, \"", methodName, "\", in)")
+		g.P("r, err := c.Cosmos().CosmosMessageElement(from, c, \"", methodName, "\", in)")
+		g.P("if r == nil { return nil, err }")
+		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
+		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf("), atomosPackage.Ident("ErrAtomMessageReplyType"), ", \"Reply type=(%T)\", r) }")
+		g.P("return reply, err")
+		g.P("}")
+		g.P()
+	}
+	// Scale method implementations.
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		scaleName := strings.Trim(methodName, "Scale")
+		g.P("func (c *", noExport(idName), ") ", methodName+"(from ", atomosPackage.Ident("ID"),
+			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
+			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
+			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
+		g.P("id, err := c.Cosmos().CosmosScaleElementGetAtomID(from, ", service.GoName, "Name, \"", scaleName, "\", in)")
+		g.P("if err != nil { return nil, err }")
+		g.P("defer id.Release()")
+		g.P("r, err := c.Cosmos().CosmosMessageAtom(from, id, \"", scaleName, "\", in)")
 		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf("), atomosPackage.Ident("ErrAtomMessageReplyType"), ", \"Reply type=(%T)\", r) }")
@@ -351,6 +481,9 @@ func genAtomIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
+		if strings.HasPrefix(methodName, "Scale") {
+			methodName = strings.Trim(methodName, "Scale")
+		}
 		if methodName == "" {
 			continue
 		}
@@ -358,7 +491,7 @@ func genAtomIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
 			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
-		g.P("r, err := c.Cosmos().MessageAtom(from, c, \"", methodName, "\", in)")
+		g.P("r, err := c.Cosmos().CosmosMessageAtom(from, c, \"", methodName, "\", in)")
 		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf("), atomosPackage.Ident("ErrAtomMessageReplyType"), ", \"Reply type=(%T)\", r) }")
@@ -450,7 +583,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Split(methodName, "Element")[1]
+		methodName = strings.Trim(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -473,6 +606,9 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
+		if strings.HasPrefix(methodName, "Scale") {
+			methodName = strings.Trim(methodName, "Scale")
+		}
 		if methodName == "" {
 			continue
 		}
@@ -482,6 +618,26 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("a, ok := to.(", elementAtomName, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageAtomType"), ", \"Atom type=(%T)\", to) }")
 		g.P("return a.", methodName, "(from, req)")
+		g.P("},")
+	}
+	g.P("}")
+
+	g.P("elem.ScaleHandlers = map[string]", atomosPackage.Ident("ScaleHandler"), "{")
+	for _, method := range service.Methods {
+		methodName := method.GoName
+		if !strings.HasPrefix(methodName, "Scale") {
+			continue
+		}
+		methodName = strings.Trim(methodName, "Scale")
+		if methodName == "" {
+			continue
+		}
+		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", e ", atomosPackage.Ident("Atomos"), ", message string, in ", protobufPackage.Ident("Message"), ") (id ", atomosPackage.Ident("ID"), ", err *", atomosPackage.Ident("ErrorInfo"), ") {")
+		g.P("req, ok := in.(*", method.Input.GoIdent, ")")
+		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageArgType"), ", \"Arg type=(%T)\", in) }")
+		g.P("a, ok := e.(", elementElementName, ")")
+		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageAtomType"), ", \"Element type=(%T)\", e) }")
+		g.P("return a.Scale", methodName, "(from, req)")
 		g.P("},")
 	}
 	g.P("}")
@@ -498,7 +654,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Split(methodName, "Element")[1]
+		methodName = strings.Trim(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -517,6 +673,9 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		}
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
+		}
+		if strings.HasPrefix(methodName, "Scale") {
+			methodName = strings.Trim(methodName, "Scale")
 		}
 		if methodName == "" {
 			continue
@@ -558,6 +717,13 @@ func methodSign(g *protogen.GeneratedFile, method *protogen.Method, methodName s
 		", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 		") (*", g.QualifiedGoIdent(method.Output.GoIdent),
 		", *", atomosPackage.Ident("ErrorInfo"),
+		")")
+}
+
+func elementScaleSign(g *protogen.GeneratedFile, method *protogen.Method, elemName, methodName string) {
+	g.P(methodName+"(from ", atomosPackage.Ident("ID"),
+		", in *", g.QualifiedGoIdent(method.Input.GoIdent),
+		") (", elemName+"AtomID, *", atomosPackage.Ident("ErrorInfo"),
 		")")
 }
 

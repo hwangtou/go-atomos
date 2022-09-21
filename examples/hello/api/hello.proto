@@ -25,7 +25,7 @@ service Hello {
   // Sends a greeting
   rpc ElementSayHello (HelloReq) returns (HelloResp) {}
 
-  // Scale
+  // Scale Bonjour
   rpc ScaleBonjour (BonjourReq) returns (BonjourResp) {}
 
   // Spawn

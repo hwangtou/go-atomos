@@ -63,12 +63,13 @@ func helloScript(self *atomos.CosmosMain, killCh chan bool) {
 
 	// Panic
 	if _, err := helloId.MakePanic(self, &api.MakePanicIn{}); err != nil {
-		self.Log().Error("Make panic, err=(%v)", err)
-		return
+		self.Log().Info("Make panic, err=(%v)", err)
+		//return
 	}
 
 	// Scale 100K
-	for i := 0; i < 100000; i += 1 {
+	scaleTimes := 10 //100000
+	for i := 0; i < scaleTimes; i += 1 {
 		time.Sleep(1 * time.Microsecond)
 		go func() {
 			_, err = helloElementId.ScaleBonjour(self, &api.BonjourReq{})
