@@ -143,7 +143,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 		if !strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
-		if strings.Trim(methodName, "Scale") == "" {
+		if strings.TrimPrefix(methodName, "Scale") == "" {
 			continue
 		}
 		if !hasScale {
@@ -375,7 +375,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		if !strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
-		methodName = strings.Trim(methodName, "Scale")
+		methodName = strings.TrimPrefix(methodName, "Scale")
 		g.Annotate(atomName+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
@@ -423,7 +423,7 @@ func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Trim(methodName, "Element")
+		methodName = strings.TrimPrefix(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -445,7 +445,7 @@ func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		if !strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
-		scaleName := strings.Trim(methodName, "Scale")
+		scaleName := strings.TrimPrefix(methodName, "Scale")
 		g.P("func (c *", noExport(idName), ") ", methodName+"(from ", atomosPackage.Ident("ID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
@@ -482,7 +482,7 @@ func genAtomIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 			continue
 		}
 		if strings.HasPrefix(methodName, "Scale") {
-			methodName = strings.Trim(methodName, "Scale")
+			methodName = strings.TrimPrefix(methodName, "Scale")
 		}
 		if methodName == "" {
 			continue
@@ -583,7 +583,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Trim(methodName, "Element")
+		methodName = strings.TrimPrefix(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -607,7 +607,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 			continue
 		}
 		if strings.HasPrefix(methodName, "Scale") {
-			methodName = strings.Trim(methodName, "Scale")
+			methodName = strings.TrimPrefix(methodName, "Scale")
 		}
 		if methodName == "" {
 			continue
@@ -628,7 +628,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if !strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
-		methodName = strings.Trim(methodName, "Scale")
+		methodName = strings.TrimPrefix(methodName, "Scale")
 		if methodName == "" {
 			continue
 		}
@@ -654,7 +654,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if strings.HasPrefix(methodName, "Spawn") {
 			continue
 		}
-		methodName = strings.Trim(methodName, "Element")
+		methodName = strings.TrimPrefix(methodName, "Element")
 		if methodName == "" {
 			continue
 		}
@@ -675,7 +675,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 			continue
 		}
 		if strings.HasPrefix(methodName, "Scale") {
-			methodName = strings.Trim(methodName, "Scale")
+			methodName = strings.TrimPrefix(methodName, "Scale")
 		}
 		if methodName == "" {
 			continue

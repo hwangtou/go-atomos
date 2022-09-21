@@ -16,8 +16,8 @@ const (
 	ErrMainReloadFailed
 	ErrMainStartRunningPanic
 	ErrMainCannotKill
-	ErrMainCannotSpawn
 	ErrMainCannotMessage
+	ErrMainCannotScale
 
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid

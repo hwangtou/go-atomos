@@ -35,10 +35,6 @@ type CosmosMain struct {
 	callChain []ID
 }
 
-func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
-	return nil, NewError(ErrAtomCannotScale, "Main: Cannot scale.")
-}
-
 // 生命周期相关
 // Life cycle
 
@@ -199,6 +195,18 @@ func (a *CosmosMain) Parallel(fn func()) {
 		}()
 		fn()
 	}()
+}
+
+func (c *CosmosMain) Config() map[string]string {
+	return c.runnable.config.Customize
+}
+
+func (c *CosmosMain) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+	return nil, NewError(ErrMainCannotMessage, "Main: Cannot message.")
+}
+
+func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+	return nil, NewError(ErrMainCannotScale, "Main: Cannot scale.")
 }
 
 // Check chain.
