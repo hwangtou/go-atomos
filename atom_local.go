@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
 )
 
 // Actual Atom
@@ -180,6 +181,13 @@ func (a *AtomLocal) String() string {
 
 func (a *AtomLocal) State() AtomosState {
 	return a.atomos.state
+}
+
+func (a *AtomLocal) IdleDuration() time.Duration {
+	if a.atomos.state != AtomosWaiting {
+		return 0
+	}
+	return time.Now().Sub(a.atomos.lastWait)
 }
 
 func (a *AtomLocal) getCallChain() []ID {

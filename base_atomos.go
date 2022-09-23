@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"google.golang.org/protobuf/proto"
 	"sync"
+	"time"
 )
 
 type AtomosHolder interface {
@@ -69,6 +70,10 @@ type BaseAtomos struct {
 
 	//// Element中名称列表的元素
 	//nameElement *list.Element
+
+	lastBusy time.Time
+	lastWait time.Time
+	lastStop time.Time
 }
 
 // Atom对象的内存池
@@ -271,22 +276,29 @@ func (a *BaseAtomos) GetState() AtomosState {
 }
 func (a *BaseAtomos) setSpawning() {
 	a.state = AtomosSpawning
+	a.lastBusy = time.Now()
+	a.lastWait = time.Now()
+	a.lastStop = time.Time{}
 }
 
 func (a *BaseAtomos) setBusy() {
 	a.state = AtomosBusy
+	a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setWaiting() {
 	a.state = AtomosWaiting
+	a.lastWait = time.Now()
 }
 
 func (a *BaseAtomos) setStopping() {
 	a.state = AtomosStopping
+	a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setHalt() {
 	a.state = AtomosHalt
+	a.lastStop = time.Now()
 }
 
 // Mailbox

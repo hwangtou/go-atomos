@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -122,6 +123,13 @@ func (e *ElementLocal) GetName() string {
 
 func (e *ElementLocal) State() AtomosState {
 	return e.atomos.state
+}
+
+func (a *ElementLocal) IdleDuration() time.Duration {
+	if a.atomos.state != AtomosWaiting {
+		return 0
+	}
+	return time.Now().Sub(a.atomos.lastWait)
 }
 
 func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {

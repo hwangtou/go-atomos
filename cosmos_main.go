@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
 )
 
 type CosmosMain struct {
@@ -123,6 +124,13 @@ func (c *CosmosMain) GetName() string {
 
 func (c *CosmosMain) State() AtomosState {
 	return c.atomos.state
+}
+
+func (a *CosmosMain) IdleDuration() time.Duration {
+	if a.atomos.state != AtomosWaiting {
+		return 0
+	}
+	return time.Now().Sub(a.atomos.lastWait)
 }
 
 func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {

@@ -20,6 +20,7 @@ message IDInfo {
   string cosmos = 2;
   string element = 3;
   string atomos = 4;
+  google.protobuf.Any ext = 5;
 }
 
 //message AtomId {
@@ -60,6 +61,26 @@ message ErrorCallerInfo {
 }
 
 message Nil {
+}
+
+message Int32 {
+  int32 n = 1;
+}
+
+message Int64 {
+  int64 n = 1;
+}
+
+message UInt32 {
+  uint32 n = 1;
+}
+
+message UInt64 {
+  uint64 i = 1;
+}
+
+message String {
+  string s = 1;
 }
 
 // Configuration

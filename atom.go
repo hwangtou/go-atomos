@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"time"
 )
 
 //
@@ -46,6 +47,7 @@ type ID interface {
 	GetName() string
 
 	State() AtomosState
+	IdleDuration() time.Duration
 
 	//// GetVersion
 	//// ElementInterface的版本。
