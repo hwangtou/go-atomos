@@ -645,7 +645,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("elem.ElementDecoders = map[string]*", atomosPackage.Ident("IOMessageDecoder"), "{")
 	for _, method := range service.Methods {
 		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") {
+		if !strings.HasPrefix(methodName, "Element") && !strings.HasPrefix(methodName, "Scale") {
 			continue
 		}
 		if strings.HasPrefix(methodName, "ElementSpawn") {

@@ -321,6 +321,14 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
 			},
 		},
+		"ScaleBonjour": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.ErrorInfo) {
+				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
+			},
+		},
 	}
 	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"Bonjour": {
