@@ -135,7 +135,7 @@ func (a *ElementLocal) IdleDuration() time.Duration {
 func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
 	decoderFn, has := e.current.ElementDecoders[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	in, err := decoderFn.InDec(buf, protoOrJSON)
 	if err != nil {
@@ -243,11 +243,11 @@ func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
 func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
 	handlerFn, has := e.current.ElementHandlers[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	decoderFn, has := e.current.ElementDecoders[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message self decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	in, err := decoderFn.InDec(buf, protoOrJSON)
 	if err != nil {

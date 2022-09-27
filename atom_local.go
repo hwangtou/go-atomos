@@ -122,7 +122,7 @@ func (a *AtomLocal) GetName() string {
 func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
 	decoderFn, has := a.current.AtomDecoders[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	in, err := decoderFn.InDec(buf, protoOrJSON)
 	if err != nil {
@@ -259,11 +259,11 @@ func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
 func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
 	handlerFn, has := a.current.AtomHandlers[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	decoderFn, has := a.current.AtomDecoders[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Decoder not exists, from=(%v),name=(%s)", from, name)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message self decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
 	in, err := decoderFn.InDec(buf, protoOrJSON)
 	if err != nil {
