@@ -133,7 +133,11 @@ func (a *CosmosMain) IdleDuration() time.Duration {
 	return time.Now().Sub(a.atomos.lastWait)
 }
 
-func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
+//}
+
+func (a *CosmosMain) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
 	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 }
 

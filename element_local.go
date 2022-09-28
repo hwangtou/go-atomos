@@ -4,9 +4,7 @@ package go_atomos
 
 import (
 	"container/list"
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -132,30 +130,34 @@ func (a *ElementLocal) IdleDuration() time.Duration {
 	return time.Now().Sub(a.atomos.lastWait)
 }
 
-func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
-	decoderFn, has := e.current.ElementDecoders[name]
-	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
-	}
-	in, err := decoderFn.InDec(buf, protoOrJSON)
-	if err != nil {
-		return nil, err
-	}
+//func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//	decoderFn, has := e.current.ElementDecoders[name]
+//	if !has {
+//		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
+//	}
+//	in, err := decoderFn.InDec(buf, protoOrJSON)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	var outBuf []byte
+//	out, err := e.pushMessageMail(from, name, in)
+//	if out != nil && reflect.TypeOf(out).Kind() == reflect.Pointer && !reflect.ValueOf(out).IsNil() {
+//		var e error
+//		if protoOrJSON {
+//			outBuf, e = proto.Marshal(out)
+//		} else {
+//			outBuf, e = json.Marshal(out)
+//		}
+//		if e != nil {
+//			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+//		}
+//	}
+//	return outBuf, err
+//}
 
-	var outBuf []byte
-	out, err := e.pushMessageMail(from, name, in)
-	if out != nil && reflect.TypeOf(out).Kind() == reflect.Pointer && !reflect.ValueOf(out).IsNil() {
-		var e error
-		if protoOrJSON {
-			outBuf, e = proto.Marshal(out)
-		} else {
-			outBuf, e = json.Marshal(out)
-		}
-		if e != nil {
-			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
-		}
-	}
-	return outBuf, err
+func (a *ElementLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+	return a.pushMessageMail(from, name, in)
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {

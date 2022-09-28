@@ -54,7 +54,7 @@ type ID interface {
 	//// Version of ElementInterface.
 	//GetVersion() uint64
 
-	MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+	MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo)
 
 	DecoderByName(name string) (MessageDecoder, MessageDecoder)
 
