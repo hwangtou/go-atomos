@@ -23,7 +23,7 @@ message IDInfo {
   google.protobuf.Any ext = 5;
 }
 
-//message AtomId {
+//message AtomID {
 //  string node = 1;
 //  string element = 2;
 //  string name = 3;
@@ -153,12 +153,12 @@ message CosmosRemoteConnectInit {
 
 // Cosmos Requester
 
-message CosmosRemoteGetAtomIdReq {
+message CosmosRemoteGetAtomIDReq {
   string element = 1;
   string name = 2;
 }
 
-message CosmosRemoteGetAtomIdResp {
+message CosmosRemoteGetAtomIDResp {
   bool has = 1;
   string error = 2;
 }

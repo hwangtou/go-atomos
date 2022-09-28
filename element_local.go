@@ -25,7 +25,7 @@ type ElementLocal struct {
 	// Base atomos, the key of lockless queue of Atom.
 	atomos *BaseAtomos
 
-	//// 实际的Id类型
+	//// 实际的ID类型
 	//id ID
 
 	// 该Element所有Atom的容器。
@@ -47,7 +47,7 @@ type ElementLocal struct {
 	current *ElementImplementation
 
 	// 调用链
-	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
+	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
 	callChain []ID
 }
 
@@ -89,8 +89,8 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 //
 
 // ID，相当于Atom的句柄的概念。
-// 通过Id，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
-// 直接用AtomLocal继承Id，因此本地的Id直接使用AtomLocal的引用即可。
+// 通过ID，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
+// 直接用AtomLocal继承ID，因此本地的ID直接使用AtomLocal的引用即可。
 //
 // ID, a concept similar to file descriptor of an atomos.
 // With ID, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
@@ -277,7 +277,7 @@ func (e *ElementLocal) GetElementName() string {
 	return e.GetIDInfo().Element
 }
 
-func (e *ElementLocal) GetAtomId(name string) (ID, *ErrorInfo) {
+func (e *ElementLocal) GetAtomID(name string) (ID, *ErrorInfo) {
 	return e.elementAtomGet(name)
 }
 
@@ -297,32 +297,32 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *E
 	return e.elementAtomSpawn(name, arg, current, persistence)
 }
 
-func (e *ElementLocal) MessageElement(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	if fromId == nil {
+func (e *ElementLocal) MessageElement(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	if fromID == nil {
 		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
-			fromId, toId, name, args)
+			fromID, toID, name, args)
 	}
-	a := toId.getElementLocal()
+	a := toID.getElementLocal()
 	if a == nil {
 		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
-			fromId, toId, name, args)
+			fromID, toID, name, args)
 	}
 	// PushProcessLog.
-	return a.pushMessageMail(fromId, name, args)
+	return a.pushMessageMail(fromID, name, args)
 }
 
-func (e *ElementLocal) MessageAtom(fromId, toId ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	if fromId == nil {
+func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	if fromID == nil {
 		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
-			fromId, toId, name, args)
+			fromID, toID, name, args)
 	}
-	a := toId.getAtomLocal()
+	a := toID.getAtomLocal()
 	if a == nil {
 		return reply, NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
-			fromId, toId, name, args)
+			fromID, toID, name, args)
 	}
 	// PushProcessLog.
-	return a.pushMessageMail(fromId, name, args)
+	return a.pushMessageMail(fromID, name, args)
 }
 
 func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo) {
@@ -333,22 +333,22 @@ func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Mess
 	return e.pushScaleMail(fromID, message, args)
 }
 
-func (e *ElementLocal) KillAtom(fromId, toId ID) *ErrorInfo {
-	if fromId == nil {
-		return NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s)", fromId, toId)
+func (e *ElementLocal) KillAtom(fromID, toID ID) *ErrorInfo {
+	if fromID == nil {
+		return NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s)", fromID, toID)
 	}
-	a := toId.getElementLocal()
+	a := toID.getElementLocal()
 	if a == nil {
-		return NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s)", fromId, toId)
+		return NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s)", fromID, toID)
 	}
 	// Dead Lock Checker.
-	if !a.checkCallChain(fromId.getCallChain()) {
-		return NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s)", fromId.getCallChain(), toId)
+	if !a.checkCallChain(fromID.getCallChain()) {
+		return NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s)", fromID.getCallChain(), toID)
 	}
-	a.addCallChain(fromId.getCallChain())
+	a.addCallChain(fromID.getCallChain())
 	defer a.delCallChain()
 	// PushProcessLog.
-	return a.pushKillMail(fromId, true)
+	return a.pushKillMail(fromID, true)
 }
 
 // Implementation of AtomosUtilities
@@ -363,17 +363,17 @@ func (e *ElementLocal) Task() Task {
 
 // Check chain.
 
-func (e *ElementLocal) checkCallChain(fromIdList []ID) bool {
-	for _, fromId := range fromIdList {
-		if fromId.GetIDInfo().IsEqual(e.GetIDInfo()) {
+func (e *ElementLocal) checkCallChain(fromIDList []ID) bool {
+	for _, fromID := range fromIDList {
+		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
 			return false
 		}
 	}
 	return true
 }
 
-func (e *ElementLocal) addCallChain(fromIdList []ID) {
-	e.callChain = append(fromIdList, e)
+func (e *ElementLocal) addCallChain(fromIDList []ID) {
+	e.callChain = append(fromIDList, e)
 }
 
 func (e *ElementLocal) delCallChain() {

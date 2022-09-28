@@ -78,7 +78,7 @@ func main() {
 			log.Println("-c or -n is empty")
 			goto help
 		}
-		NewPath(VarRunPath + AtomosPrefix + cosmosName)
+		NewPath(VarRunPath + AtomosPrefix + *cosmosName)
 	}
 help:
 	log.Println("Usage: -a [init|validate|status] -u {user_name} -g {group_name} -c {cosmos_name} -n {node_name_1,node_name_2,...}")

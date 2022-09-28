@@ -29,10 +29,10 @@ type Element interface {
 	// Name of the Element and its Atoms.
 	GetElementName() string
 
-	// GetAtomId
-	// 通过Atom名称获取指定的Atom的Id。
-	// Get AtomId by name of Atom.
-	GetAtomId(atomName string) (ID, *ErrorInfo)
+	// GetAtomID
+	// 通过Atom名称获取指定的Atom的ID。
+	// Get AtomID by name of Atom.
+	GetAtomID(atomName string) (ID, *ErrorInfo)
 
 	GetAtomsNum() int
 
@@ -57,8 +57,8 @@ type Element interface {
 }
 
 //type ElementLoadable interface {
-//	Load(mainId ElementId) *ErrorInfo
-//	Reload(mainId ElementId, atomos Atomos) *ErrorInfo
+//	Load(mainID ElementID) *ErrorInfo
+//	Reload(mainID ElementID, atomos Atomos) *ErrorInfo
 //	Unload()
 //}
 
@@ -94,7 +94,7 @@ type ElementCustomizeStartRunning interface {
 
 type ElementCustomizeAuthorization interface {
 	// AtomCanKill
-	// Atom是否可以被该Id的Atom终止。
+	// Atom是否可以被该ID的Atom终止。
 	// Atom保存函数的函数类型，只有有状态的Atom会被保存。
 	// Whether the Atom can be killed by the ID or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.

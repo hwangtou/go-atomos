@@ -137,20 +137,20 @@ func (h *HelloAtom) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloResp, 
 }
 
 func (h *HelloAtom) BuildNet(from atomos.ID, in *api.BuildNetReq) (*api.BuildNetResp, *atomos.ErrorInfo) {
-	nextId := in.Id + 1
-	if nextId == 10 {
+	nextID := in.Id + 1
+	if nextID == 10 {
 		//panic("test")
 		return &api.BuildNetResp{}, nil
 	}
-	h.self.Log().Info("BuildNet: %d", nextId)
-	name := fmt.Sprintf("hello:%d", nextId)
-	helloId, err := api.SpawnHelloAtom(h.self.Cosmos(), name, &api.HelloSpawnArg{Id: nextId})
+	h.self.Log().Info("BuildNet: %d", nextID)
+	name := fmt.Sprintf("hello:%d", nextID)
+	helloID, err := api.SpawnHelloAtom(h.self.Cosmos(), name, &api.HelloSpawnArg{Id: nextID})
 	if err != nil {
 		return nil, err
 	}
-	_, err = helloId.BuildNet(h.self, &api.BuildNetReq{Id: nextId})
+	_, err = helloID.BuildNet(h.self, &api.BuildNetReq{Id: nextID})
 	if err != nil {
-		//if in.Id == 0 {
+		//if in.ID == 0 {
 		//	return nil, err
 		//}
 		return nil, err.AutoStack(h.self, in)

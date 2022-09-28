@@ -29,10 +29,10 @@ type AtomLocal struct {
 	// Base atomos, the key of lockless queue of Atom.
 	atomos *BaseAtomos
 
-	//// 实际的Id类型
+	//// 实际的ID类型
 	//id ID
-	// 引用计数，所以任何GetId操作之后都需要Release。
-	// Reference count, thus we have to Release any ID after GetId.
+	// 引用计数，所以任何GetID操作之后都需要Release。
+	// Reference count, thus we have to Release any ID after GetID.
 	count int
 
 	// Element的List容器的Element
@@ -42,7 +42,7 @@ type AtomLocal struct {
 	current *ElementImplementation
 
 	// 调用链
-	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
+	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
 	callChain []ID
 }
 
@@ -59,7 +59,7 @@ func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImp
 	a := atomLocalPool.Get().(*AtomLocal)
 	a.element = e
 	a.atomos = NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor(name), reloads)
-	//a.id = current.Interface.AtomIdConstructor(a)
+	//a.id = current.Interface.AtomIDConstructor(a)
 	a.count = 0
 	a.nameElement = nil
 	a.current = current
@@ -86,8 +86,8 @@ var atomLocalPool = sync.Pool{
 //
 
 // ID，相当于Atom的句柄的概念。
-// 通过Id，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
-// 直接用AtomLocal继承Id，因此本地的Id直接使用AtomLocal的引用即可。
+// 通过ID，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
+// 直接用AtomLocal继承ID，因此本地的ID直接使用AtomLocal的引用即可。
 //
 // ID, a concept similar to file descriptor of an atomos.
 // With ID, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
@@ -295,17 +295,17 @@ func (a *AtomLocal) Task() Task {
 
 // Check chain.
 
-func (a *AtomLocal) checkCallChain(fromIdList []ID) bool {
-	for _, fromId := range fromIdList {
-		if fromId.GetIDInfo().IsEqual(a.GetIDInfo()) {
+func (a *AtomLocal) checkCallChain(fromIDList []ID) bool {
+	for _, fromID := range fromIDList {
+		if fromID.GetIDInfo().IsEqual(a.GetIDInfo()) {
 			return false
 		}
 	}
 	return true
 }
 
-func (a *AtomLocal) addCallChain(fromIdList []ID) {
-	a.callChain = append(fromIdList, a)
+func (a *AtomLocal) addCallChain(fromIDList []ID) {
+	a.callChain = append(fromIDList, a)
 }
 
 func (a *AtomLocal) delCallChain() {

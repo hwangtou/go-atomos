@@ -17,7 +17,7 @@ import (
 // #3 Go的Channel是单向的，没有系统的办法去处理回调问题。
 //
 
-const DefaultMailId = 0
+const DefaultMailID = 0
 
 // 邮件类型
 
@@ -68,7 +68,7 @@ type atomosMail struct {
 	// Halt, Message, Task, Reload
 	mailType MailType
 
-	// 从哪个Id发来的邮件。
+	// 从哪个ID发来的邮件。
 	// Mail send from which ID.
 	from ID
 
@@ -112,7 +112,7 @@ var atomosMailsPool = sync.Pool{
 
 func allocAtomosMail() *atomosMail {
 	am := atomosMailsPool.Get().(*atomosMail)
-	am.mail = newMail(DefaultMailId, am)
+	am.mail = newMail(DefaultMailID, am)
 	return am
 }
 
@@ -124,7 +124,7 @@ func deallocAtomosMail(am *atomosMail) {
 // 消息邮件
 // Message Mail
 func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
-	am.mail.id = DefaultMailId
+	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailMessage
 	am.from = from
@@ -145,7 +145,7 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 // Scale邮件
 // Scale Mail
 func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
-	am.mail.id = DefaultMailId
+	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailScale
 	am.from = from
@@ -165,8 +165,8 @@ func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
 
 // 任务邮件
 // Task Mail
-func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message) {
-	am.mail.id = taskId
+func initTaskMail(am *atomosMail, taskID uint64, name string, arg proto.Message) {
+	am.mail.id = taskID
 	am.mail.action = MailActionRun
 	am.mailType = MailTask
 	am.from = nil
@@ -183,7 +183,7 @@ func initTaskMail(am *atomosMail, taskId uint64, name string, arg proto.Message)
 // 重载邮件
 // Reload Mail
 func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
-	am.mail.id = DefaultMailId
+	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailReload
 	am.from = nil
@@ -199,7 +199,7 @@ func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
 // 虫洞邮件
 // Reload Mail
 func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
-	am.mail.id = DefaultMailId
+	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailWormhole
 	am.from = from
@@ -215,7 +215,7 @@ func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
 // 终止邮件
 // Halt Mail
 func initKillMail(am *atomosMail, from ID) {
-	am.mail.id = DefaultMailId
+	am.mail.id = DefaultMailID
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
 	am.from = from

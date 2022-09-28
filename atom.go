@@ -17,7 +17,7 @@ const RunnableName = "AtomosRunnable"
 // Some methods of Atom interface that expose Atom developers to use.
 
 //
-// Id
+// ID
 //
 
 // ID 是Atom的类似句柄的对象。
@@ -26,7 +26,7 @@ type ID interface {
 	GetIDInfo() *IDInfo
 
 	// Release
-	// 释放Id的引用计数
+	// 释放ID的引用计数
 	// Release reference count of ID.
 	// TODO:思考是否真的需要Release
 	Release()
@@ -166,10 +166,10 @@ type AtomosWormhole interface {
 //	CloseWorm(control WormholeControl)
 //}
 //
-//// WormholeId
-//// 是Id接口的延伸，提供向WormholeAtom发送Wormhole的可能。
-//// Extend of Id, it lets send wormhole to WormholeAtom become possible.
-//type WormholeId interface {
+//// WormholeID
+//// 是ID接口的延伸，提供向WormholeAtom发送Wormhole的可能。
+//// Extend of ID, it lets send wormhole to WormholeAtom become possible.
+//type WormholeID interface {
 //	ID
 //	Accept(daemon WormholeDaemon) error
 //}

@@ -85,7 +85,7 @@ func newTestFakeRunnable(t *testing.T) *CosmosRunnable {
 
 			// Spawn for twice.
 			atom, err = elem.SpawnAtom("testAtomA", nil)
-			if err != nil {
+			if err == nil {
 				t.Errorf("MainScript: Spawn failed, state=(%v),err=(%v)", elem.atomos.GetState(), err)
 				return
 			}
@@ -153,30 +153,30 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 				ta := to.(*testAtomos)
 				ta.self.Log().Info("AtomHandlers: testTask, from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				taskId, err := ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err := ta.self.Task().Append(ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("Append failed, err=(%v)", err)
 					return nil, err
 				}
 				// Append then cancel
-				taskId, err = ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err = ta.self.Task().Append(ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("Append failed, err=(%v)", err)
 					return nil, err
 				}
-				canceled, err := ta.self.Task().Cancel(taskId)
+				canceled, err := ta.self.Task().Cancel(taskID)
 				ta.self.Log().Info("Cancel task, canceled=(%v)", canceled)
 				if err != nil {
 					ta.self.Log().Error("Append then cancel failed, err=(%v)", err)
 					return nil, err
 				}
 				// Timer
-				taskId, err = ta.self.Task().AddAfter(1*time.Second, ta.Tasking, nil)
+				taskID, err = ta.self.Task().AddAfter(1*time.Second, ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("AddAfter failed, err=(%v)", err)
 					return nil, err
 				}
-				ta.self.Log().Info("AddAfter taskId=(%d)", taskId)
+				ta.self.Log().Info("AddAfter taskID=(%d)", taskID)
 				return nil, nil
 			},
 			"testDeadLoop": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
@@ -194,30 +194,30 @@ func newTestFakeElement(t *testing.T) *ElementImplementation {
 				ta := to.(*testElement)
 				ta.self.Log().Info("ElementHandlers: testTask, from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				taskId, err := ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err := ta.self.Task().Append(ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("Append failed, err=(%v)", err)
 					return nil, err
 				}
 				// Append then cancel
-				taskId, err = ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err = ta.self.Task().Append(ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("Append failed, err=(%v)", err)
 					return nil, err
 				}
-				canceled, err := ta.self.Task().Cancel(taskId)
+				canceled, err := ta.self.Task().Cancel(taskID)
 				ta.self.Log().Info("Cancel task, canceled=(%v)", canceled)
 				if err != nil {
 					ta.self.Log().Error("Append then cancel failed, err=(%v)", err)
 					return nil, err
 				}
 				// Timer
-				taskId, err = ta.self.Task().AddAfter(1*time.Second, ta.Tasking, nil)
+				taskID, err = ta.self.Task().AddAfter(1*time.Second, ta.Tasking, nil)
 				if err != nil {
 					ta.self.Log().Error("AddAfter failed, err=(%v)", err)
 					return nil, err
 				}
-				ta.self.Log().Info("AddAfter taskId=(%d)", taskId)
+				ta.self.Log().Info("AddAfter taskID=(%d)", taskID)
 				return nil, nil
 			},
 			"testDeadLoop": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo) {
@@ -266,7 +266,7 @@ func (t *testAtomos) Reload(oldInstance Atomos) {
 }
 
 func (t *testAtomos) Tasking(id uint64, _ proto.Message) {
-	t.self.Log().Info("Tasking: taskId=(%d)", id)
+	t.self.Log().Info("Tasking: taskID=(%d)", id)
 }
 
 // Task Element

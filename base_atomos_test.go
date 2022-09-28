@@ -59,8 +59,8 @@ func (t *TestAtomosInstance) Reload(oldInstance Atomos) {
 	t.T.Logf("Reload: state=(%v),reload=(%v)", a.state, oldInstance)
 }
 
-func (t *TestAtomosInstance) TestTask(taskId uint64, data proto.Message) {
-	t.T.Logf("TestTask: state=(%v),taskId=(%d),data=(%v),reload=(%v)", a.state, taskId, data, t.reload)
+func (t *TestAtomosInstance) TestTask(taskID uint64, data proto.Message) {
+	t.T.Logf("TestTask: state=(%v),taskID=(%d),data=(%v),reload=(%v)", a.state, taskID, data, t.reload)
 }
 
 var a *BaseAtomos
@@ -81,11 +81,11 @@ func TestBaseAtomos(t *testing.T) {
 	reply, err := a.PushMessageMailAndWaitReply(nil, "message", nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)
 	// Push Task
-	taskId, err := a.Task().AddAfter(0, instance.TestTask, nil)
-	t.Logf("TaskAddAfter: taskId=(%v),state=(%v),err=(%v)", taskId, a.GetState(), err)
+	taskID, err := a.Task().AddAfter(0, instance.TestTask, nil)
+	t.Logf("TaskAddAfter: taskID=(%v),state=(%v),err=(%v)", taskID, a.GetState(), err)
 	// Push Task
-	taskId, err = a.Task().AddAfter(1*time.Second, instance.TestTask, nil)
-	t.Logf("TaskAddAfter: taskId=(%v),state=(%v),err=(%v)", taskId, a.GetState(), err)
+	taskID, err = a.Task().AddAfter(1*time.Second, instance.TestTask, nil)
+	t.Logf("TaskAddAfter: taskID=(%v),state=(%v),err=(%v)", taskID, a.GetState(), err)
 	// Push Reload
 	err = a.PushReloadMailAndWaitReply(nil, &TestAtomosInstance{T: t, reload: 2}, 2)
 	t.Logf("PushReloadMailAndWaitReply: reply=(%v),state=(%v),err=(%v)", reply, a.GetState(), err)

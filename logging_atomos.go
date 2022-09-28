@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const defaultLogMailId = 0
+const defaultLogMailID = 0
 
 // Cosmos的Log接口。
 // Interface of Cosmos Log.
@@ -60,7 +60,7 @@ func (c *LoggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
 	lm.Time = timestamppb.Now()
 	lm.Level = level
 	lm.Message = msg
-	m := newMail(defaultLogMailId, lm)
+	m := newMail(defaultLogMailID, lm)
 	if ok := c.log.pushTail(m); !ok {
 		LogWrite(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg), true)
 	}

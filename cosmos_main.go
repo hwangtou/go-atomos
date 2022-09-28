@@ -32,7 +32,7 @@ type CosmosMain struct {
 	//remoteServer *cosmosRemoteServer
 
 	// 调用链
-	// 调用链用于检测是否有循环调用，在处理message时把fromId的调用链加上自己之后
+	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
 	callChain []ID
 }
 
@@ -223,17 +223,17 @@ func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID,
 
 // Check chain.
 
-func (e *CosmosMain) checkCallChain(fromIdList []ID) bool {
-	for _, fromId := range fromIdList {
-		if fromId.GetIDInfo().IsEqual(e.GetIDInfo()) {
+func (e *CosmosMain) checkCallChain(fromIDList []ID) bool {
+	for _, fromID := range fromIDList {
+		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
 			return false
 		}
 	}
 	return true
 }
 
-func (e *CosmosMain) addCallChain(fromIdList []ID) {
-	e.callChain = append(fromIdList, e)
+func (e *CosmosMain) addCallChain(fromIDList []ID) {
+	e.callChain = append(fromIDList, e)
 }
 
 func (e *CosmosMain) delCallChain() {
@@ -259,7 +259,7 @@ func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo) 
 	if err != nil {
 		return nil, err
 	}
-	return element.GetAtomId(name)
+	return element.GetAtomID(name)
 }
 
 func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
@@ -270,12 +270,12 @@ func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message
 	return element.SpawnAtom(name, arg)
 }
 
-func (c *CosmosMain) CosmosMessageElement(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	return toId.Element().MessageElement(fromId, toId, message, args)
+func (c *CosmosMain) CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return toID.Element().MessageElement(fromID, toID, message, args)
 }
 
-func (c *CosmosMain) CosmosMessageAtom(fromId, toId ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	return toId.Element().MessageAtom(fromId, toId, message, args)
+func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+	return toID.Element().MessageAtom(fromID, toID, message, args)
 }
 
 func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo) {

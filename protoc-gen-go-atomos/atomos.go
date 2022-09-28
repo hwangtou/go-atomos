@@ -75,9 +75,9 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 			continue
 		}
 		genTitle(g, service, "Element", service.GoName)
-		genElementIdInternal(g, service)
+		genElementIDInternal(g, service)
 		genTitle(g, service, "Atom", service.GoName)
-		genAtomIdInternal(g, service)
+		genAtomIDInternal(g, service)
 		genImplement(file, g, service)
 	}
 }
@@ -402,7 +402,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 }
 
-func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
+func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	idName := service.GoName + "ElementID"
 
 	// ID structure.
@@ -463,7 +463,7 @@ func genElementIdInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 	}
 }
 
-func genAtomIdInternal(g *protogen.GeneratedFile, service *protogen.Service) {
+func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	idName := service.GoName + "AtomID"
 
 	// ID structure.

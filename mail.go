@@ -150,7 +150,7 @@ func (mb *mailBox) waitPop() *mail {
 	}
 }
 
-func (mb *mailBox) getById(id uint64) *mail {
+func (mb *mailBox) getByID(id uint64) *mail {
 	mb.mutex.Lock()
 	m := mb.head
 	if m == nil {
@@ -225,7 +225,7 @@ func (mb *mailBox) popAll() (head *mail, num uint32) {
 	return head, num
 }
 
-func (mb *mailBox) popById(id uint64) *mail {
+func (mb *mailBox) popByID(id uint64) *mail {
 	mb.mutex.Lock()
 	var pM, m *mail = nil, mb.head
 	if m == nil {

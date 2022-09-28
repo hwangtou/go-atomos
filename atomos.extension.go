@@ -11,7 +11,7 @@ import (
 
 func (x *IDInfo) Info() string {
 	if x == nil {
-		return "InvalidAtomId"
+		return "InvalidAtomID"
 	}
 	switch x.Type {
 	case IDType_Atomos:

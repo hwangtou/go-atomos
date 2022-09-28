@@ -42,9 +42,9 @@ type ElementInterface struct {
 	ElementSpawner ElementSpawner
 	AtomSpawner    AtomSpawner
 
-	//// AtomId的构造器。
-	//// Constructor of AtomId.
-	////AtomIdConstructor AtomIdConstructor
+	//// AtomID的构造器。
+	//// Constructor of AtomID.
+	////AtomIDConstructor AtomIDConstructor
 	//
 	////ElementIDConstructor IDConstructor
 	////AtomIDConstructor    IDConstructor
@@ -56,8 +56,8 @@ type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *ErrorInf
 type ScaleHandler func(from ID, e Atomos, message string, in proto.Message) (id ID, err *ErrorInfo)
 
 // IDConstructor
-// Id构造器的函数类型，CosmosNode可以是Local和Remote。
-// Constructor Function Type of AtomId, CosmosNode can be Local or Remote.
+// ID构造器的函数类型，CosmosNode可以是Local和Remote。
+// Constructor Function Type of AtomID, CosmosNode can be Local or Remote.
 type IDConstructor func(ID) ID
 
 // MessageHandler

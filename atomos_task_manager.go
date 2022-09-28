@@ -17,7 +17,7 @@ import (
 // Atomos Task
 //
 
-type TaskFn func(taskId uint64, data proto.Message)
+type TaskFn func(taskID uint64, data proto.Message)
 
 type Task interface {
 	Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
@@ -101,7 +101,7 @@ type atomosTask struct {
 // Cancelled Task.
 // When an atomos is being halted, it will pack all not processed task into CancelledTask instance, and pass
 type CancelledTask struct {
-	Id   uint64
+	ID   uint64
 	Name string
 	Arg  proto.Message
 }
@@ -125,7 +125,7 @@ type atomosTaskManager struct {
 	//
 	// Increase id counter.
 	// (Is anyone able to use all the number of the unsigned int64?)
-	curId uint64
+	curID uint64
 
 	// 任务容器，目前仅定时任务使用。
 	// Tasks holder, only timer task will use.
@@ -139,7 +139,7 @@ type atomosTaskManager struct {
 // No New and Delete function because atomosTaskManager is struct inner BaseAtomos.
 func initAtomosTasksManager(at *atomosTaskManager, a *BaseAtomos) {
 	at.atomos = a
-	at.curId = 0
+	at.curID = 0
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
 }
 
@@ -185,18 +185,18 @@ func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, er
 			"STOPPED, Append atomos failed, fn=(%T),msg=(%+v)", fn, msg)
 	}
 
-	// Id increment.
-	at.curId += 1
+	// ID increment.
+	at.curID += 1
 
 	// Load the Atomos mail.
 	am := allocAtomosMail()
-	initTaskMail(am, at.curId, fnName, msg)
+	initTaskMail(am, at.curID, fnName, msg)
 	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
 		return 0, NewErrorf(ErrAtomosIsNotRunning,
 			"STOPPED, Append mailbox failed, fn=(%T),msg=(%+v)", fn, msg)
 	}
-	return at.curId, nil
+	return at.curID, nil
 }
 
 func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
@@ -215,18 +215,18 @@ func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id 
 			"STOPPED, Append atomos failed, fn=(%s),msg=(%+v)", fnName, msg)
 	}
 
-	// Id increment.
-	at.curId += 1
+	// ID increment.
+	at.curID += 1
 
 	// Load the Atomos mail.
 	am := allocAtomosMail()
-	initTaskMail(am, at.curId, fnName, msg)
+	initTaskMail(am, at.curID, fnName, msg)
 	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
 		return 0, NewErrorf(ErrAtomosIsNotRunning,
 			"STOPPED, Append mailbox failed, fn=(%s),msg=(%+v)", fnName, msg)
 	}
-	return at.curId, nil
+	return at.curID, nil
 }
 
 // AddAfter
@@ -249,16 +249,16 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.
 	}
 
 	// Increment
-	at.curId += 1
-	curId := at.curId
+	at.curID += 1
+	curID := at.curID
 
 	// Load the Atomos mail.
 	am := allocAtomosMail()
-	initTaskMail(am, at.curId, fnName, msg)
+	initTaskMail(am, at.curID, fnName, msg)
 	// But not append to the mailbox, now is to create a timer task.
 	t := &atomosTask{}
-	at.tasks[curId] = t
-	t.id = curId
+	at.tasks[curID] = t
+	t.id = curID
 	t.mail = am
 	// Set the task to state TaskScheduling, and try to add mail to mailbox after duartion.
 	t.timerState = TaskScheduling
@@ -306,7 +306,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.
 			at.atomos.log.Fatal("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
 		}
 	})
-	return curId, nil
+	return curID, nil
 }
 
 func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
@@ -326,16 +326,16 @@ func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, 
 	}
 
 	// Increment
-	at.curId += 1
-	curId := at.curId
+	at.curID += 1
+	curID := at.curID
 
 	// Load the Atomos mail.
 	am := allocAtomosMail()
-	initTaskMail(am, at.curId, fnName, msg)
+	initTaskMail(am, at.curID, fnName, msg)
 	// But not append to the mailbox, now is to create a timer task.
 	t := &atomosTask{}
-	at.tasks[curId] = t
-	t.id = curId
+	at.tasks[curID] = t
+	t.id = curID
 	t.mail = am
 	// Set the task to state TaskScheduling, and try to add mail to mailbox after duartion.
 	t.timerState = TaskScheduling
@@ -383,7 +383,7 @@ func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, 
 			at.atomos.log.Fatal("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
 		}
 	})
-	return curId, nil
+	return curID, nil
 }
 
 // 用于Add和AddAfter的检查任务合法性逻辑。
@@ -545,7 +545,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 				// and the function still have acquired the mutex.
 				at.atomos.log.Info("AtomosTask: Atomos has halted")
 			}
-			cancel.Id = id
+			cancel.ID = id
 			cancel.Name = t.mail.name
 			cancel.Arg = t.mail.arg
 			return cancel, nil
@@ -553,12 +553,12 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 		// 定时任务已经在Atomos mailbox中。
 		// Timer task is already in Atomos mailbox.
 		case TaskMailing:
-			m := at.atomos.mailbox.popById(id)
+			m := at.atomos.mailbox.popByID(id)
 			if m == nil {
 				err = NewErrorf(ErrAtomosTaskNotExists, "Delete a not exists task timer, task=(%+v)", t)
 				return cancel, err
 			}
-			cancel.Id = id
+			cancel.ID = id
 			cancel.Name = t.mail.name
 			cancel.Arg = t.mail.arg
 			return cancel, nil
@@ -569,7 +569,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 			return cancel, err
 		}
 	}
-	m := at.atomos.mailbox.popById(id)
+	m := at.atomos.mailbox.popByID(id)
 	if m == nil {
 		err = NewErrorf(ErrAtomosTaskNotExists, "Delete a not exists task timer, task=(%+v)", t)
 		return cancel, err
@@ -579,7 +579,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 		err = NewErrorf(ErrAtomosTaskNotExists, "Delete a task timer but its mail is invalid, task=(%+v)", t)
 		return cancel, err
 	}
-	cancel.Id = id
+	cancel.ID = id
 	cancel.Name = am.name
 	cancel.Arg = am.arg
 	return cancel, nil
