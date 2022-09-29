@@ -24,6 +24,7 @@ const RunnableName = "AtomosRunnable"
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
 	GetIDInfo() *IDInfo
+	String() string
 
 	// Release
 	// 释放ID的引用计数
@@ -67,11 +68,9 @@ type ID interface {
 	// Send wormhole to atomos.
 	SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
 
-	//// 内部使用，如果是本地Atom，会返回本地Atom的引用。
-	//// Inner use only, if Atom is local, it returns the local AtomCore reference.
-	//getLocalAtom() *AtomCore
+	// Info
 
-	String() string
+	// Transaction
 
 	// Internal
 

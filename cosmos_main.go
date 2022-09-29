@@ -107,6 +107,10 @@ func (c *CosmosMain) GetIDInfo() *IDInfo {
 	return c.atomos.GetIDInfo()
 }
 
+func (c *CosmosMain) String() string {
+	return c.atomos.Description()
+}
+
 func (c *CosmosMain) Release() {
 }
 
@@ -126,18 +130,18 @@ func (c *CosmosMain) State() AtomosState {
 	return c.atomos.state
 }
 
-func (a *CosmosMain) IdleDuration() time.Duration {
-	if a.atomos.state != AtomosWaiting {
+func (c *CosmosMain) IdleDuration() time.Duration {
+	if c.atomos.state != AtomosWaiting {
 		return 0
 	}
-	return time.Now().Sub(a.atomos.lastWait)
+	return time.Now().Sub(c.atomos.lastWait)
 }
 
 //func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
 //	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 //}
 
-func (a *CosmosMain) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+func (c *CosmosMain) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
 	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 }
 
@@ -149,23 +153,19 @@ func (c *CosmosMain) Kill(from ID) *ErrorInfo {
 	return NewError(ErrMainCannotKill, "Cannot kill main")
 }
 
-func (a *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
-	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
-}
-
-func (c *CosmosMain) String() string {
-	return c.atomos.Description()
+func (c *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	return c.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
 func (c *CosmosMain) getCallChain() []ID {
 	return c.callChain
 }
 
-func (a *CosmosMain) getElementLocal() *ElementLocal {
+func (c *CosmosMain) getElementLocal() *ElementLocal {
 	return nil
 }
 
-func (a *CosmosMain) getAtomLocal() *AtomLocal {
+func (c *CosmosMain) getAtomLocal() *AtomLocal {
 	return nil
 }
 
@@ -179,8 +179,8 @@ func (a *CosmosMain) getAtomLocal() *AtomLocal {
 // With SelfID, Atom can access its self-main with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (e *CosmosMain) CosmosMain() *CosmosMain {
-	return e
+func (c *CosmosMain) CosmosMain() *CosmosMain {
+	return c
 }
 
 //func (e *CosmosMain) ElementLocal() *ElementLocal {
@@ -189,20 +189,20 @@ func (e *CosmosMain) CosmosMain() *CosmosMain {
 
 // KillSelf
 // Atom kill itself from inner
-func (e *CosmosMain) KillSelf() {
-	if err := e.pushKillMail(e, false); err != nil {
-		e.Log().Error("KillSelf error, err=%v", err)
+func (c *CosmosMain) KillSelf() {
+	if err := c.pushKillMail(c, false); err != nil {
+		c.Log().Error("KillSelf error, err=%v", err)
 		return
 	}
-	e.Log().Info("KillSelf")
+	c.Log().Info("KillSelf")
 }
 
-func (a *CosmosMain) Parallel(fn func()) {
+func (c *CosmosMain) Parallel(fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				stack := debug.Stack()
-				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+				c.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
 			}
 		}()
 		fn()
@@ -223,21 +223,21 @@ func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID,
 
 // Check chain.
 
-func (e *CosmosMain) checkCallChain(fromIDList []ID) bool {
+func (c *CosmosMain) checkCallChain(fromIDList []ID) bool {
 	for _, fromID := range fromIDList {
-		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
+		if fromID.GetIDInfo().IsEqual(c.GetIDInfo()) {
 			return false
 		}
 	}
 	return true
 }
 
-func (e *CosmosMain) addCallChain(fromIDList []ID) {
-	e.callChain = append(fromIDList, e)
+func (c *CosmosMain) addCallChain(fromIDList []ID) {
+	c.callChain = append(fromIDList, c)
 }
 
-func (e *CosmosMain) delCallChain() {
-	e.callChain = nil
+func (c *CosmosMain) delCallChain() {
+	c.callChain = nil
 }
 
 // Implementation of CosmosNode
@@ -288,12 +288,12 @@ func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string
 
 // Implementation of AtomosUtilities
 
-func (e *CosmosMain) Log() Logging {
-	return e.atomos.Log()
+func (c *CosmosMain) Log() Logging {
+	return c.atomos.Log()
 }
 
-func (e *CosmosMain) Task() Task {
-	return e.atomos.Task()
+func (c *CosmosMain) Task() Task {
+	return c.atomos.Task()
 }
 
 // Main as an Atomos
@@ -322,12 +322,12 @@ func (c *CosmosMain) Reload(newInstance Atomos) {
 //	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
 //}
 
-func (e *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	return nil, NewError(ErrMainCannotMessage, "Main: Cannot send message.")
 }
 
-func (e *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
-	return e.atomos.PushKillMailAndWaitReply(from, wait)
+func (c *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
+	return c.atomos.PushKillMailAndWaitReply(from, wait)
 }
 
 func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
@@ -359,8 +359,8 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 	return nil
 }
 
-func (e *CosmosMain) pushReloadMail(from ID, impl *CosmosRunnable, reloads int) *ErrorInfo {
-	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
+func (c *CosmosMain) pushReloadMail(from ID, impl *CosmosRunnable, reloads int) *ErrorInfo {
+	return c.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
 }
 
 func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadable) (newElement Atomos) {
@@ -438,11 +438,11 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	return
 }
 
-func (a *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
-	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
+func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosMain: Not supported wormhole, type=(%T)", a.atomos.instance)
-		a.Log().Error(err.Message)
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosMain: Not supported wormhole, type=(%T)", c.atomos.instance)
+		c.Log().Error(err.Message)
 		return err
 	}
 	return holder.AcceptWormhole(from, wormhole)

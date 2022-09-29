@@ -104,6 +104,13 @@ func (e *ElementLocal) GetIDInfo() *IDInfo {
 	return e.atomos.GetIDInfo()
 }
 
+func (e *ElementLocal) String() string {
+	if e == nil {
+		return "nil"
+	}
+	return e.atomos.String()
+}
+
 func (e *ElementLocal) Release() {
 }
 
@@ -123,11 +130,11 @@ func (e *ElementLocal) State() AtomosState {
 	return e.atomos.state
 }
 
-func (a *ElementLocal) IdleDuration() time.Duration {
-	if a.atomos.state != AtomosWaiting {
+func (e *ElementLocal) IdleDuration() time.Duration {
+	if e.atomos.state != AtomosWaiting {
 		return 0
 	}
-	return time.Now().Sub(a.atomos.lastWait)
+	return time.Now().Sub(e.atomos.lastWait)
 }
 
 //func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
@@ -156,8 +163,8 @@ func (a *ElementLocal) IdleDuration() time.Duration {
 //	return outBuf, err
 //}
 
-func (a *ElementLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
-	return a.pushMessageMail(from, name, in)
+func (e *ElementLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+	return e.pushMessageMail(from, name, in)
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -174,13 +181,6 @@ func (e *ElementLocal) Kill(from ID) *ErrorInfo {
 
 func (e *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 	return e.atomos.PushWormholeMailAndWaitReply(from, wormhole)
-}
-
-func (e *ElementLocal) String() string {
-	if e == nil {
-		return "nil"
-	}
-	return e.atomos.String()
 }
 
 func (e *ElementLocal) getCallChain() []ID {

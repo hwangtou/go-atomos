@@ -101,6 +101,13 @@ func (a *AtomLocal) GetIDInfo() *IDInfo {
 	return a.atomos.GetIDInfo()
 }
 
+func (a *AtomLocal) String() string {
+	if a == nil {
+		return "nil"
+	}
+	return a.atomos.String()
+}
+
 func (a *AtomLocal) Release() {
 	a.element.elementAtomRelease(a)
 }
@@ -174,13 +181,6 @@ func (a *AtomLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
-func (a *AtomLocal) String() string {
-	if a == nil {
-		return "nil"
-	}
-	return a.atomos.String()
-}
-
 func (a *AtomLocal) State() AtomosState {
 	return a.atomos.state
 }
@@ -246,8 +246,8 @@ func (a *AtomLocal) Parallel(fn func()) {
 
 // Implementation of AtomSelfID
 
-func (e *AtomLocal) Config() map[string]string {
-	return e.element.main.runnable.config.Customize
+func (a *AtomLocal) Config() map[string]string {
+	return a.element.main.runnable.config.Customize
 }
 
 func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
