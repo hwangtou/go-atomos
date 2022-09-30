@@ -361,6 +361,10 @@ func (e *ElementLocal) Task() Task {
 	return e.atomos.Task()
 }
 
+func (e *ElementLocal) Transaction() Transaction {
+	return e.atomos.Transaction()
+}
+
 // Check chain.
 
 func (e *ElementLocal) checkCallChain(fromIDList []ID) bool {

@@ -62,15 +62,14 @@ type BaseAtomos struct {
 	// Task Manager, uses to handle Task from inner Atom.
 	task atomosTaskManager
 
+	// 事务管理器
+	transaction atomosTransactionManager
+
 	// 日志管理器，用于处理来自Atom内部的日志。
 	// Logs Manager, uses to handle Log from inner Atom.
 	log atomosLoggingManager
 
-	//refCount int
-
-	//// Element中名称列表的元素
-	//nameElement *list.Element
-
+	// 运行信息
 	lastBusy time.Time
 	lastWait time.Time
 	lastStop time.Time
@@ -95,6 +94,7 @@ func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHol
 	a.instance = inst
 	a.reloads = reloads
 	initAtomosLog(&a.log, log, a, lv)
+	initAtomosTransactionManager(&a.transaction, a)
 	initAtomosTasksManager(&a.task, a)
 	//a.refCount = 1
 	a.state = AtomosWaiting
@@ -108,6 +108,7 @@ func (a *BaseAtomos) DeleteAtomos(wait bool) {
 		a.mailbox.stop()
 	}
 	releaseAtomosTask(&a.task)
+	releaseAtomosTransaction(&a.transaction)
 	releaseAtomosLog(&a.log)
 	atomosPool.Put(a)
 }
@@ -140,6 +141,10 @@ func (a *BaseAtomos) Log() Logging {
 
 func (a *BaseAtomos) Task() Task {
 	return &a.task
+}
+
+func (a *BaseAtomos) Transaction() Transaction {
+	return &a.transaction
 }
 
 func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
@@ -209,6 +214,17 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole AtomosWormho
 	initWormholeMail(am, from, wormhole)
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),wormhole=(%v)", from, wormhole)
+	}
+	_, err = am.waitReply()
+	deallocAtomosMail(am)
+	return err
+}
+
+func (a *BaseAtomos) PushTransactionMailAndWaitReply(from ID, name string, kind transactionMailKind, ttl time.Duration) (err *ErrorInfo) {
+	am := allocAtomosMail()
+	initTransactionMail(am, from, name, kind, ttl)
+	if ok := a.mailbox.pushTail(am.mail); !ok {
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),transaction=(%s)", from, name)
 	}
 	_, err = am.waitReply()
 	deallocAtomosMail(am)
@@ -334,6 +350,8 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 	a.setBusy()
 	defer a.setWaiting()
 	switch am.mailType {
+	case MailHalt:
+		a.log.Fatal("Atomos: Received Halt message on receive, type=(%v),mail=(%+v)", am.mailType, am)
 	case MailMessage:
 		resp, err := a.holder.OnMessaging(am.from, am.name, am.arg)
 		if resp != nil {
@@ -360,6 +378,22 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		id, err := a.holder.OnScaling(am.from, am.name, am.arg)
 		am.sendReplyID(id, err)
 		// Mail dealloc in AtomCore.pushScaleMail.
+	case MailTransaction:
+		var err *ErrorInfo
+		switch am.transactionKind {
+		case transactionMailSet:
+			err = a.transaction.onSet(am.from, am.name, am.transactionTTL)
+		case transactionMailCommit:
+			err = a.transaction.onCommit(am.from, am.name)
+		case transactionMailRollback:
+			err = a.transaction.onRollback(am.from, am.name)
+		case transactionMailTimeout:
+			err = a.transaction.onTimeout(am.name)
+		default:
+			err = NewErrorf(ErrTransactionNotSupported, "invalid mail, type=(%v)", am.transactionKind).AutoStack(nil, nil)
+		}
+		am.sendReply(nil, err)
+		// Mail dealloc in AtomCore.pushTransactionMail.
 	default:
 		a.log.Fatal("Atomos: Received unknown message type, type=(%v),mail=(%+v)", am.mailType, am)
 	}
@@ -380,20 +414,26 @@ func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
 	// Try to reply here, to prevent mail non-reply, and stub.
 	//err := NewErrorfWithStack(ErrAtomosPanic, trace, "PANIC, mail=(%+v)", am)
 	switch am.mailType {
-	case MailMessage:
-		am.sendReply(nil, err)
-		// Mail then will be dealloc in AtomCore.pushMessageMail.
 	case MailHalt:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushKillMail.
+	case MailMessage:
+		am.sendReply(nil, err)
+		// Mail then will be dealloc in AtomCore.pushMessageMail.
+	case MailTask:
+		a.log.Error("Atomos: PANIC when atomos is running task, id=(%s),type=(%v),mail=(%+v)", a.id.Info(), am.mailType, am)
 	case MailReload:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushReloadMail.
 	case MailWormhole:
 		am.sendReply(nil, err)
 		// Mail then will be dealloc in AtomCore.pushWormholeMail.
-	case MailTask:
-		a.log.Error("Atomos: PANIC when atomos is running task, id=(%s),type=(%v),mail=(%+v)", a.id.Info(), am.mailType, am)
+	case MailScale:
+		am.sendReply(nil, err)
+		// Mail then will be dealloc in AtomCore.pushScaleMail.
+	case MailTransaction:
+		am.sendReply(nil, err)
+		// Mail then will be dealloc in AtomCore.pushTransactionMail.
 	default:
 		a.log.Fatal("Atomos: PANIC unknown message type, id=(%s),type=(%v),mail=(%+v)", a.id.Info(), am.mailType, am)
 	}
@@ -443,6 +483,12 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 			case MailWormhole:
 				remainAtomMail.sendReply(nil, err)
 				// Mail dealloc in AtomCore.pushWormholeMail.
+			case MailScale:
+				remainAtomMail.sendReply(nil, err)
+				// Mail dealloc in AtomCore.pushScaleMail.
+			case MailTransaction:
+				remainAtomMail.sendReply(nil, err)
+				// Mail dealloc in AtomCore.pushTransactionMail.
 			default:
 				a.log.Fatal("Atom.Mail: Stopped, unknown message type, type=%v,mail=%+v",
 					remainAtomMail.mailType, remainAtomMail)

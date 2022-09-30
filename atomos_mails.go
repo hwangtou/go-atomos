@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -52,6 +53,19 @@ const (
 	// MailScale
 	// Scale邮件。
 	MailScale MailType = 5
+
+	// MailTransaction
+	// 事务邮件。
+	MailTransaction MailType = 6
+)
+
+type transactionMailKind int
+
+const (
+	transactionMailSet      transactionMailKind = 1
+	transactionMailCommit   transactionMailKind = 2
+	transactionMailRollback transactionMailKind = 3
+	transactionMailTimeout  transactionMailKind = 4
 )
 
 // Atomos邮件
@@ -85,7 +99,12 @@ type atomosMail struct {
 	reload  AtomosReloadable
 	reloads int
 
+	// 虫洞
 	wormhole AtomosWormhole
+
+	// 事务
+	transactionKind transactionMailKind
+	transactionTTL  time.Duration
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
@@ -138,6 +157,8 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	am.reload = nil
 	am.reloads = 0
 	am.wormhole = nil
+	am.transactionKind = 0
+	am.transactionTTL = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -159,6 +180,8 @@ func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	am.reload = nil
 	am.reloads = 0
 	am.wormhole = nil
+	am.transactionKind = 0
+	am.transactionTTL = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -176,6 +199,8 @@ func initTaskMail(am *atomosMail, taskID uint64, name string, arg proto.Message)
 	am.reload = nil
 	am.reloads = 0
 	am.wormhole = nil
+	am.transactionKind = 0
+	am.transactionTTL = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -192,6 +217,8 @@ func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
 	am.reload = newInstance
 	am.reloads = reloads
 	am.wormhole = nil
+	am.transactionKind = 0
+	am.transactionTTL = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -208,6 +235,26 @@ func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
 	am.reload = nil
 	am.reloads = 0
 	am.wormhole = wormhole
+	am.transactionKind = 0
+	am.transactionTTL = 0
+	am.mailReply = mailReply{}
+	am.waitCh = make(chan *mailReply, 1)
+}
+
+// 事务邮件
+// Transaction Mail
+func initTransactionMail(am *atomosMail, from ID, name string, kind transactionMailKind, ttl time.Duration) {
+	am.mail.id = DefaultMailID
+	am.mail.action = MailActionRun
+	am.mailType = MailTransaction
+	am.from = from
+	am.name = name
+	am.arg = nil
+	am.reload = nil
+	am.reloads = 0
+	am.wormhole = nil
+	am.transactionKind = kind
+	am.transactionTTL = ttl
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -223,6 +270,8 @@ func initKillMail(am *atomosMail, from ID) {
 	am.reload = nil
 	am.reloads = 0
 	am.wormhole = nil
+	am.transactionKind = 0
+	am.transactionTTL = 0
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
 }
@@ -237,7 +286,7 @@ type mailReply struct {
 
 // Method sendReply() will only be called in for-loop of MailBox, it's safe to do so, because while an atomos is
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
-// has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
+// has been sent to waitCh, there will have no reference to the waitCh, waitCh will be collected.
 func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	m.mailReply.resp = resp
 	m.mailReply.err = err

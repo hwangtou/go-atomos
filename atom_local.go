@@ -29,8 +29,6 @@ type AtomLocal struct {
 	// Base atomos, the key of lockless queue of Atom.
 	atomos *BaseAtomos
 
-	//// 实际的ID类型
-	//id ID
 	// 引用计数，所以任何GetID操作之后都需要Release。
 	// Reference count, thus we have to Release any ID after GetID.
 	count int
@@ -291,6 +289,10 @@ func (a *AtomLocal) Log() Logging {
 
 func (a *AtomLocal) Task() Task {
 	return a.atomos.Task()
+}
+
+func (a *AtomLocal) Transaction() Transaction {
+	return a.atomos.Transaction()
 }
 
 // Check chain.

@@ -296,6 +296,10 @@ func (c *CosmosMain) Task() Task {
 	return c.atomos.Task()
 }
 
+func (c *CosmosMain) Transaction() Transaction {
+	return c.atomos.Transaction()
+}
+
 // Main as an Atomos
 
 func (c *CosmosMain) Description() string {

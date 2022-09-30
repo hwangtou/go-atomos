@@ -123,6 +123,10 @@ type SelfID interface {
 	Config() map[string]string
 
 	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+
+	// Transaction
+	// Atomos事务
+	Transaction() Transaction
 }
 
 type AtomSelfID interface {

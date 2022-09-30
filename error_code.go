@@ -64,4 +64,10 @@ const (
 	ErrAtomMessageReplyType
 
 	ErrElementCannotKill
+
+	ErrTransactionNameInvalid
+	ErrTransactionIsBusy
+	ErrTransactionNotSupported
+	ErrTransactionNotExists
+	ErrTransactionNotMatched
 )
