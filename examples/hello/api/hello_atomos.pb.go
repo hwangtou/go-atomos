@@ -112,10 +112,10 @@ type HelloAtom interface {
 
 func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloAtomID, *go_atomos.ErrorInfo) {
 	id, err := c.CosmosSpawnElementAtom(HelloName, name, arg)
-	if err != nil {
+	if id == nil {
 		return nil, err
 	}
-	return &helloAtomID{id}, nil
+	return &helloAtomID{id}, err
 }
 
 //////

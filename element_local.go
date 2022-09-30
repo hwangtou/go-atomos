@@ -630,7 +630,7 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
 	if has {
-		if oldAtom.atomos.isNotHalt() {
+		if oldAtom.atomos.isSpawnIdleAtomos() {
 			atom.deleteAtomLocal(false)
 			return oldAtom, NewErrorf(ErrAtomExists, "Atom exists, name=(%s),arg=(%v)", name, arg)
 		} else {

@@ -186,10 +186,10 @@ func (a *AtomLocal) State() AtomosState {
 }
 
 func (a *AtomLocal) IdleDuration() time.Duration {
-	if a.atomos.state != AtomosWaiting {
-		return 0
-	}
-	return time.Now().Sub(a.atomos.lastWait)
+	//if a.atomos.state != AtomosWaiting {
+	//	return 0
+	//}
+	return time.Now().Sub(a.atomos.lastBusy)
 }
 
 func (a *AtomLocal) getCallChain() []ID {

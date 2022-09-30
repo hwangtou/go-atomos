@@ -105,6 +105,10 @@ func (x *ErrorInfo) Error() string {
 	return x.Message
 }
 
+func (x *ErrorInfo) IsAtomExist() bool {
+	return x.Code == ErrAtomExists
+}
+
 func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
 	if x.Host != server.Host {
 		return false

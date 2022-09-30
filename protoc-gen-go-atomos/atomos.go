@@ -396,8 +396,8 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 			", name string, arg *", spawnArgTypeName, ") (",
 			idName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
 		g.P("id, err := c.CosmosSpawnElementAtom(", elementName, "Name, name, arg)")
-		g.P("if err != nil { return nil, err }")
-		g.P("return &", noExport(idName), "{id}, nil")
+		g.P("if id == nil { return nil, err }")
+		g.P("return &", noExport(idName), "{id}, err")
 		g.P("}")
 	}
 }

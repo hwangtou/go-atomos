@@ -271,6 +271,25 @@ func (a *BaseAtomos) isNotHalt() bool {
 	return a.state > AtomosHalt
 }
 
+func (a *BaseAtomos) isSpawnIdleAtomos() bool {
+	switch a.state {
+	case AtomosHalt:
+		return false
+	case AtomosSpawning:
+		return true
+	case AtomosWaiting:
+		now := time.Now()
+		a.lastBusy, a.lastWait = now, now
+		return true
+	case AtomosBusy:
+		return true
+	case AtomosStopping:
+		fallthrough
+	default:
+		return false
+	}
+}
+
 func (a *BaseAtomos) GetState() AtomosState {
 	return a.state
 }
@@ -283,17 +302,17 @@ func (a *BaseAtomos) setSpawning() {
 
 func (a *BaseAtomos) setBusy() {
 	a.state = AtomosBusy
-	a.lastBusy = time.Now()
+	a.lastWait = time.Now()
 }
 
 func (a *BaseAtomos) setWaiting() {
 	a.state = AtomosWaiting
-	a.lastWait = time.Now()
+	a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setStopping() {
 	a.state = AtomosStopping
-	a.lastBusy = time.Now()
+	//a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setHalt() {

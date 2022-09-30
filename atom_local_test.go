@@ -12,16 +12,23 @@ func TestAtomLocal(t *testing.T) {
 	impl := newTestFakeElement(t)
 	elem := newElementLocal(main, main.runnable, impl)
 
+	testAtomName := "testAtom"
+
 	// Spawn.
-	atom := newAtomLocal("testAtom", elem, elem.atomos.reloads, impl, elem.atomos.logging, impl.Interface.Config.LogLevel)
-	atom.Log().Info("TestAtomLocal")
-	atom.atomos.setSpawning()
-	err := impl.Interface.AtomSpawner(atom, atom.atomos.instance, nil, nil)
+	//atom := newAtomLocal(testAtomName, elem, elem.atomos.reloads, impl, elem.atomos.logging, impl.Interface.Config.LogLevel)
+	//atom.Log().Info("TestAtomLocal")
+	//atom.atomos.setSpawning()
+	//err := impl.Interface.AtomSpawner(atom, atom.atomos.instance, nil, nil)
+	//if err != nil {
+	//	t.Errorf("AtomSpawner: Failed, state=(%v),err=(%v)", atom.atomos.GetState(), err)
+	//	return
+	//}
+	//atom.atomos.setWaiting()
+	atom, err := elem.SpawnAtom(testAtomName, nil)
 	if err != nil {
 		t.Errorf("AtomSpawner: Failed, state=(%v),err=(%v)", atom.atomos.GetState(), err)
 		return
 	}
-	atom.atomos.setWaiting()
 
 	testAtom = atom
 
@@ -74,6 +81,25 @@ func TestAtomLocal(t *testing.T) {
 		return
 	}
 	t.Logf("PushMessage: Failed after halted, state=(%v),reply=(%v)", atom.atomos.GetState(), reply)
+
+	// Try Spawn Halt ID
+	respawn, err := elem.SpawnAtom(testAtomName, nil)
+	if err != nil {
+		t.Errorf("AtomSpawner: Failed, state=(%v),err=(%v)", atom.atomos.GetState(), err)
+		return
+	}
+	if respawn != testAtom {
+		t.Errorf("AtomSpawner: Not matched, state=(%v),err=(%v)", atom.atomos.GetState(), err)
+		return
+	}
+
+	// Push Message.
+	reply, err = atom.pushMessageMail(nil, "testMessage", nil)
+	if err != nil {
+		t.Errorf("PushMessage: TestMessage Failed, state=(%v),err=(%v)", atom.atomos.GetState(), err)
+		return
+	}
+	t.Logf("PushMessage: TestMessage Succeed, state=(%v),reply=(%v)", atom.atomos.GetState(), reply)
 
 	time.Sleep(100 * time.Millisecond)
 }
