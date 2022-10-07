@@ -1,4 +1,4 @@
-module hello
+module remote
 
 go 1.16
 

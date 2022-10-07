@@ -4,8 +4,8 @@ import (
 	atomos "github.com/hwangtou/go-atomos"
 	"time"
 
-	"github.com/hwangtou/go-atomos/examples/hello/api"
-	"github.com/hwangtou/go-atomos/examples/hello/elements"
+	"hello/api"
+	"hello/elements"
 )
 
 var AtomosRunnable atomos.CosmosRunnable

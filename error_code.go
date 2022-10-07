@@ -64,4 +64,10 @@ const (
 	ErrAtomMessageReplyType
 
 	ErrElementCannotKill
+
+	ErrRemoteListenerLoad
+	ErrRemoteListenerListen
+	ErrRemoteConnectFailed
+	ErrRemoteNotConnect
+	ErrRemoteCannotRemoteSpawn
 )

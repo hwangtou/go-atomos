@@ -221,6 +221,8 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole AtomosWormho
 type AtomosState int
 
 const (
+	AtomosStateUnknown AtomosState = -1
+
 	// AtomosHalt
 	// 停止
 	// Atom is stopped.

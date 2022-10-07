@@ -95,6 +95,19 @@ message Config {
   map<string, string> customize = 7;
 }
 
+message ElementConfig {
+  string name = 1;
+  uint64 version = 2;
+  LogLevel log_level = 3;
+  int32 atom_init_num = 4;
+  map<string, AtomMessageConfig> messages = 5;
+}
+
+message AtomMessageConfig {
+  google.protobuf.Any in = 1;
+  google.protobuf.Any out = 2;
+}
+
 message RemoteServerConfig {
   string host = 1;
   int32 port = 2;
@@ -117,61 +130,61 @@ message CertConfig {
   bool insecure_skip_verify = 3;
 }
 
-message CosmosLocalConfig {
-  string node_name = 1;
-  RemoteServerConfig enable_remote = 2;
-  repeated string elements = 3;
+// Cosmos Info
+
+message CosmosRemoteConnectInfo {
+  CosmosRemoteInfo config = 1;
 }
 
-message ElementConfig {
-  string name = 1;
-  uint64 version = 2;
-  LogLevel log_level = 3;
-  int32 atom_init_num = 4;
-  map<string, AtomMessageConfig> messages = 5;
+message CosmosRemoteInfo {
+  IDInfo id = 1;
+  map<string, ElementRemoteInfo> elements = 2;
+  int64 changed = 3;
 }
 
-message AtomMessageConfig {
-  google.protobuf.Any in = 1;
-  google.protobuf.Any out = 2;
+message ElementRemoteInfo {
+  IDInfo id = 1;
 }
 
-// Cosmos Watch
-
-enum CosmosWatchMessageType {
-  Init = 0;
-}
-
-message CosmosWatch {
-  CosmosWatchMessageType message_type = 1;
-  CosmosRemoteConnectInit init_message = 2;
-}
-
-message CosmosRemoteConnectInit {
-  CosmosLocalConfig config = 1;
+message AtomRemoteInfo {
+  IDInfo id = 1;
 }
 
 // Cosmos Requester
 
-message CosmosRemoteGetAtomIDReq {
-  string element = 1;
-  string name = 2;
-}
+//message CosmosRemoteGetAtomIDReq {
+//  string element = 1;
+//  string name = 2;
+//}
 
-message CosmosRemoteGetAtomIDResp {
-  bool has = 1;
-  string error = 2;
+message CosmosRemoteGetAtomIDRsp {
+  AtomRemoteInfo info = 1;
+  ErrorInfo error = 2;
 }
 
 message CosmosRemoteMessagingReq {
   IDInfo from = 1;
-  IDInfo to = 2;
-  string message = 3;
-  google.protobuf.Any args = 4;
+  string from_addr = 2;
+  IDInfo to = 3;
+  repeated IDInfo call_chain = 4;
+  string message = 5;
+  google.protobuf.Any args = 6;
 }
 
-message CosmosRemoteMessagingResp {
-  bool has = 1;
-  google.protobuf.Any reply = 2;
-  string error = 3;
+message CosmosRemoteMessagingRsp {
+  google.protobuf.Any reply = 1;
+  ErrorInfo error = 2;
+}
+
+message CosmosRemoteScalingReq {
+  IDInfo from = 1;
+  string from_addr = 2;
+  IDInfo to = 3;
+  string message = 4;
+  google.protobuf.Any args = 5;
+}
+
+message CosmosRemoteScalingRsp {
+  IDInfo id = 1;
+  ErrorInfo error = 2;
 }

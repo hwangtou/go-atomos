@@ -11,3 +11,13 @@ const (
 	// Name of main element
 	MainElementName = "Main"
 )
+
+const (
+	RemoteAtomosURIPrefix = "/atomos"
+
+	RemoteAtomosConnect          = RemoteAtomosURIPrefix + "/connect"
+	RemoteAtomosElementMessaging = RemoteAtomosURIPrefix + "/element/messaging"
+	RemoteAtomosElementScaling   = RemoteAtomosURIPrefix + "/element/scaling"
+	RemoteAtomosGetAtom          = RemoteAtomosURIPrefix + "/atom/get"
+	RemoteAtomosAtomMessaging    = RemoteAtomosURIPrefix + "/atom/message"
+)

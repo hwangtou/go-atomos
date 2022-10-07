@@ -1,0 +1,17 @@
+node: hello_client
+log_path: log
+log_level: 1
+enable_cert:
+  cert_path: config/server.crt
+  key_path: config/server.key
+  insecure_skip_verify: true
+enable_server:
+  host: 127.0.0.1
+  port: 12351
+enable_telnet:
+  network: tcp
+  address: 127.0.0.1:1234
+  admin:
+    username: admin
+    password: admin123
+customize:

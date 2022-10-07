@@ -38,8 +38,6 @@ type ElementLocal struct {
 	// Lock.
 	lock sync.RWMutex
 
-	scale *list.List
-
 	//// Available or Reloading
 	//avail bool
 	// 当前ElementImplementation的引用。
@@ -69,7 +67,6 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		atoms:     nil,
 		names:     list.New(),
 		lock:      sync.RWMutex{},
-		scale:     list.New(),
 		current:   impl,
 		callChain: nil,
 	}
@@ -131,9 +128,9 @@ func (e *ElementLocal) State() AtomosState {
 }
 
 func (e *ElementLocal) IdleDuration() time.Duration {
-	if e.atomos.state != AtomosWaiting {
-		return 0
-	}
+	//if e.atomos.state != AtomosWaiting {
+	//	return 0
+	//}
 	return time.Now().Sub(e.atomos.lastWait)
 }
 
@@ -168,7 +165,7 @@ func (e *ElementLocal) MessageByName(from ID, name string, in proto.Message) (pr
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -192,6 +189,14 @@ func (e *ElementLocal) getElementLocal() *ElementLocal {
 }
 
 func (e *ElementLocal) getAtomLocal() *AtomLocal {
+	return nil
+}
+
+func (e *ElementLocal) getElementRemote() *ElementRemote {
+	return nil
+}
+
+func (e *ElementLocal) getAtomRemote() *AtomRemote {
 	return nil
 }
 
@@ -247,7 +252,7 @@ func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, proto
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message self decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
@@ -278,7 +283,7 @@ func (e *ElementLocal) GetElementName() string {
 }
 
 func (e *ElementLocal) GetAtomID(name string) (ID, *ErrorInfo) {
-	return e.elementAtomGet(name)
+	return e.elementAtomGet(name, false)
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -294,7 +299,7 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *E
 	e.lock.RUnlock()
 	// Auto data persistence.
 	persistence, _ := current.Developer.(ElementCustomizeAutoDataPersistence)
-	return e.elementAtomSpawn(name, arg, current, persistence)
+	return e.elementAtomSpawn(name, arg, current, persistence, false)
 }
 
 func (e *ElementLocal) MessageElement(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
@@ -596,13 +601,15 @@ func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 
 // Internal
 
-func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *ErrorInfo) {
+func (e *ElementLocal) elementAtomGet(name string, remote bool) (*AtomLocal, *ErrorInfo) {
 	e.lock.RLock()
 	current := e.current
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
-		atom.count += 1
+		if !remote {
+			atom.count += 1
+		}
 		return atom, nil
 	}
 	// Auto data persistence.
@@ -610,10 +617,10 @@ func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *ErrorInfo) {
 	if !ok || persistence == nil {
 		return nil, NewErrorf(ErrAtomNotExists, "Atom not exists, name=(%s)", name)
 	}
-	return e.elementAtomSpawn(name, nil, current, persistence)
+	return e.elementAtomSpawn(name, nil, current, persistence, remote)
 }
 
-func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence) (*AtomLocal, *ErrorInfo) {
+func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, remote bool) (*AtomLocal, *ErrorInfo) {
 	// Element的容器逻辑。
 
 	// Alloc an atomos and try setting.
@@ -647,7 +654,9 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 			atom = oldAtom
 		}
 	}
-	atom.count += 1
+	if !remote {
+		atom.count += 1
+	}
 
 	// Atom的Spawn逻辑。
 	atom.atomos.setSpawning()

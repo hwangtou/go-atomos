@@ -155,7 +155,7 @@ func (a *AtomLocal) MessageByName(from ID, name string, in proto.Message) (proto
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.element.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -202,6 +202,14 @@ func (a *AtomLocal) getElementLocal() *ElementLocal {
 
 func (a *AtomLocal) getAtomLocal() *AtomLocal {
 	return a
+}
+
+func (a *AtomLocal) getElementRemote() *ElementRemote {
+	return nil
+}
+
+func (a *AtomLocal) getAtomRemote() *AtomRemote {
+	return nil
 }
 
 // Implementation of SelfID
@@ -263,7 +271,7 @@ func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJ
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message self decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
 	}

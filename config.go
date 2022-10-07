@@ -36,8 +36,9 @@ type yamlCertConfig struct {
 }
 
 type yamlRemoteServerConfig struct {
-	Host string `yaml:"host"`
-	Port int32  `yaml:"port"`
+	Host  string `yaml:"host"`
+	Port  int32  `yaml:"port"`
+	Token string `yaml:"token"`
 }
 
 type yamlTelnetConfig struct {
