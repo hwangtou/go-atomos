@@ -68,7 +68,7 @@ type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Messag
 // Message解码器
 type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
 
-//type JSONDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
+//type JSONDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
 
 // ElementAtomMessage
 // Element的Atom的调用信息。
@@ -146,7 +146,7 @@ func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Messag
 	return p, nil
 }
 
-//func JSONUnmarshal(b []byte, p proto.Message) (proto.Message, *ErrorInfo) {
+//func JSONUnmarshal(b []byte, p proto.Message) (proto.Message, *Error) {
 //	if err := json.Unmarshal(b, p); err != nil {
 //		return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
 //	}

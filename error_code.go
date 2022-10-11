@@ -20,12 +20,50 @@ const (
 	ErrMainCannotScale
 
 	ErrCosmosConfigInvalid
-	ErrCosmosConfigNodeNameInvalid
+	ErrCosmosConfigNotFound
+	ErrCosmosNameInvalid
+	ErrCosmosNodeNameInvalid
+	ErrCosmosNodeNameNotFound
 	ErrCosmosConfigLogPathInvalid
+	ErrCosmosConfigRunPathInvalid
+	ErrCosmosConfigRunPIDIsRunning
+	ErrCosmosConfigRunPIDPathInvalid
+	ErrCosmosConfigRunPIDInvalid
+	ErrCosmosConfigRemovePIDPathFailed
+	ErrCosmosConfigBuildPathInvalid
+	ErrCosmosConfigBinPathInvalid
+	ErrCosmosConfigBuildFailed
+	ErrCosmosConfigBinLinkFileFailed
+	ErrCosmosReadEtcPath
 	ErrCosmosCertConfigInvalid
+	ErrCosmosLogOpenFailed
+	ErrCosmosWritePIDFileFailed
+	ErrCosmosWriteUnixSocketFailed
 	ErrCosmosHasAlreadyRun
 	ErrCosmosIsBusy
 	ErrCosmosIsClosed
+	ErrCosmosUnixSocketConnEOF
+	ErrCosmosUnixSocketCommandNotSupported
+	ErrCosmosUnixSocketConnError
+	ErrCosmosUnixSocketConnWriteError
+	ErrCosmosDaemonGetExecutableFailed
+	ErrCosmosDaemonStartProcessFailed
+	ErrCosmosProcessIDFileNotFound
+	ErrCosmosNodeRunPathWatchFailed
+
+	ErrPathUserInvalid
+	ErrPathGroupInvalid
+	ErrPathNotExist
+	ErrPathMakeDir
+	ErrPathGroupIDInvalid
+	ErrPathUserIDInvalid
+	ErrPathChangeOwnFailed
+	ErrPathChangeModeFailed
+	ErrPathIsNotDirectory
+	ErrPathIsNotOwner
+	ErrPathPermNotMatch
+	ErrPathSaveFileFailed
+	ErrPathGetGroupIDsFailed
 
 	ErrElementLoaded
 	ErrElementReloadInvalid

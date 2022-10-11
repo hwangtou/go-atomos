@@ -10,7 +10,7 @@ type TestAtomosHolder struct {
 	T *testing.T
 }
 
-func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", from, a.state, name, args)
 	switch name {
 	case "panic":
@@ -19,7 +19,7 @@ func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message)
 	return
 }
 
-func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	panic("not supported")
 }
 
@@ -31,12 +31,12 @@ func (t *TestAtomosHolder) OnReloading(oldInstance Atomos, reloadObject AtomosRe
 	return n
 }
 
-func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	t.T.Logf("OnWormhole: wormhole=(%v)", wormhole)
 	return nil
 }
 
-func (t *TestAtomosHolder) OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo {
+func (t *TestAtomosHolder) OnStopping(from ID, cancelled map[uint64]CancelledTask) *Error {
 	t.T.Logf("OnStopping: from=(%v),state=(%v),cancelled=(%v)", from, a.state, cancelled)
 	return nil
 }
@@ -75,7 +75,7 @@ func TestBaseAtomos(t *testing.T) {
 	log := NewLoggingAtomos()
 	instance := &TestAtomosInstance{T: t, reload: 1}
 	holder := &TestAtomosHolder{T: t}
-	atom := NewBaseAtomos(id, log, LogLevel_Debug, holder, instance, 1)
+	atom := NewBaseAtomos(id, log, LogLevel_DEBUG, holder, instance, 1)
 	a = atom
 	// Push Message
 	reply, err := a.PushMessageMailAndWaitReply(nil, "message", nil)
