@@ -1,5 +1,5 @@
 node: helloworld
-log_path: log
+log_path: hello.log
 log_level: 1
 enable_cert:
   cert_path: config/server.crt

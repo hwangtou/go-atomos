@@ -10,9 +10,13 @@ import (
 
 // Fake Data
 
-func newTestFakeCosmosProcess(_ *testing.T) *CosmosProcess {
+func newTestFakeCosmosProcess(t *testing.T) *CosmosProcess {
+	l, er := NewLoggingAtomos("tmp_test.log")
+	if er != nil {
+		t.Fatal(er)
+	}
 	return &CosmosProcess{
-		sharedLog: NewLoggingAtomos(),
+		sharedLog: l,
 	}
 }
 

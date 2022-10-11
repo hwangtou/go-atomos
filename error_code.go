@@ -64,4 +64,6 @@ const (
 	ErrAtomMessageReplyType
 
 	ErrElementCannotKill
+
+	ErrLogFileCannotOpen
 )

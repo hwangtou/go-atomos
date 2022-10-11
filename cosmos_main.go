@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"google.golang.org/protobuf/proto"
 	"io/ioutil"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -40,7 +41,9 @@ type CosmosMain struct {
 // Life cycle
 
 func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain {
-	process.sharedLog.PushProcessLog(LogLevel_Info, "Main: Loading")
+	process.sharedLog.PushProcessLog(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	process.sharedLog.PushProcessLog(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	process.sharedLog.PushProcessLog(LogLevel_Info, "CosmosMain: Initializing, pid=(%d)", os.Getpid())
 	id := &IDInfo{
 		Type:    IDType_Main,
 		Cosmos:  runnable.config.Node,
@@ -67,7 +70,7 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
 	_, err := c.tryLoadRunnable(runnable)
 	if err != nil {
-		c.Log().Fatal("Main: Once load failed, err=(%v)", err)
+		c.Log().Fatal("CosmosMain: Once load failed, err=(%v)", err)
 		return err
 	}
 	return nil
@@ -214,11 +217,11 @@ func (c *CosmosMain) Config() map[string]string {
 }
 
 func (c *CosmosMain) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
-	return nil, NewError(ErrMainCannotMessage, "Main: Cannot message.")
+	return nil, NewError(ErrMainCannotMessage, "CosmosMain: Cannot message.")
 }
 
 func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
-	return nil, NewError(ErrMainCannotScale, "Main: Cannot scale.")
+	return nil, NewError(ErrMainCannotScale, "CosmosMain: Cannot scale.")
 }
 
 // Check chain.
@@ -303,12 +306,12 @@ func (c *CosmosMain) Description() string {
 }
 
 func (c *CosmosMain) Halt(from ID, cancels map[uint64]CancelledTask) (save bool, data proto.Message) {
-	c.Log().Fatal("Main: Halt of CosmosMain should not be called.")
+	c.Log().Fatal("CosmosMain: Halt of CosmosMain should not be called.")
 	return false, nil
 }
 
 func (c *CosmosMain) Reload(newInstance Atomos) {
-	c.Log().Fatal("Main: Reload of CosmosMain should not be called.")
+	c.Log().Fatal("CosmosMain: Reload of CosmosMain should not be called.")
 }
 
 // 内部实现
@@ -323,7 +326,7 @@ func (c *CosmosMain) Reload(newInstance Atomos) {
 //}
 
 func (c *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
-	return nil, NewError(ErrMainCannotMessage, "Main: Cannot send message.")
+	return nil, NewError(ErrMainCannotMessage, "CosmosMain: Cannot send message.")
 }
 
 func (c *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
@@ -331,7 +334,7 @@ func (c *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
 }
 
 func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
-	c.Log().Info("Main: NOW EXITING!")
+	c.Log().Info("CosmosMain: NOW EXITING!")
 
 	// Unload local elements and its atomos.
 	for i := len(c.runnable.implementOrder) - 1; i >= 0; i -= 1 {
@@ -342,7 +345,7 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 		}
 		err := elem.pushKillMail(c, true)
 		if err != nil {
-			c.Log().Error("Main: Exiting kill element error, element=(%s),err=(%v)", name, err.Message)
+			c.Log().Error("CosmosMain: Exiting kill element error, element=(%s),err=(%v)", name, err.Message)
 		}
 	}
 
@@ -375,11 +378,11 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 		c.Log().Fatal(err.Message)
 		return
 	}
-	c.Log().Info("Main: NOW RELOADING!")
+	c.Log().Info("CosmosMain: NOW RELOADING!")
 
 	helper, err := c.tryLoadRunnable(newRunnable)
 	if err != nil {
-		c.Log().Info("Main: Reload failed, err=(%v)", err)
+		c.Log().Info("CosmosMain: Reload failed, err=(%v)", err)
 		return
 	}
 
@@ -391,12 +394,12 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 		elem, has := c.elements[name]
 		c.mutex.RUnlock()
 		if !has {
-			c.Log().Fatal("Main: Reload is reloading not exists element, name=(%s)", name)
+			c.Log().Fatal("CosmosMain: Reload is reloading not exists element, name=(%s)", name)
 			continue
 		}
 		err := elem.pushReloadMail(c, define, c.atomos.reloads)
 		if err != nil {
-			c.Log().Fatal("Main: Reload sent reload failed, name=(%s),err=(%v)", name, err)
+			c.Log().Fatal("CosmosMain: Reload sent reload failed, name=(%s),err=(%v)", name, err)
 		}
 	}
 
@@ -408,12 +411,12 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 		elem, has := c.elements[name]
 		c.mutex.RUnlock()
 		if !has {
-			c.Log().Fatal("Main: Reload is halting not exists element, name=(%s)", name)
+			c.Log().Fatal("CosmosMain: Reload is halting not exists element, name=(%s)", name)
 			continue
 		}
 		err := elem.pushKillMail(c, true)
 		if err != nil {
-			c.Log().Fatal("Main: Reload sent halt failed, name=(%s),err=(%v)", name, err)
+			c.Log().Fatal("CosmosMain: Reload sent halt failed, name=(%s),err=(%v)", name, err)
 		}
 		c.mutex.Lock()
 		delete(c.elements, name)
@@ -424,24 +427,24 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	if err := func(runnable *CosmosRunnable) (err *ErrorInfo) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewErrorf(ErrMainReloadFailed, "Main: Reload script CRASH! reason=(%s)", r)
+				err = NewErrorf(ErrMainReloadFailed, "CosmosMain: Reload script CRASH! reason=(%s)", r)
 				c.Log().Fatal(err.Message)
 			}
 		}()
 		runnable.reloadScript(c)
 		return
 	}(newRunnable); err != nil {
-		c.Log().Fatal("Main: Reload failed, err=(%v)", err)
+		c.Log().Fatal("CosmosMain: Reload failed, err=(%v)", err)
 	}
 
-	c.Log().Info("Main: RELOADED!")
+	c.Log().Info("CosmosMain: RELOADED!")
 	return
 }
 
 func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosMain: Not supported wormhole, type=(%T)", c.atomos.instance)
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosCosmosMain: Not supported wormhole, type=(%T)", c.atomos.instance)
 		c.Log().Error(err.Message)
 		return err
 	}
@@ -455,12 +458,12 @@ func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil {
-		err = NewError(ErrMainRunnableNotFound, "Main: It's not running.")
+		err = NewError(ErrMainRunnableNotFound, "CosmosMain: It's not running.")
 		return nil, err
 	}
 	elem, has := c.elements[name]
 	if !has {
-		err = NewErrorf(ErrMainElementNotFound, "Main: Local element not found, name=(%s)", name)
+		err = NewErrorf(ErrMainElementNotFound, "CosmosMain: Local element not found, name=(%s)", name)
 		return nil, err
 	}
 	return elem, nil
@@ -474,7 +477,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl)
 		if e != nil {
 			err = e
-			c.Log().Fatal("Main: Spawning element failed, name=(%s),err=(%v)", impl.Interface.Config.Name, err)
+			c.Log().Fatal("CosmosMain: Spawning element failed, name=(%s),err=(%v)", impl.Interface.Config.Name, err)
 			break
 		}
 		loaded = append(loaded, elem)
@@ -482,10 +485,10 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	if err != nil {
 		for _, elem := range loaded {
 			if err := elem.pushKillMail(c, true); err != nil {
-				c.Log().Fatal("Main: Spawning element failed, kill error, name=(%s),err=(%v)", elem.GetName(), err)
+				c.Log().Fatal("CosmosMain: Spawning element failed, kill error, name=(%s),err=(%v)", elem.GetName(), err)
 			}
 		}
-		c.Log().Fatal("Main: Spawning element has rollback")
+		c.Log().Fatal("CosmosMain: Spawning element has rollback")
 		return
 	}
 	for _, elem := range loaded {
@@ -497,7 +500,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		go func(s ElementCustomizeStartRunning) {
 			defer func() {
 				if r := recover(); r != nil {
-					err = NewErrorf(ErrMainStartRunningPanic, "Main: Running PANIC! reason=(%s)", r)
+					err = NewErrorf(ErrMainStartRunningPanic, "CosmosMain: Running PANIC! reason=(%s)", r)
 					c.Log().Fatal(err.Message)
 				}
 			}()
@@ -528,7 +531,7 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 		//	err = err.AddStack(c.GetIDInfo(), debug.Stack())
 		//}
 		//if err != nil {
-		//	c.Log().Fatal("Main: %s, err=(%v)", name, err)
+		//	c.Log().Fatal("CosmosMain: %s, err=(%v)", name, err)
 		//}
 	}()
 
@@ -608,16 +611,16 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 	// Check enable Cert.
 	if cert := newRunnable.config.EnableCert; cert != nil {
 		if cert.CertPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Cert path is empty")
+			return nil, NewError(ErrCosmosCertConfigInvalid, "CosmosMain: Cert path is empty")
 		}
 		if cert.KeyPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Main: Key path is empty")
+			return nil, NewError(ErrCosmosCertConfigInvalid, "CosmosMain: Key path is empty")
 		}
 		// Load Key Pair.
-		c.Log().Info("Main: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
+		c.Log().Info("CosmosMain: Enabling Cert, cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
 		pair, e := tls.LoadX509KeyPair(cert.CertPath, cert.KeyPath)
 		if e != nil {
-			err := NewErrorf(ErrMainLoadCertFailed, "Main: Load Key Pair failed, err=(%v)", e)
+			err := NewErrorf(ErrMainLoadCertFailed, "CosmosMain: Load Key Pair failed, err=(%v)", e)
 			c.Log().Fatal(err.Message)
 			return nil, err
 		}
@@ -629,7 +632,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		// Load Cert.
 		caCert, e := ioutil.ReadFile(cert.CertPath)
 		if e != nil {
-			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Main: Cert file read error, err=(%v)", e)
+			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "CosmosMain: Cert file read error, err=(%v)", e)
 		}
 		tlsConfig := &tls.Config{}
 		if cert.InsecureSkipVerify {
@@ -651,7 +654,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 	// loadRemoteCosmosServerSupport
 	if server := newRunnable.config.EnableServer; server != nil {
 		// Enable Server
-		c.Log().Info("Main: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
+		c.Log().Info("CosmosMain: Enable Server, host=(%s),port=(%d)", server.Host, server.Port)
 		if oldRunnable != nil && oldRunnable.config.EnableServer.IsEqual(newRunnable.config.EnableServer) {
 			goto noServerReconnect
 		}

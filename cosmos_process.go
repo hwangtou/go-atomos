@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -24,27 +25,30 @@ type CosmosProcess struct {
 // Cosmos Life Cycle
 
 func CosmosProcessMainFn(runnable CosmosRunnable) {
-	// Load runnable.
-	cosmos := &CosmosProcess{
-		// Cosmos log is initialized once and available all the time.
-		sharedLog: NewLoggingAtomos(),
-		main:      nil,
+	if runnable.config == nil {
+		log.Printf("CosmosProcess: No config")
+		return
 	}
-	defer cosmos.sharedLog.log.waitTerminate()
-
+	// Load runnable.
+	cosmos := &CosmosProcess{}
 	// Run
-	cosmos.Run(runnable)
+	if err := cosmos.Run(runnable); err != nil {
+		os.Stderr.WriteString(fmt.Sprintf("CosmosProcess: Run failed, err=(%v)", err))
+	}
 }
 
-func (c *CosmosProcess) Run(runnable CosmosRunnable) {
-	if runnable.config == nil {
-		c.Logging(LogLevel_Fatal, "CosmosProcess: No config")
-		return
+func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
+	if err = runnable.config.Check(); err != nil {
+		return err.AutoStack(nil, nil)
 	}
-	if err := runnable.config.Check(); err != nil {
-		c.Logging(LogLevel_Fatal, "CosmosProcess: Check config error, err=(%v)", err)
-		return
+
+	// Load Logger
+	// Cosmos log is initialized once and available all the time.
+	c.sharedLog, err = NewLoggingAtomos(runnable.config.LogPath)
+	if err != nil {
+		return err.AutoStack(nil, nil)
 	}
+	defer c.sharedLog.close()
 
 	// Run main.
 	c.main = newCosmosMain(c, &runnable)
@@ -53,7 +57,7 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) {
 	// Daemon execute executable command.
 	// 让本地的Cosmos去初始化Runnable中的各种内容，主要是Element相关信息的加载。
 	// Make CosmosMain initial the content of Runnable, especially the Element information.
-	err := c.main.onceLoad(&runnable)
+	err = c.main.onceLoad(&runnable)
 	if err != nil {
 		c.Logging(LogLevel_Fatal, "CosmosProcess: Main init failed") //, err=(%v)", err.Message)
 		return
@@ -64,6 +68,8 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) {
 	defer func() {
 		err = c.main.pushKillMail(nil, true)
 		c.Logging(LogLevel_Info, "CosmosProcess: EXITED!")
+		c.Logging(LogLevel_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+		c.Logging(LogLevel_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	}()
 
 	go c.waitKillSignal()
@@ -80,6 +86,7 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) {
 	c.Logging(LogLevel_Info, "CosmosProcess: NOW RUNNING!")
 	runnable.mainScript(c.main, c.main.waitProcessExitCh)
 	c.Logging(LogLevel_Info, "CosmosProcess: Execute runnable succeed.")
+	return nil
 }
 
 func (c *CosmosProcess) Stop() {

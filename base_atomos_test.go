@@ -72,7 +72,11 @@ func TestBaseAtomos(t *testing.T) {
 		Element: "element",
 		Atomos:  "atomos",
 	}
-	log := NewLoggingAtomos()
+	log, err := NewLoggingAtomos("tmp/test.log")
+	if err != nil {
+		t.Errorf("NewLoggingAtomos: err=(%v)", err)
+		return
+	}
 	instance := &TestAtomosInstance{T: t, reload: 1}
 	holder := &TestAtomosHolder{T: t}
 	atom := NewBaseAtomos(id, log, LogLevel_Debug, holder, instance, 1)
