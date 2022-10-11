@@ -458,8 +458,12 @@ func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (
 	}
 
 	newAtom = reload.Developer.AtomConstructor(a.GetName())
-	newAtom.Reload(oldAtom)
-	return newAtom
+	reloadAtom, ok := newAtom.(AtomosReload)
+	if ok && reloadAtom != nil {
+		reloadAtom.Reload(oldAtom)
+		return newAtom
+	}
+	return oldAtom
 }
 
 func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {

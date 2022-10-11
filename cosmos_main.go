@@ -16,8 +16,8 @@ type CosmosMain struct {
 	process *CosmosProcess
 
 	// Config
-	runnable   *CosmosRunnable
-	mainKillCh chan bool
+	runnable          *CosmosRunnable
+	waitProcessExitCh chan bool
 
 	atomos *BaseAtomos
 
@@ -48,15 +48,15 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 		Atomos:  "",
 	}
 	mainFn := &CosmosMain{
-		process:    process,
-		runnable:   nil,
-		atomos:     nil,
-		mainKillCh: make(chan bool),
-		elements:   make(map[string]*ElementLocal, len(runnable.implements)),
-		mutex:      sync.RWMutex{},
-		listenCert: nil,
-		clientCert: nil,
-		callChain:  nil,
+		process:           process,
+		runnable:          nil,
+		atomos:            nil,
+		waitProcessExitCh: make(chan bool, 1),
+		elements:          make(map[string]*ElementLocal, len(runnable.implements)),
+		mutex:             sync.RWMutex{},
+		listenCert:        nil,
+		clientCert:        nil,
+		callChain:         nil,
 	}
 	mainFn.atomos = NewBaseAtomos(id, process.sharedLog, runnable.mainLogLevel, mainFn, mainFn, 0)
 	return mainFn
@@ -352,7 +352,7 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 	c.callChain = nil
 	c.clientCert = nil
 	c.listenCert = nil
-	c.mainKillCh = nil
+	c.waitProcessExitCh = nil
 	c.elements = nil
 	c.runnable = nil
 	c.process = nil

@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"flag"
 	"gopkg.in/yaml.v2"
 	"os"
 )
@@ -49,6 +50,15 @@ type yamlTelnetConfig struct {
 type yamlTelnetAdmin struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+func NewConfigFromYamlFileArgument() (*Config, *ErrorInfo) {
+	// Config
+	configPath := flag.String("config", "config/config.yaml", "yaml config path")
+	flag.Parse()
+
+	// Load config.
+	return ConfigFromYaml(*configPath)
 }
 
 func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {

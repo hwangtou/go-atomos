@@ -32,8 +32,7 @@ type AtomosAcceptWormhole interface {
 	AcceptWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
 }
 
-type AtomosReloadable interface {
-}
+type AtomosReloadable interface{}
 
 type BaseAtomos struct {
 	// 句柄信息

@@ -123,6 +123,13 @@ func (mb *mailBox) waitStop() {
 	<-ch
 }
 
+func (mb *mailBox) waitTerminate() {
+	ch := make(chan struct{}, 1)
+	m := newExitMail(ch)
+	mb.pushTail(m)
+	<-ch
+}
+
 func (mb *mailBox) stop() {
 	m := newExitMail(nil)
 	mb.pushHead(m)

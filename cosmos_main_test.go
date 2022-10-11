@@ -33,7 +33,7 @@ func TestCosmosMain(t *testing.T) {
 					main.Log().Fatal(err.Message)
 				}
 			}()
-			runnable.mainScript(main, main.mainKillCh)
+			runnable.mainScript(main, main.waitProcessExitCh)
 			return
 		}(runnable); err != nil {
 			main.Log().Fatal("Main: Load failed, err=(%v)", err)

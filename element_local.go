@@ -566,7 +566,11 @@ func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloada
 	}
 
 	newElement = reload.Developer.ElementConstructor()
-	newElement.Reload(oldElement)
+	reloadElement, ok := newElement.(AtomosReload)
+	if !ok && reloadElement == nil {
+		return oldElement
+	}
+	reloadElement.Reload(oldElement)
 
 	// Send Reload to all atoms.
 	// 重载Element，需要指定一个版本的ElementImplementation。

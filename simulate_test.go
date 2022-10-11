@@ -18,9 +18,9 @@ func newTestFakeCosmosProcess(_ *testing.T) *CosmosProcess {
 
 func newTestFakeCosmosMain(t *testing.T) *CosmosMain {
 	cosmosMain := &CosmosMain{
-		process:    newTestFakeCosmosProcess(t),
-		runnable:   newTestFakeRunnable(t),
-		mainKillCh: nil,
+		process:           newTestFakeCosmosProcess(t),
+		runnable:          newTestFakeRunnable(t),
+		waitProcessExitCh: nil,
 		atomos: &BaseAtomos{
 			id: &IDInfo{
 				state:         protoimpl.MessageState{},
