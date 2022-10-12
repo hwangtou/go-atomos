@@ -16,40 +16,33 @@ func (x *Config) Check() *ErrorInfo {
 	if x.LogPath == "" {
 		return NewError(ErrCosmosConfigLogPathInvalid, "Log path is empty")
 	}
-	// TODO: Try open log file
 	return nil
 }
 
 type yamlConfig struct {
 	Node         string                  `yaml:"node"`
-	LogPath      string                  `yaml:"log_path"`
-	LogLevel     int                     `yaml:"log_level"`
-	EnableCert   *yamlCertConfig         `yaml:"enable_cert"`
-	EnableServer *yamlRemoteServerConfig `yaml:"enable_server"`
-	EnableTelnet *yamlTelnetConfig       `yaml:"enable_telnet"`
+	LogPath      string                  `yaml:"log-path"`
+	LogLevel     string                  `yaml:"log-level"`
+	ManagePort   int                     `yaml:"manage-port"`
+	Managers     []*yamlManager          `yaml:"managers"`
+	UseCert      *yamlCertConfig         `yaml:"use-cert"`
+	EnableServer *yamlRemoteServerConfig `yaml:"enable-server"`
 	Customize    map[string]string       `yaml:"customize"`
 }
 
+type yamlManager struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
 type yamlCertConfig struct {
-	CertPath           string `yaml:"cert_path"`
-	KeyPath            string `yaml:"key_path"`
-	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+	CertPath           string `yaml:"cert-path"`
+	KeyPath            string `yaml:"key-path"`
+	InsecureSkipVerify bool   `yaml:"insecure-skip-verify"`
 }
 
 type yamlRemoteServerConfig struct {
-	Host string `yaml:"host"`
-	Port int32  `yaml:"port"`
-}
-
-type yamlTelnetConfig struct {
-	Network string           `yaml:"network"`
-	Address string           `yaml:"address"`
-	Admin   *yamlTelnetAdmin `yaml:"admin"`
-}
-
-type yamlTelnetAdmin struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Port int32 `yaml:"port"`
 }
 
 func NewConfigFromYamlFileArgument() (*Config, *ErrorInfo) {
@@ -70,14 +63,28 @@ func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {
 	if err = yaml.Unmarshal(dat, y); err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err)
 	}
-	conf := &Config{
-		Node:      y.Node,
-		LogPath:   y.LogPath,
-		LogLevel:  LogLevel(y.LogLevel),
-		Customize: map[string]string{},
+	logLevel := LogLevel_Debug
+	if lv, ok := LogLevel_value[y.LogLevel]; ok {
+		logLevel = LogLevel(lv)
 	}
-	if cert := y.EnableCert; cert != nil {
-		conf.EnableCert = &CertConfig{
+	conf := &Config{
+		LogPath:      y.LogPath,
+		LogLevel:     logLevel,
+		ManagePort:   uint32(y.ManagePort),
+		Managers:     nil,
+		Node:         y.Node,
+		UseCert:      nil,
+		EnableServer: nil,
+		Customize:    map[string]string{},
+	}
+	for _, manager := range y.Managers {
+		conf.Managers = append(conf.Managers, &Manager{
+			Username: manager.Username,
+			Password: manager.Password,
+		})
+	}
+	if cert := y.UseCert; cert != nil {
+		conf.UseCert = &CertConfig{
 			CertPath:           cert.CertPath,
 			KeyPath:            cert.KeyPath,
 			InsecureSkipVerify: cert.InsecureSkipVerify,
@@ -85,20 +92,7 @@ func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {
 	}
 	if server := y.EnableServer; server != nil {
 		conf.EnableServer = &RemoteServerConfig{
-			Host: server.Host,
 			Port: server.Port,
-		}
-	}
-	if telnet := y.EnableTelnet; telnet != nil {
-		conf.EnableTelnet = &TelnetServerConfig{
-			Network: telnet.Network,
-			Address: telnet.Address,
-		}
-		if telnetAdmin := telnet.Admin; telnetAdmin != nil {
-			conf.EnableTelnet.Admin = &TelnetAdminConfig{
-				Username: telnetAdmin.Username,
-				Password: telnetAdmin.Password,
-			}
 		}
 	}
 	if custom := y.Customize; custom != nil {

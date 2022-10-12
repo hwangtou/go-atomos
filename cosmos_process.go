@@ -52,6 +52,9 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 
 	// Run main.
 	c.main = newCosmosMain(c, &runnable)
+	c.Logging(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	c.Logging(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	c.Logging(LogLevel_Info, "CosmosMain: Initializing, pid=(%d)", os.Getpid())
 
 	// 后台驻留执行可执行命令。
 	// Daemon execute executable command.
@@ -59,7 +62,7 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 	// Make CosmosMain initial the content of Runnable, especially the Element information.
 	err = c.main.onceLoad(&runnable)
 	if err != nil {
-		c.Logging(LogLevel_Fatal, "CosmosProcess: Main init failed") //, err=(%v)", err.Message)
+		c.Logging(LogLevel_Fatal, "CosmosProcess: Initializing failed, err=(%v)", err)
 		return
 	}
 	// 最后执行Runnable的清理相关动作，还原Cosmos的原状。
@@ -78,14 +81,14 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 	// To prevent panic from the Runnable Script.
 	defer func() {
 		if r := recover(); r != nil {
-			c.Logging(LogLevel_Fatal, "CosmosProcess: Main script CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack()))
+			c.Logging(LogLevel_Fatal, "CosmosProcess: MAIN SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack()))
 		}
 	}()
 	// 执行Runnable。
 	// Execute runnable.
-	c.Logging(LogLevel_Info, "CosmosProcess: NOW RUNNING!")
+	c.Logging(LogLevel_Info, "CosmosProcess: MAIN SCRIPT IS NOW RUNNING!")
 	runnable.mainScript(c.main, c.main.waitProcessExitCh)
-	c.Logging(LogLevel_Info, "CosmosProcess: Execute runnable succeed.")
+	c.Logging(LogLevel_Info, "CosmosProcess: MAIN SCRIPT HAS EXECUTED!")
 	return nil
 }
 

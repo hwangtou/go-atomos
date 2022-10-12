@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"google.golang.org/protobuf/proto"
 	"io/ioutil"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -41,9 +40,6 @@ type CosmosMain struct {
 // Life cycle
 
 func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain {
-	process.sharedLog.PushProcessLog(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	process.sharedLog.PushProcessLog(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	process.sharedLog.PushProcessLog(LogLevel_Info, "CosmosMain: Initializing, pid=(%d)", os.Getpid())
 	id := &IDInfo{
 		Type:    IDType_Main,
 		Cosmos:  runnable.config.Node,
@@ -609,7 +605,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	// loadTlsCosmosNodeSupport()
 	// Check enable Cert.
-	if cert := newRunnable.config.EnableCert; cert != nil {
+	if cert := newRunnable.config.UseCert; cert != nil {
 		if cert.CertPath == "" {
 			return nil, NewError(ErrCosmosCertConfigInvalid, "CosmosMain: Cert path is empty")
 		}

@@ -86,13 +86,20 @@ message String {
 // Configuration
 
 message Config {
-  string node = 1;
-  string log_path = 2;
-  LogLevel log_level = 3;
-  CertConfig enable_cert = 4;
-  RemoteServerConfig enable_server = 5;
-  TelnetServerConfig enable_telnet = 6;
-  map<string, string> customize = 7;
+  string log_path = 1;
+  LogLevel log_level = 2;
+
+  // 管理
+  uint32 manage_port = 3;
+  repeated Manager managers = 4;
+
+  // 节点通讯
+  string node = 5;
+  CertConfig use_cert = 6;
+  RemoteServerConfig enable_server = 7;
+
+  // 自定义配置
+  map<string, string> customize = 8;
 }
 
 message RemoteServerConfig {
@@ -100,13 +107,7 @@ message RemoteServerConfig {
   int32 port = 2;
 }
 
-message TelnetServerConfig {
-  string network = 1;
-  string address = 2;
-  TelnetAdminConfig admin = 3;
-}
-
-message TelnetAdminConfig {
+message Manager {
   string username = 1;
   string password = 2;
 }
@@ -115,6 +116,21 @@ message CertConfig {
   string cert_path = 1;
   string key_path = 2;
   bool insecure_skip_verify = 3;
+}
+
+// Cosmos Watch
+
+enum CosmosWatchMessageType {
+  Init = 0;
+}
+
+message CosmosWatch {
+  CosmosWatchMessageType message_type = 1;
+  CosmosRemoteConnectInit init_message = 2;
+}
+
+message CosmosRemoteConnectInit {
+  CosmosLocalConfig config = 1;
 }
 
 message CosmosLocalConfig {
@@ -134,21 +150,6 @@ message ElementConfig {
 message AtomMessageConfig {
   google.protobuf.Any in = 1;
   google.protobuf.Any out = 2;
-}
-
-// Cosmos Watch
-
-enum CosmosWatchMessageType {
-  Init = 0;
-}
-
-message CosmosWatch {
-  CosmosWatchMessageType message_type = 1;
-  CosmosRemoteConnectInit init_message = 2;
-}
-
-message CosmosRemoteConnectInit {
-  CosmosLocalConfig config = 1;
 }
 
 // Cosmos Requester
