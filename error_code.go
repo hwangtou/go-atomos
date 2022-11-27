@@ -22,10 +22,22 @@ const (
 	ErrCosmosConfigInvalid
 	ErrCosmosConfigNodeNameInvalid
 	ErrCosmosConfigLogPathInvalid
+	ErrCosmosConfigRunPathInvalid
+	ErrCosmosConfigRunPIDIsRunning
+	ErrCosmosConfigRunPIDPathInvalid
+	ErrCosmosConfigRunPIDInvalid
+	ErrCosmosConfigRemovePIDPathFailed
 	ErrCosmosCertConfigInvalid
+	ErrCosmosLogOpenFailed
+	ErrCosmosWritePIDFileFailed
+	ErrCosmosWriteUnixSocketFailed
 	ErrCosmosHasAlreadyRun
 	ErrCosmosIsBusy
 	ErrCosmosIsClosed
+	ErrCosmosUnixSocketConnEOF
+	ErrCosmosUnixSocketConnError
+	ErrCosmosUnixSocketConnShouldQuit
+	ErrCosmosUnixSocketConnWriteError
 
 	ErrElementLoaded
 	ErrElementReloadInvalid

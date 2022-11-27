@@ -50,36 +50,36 @@ func (l *atomosLoggingManager) pushAtomosLog(id *IDInfo, level LogLevel, msg str
 // Log functions in difference levels.
 
 func (l *atomosLoggingManager) Debug(format string, args ...interface{}) {
-	if l.level > LogLevel_Debug {
+	if l.level > LogLevel_DEBUG {
 		return
 	}
-	l.pushAtomosLog(l.atomos.id, LogLevel_Debug, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.atomos.id, LogLevel_DEBUG, fmt.Sprintf(format, args...))
 }
 
 func (l *atomosLoggingManager) Info(format string, args ...interface{}) {
-	if l.level > LogLevel_Info {
+	if l.level > LogLevel_INFO {
 		return
 	}
-	l.pushAtomosLog(l.atomos.id, LogLevel_Info, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.atomos.id, LogLevel_INFO, fmt.Sprintf(format, args...))
 }
 
 func (l *atomosLoggingManager) Warn(format string, args ...interface{}) {
-	if l.level > LogLevel_Warn {
+	if l.level > LogLevel_WARN {
 		return
 	}
-	l.pushAtomosLog(l.atomos.id, LogLevel_Warn, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.atomos.id, LogLevel_WARN, fmt.Sprintf(format, args...))
 }
 
 func (l *atomosLoggingManager) Error(format string, args ...interface{}) {
-	if l.level > LogLevel_Error {
+	if l.level > LogLevel_ERROR {
 		return
 	}
-	l.pushAtomosLog(l.atomos.id, LogLevel_Error, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.atomos.id, LogLevel_ERROR, fmt.Sprintf(format, args...))
 }
 
 func (l *atomosLoggingManager) Fatal(format string, args ...interface{}) {
-	if l.level > LogLevel_Fatal {
+	if l.level > LogLevel_FATAL {
 		return
 	}
-	l.pushAtomosLog(l.atomos.id, LogLevel_Fatal, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.atomos.id, LogLevel_FATAL, fmt.Sprintf(format, args...))
 }

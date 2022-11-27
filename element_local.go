@@ -137,7 +137,7 @@ func (e *ElementLocal) IdleDuration() time.Duration {
 	return time.Now().Sub(e.atomos.lastWait)
 }
 
-//func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//func (e *ElementLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 //	decoderFn, has := e.current.ElementDecoders[name]
 //	if !has {
 //		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
@@ -163,7 +163,7 @@ func (e *ElementLocal) IdleDuration() time.Duration {
 //	return outBuf, err
 //}
 
-func (e *ElementLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+func (e *ElementLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *Error) {
 	return e.pushMessageMail(from, name, in)
 }
 
@@ -175,11 +175,11 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementLocal) Kill(from ID) *ErrorInfo {
+func (e *ElementLocal) Kill(from ID) *Error {
 	return NewError(ErrElementCannotKill, "Cannot kill element")
 }
 
-func (e *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (e *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *Error {
 	return e.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
@@ -233,7 +233,7 @@ func (e *ElementLocal) Parallel(fn func()) {
 
 // Implementation of AtomSelfID
 
-func (e *ElementLocal) Config() map[string]string {
+func (e *ElementLocal) Config() map[string][]byte {
 	return e.main.runnable.config.Customize
 }
 
@@ -242,7 +242,7 @@ func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
 	return p
 }
 
-func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 	handlerFn, has := e.current.ElementHandlers[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
@@ -277,7 +277,7 @@ func (e *ElementLocal) GetElementName() string {
 	return e.GetIDInfo().Element
 }
 
-func (e *ElementLocal) GetAtomID(name string) (ID, *ErrorInfo) {
+func (e *ElementLocal) GetAtomID(name string) (ID, *Error) {
 	return e.elementAtomGet(name)
 }
 
@@ -288,7 +288,7 @@ func (e *ElementLocal) GetAtomsNum() int {
 	return num
 }
 
-func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *ErrorInfo) {
+func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *Error) {
 	e.lock.RLock()
 	current := e.current
 	e.lock.RUnlock()
@@ -297,7 +297,7 @@ func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *E
 	return e.elementAtomSpawn(name, arg, current, persistence)
 }
 
-func (e *ElementLocal) MessageElement(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (e *ElementLocal) MessageElement(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	if fromID == nil {
 		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args)
@@ -311,7 +311,7 @@ func (e *ElementLocal) MessageElement(fromID, toID ID, name string, args proto.M
 	return a.pushMessageMail(fromID, name, args)
 }
 
-func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	if fromID == nil {
 		return reply, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args)
@@ -325,7 +325,7 @@ func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, args proto.Mess
 	return a.pushMessageMail(fromID, name, args)
 }
 
-func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo) {
+func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *Error) {
 	if fromID == nil {
 		return nil, NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),message=(%s),args=(%v)",
 			fromID, message, args)
@@ -333,7 +333,7 @@ func (e *ElementLocal) ScaleGetAtomID(fromID ID, message string, args proto.Mess
 	return e.pushScaleMail(fromID, message, args)
 }
 
-func (e *ElementLocal) KillAtom(fromID, toID ID) *ErrorInfo {
+func (e *ElementLocal) KillAtom(fromID, toID ID) *Error {
 	if fromID == nil {
 		return NewErrorf(ErrAtomFromIDInvalid, "From ID invalid, from=(%s),to=(%s)", fromID, toID)
 	}
@@ -387,7 +387,7 @@ func (e *ElementLocal) delCallChain() {
 // Mailbox Handler
 // TODO: Performance tracer.
 
-func (e *ElementLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (e *ElementLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
 	if from != nil {
 		if !e.checkCallChain(from.getCallChain()) {
@@ -400,7 +400,7 @@ func (e *ElementLocal) pushMessageMail(from ID, name string, args proto.Message)
 	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
 }
 
-func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	handler := e.current.ElementHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrElementMessageHandlerNotExists,
@@ -434,10 +434,10 @@ func (e *ElementLocal) OnMessaging(from ID, name string, args proto.Message) (re
 	return
 }
 
-func (e *ElementLocal) pushScaleMail(from ID, message string, args proto.Message) (ID, *ErrorInfo) {
+func (e *ElementLocal) pushScaleMail(from ID, message string, args proto.Message) (ID, *Error) {
 	return e.atomos.PushScaleMailAndWaitReply(from, message, args)
 }
-func (e *ElementLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+func (e *ElementLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	handler := e.current.ScaleHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrElementScaleHandlerNotExists,
@@ -470,11 +470,11 @@ func (e *ElementLocal) OnScaling(from ID, name string, args proto.Message) (id I
 	return
 }
 
-func (e *ElementLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
+func (e *ElementLocal) pushKillMail(from ID, wait bool) *Error {
 	return e.atomos.PushKillMailAndWaitReply(from, wait)
 }
 
-func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
+func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
 	//defer func() {
 	//	if r := recover(); r != nil {
 	//		err = NewErrorf(ErrElementKillHandlerPanic,
@@ -551,7 +551,7 @@ autoLoad:
 	return err
 }
 
-func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) *ErrorInfo {
+func (e *ElementLocal) pushReloadMail(from ID, impl *ElementImplementation, reloads int) *Error {
 	return e.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
 }
 
@@ -588,7 +588,7 @@ func (e *ElementLocal) OnReloading(oldElement Atomos, reloadObject AtomosReloada
 	return newElement
 }
 
-func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "ElementLocal: Not supported wormhole, type=(%T)", e.atomos.instance)
@@ -600,7 +600,7 @@ func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 
 // Internal
 
-func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *ErrorInfo) {
+func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *Error) {
 	e.lock.RLock()
 	current := e.current
 	atom, hasAtom := e.atoms[name]
@@ -617,7 +617,7 @@ func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *ErrorInfo) {
 	return e.elementAtomSpawn(name, nil, current, persistence)
 }
 
-func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence) (*AtomLocal, *ErrorInfo) {
+func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence) (*AtomLocal, *Error) {
 	// Element的容器逻辑。
 
 	// Alloc an atomos and try setting.
@@ -705,7 +705,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	atom.deleteAtomLocal(false)
 }
 
-func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *ErrorInfo {
+func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *Error {
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。

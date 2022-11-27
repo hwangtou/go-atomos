@@ -30,11 +30,11 @@ message IDInfo {
 //}
 
 enum LogLevel {
-  Debug = 0;
-  Info = 1;
-  Warn = 2;
-  Error = 3;
-  Fatal = 4;
+  DEBUG = 0;
+  INFO = 1;
+  WARN = 2;
+  ERROR = 3;
+  FATAL = 4;
 }
 
 message LogMail {
@@ -44,7 +44,7 @@ message LogMail {
   string message = 4;
 }
 
-message ErrorInfo {
+message Error {
   int64 code = 1;
   string message = 2;
   string panic = 3;
@@ -86,20 +86,22 @@ message String {
 // Configuration
 
 message Config {
-  string log_path = 1;
-  LogLevel log_level = 2;
+  string cosmos = 1;
+  string node = 2;
 
-  // 管理
-  uint32 manage_port = 3;
-  repeated Manager managers = 4;
+  LogLevel log_level = 3;
+  string log_path = 4;
+  string run_path = 5;
+  string etc_path = 6;
+
+//  repeated Manager managers = 6;
 
   // 节点通讯
-  string node = 5;
-  CertConfig use_cert = 6;
-  RemoteServerConfig enable_server = 7;
+  CertConfig enable_cert = 7;
+  RemoteServerConfig enable_server = 8;
 
   // 自定义配置
-  map<string, string> customize = 8;
+  map<string, bytes> customize = 9;
 }
 
 message RemoteServerConfig {

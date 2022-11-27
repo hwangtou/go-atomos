@@ -37,7 +37,7 @@ func CosmosProcessMainFn(runnable CosmosRunnable) {
 	}
 }
 
-func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
+func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *Error) {
 	if err = runnable.config.Check(); err != nil {
 		return err.AutoStack(nil, nil)
 	}
@@ -52,9 +52,9 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 
 	// Run main.
 	c.main = newCosmosMain(c, &runnable)
-	c.Logging(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	c.Logging(LogLevel_Info, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	c.Logging(LogLevel_Info, "CosmosMain: Initializing, pid=(%d)", os.Getpid())
+	c.Logging(LogLevel_INFO, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	c.Logging(LogLevel_INFO, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+	c.Logging(LogLevel_INFO, "CosmosMain: Initializing, pid=(%d)", os.Getpid())
 
 	// 后台驻留执行可执行命令。
 	// Daemon execute executable command.
@@ -62,7 +62,7 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 	// Make CosmosMain initial the content of Runnable, especially the Element information.
 	err = c.main.onceLoad(&runnable)
 	if err != nil {
-		c.Logging(LogLevel_Fatal, "CosmosProcess: Initializing failed, err=(%v)", err)
+		c.Logging(LogLevel_FATAL, "CosmosProcess: Initializing failed, err=(%v)", err)
 		return
 	}
 	// 最后执行Runnable的清理相关动作，还原Cosmos的原状。
@@ -70,9 +70,9 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 	// Stopped
 	defer func() {
 		err = c.main.pushKillMail(nil, true)
-		c.Logging(LogLevel_Info, "CosmosProcess: EXITED!")
-		c.Logging(LogLevel_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-		c.Logging(LogLevel_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+		c.Logging(LogLevel_INFO, "CosmosProcess: EXITED!")
+		c.Logging(LogLevel_INFO, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+		c.Logging(LogLevel_INFO, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	}()
 
 	go c.waitKillSignal()
@@ -81,14 +81,14 @@ func (c *CosmosProcess) Run(runnable CosmosRunnable) (err *ErrorInfo) {
 	// To prevent panic from the Runnable Script.
 	defer func() {
 		if r := recover(); r != nil {
-			c.Logging(LogLevel_Fatal, "CosmosProcess: MAIN SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack()))
+			c.Logging(LogLevel_FATAL, "CosmosProcess: MAIN SCRIPT CRASH! reason=(%s),stack=(%s)", r, string(debug.Stack()))
 		}
 	}()
 	// 执行Runnable。
 	// Execute runnable.
-	c.Logging(LogLevel_Info, "CosmosProcess: MAIN SCRIPT IS NOW RUNNING!")
+	c.Logging(LogLevel_INFO, "CosmosProcess: MAIN SCRIPT IS NOW RUNNING!")
 	runnable.mainScript(c.main, c.main.waitProcessExitCh)
-	c.Logging(LogLevel_Info, "CosmosProcess: MAIN SCRIPT HAS EXECUTED!")
+	c.Logging(LogLevel_INFO, "CosmosProcess: MAIN SCRIPT HAS EXECUTED!")
 	return nil
 }
 
@@ -98,7 +98,7 @@ func (c *CosmosProcess) Stop() {
 		select {
 		case main.waitProcessExitCh <- true:
 		default:
-			c.Logging(LogLevel_Info, "CosmosProcess: Exit error, err=(Runnable is blocking)")
+			c.Logging(LogLevel_INFO, "CosmosProcess: Exit error, err=(Runnable is blocking)")
 		}
 	}
 }
@@ -116,7 +116,7 @@ func (c *CosmosProcess) waitKillSignal() {
 				fallthrough
 			case os.Kill:
 				c.Stop()
-				c.Logging(LogLevel_Info, "CosmosProcess: WaitKillSignal killed atomos")
+				c.Logging(LogLevel_INFO, "CosmosProcess: WaitKillSignal killed atomos")
 				return
 			}
 		}

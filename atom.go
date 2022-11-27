@@ -55,18 +55,18 @@ type ID interface {
 	//// Version of ElementInterface.
 	//GetVersion() uint64
 
-	MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo)
+	MessageByName(from ID, name string, in proto.Message) (proto.Message, *Error)
 
 	DecoderByName(name string) (MessageDecoder, MessageDecoder)
 
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
-	Kill(from ID) *ErrorInfo
+	Kill(from ID) *Error
 
 	// SendWormhole
 	// Send wormhole to atomos.
-	SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
+	SendWormhole(from ID, wormhole AtomosWormhole) *Error
 
 	// Info
 
@@ -82,7 +82,7 @@ type ID interface {
 //type CallName interface {
 //	// CallNameWithProtoBuffer
 //	// 直接接收调用
-//	CallName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+//	CallName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error)
 //}
 
 //type CallJson interface {
@@ -120,9 +120,9 @@ type SelfID interface {
 
 	Parallel(func())
 
-	Config() map[string]string
+	Config() map[string][]byte
 
-	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo)
+	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error)
 }
 
 type AtomSelfID interface {

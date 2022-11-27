@@ -171,7 +171,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func Get", elementIDName, " (c ", atomosPackage.Ident("CosmosNode"), ") (", elementIDName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+	g.P("func Get", elementIDName, " (c ", atomosPackage.Ident("CosmosNode"), ") (", elementIDName, ", *", atomosPackage.Ident("Error"), ") {")
 	g.P("ca, err := c.CosmosGetElementID(", elementName, "Name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("return &", noExport(elementIDName), "{ca}, nil")
@@ -256,7 +256,7 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func Get", atomNameID, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", atomNameID, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+	g.P("func Get", atomNameID, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", atomNameID, ", *", atomosPackage.Ident("Error"), ") {")
 	g.P("ca, err := c.CosmosGetElementAtomID(", atomName, "Name, name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("return &", noExport(atomNameID), "{ca}, nil")
@@ -394,7 +394,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	if spawnArgTypeName != "" {
 		g.P("func Spawn", atomName, "(c ", atomosPackage.Ident("CosmosNode"),
 			", name string, arg *", spawnArgTypeName, ") (",
-			idName, ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+			idName, ", *", atomosPackage.Ident("Error"), ") {")
 		g.P("id, err := c.CosmosSpawnElementAtom(", elementName, "Name, name, arg)")
 		g.P("if id == nil { return nil, err }")
 		g.P("return &", noExport(idName), "{id}, err")
@@ -430,7 +430,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		g.P("func (c *", noExport(idName), ") ", methodName+"(from ", atomosPackage.Ident("ID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
-			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
+			", *", atomosPackage.Ident("Error"), ")", " {")
 		g.P("r, err := c.Cosmos().CosmosMessageElement(from, c, \"", methodName, "\", in)")
 		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
@@ -449,7 +449,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		g.P("func (c *", noExport(idName), ") ", methodName+"(from ", atomosPackage.Ident("ID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
-			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
+			", *", atomosPackage.Ident("Error"), ")", " {")
 		g.P("id, err := c.Cosmos().CosmosScaleElementGetAtomID(from, ", service.GoName, "Name, \"", scaleName, "\", in)")
 		g.P("if err != nil { return nil, err }")
 		g.P("defer id.Release()")
@@ -490,7 +490,7 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("func (c *", noExport(idName), ") ", methodName+"(from ", atomosPackage.Ident("ID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
-			", *", atomosPackage.Ident("ErrorInfo"), ")", " {")
+			", *", atomosPackage.Ident("Error"), ")", " {")
 		g.P("r, err := c.Cosmos().CosmosMessageAtom(from, c, \"", methodName, "\", in)")
 		g.P("if r == nil { return nil, err }")
 		g.P("reply, ok := r.(*", method.Output.GoIdent, ")")
@@ -516,7 +516,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 			continue
 		}
 		hasElementSpawn = true
-		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("ErrorInfo"), " {")
+		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("Error"), " {")
 		g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
 		g.P("elem, ok := a.(", elementElementName, ")")
 		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
@@ -524,7 +524,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		g.P("}")
 	}
 	if !hasElementSpawn {
-		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("ErrorInfo"), " {")
+		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("Error"), " {")
 		//g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
 		g.P("elem, ok := a.(", elementElementName, ")")
 		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
@@ -536,7 +536,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if method.GoName != "Spawn" {
 			continue
 		}
-		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", arg, data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("ErrorInfo"), " {")
+		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", arg, data ", protobufPackage.Ident("Message"), ") *", atomosPackage.Ident("Error"), " {")
 		g.P("argT, _ := arg.(*", method.Input.GoIdent, "); dataT, _ := data.(*", method.Output.GoIdent, ")")
 		g.P("atom, ok := a.(", elementAtomName, ")")
 		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomNotImplemented"), ", \"Atom not implemented, type=(", elementAtomName, ")\") }")
@@ -587,7 +587,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if methodName == "" {
 			continue
 		}
-		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") {")
 		g.P("req, ok := in.(*", method.Input.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageArgType"), ", \"Arg type=(%T)\", in) }")
 		g.P("a, ok := to.(", elementElementName, ")")
@@ -612,7 +612,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if methodName == "" {
 			continue
 		}
-		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") {")
+		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") {")
 		g.P("req, ok := in.(*", method.Input.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageArgType"), ", \"Arg type=(%T)\", in) }")
 		g.P("a, ok := to.(", elementAtomName, ")")
@@ -632,7 +632,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 		if methodName == "" {
 			continue
 		}
-		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", e ", atomosPackage.Ident("Atomos"), ", message string, in ", protobufPackage.Ident("Message"), ") (id ", atomosPackage.Ident("ID"), ", err *", atomosPackage.Ident("ErrorInfo"), ") {")
+		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", e ", atomosPackage.Ident("Atomos"), ", message string, in ", protobufPackage.Ident("Message"), ") (id ", atomosPackage.Ident("ID"), ", err *", atomosPackage.Ident("Error"), ") {")
 		g.P("req, ok := in.(*", method.Input.GoIdent, ")")
 		g.P("if !ok { return nil, ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomMessageArgType"), ", \"Arg type=(%T)\", in) }")
 		g.P("a, ok := e.(", elementElementName, ")")
@@ -659,8 +659,8 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 			continue
 		}
 		g.P("\"", methodName, "\": {")
-		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
-		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
+		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
+		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
 		g.P("},")
 	}
 	g.P("}")
@@ -681,8 +681,8 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 			continue
 		}
 		g.P("\"", methodName, "\": {")
-		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
-		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("ErrorInfo"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
+		g.P("InDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Input.GoIdent, "{}, p) },")
+		g.P("OutDec: func(b []byte, p bool) (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") { return ", atomosPackage.Ident("MessageUnmarshal"), "(b, &", method.Output.GoIdent, "{}, p) },")
 		g.P("},")
 	}
 	g.P("}")
@@ -696,34 +696,34 @@ const deprecationComment = "// Deprecated: Do not use."
 func spawnElementSign(g *protogen.GeneratedFile, method *protogen.Method) {
 	g.P("Spawn(self ", atomosPackage.Ident("ElementSelfID"),
 		", data *", g.QualifiedGoIdent(method.Output.GoIdent),
-		") *", atomosPackage.Ident("ErrorInfo"))
+		") *", atomosPackage.Ident("Error"))
 }
 
 func spawnElementDefaultSign(g *protogen.GeneratedFile) {
 	g.P("Spawn(self ", atomosPackage.Ident("ElementSelfID"),
 		", data *", atomosPackage.Ident("Nil"),
-		") *", atomosPackage.Ident("ErrorInfo"))
+		") *", atomosPackage.Ident("Error"))
 }
 
 func spawnAtomSign(g *protogen.GeneratedFile, method *protogen.Method) {
 	g.P("Spawn(self ", atomosPackage.Ident("AtomSelfID"),
 		", arg *", g.QualifiedGoIdent(method.Input.GoIdent),
 		", data *", g.QualifiedGoIdent(method.Output.GoIdent),
-		") *", atomosPackage.Ident("ErrorInfo"))
+		") *", atomosPackage.Ident("Error"))
 }
 
 func methodSign(g *protogen.GeneratedFile, method *protogen.Method, methodName string) {
 	g.P(methodName+"(from ", atomosPackage.Ident("ID"),
 		", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 		") (*", g.QualifiedGoIdent(method.Output.GoIdent),
-		", *", atomosPackage.Ident("ErrorInfo"),
+		", *", atomosPackage.Ident("Error"),
 		")")
 }
 
 func elementScaleSign(g *protogen.GeneratedFile, method *protogen.Method, elemName, methodName string) {
 	g.P(methodName+"(from ", atomosPackage.Ident("ID"),
 		", in *", g.QualifiedGoIdent(method.Input.GoIdent),
-		") (", elemName+"AtomID, *", atomosPackage.Ident("ErrorInfo"),
+		") (", elemName+"AtomID, *", atomosPackage.Ident("Error"),
 		")")
 }
 

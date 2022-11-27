@@ -232,13 +232,13 @@ func initKillMail(am *atomosMail, from ID) {
 type mailReply struct {
 	resp proto.Message
 	id   ID
-	err  *ErrorInfo
+	err  *Error
 }
 
 // Method sendReply() will only be called in for-loop of MailBox, it's safe to do so, because while an atomos is
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
 // has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
-func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
+func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mailReply.resp = resp
 	m.mailReply.err = err
 	if m.waitCh != nil {
@@ -250,7 +250,7 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	}
 }
 
-func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
+func (m *atomosMail) sendReplyID(id ID, err *Error) {
 	m.mailReply.id = id
 	m.mailReply.err = err
 	if m.waitCh != nil {
@@ -263,7 +263,7 @@ func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
 }
 
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
+func (m *atomosMail) waitReply() (resp proto.Message, err *Error) {
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	reply := <-m.waitCh
 	// Wait channel must be empty before delete a mail.
@@ -273,7 +273,7 @@ func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
 }
 
 // TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReplyID() (id ID, err *ErrorInfo) {
+func (m *atomosMail) waitReplyID() (id ID, err *Error) {
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	reply := <-m.waitCh
 	// Wait channel must be empty before delete a mail.

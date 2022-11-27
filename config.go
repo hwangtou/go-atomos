@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func (x *Config) Check() *ErrorInfo {
+func (x *Config) Check() *Error {
 	if x == nil {
 		return NewError(ErrCosmosConfigInvalid, "No configuration")
 	}
@@ -19,16 +19,19 @@ func (x *Config) Check() *ErrorInfo {
 	return nil
 }
 
-type yamlConfig struct {
-	Node         string                  `yaml:"node"`
-	LogPath      string                  `yaml:"log-path"`
-	LogLevel     string                  `yaml:"log-level"`
-	ManagePort   int                     `yaml:"manage-port"`
-	Managers     []*yamlManager          `yaml:"managers"`
-	UseCert      *yamlCertConfig         `yaml:"use-cert"`
-	EnableServer *yamlRemoteServerConfig `yaml:"enable-server"`
-	Customize    map[string]string       `yaml:"customize"`
-}
+//type yamlConfig struct {
+//	Cosmos string `yaml:"cosmos"`
+//	Node   string `yaml:"node"`
+//
+//	LogLevel string `yaml:"log-level"`
+//	LogPath  string `yaml:"log-path"`
+//	RunPath  string `yaml:"run-path"`
+//
+//	Managers     []*yamlManager          `yaml:"managers"`
+//	UseCert      *yamlCertConfig         `yaml:"use-cert"`
+//	EnableServer *yamlRemoteServerConfig `yaml:"enable-server"`
+//	Customize    map[string]string       `yaml:"customize"`
+//}
 
 type yamlManager struct {
 	Username string `yaml:"username"`
@@ -45,7 +48,7 @@ type yamlRemoteServerConfig struct {
 	Port int32 `yaml:"port"`
 }
 
-func NewConfigFromYamlFileArgument() (*Config, *ErrorInfo) {
+func NewConfigFromYamlFileArgument() (*Config, *Error) {
 	// Config
 	configPath := flag.String("config", "config/config.yaml", "yaml config path")
 	flag.Parse()
@@ -54,37 +57,32 @@ func NewConfigFromYamlFileArgument() (*Config, *ErrorInfo) {
 	return ConfigFromYaml(*configPath)
 }
 
-func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {
+func ConfigFromYaml(filepath string) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)
 	}
-	y := &yamlConfig{}
+	y := &NodeConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err)
 	}
-	logLevel := LogLevel_Debug
+	logLevel := LogLevel_DEBUG
 	if lv, ok := LogLevel_value[y.LogLevel]; ok {
 		logLevel = LogLevel(lv)
 	}
 	conf := &Config{
-		LogPath:      y.LogPath,
-		LogLevel:     logLevel,
-		ManagePort:   uint32(y.ManagePort),
-		Managers:     nil,
+		Cosmos:       y.Cosmos,
 		Node:         y.Node,
-		UseCert:      nil,
+		LogLevel:     logLevel,
+		LogPath:      y.LogPath,
+		RunPath:      y.RunPath,
+		EtcPath:      y.EtcPath,
+		EnableCert:   nil,
 		EnableServer: nil,
-		Customize:    map[string]string{},
+		Customize:    map[string][]byte{},
 	}
-	for _, manager := range y.Managers {
-		conf.Managers = append(conf.Managers, &Manager{
-			Username: manager.Username,
-			Password: manager.Password,
-		})
-	}
-	if cert := y.UseCert; cert != nil {
-		conf.UseCert = &CertConfig{
+	if cert := y.EnableCert; cert != nil {
+		conf.EnableCert = &CertConfig{
 			CertPath:           cert.CertPath,
 			KeyPath:            cert.KeyPath,
 			InsecureSkipVerify: cert.InsecureSkipVerify,
@@ -92,13 +90,53 @@ func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {
 	}
 	if server := y.EnableServer; server != nil {
 		conf.EnableServer = &RemoteServerConfig{
+			Host: "",
 			Port: server.Port,
 		}
 	}
-	if custom := y.Customize; custom != nil {
+	if custom := y.CustomizeConfig; custom != nil {
 		for key, value := range custom {
 			conf.Customize[key] = value
 		}
 	}
 	return conf, nil
 }
+
+// Config
+
+type SupervisorConfig struct {
+	Cosmos   string   `yaml:"cosmos"`
+	NodeList []string `yaml:"node-list"`
+
+	LogLevel string `yaml:"log-level"`
+	LogPath  string `yaml:"log-path"`
+}
+
+type NodeConfig struct {
+	Cosmos string `yaml:"cosmos"`
+	Node   string `yaml:"node"`
+
+	LogLevel string `yaml:"log-level"`
+	LogPath  string `yaml:"log-path"`
+
+	BuildPath string `yaml:"build-path"`
+	BinPath   string `yaml:"bin-path"`
+	RunPath   string `yaml:"run-path"`
+	EtcPath   string `yaml:"etc-path"`
+
+	EnableCert   *CertConfig         `yaml:"enable-cert"`
+	EnableServer *RemoteServerConfig `yaml:"enable-server"`
+
+	CustomizeConfig map[string][]byte `yaml:"customize"`
+}
+
+//type CertConfig struct {
+//	CertPath           string `yaml:"cert_path"`
+//	KeyPath            string `yaml:"key_path"`
+//	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+//}
+
+//type RemoteServerConfig struct {
+//	Host string `yaml:"host"`
+//	Port int32  `yaml:"port"`
+//}

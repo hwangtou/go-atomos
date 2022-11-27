@@ -63,7 +63,7 @@ func newCosmosMain(process *CosmosProcess, runnable *CosmosRunnable) *CosmosMain
 
 // Load Runnable
 
-func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
+func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *Error {
 	_, err := c.tryLoadRunnable(runnable)
 	if err != nil {
 		c.Log().Fatal("CosmosMain: Once load failed, err=(%v)", err)
@@ -72,7 +72,7 @@ func (c *CosmosMain) onceLoad(runnable *CosmosRunnable) *ErrorInfo {
 	return nil
 }
 
-func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
+func (c *CosmosMain) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
 	oldRunnable := c.runnable
 	c.runnable = newRunnable
 	helper, err := c.newRunnableLoadingHelper(oldRunnable, newRunnable)
@@ -136,11 +136,11 @@ func (c *CosmosMain) IdleDuration() time.Duration {
 	return time.Now().Sub(c.atomos.lastWait)
 }
 
-//func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//func (c *CosmosMain) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 //	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 //}
 
-func (c *CosmosMain) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+func (c *CosmosMain) MessageByName(from ID, name string, in proto.Message) (proto.Message, *Error) {
 	return nil, NewError(ErrMainCannotMessage, "Cannot message main")
 }
 
@@ -148,11 +148,11 @@ func (c *CosmosMain) DecoderByName(name string) (MessageDecoder, MessageDecoder)
 	return nil, nil
 }
 
-func (c *CosmosMain) Kill(from ID) *ErrorInfo {
+func (c *CosmosMain) Kill(from ID) *Error {
 	return NewError(ErrMainCannotKill, "Cannot kill main")
 }
 
-func (c *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (c *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *Error {
 	return c.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
@@ -208,15 +208,15 @@ func (c *CosmosMain) Parallel(fn func()) {
 	}()
 }
 
-func (c *CosmosMain) Config() map[string]string {
+func (c *CosmosMain) Config() map[string][]byte {
 	return c.runnable.config.Customize
 }
 
-func (c *CosmosMain) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+func (c *CosmosMain) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 	return nil, NewError(ErrMainCannotMessage, "CosmosMain: Cannot message.")
 }
 
-func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+func (c *CosmosMain) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrMainCannotScale, "CosmosMain: Cannot scale.")
 }
 
@@ -249,11 +249,11 @@ func (c *CosmosMain) CosmosIsLocal() bool {
 	return true
 }
 
-func (c *CosmosMain) CosmosGetElementID(elem string) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosGetElementID(elem string) (ID, *Error) {
 	return c.getElement(elem)
 }
 
-func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err
@@ -261,7 +261,7 @@ func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo) 
 	return element.GetAtomID(name)
 }
 
-func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo) {
+func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err
@@ -269,15 +269,15 @@ func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message
 	return element.SpawnAtom(name, arg)
 }
 
-func (c *CosmosMain) CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error) {
 	return toID.Element().MessageElement(fromID, toID, message, args)
 }
 
-func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error) {
 	return toID.Element().MessageAtom(fromID, toID, message, args)
 }
 
-func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo) {
+func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, err
@@ -317,19 +317,19 @@ func (c *CosmosMain) Reload(newInstance Atomos) {
 // Mailbox Handler
 // TODO: Performance tracer.
 
-//func (e *CosmosMain) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+//func (e *CosmosMain) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 //	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
 //}
 
-func (c *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (c *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	return nil, NewError(ErrMainCannotMessage, "CosmosMain: Cannot send message.")
 }
 
-func (c *CosmosMain) pushKillMail(from ID, wait bool) *ErrorInfo {
+func (c *CosmosMain) pushKillMail(from ID, wait bool) *Error {
 	return c.atomos.PushKillMailAndWaitReply(from, wait)
 }
 
-func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
+func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
 	c.Log().Info("CosmosMain: NOW EXITING!")
 
 	// Unload local elements and its atomos.
@@ -358,7 +358,7 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 	return nil
 }
 
-func (c *CosmosMain) pushReloadMail(from ID, impl *CosmosRunnable, reloads int) *ErrorInfo {
+func (c *CosmosMain) pushReloadMail(from ID, impl *CosmosRunnable, reloads int) *Error {
 	return c.atomos.PushReloadMailAndWaitReply(from, impl, reloads)
 }
 
@@ -420,7 +420,7 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	}
 
 	// Execute newRunnable script after reloading all elements and atomos.
-	if err := func(runnable *CosmosRunnable) (err *ErrorInfo) {
+	if err := func(runnable *CosmosRunnable) (err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = NewErrorf(ErrMainReloadFailed, "CosmosMain: Reload script CRASH! reason=(%s)", r)
@@ -437,7 +437,7 @@ func (c *CosmosMain) OnReloading(oldElement Atomos, reloadObject AtomosReloadabl
 	return
 }
 
-func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "CosmosCosmosMain: Not supported wormhole, type=(%T)", c.atomos.instance)
@@ -449,7 +449,7 @@ func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 
 // Element Inner
 
-func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo) {
+func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *Error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
@@ -465,7 +465,7 @@ func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *ErrorInfo
 	return elem, nil
 }
 
-func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *ErrorInfo) {
+func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Error) {
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
@@ -506,7 +506,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 	return nil
 }
 
-func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *ErrorInfo) {
+func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *Error) {
 	name := i.Interface.Config.Name
 	defer func() {
 		//var stack []byte
@@ -569,7 +569,7 @@ type runnableLoadingHelper struct {
 	//remoteServer *cosmosRemoteServer
 }
 
-func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *ErrorInfo) {
+func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
 	helper := &runnableLoadingHelper{
 		newRunnable:   newRunnable,
 		spawnElement:  nil,
@@ -605,7 +605,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	// loadTlsCosmosNodeSupport()
 	// Check enable Cert.
-	if cert := newRunnable.config.UseCert; cert != nil {
+	if cert := newRunnable.config.EnableCert; cert != nil {
 		if cert.CertPath == "" {
 			return nil, NewError(ErrCosmosCertConfigInvalid, "CosmosMain: Cert path is empty")
 		}

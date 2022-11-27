@@ -50,10 +50,10 @@ type ElementInterface struct {
 	////AtomIDConstructor    IDConstructor
 }
 
-type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *ErrorInfo
-type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *ErrorInfo
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *Error
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error
 
-type ScaleHandler func(from ID, e Atomos, message string, in proto.Message) (id ID, err *ErrorInfo)
+type ScaleHandler func(from ID, e Atomos, message string, in proto.Message) (id ID, err *Error)
 
 // IDConstructor
 // ID构造器的函数类型，CosmosNode可以是Local和Remote。
@@ -62,13 +62,13 @@ type IDConstructor func(ID) ID
 
 // MessageHandler
 // Message处理器
-type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *ErrorInfo)
+type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error)
 
 // MessageDecoder
 // Message解码器
-type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
+type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
 
-//type JSONDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *ErrorInfo)
+//type JSONDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
 
 // ElementAtomMessage
 // Element的Atom的调用信息。
@@ -133,7 +133,7 @@ func MessageToAny(p proto.Message) *anypb.Any {
 	return a
 }
 
-func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Message, *ErrorInfo) {
+func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Message, *Error) {
 	if protoOrJSON {
 		if err := proto.Unmarshal(b, p); err != nil {
 			return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
@@ -146,7 +146,7 @@ func MessageUnmarshal(b []byte, p proto.Message, protoOrJSON bool) (proto.Messag
 	return p, nil
 }
 
-//func JSONUnmarshal(b []byte, p proto.Message) (proto.Message, *ErrorInfo) {
+//func JSONUnmarshal(b []byte, p proto.Message) (proto.Message, *Error) {
 //	if err := json.Unmarshal(b, p); err != nil {
 //		return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
 //	}

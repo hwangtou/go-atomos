@@ -20,11 +20,11 @@ import (
 type TaskFn func(taskID uint64, data proto.Message)
 
 type Task interface {
-	Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
-	AppendMethod(fnName string, msg proto.Message) (id uint64, err *ErrorInfo)
-	AddAfter(d time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo)
-	AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *ErrorInfo)
-	Cancel(id uint64) (CancelledTask, *ErrorInfo)
+	Append(fn TaskFn, msg proto.Message) (id uint64, err *Error)
+	AppendMethod(fnName string, msg proto.Message) (id uint64, err *Error)
+	AddAfter(d time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *Error)
+	AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *Error)
+	Cancel(id uint64) (CancelledTask, *Error)
 }
 
 // 测试思路：
@@ -169,7 +169,7 @@ func (at *atomosTaskManager) stopUnlock() {
 // Append
 // 添加任务，并返回可以用于取消的任务id。
 // Append task, and return a cancellable task id.
-func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, err *Error) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(at.atomos, fn, msg)
 	if err != nil {
@@ -199,7 +199,7 @@ func (at *atomosTaskManager) Append(fn TaskFn, msg proto.Message) (id uint64, er
 	return at.curID, nil
 }
 
-func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id uint64, err *Error) {
 	// Check if illegal before scheduling.
 	err = checkTaskFnByName(at.atomos, fnName, msg)
 	if err != nil {
@@ -232,7 +232,7 @@ func (at *atomosTaskManager) AppendMethod(fnName string, msg proto.Message) (id 
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return an cancellable task id.
-func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.Message) (id uint64, err *Error) {
 	// Check if illegal before scheduling.
 	fnName, err := checkTaskFn(at.atomos, fn, msg)
 	if err != nil {
@@ -309,7 +309,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, fn TaskFn, msg proto.
 	return curID, nil
 }
 
-func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *ErrorInfo) {
+func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, msg proto.Message) (id uint64, err *Error) {
 	// Check if illegal before scheduling.
 	err = checkTaskFnByName(at.atomos, fnName, msg)
 	if err != nil {
@@ -388,7 +388,7 @@ func (at *atomosTaskManager) AddMethodAfter(after time.Duration, fnName string, 
 
 // 用于Add和AddAfter的检查任务合法性逻辑。
 // Uses in Append and AddAfter for checking task legal.
-func checkTaskFn(a *BaseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInfo) {
+func checkTaskFn(a *BaseAtomos, fn TaskFn, msg proto.Message) (string, *Error) {
 	// Check func type.
 	fnValue := reflect.ValueOf(fn)
 	fnType := reflect.TypeOf(fn)
@@ -417,7 +417,7 @@ func checkTaskFn(a *BaseAtomos, fn TaskFn, msg proto.Message) (string, *ErrorInf
 	return fnName, err
 }
 
-func checkTaskFnByName(a *BaseAtomos, fnName string, msg proto.Message) *ErrorInfo {
+func checkTaskFnByName(a *BaseAtomos, fnName string, msg proto.Message) *Error {
 	// 检查instance是否存在该名称的方法。
 	instValue := reflect.ValueOf(a.instance)
 	method := instValue.MethodByName(fnName)
@@ -428,7 +428,7 @@ func checkTaskFnByName(a *BaseAtomos, fnName string, msg proto.Message) *ErrorIn
 	return err
 }
 
-func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, *ErrorInfo) {
+func checkFnArgs(fnType reflect.Type, fnName string, msg proto.Message) (int, *Error) {
 	fnNumIn := fnType.NumIn()
 	switch fnNumIn {
 	//case 0:
@@ -478,7 +478,7 @@ func getTaskFnName(fnRawName string) string {
 // Cancel
 // 取消任务。
 // Cancel task.
-func (at *atomosTaskManager) Cancel(id uint64) (CancelledTask, *ErrorInfo) {
+func (at *atomosTaskManager) Cancel(id uint64) (CancelledTask, *Error) {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
@@ -509,7 +509,7 @@ func (at *atomosTaskManager) cancelAllSchedulingTasks() map[uint64]CancelledTask
 // Delete two kinds of tasks:
 // 1. delete append atomosTask
 // 2. delete timer atomosTask
-func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel CancelledTask, err *ErrorInfo) {
+func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel CancelledTask, err *Error) {
 	if t == nil {
 		ta := at.tasks[id]
 		t = ta

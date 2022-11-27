@@ -124,7 +124,7 @@ func (a *AtomLocal) GetName() string {
 	return a.atomos.GetIDInfo().Atomos
 }
 
-//func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+//func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 //	decoderFn, has := a.current.AtomDecoders[name]
 //	if !has {
 //		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
@@ -150,7 +150,7 @@ func (a *AtomLocal) GetName() string {
 //	return outBuf, err
 //}
 
-func (a *AtomLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
+func (a *AtomLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *Error) {
 	return a.pushMessageMail(from, name, in)
 }
 
@@ -166,7 +166,7 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(from ID) *ErrorInfo {
+func (a *AtomLocal) Kill(from ID) *Error {
 	dev := a.element.current.Developer
 	elemAuth, ok := dev.(ElementCustomizeAuthorization)
 	if ok && elemAuth != nil {
@@ -177,7 +177,7 @@ func (a *AtomLocal) Kill(from ID) *ErrorInfo {
 	return a.pushKillMail(from, true)
 }
 
-func (a *AtomLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (a *AtomLocal) SendWormhole(from ID, wormhole AtomosWormhole) *Error {
 	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
 }
 
@@ -246,7 +246,7 @@ func (a *AtomLocal) Parallel(fn func()) {
 
 // Implementation of AtomSelfID
 
-func (a *AtomLocal) Config() map[string]string {
+func (a *AtomLocal) Config() map[string][]byte {
 	return a.element.main.runnable.config.Customize
 }
 
@@ -258,7 +258,7 @@ func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
 	return p.AtomAutoDataPersistence()
 }
 
-func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 	handlerFn, has := a.current.AtomHandlers[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
@@ -327,7 +327,7 @@ func (a *AtomLocal) delCallChain() {
 
 // Message Mail
 
-func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
 	if from != nil {
 		if !a.checkCallChain(from.getCallChain()) {
@@ -340,7 +340,7 @@ func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (r
 	return a.atomos.PushMessageMailAndWaitReply(from, name, args)
 }
 
-func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	handler := a.current.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
@@ -374,20 +374,20 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 	return
 }
 
-func (a *AtomLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
+func (a *AtomLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrAtomCannotScale, "OnScaling, atom not supported")
 }
 
 // Kill Mail
 
-func (a *AtomLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
+func (a *AtomLocal) pushKillMail(from ID, wait bool) *Error {
 	return a.atomos.PushKillMailAndWaitReply(from, wait)
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Halt method has been called, while is doing this, Atom is set to Stopping.
 
-func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
+func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			_, file, line, ok := runtime.Caller(2)
@@ -440,7 +440,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 
 // 重载邮件，指定Atom的版本。
 // Reload Mail with specific version.
-func (a *AtomLocal) pushReloadMail(from ID, elem *ElementImplementation, upgrades int) *ErrorInfo {
+func (a *AtomLocal) pushReloadMail(from ID, elem *ElementImplementation, upgrades int) *Error {
 	return a.atomos.PushReloadMailAndWaitReply(from, elem, upgrades)
 }
 
@@ -466,7 +466,7 @@ func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (
 	return oldAtom
 }
 
-func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "ElementLocal: Not supported wormhole, type=(%T)", a.atomos.instance)
@@ -478,7 +478,7 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 
 // Element
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, arg proto.Message) *ErrorInfo {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, arg proto.Message) *Error {
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。

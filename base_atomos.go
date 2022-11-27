@@ -9,11 +9,11 @@ import (
 type AtomosHolder interface {
 	// OnMessaging
 	// 收到消息
-	OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error)
 
 	// OnScaling
 	// 负载均衡决策
-	OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo)
+	OnScaling(from ID, name string, args proto.Message) (id ID, err *Error)
 
 	// OnReloading
 	// 通知新的Holder正在更新中
@@ -21,15 +21,15 @@ type AtomosHolder interface {
 
 	// OnWormhole
 	// 收到Wormhole
-	OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
+	OnWormhole(from ID, wormhole AtomosWormhole) *Error
 
 	// OnStopping
 	// 停止中
-	OnStopping(from ID, cancelled map[uint64]CancelledTask) *ErrorInfo
+	OnStopping(from ID, cancelled map[uint64]CancelledTask) *Error
 }
 
 type AtomosAcceptWormhole interface {
-	AcceptWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
+	AcceptWormhole(from ID, wormhole AtomosWormhole) *Error
 }
 
 type AtomosReloadable interface{}
@@ -141,7 +141,7 @@ func (a *BaseAtomos) Task() Task {
 	return &a.task
 }
 
-func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	am := allocAtomosMail()
 	initMessageMail(am, from, name, args)
 	if ok := a.mailbox.pushTail(am.mail); !ok {
@@ -162,7 +162,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 	return reply, err
 }
 
-func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args proto.Message) (ID, *ErrorInfo) {
+func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args proto.Message) (ID, *Error) {
 	am := allocAtomosMail()
 	initScaleMail(am, from, message, args)
 	if ok := a.mailbox.pushTail(am.mail); !ok {
@@ -177,7 +177,7 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args pro
 	return id, err
 }
 
-func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInfo) {
+func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *Error) {
 	am := allocAtomosMail()
 	initKillMail(am, from)
 	if ok := a.mailbox.pushHead(am.mail); !ok {
@@ -192,7 +192,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool) (err *ErrorInf
 	return nil
 }
 
-func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload AtomosReloadable, reloads int) (err *ErrorInfo) {
+func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload AtomosReloadable, reloads int) (err *Error) {
 	am := allocAtomosMail()
 	initReloadMail(am, reload, reloads)
 	if ok := a.mailbox.pushHead(am.mail); !ok {
@@ -203,7 +203,7 @@ func (a *BaseAtomos) PushReloadMailAndWaitReply(from ID, reload AtomosReloadable
 	return err
 }
 
-func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole AtomosWormhole) (err *ErrorInfo) {
+func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole AtomosWormhole) (err *Error) {
 	am := allocAtomosMail()
 	initWormholeMail(am, from, wormhole)
 	if ok := a.mailbox.pushTail(am.mail); !ok {
@@ -367,7 +367,7 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
-func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
+func (a *BaseAtomos) onPanic(mail *mail, err *Error) {
 	am := mail.Content.(*atomosMail)
 	//defer deallocAtomosMail(am)
 

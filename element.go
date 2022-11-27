@@ -32,33 +32,33 @@ type Element interface {
 	// GetAtomID
 	// 通过Atom名称获取指定的Atom的ID。
 	// Get AtomID by name of Atom.
-	GetAtomID(atomName string) (ID, *ErrorInfo)
+	GetAtomID(atomName string) (ID, *Error)
 
 	GetAtomsNum() int
 
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *ErrorInfo)
+	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *Error)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
 
-	MessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	MessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	MessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error)
+	MessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error)
 
-	ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo)
+	ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *Error)
 
 	// KillAtom
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
-	KillAtom(fromID, toID ID) *ErrorInfo
+	KillAtom(fromID, toID ID) *Error
 }
 
 //type ElementLoadable interface {
-//	Load(mainID ElementID) *ErrorInfo
-//	Reload(mainID ElementID, atomos Atomos) *ErrorInfo
+//	Load(mainID ElementID) *Error
+//	Reload(mainID ElementID, atomos Atomos) *Error
 //	Unload()
 //}
 
@@ -84,8 +84,8 @@ type ElementCustomizeAutoDataPersistence interface {
 }
 
 type ElementCustomizeAutoLoadPersistence interface {
-	Load(self ElementSelfID, config map[string]string) *ErrorInfo
-	Unload() *ErrorInfo
+	Load(self ElementSelfID, config map[string][]byte) *Error
+	Unload() *Error
 }
 
 type ElementCustomizeStartRunning interface {
@@ -99,7 +99,7 @@ type ElementCustomizeAuthorization interface {
 	// Whether the Atom can be killed by the ID or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
 	// TODO: 以后考虑改成AtomCanAdmin，就改个名字。
-	AtomCanKill(ID) *ErrorInfo
+	AtomCanKill(ID) *Error
 }
 
 // ElementDeveloper
@@ -131,12 +131,12 @@ type AtomAutoDataPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetAtomData(name string) (proto.Message, *ErrorInfo)
+	GetAtomData(name string) (proto.Message, *Error)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetAtomData(name string, data proto.Message) *ErrorInfo
+	SetAtomData(name string, data proto.Message) *Error
 }
 
 type ElementAutoDataPersistence interface {
@@ -144,12 +144,12 @@ type ElementAutoDataPersistence interface {
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetElementData() (proto.Message, *ErrorInfo)
+	GetElementData() (proto.Message, *Error)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetElementData(data proto.Message) *ErrorInfo
+	SetElementData(data proto.Message) *Error
 }
 
 // TODO:

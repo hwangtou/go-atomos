@@ -25,7 +25,7 @@ var logMailsPool = sync.Pool{
 	},
 }
 
-func NewLoggingAtomos(logPath string) (*LoggingAtomos, *ErrorInfo) {
+func NewLoggingAtomos(logPath string) (*LoggingAtomos, *Error) {
 	f, er := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if er != nil {
 		return nil, NewErrorf(ErrLogFileCannotOpen, "Logging filepath is not accessible, err=(%v)", er)
@@ -78,7 +78,7 @@ func (c *LoggingAtomos) onLogMessage(mail *mail) {
 	delMail(mail)
 }
 
-func (c *LoggingAtomos) onLogPanic(mail *mail, info *ErrorInfo) {
+func (c *LoggingAtomos) onLogPanic(mail *mail, info *Error) {
 	lm := mail.Content.(*LogMail)
 	var message string
 	if info != nil {
@@ -87,7 +87,7 @@ func (c *LoggingAtomos) onLogPanic(mail *mail, info *ErrorInfo) {
 	c.logging(&LogMail{
 		Id:      lm.Id,
 		Time:    lm.Time,
-		Level:   LogLevel_Fatal,
+		Level:   LogLevel_FATAL,
 		Message: message,
 	})
 }
@@ -120,15 +120,15 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 		msg = fmt.Sprintf("%s", lm.Message)
 	}
 	switch lm.Level {
-	case LogLevel_Debug:
+	case LogLevel_DEBUG:
 		c.logWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
-	case LogLevel_Info:
+	case LogLevel_INFO:
 		c.logWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
-	case LogLevel_Warn:
+	case LogLevel_WARN:
 		c.logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
-	case LogLevel_Error:
+	case LogLevel_ERROR:
 		c.logWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
-	case LogLevel_Fatal:
+	case LogLevel_FATAL:
 		fallthrough
 	default:
 		c.logWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))

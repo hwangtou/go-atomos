@@ -26,7 +26,7 @@ func TestCosmosMain(t *testing.T) {
 
 	// Execute newRunnable script after reloading all elements and atomos.
 	go func() {
-		if err = func(runnable *CosmosRunnable) (err *ErrorInfo) {
+		if err = func(runnable *CosmosRunnable) (err *Error) {
 			defer func() {
 				if r := recover(); r != nil {
 					err = NewErrorf(ErrMainReloadFailed, "Main: Main script CRASH! reason=(%s)", r).AutoStack(nil, nil)

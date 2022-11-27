@@ -15,29 +15,29 @@ type CosmosNode interface {
 
 	CosmosIsLocal() bool
 
-	CosmosGetElementID(elem string) (ID, *ErrorInfo)
+	CosmosGetElementID(elem string) (ID, *Error)
 
 	// GetElementAtomID
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the AtomID of an Atom by Element nodeName and Atom nodeName.
 
-	CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo)
+	CosmosGetElementAtomID(elem, name string) (ID, *Error)
 
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
 
-	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo)
+	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *Error)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom/Element.
 
-	CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error)
+	CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *Error)
 
-	CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo)
+	CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *Error)
 }
 
 //////////////////////////////////////////////////
@@ -53,6 +53,8 @@ type CosmosRunnable struct {
 	mainScript     Script
 	mainLogLevel   LogLevel
 	reloadScript   ReloadScript
+
+	runPath, logPath string
 }
 
 // Script
@@ -91,6 +93,7 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 	return r
 }
 
+// SetScript
 // CosmosRunnable构造器方法，用于设置Script。
 // Construct method of CosmosRunnable, uses to set Script.
 func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {

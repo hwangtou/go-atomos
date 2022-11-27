@@ -34,23 +34,23 @@ func (x *IDInfo) IsEqual(r *IDInfo) bool {
 	return x.Atomos == r.Atomos && x.Element == r.Element && x.Cosmos == r.Cosmos
 }
 
-func NewError(code int64, message string) *ErrorInfo {
-	return &ErrorInfo{
+func NewError(code int64, message string) *Error {
+	return &Error{
 		Code:    code,
 		Message: message,
 		Stacks:  nil,
 	}
 }
 
-func NewErrorf(code int64, format string, args ...interface{}) *ErrorInfo {
-	return &ErrorInfo{
+func NewErrorf(code int64, format string, args ...interface{}) *Error {
+	return &Error{
 		Code:    code,
 		Message: fmt.Sprintf(format, args...),
 		Stacks:  nil,
 	}
 }
 
-func (x *ErrorInfo) AddStack(id SelfID, file, recoverInfo string, line int, args proto.Message) {
+func (x *Error) AddStack(id SelfID, file, recoverInfo string, line int, args proto.Message) {
 	// ID Info
 	var idInfo *IDInfo
 	if id != nil && reflect.TypeOf(id).Kind() == reflect.Pointer && !reflect.ValueOf(id).IsNil() {
@@ -72,7 +72,7 @@ func (x *ErrorInfo) AddStack(id SelfID, file, recoverInfo string, line int, args
 	})
 }
 
-func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
+func (x *Error) AutoStack(id SelfID, args proto.Message) *Error {
 	if x == nil {
 		return nil
 	}
@@ -84,7 +84,7 @@ func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
 	return x
 }
 
-func (x *ErrorInfo) Error() string {
+func (x *Error) Error() string {
 	if x == nil {
 		return ""
 	}
@@ -105,7 +105,7 @@ func (x *ErrorInfo) Error() string {
 	return x.Message
 }
 
-func (x *ErrorInfo) IsAtomExist() bool {
+func (x *Error) IsAtomExist() bool {
 	return x.Code == ErrAtomExists
 }
 
@@ -117,4 +117,8 @@ func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
 		return false
 	}
 	return true
+}
+
+func (x *Config) GetNodeFullName() string {
+	return fmt.Sprintf("Cosmos:\t%s\nNode:\t%s", x.Cosmos, x.Node)
 }

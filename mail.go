@@ -56,7 +56,7 @@ func (m *mail) reset() {
 // Mail Box
 
 type MailBoxOnReceiveFn func(mail *mail)
-type MailBoxOnPanicFn func(mail *mail, err *ErrorInfo)
+type MailBoxOnPanicFn func(mail *mail, err *Error)
 type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
 
 type MailBoxHandler struct {
