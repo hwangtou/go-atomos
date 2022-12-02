@@ -72,9 +72,9 @@ func TestBaseAtomos(t *testing.T) {
 		Element: "element",
 		Atomos:  "atomos",
 	}
-	log, err := NewLoggingAtomos("tmp/test.log")
+	log, err := NewLoggingAtomosWithLogPath("tmp/test.log")
 	if err != nil {
-		t.Errorf("NewLoggingAtomos: err=(%v)", err)
+		t.Errorf("NewLoggingAtomosWithLogPath: err=(%v)", err)
 		return
 	}
 	instance := &TestAtomosInstance{T: t, reload: 1}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	atomos "github.com/hwangtou/go-atomos"
 	"log"
 	"time"
@@ -18,13 +19,17 @@ func init() {
 }
 
 func main() {
-	conf, err := atomos.NewConfigFromYamlFileArgument()
+	conf, err := atomos.NewNodeConfigFromYamlFileArgument()
 	if err != nil {
 		log.Fatalf("config invalid, err=(%v)", err)
 	}
 
 	AtomosRunnable.SetConfig(conf)
-	atomos.CosmosProcessMainFn(AtomosRunnable)
+	atomos.CosmosProcessMainFn(AtomosRunnable, func(s string) {
+		fmt.Println(s)
+	}, func(s string) {
+		fmt.Println(s)
+	})
 }
 
 func helloScript(self *atomos.CosmosMain, killCh chan bool) {

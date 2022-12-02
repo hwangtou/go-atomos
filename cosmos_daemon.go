@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 )
 
 const (
@@ -20,93 +19,130 @@ const (
 	pidPerm = 0444
 
 	socketPath = "/process.socket"
-
-	logMaxSize   = 100 //10000000
-	logDaemon    = "daemon"
-	logPrefix    = "access"
-	logErrPrefix = "error"
-	logNameSep   = "_"
-	logFilePerm  = 0644
 )
 
-type cosmosDaemon struct {
-	configPath string
+//type CosmosDaemonConnect struct {
+//	greeting, bye string
+//
+//	handlers map[string]CosmosDaemonConnectHandler
+//	closeCh  chan bool
+//}
+//
+//type CosmosDaemonConnectHandler func(args ...string) (resp string, exit bool)
+//
+//func NewCosmosDaemonConnect(greeting, bye string, handlers map[string]CosmosDaemonConnectHandler) CosmosDaemonConnect {
+//	return CosmosDaemonConnect{
+//		greeting: greeting,
+//		bye:      bye,
+//		handlers: handlers,
+//		closeCh:  make(chan bool),
+//	}
+//}
 
-	config *Config
+type process struct {
+	executablePath string
+	workPath       string
 
-	// Log
-	// Because Atomos Logging is thread-safe, so no lock is needed.
-	curLogFile *os.File
-	curLogSize int
-	curErrFile *os.File
-	curErrSize int
+	env  []string
+	args []string
+}
+
+type CosmosDaemon struct {
+	config  *Config
+	logFile *LogFile
 
 	// Unix Socket
-	socket net.Listener
+	socket  net.Listener
+	command CosmosDaemonCommand
+
+	process *process
+	ExitCh  chan bool
 }
 
-func NewCosmosDaemon(configPath string) *cosmosDaemon {
-	return &cosmosDaemon{
-		configPath: configPath,
-		config:     nil,
+type CosmosDaemonCommand interface {
+	Command(cmd string) (string, bool, *Error)
+	Greeting() string
+	PrintNow() string
+	Bye() string
+}
+
+func NewCosmosDaemon(config *Config, logFile *LogFile, command CosmosDaemonCommand) *CosmosDaemon {
+	return &CosmosDaemon{
+		config:  config,
+		logFile: logFile,
+		socket:  nil,
+		command: command,
+		process: &process{},
+		ExitCh:  make(chan bool),
 	}
 }
 
-func (c *cosmosDaemon) Check() *Error {
-	if err := c.checkConfigPath(); err != nil {
-		return err.AutoStack(nil, nil)
+// Parent & Child Process
+
+func (c *CosmosDaemon) CreateProcess() (daemon bool, pid int, err *Error) {
+	var proc *os.Process
+	if os.Getenv(c.getEnvKey()) != "1" {
+		execPath, er := os.Executable()
+		if er != nil {
+			return false, pid, NewError(ErrCosmosDaemonGetExecutableFailed, er.Error()).AutoStack(nil, nil)
+		}
+		wd, er := os.Getwd()
+		if er != nil {
+			return false, pid, NewError(ErrCosmosDaemonGetExecutableFailed, er.Error()).AutoStack(nil, nil)
+		}
+
+		c.process.executablePath = execPath
+		c.process.workPath = wd
+
+		if len(c.process.args) == 0 {
+			c.process.args = os.Args
+		}
+
+		if len(c.process.env) == 0 {
+			c.process.env = os.Environ()
+		}
+		c.process.env = append(c.process.env, fmt.Sprintf("%s=%s", c.getEnvKey(), "1"))
+
+		// Fork Process
+		attr := &os.ProcAttr{
+			Dir:   c.process.workPath,
+			Env:   c.process.env,
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+			Sys:   &syscall.SysProcAttr{Setsid: true},
+		}
+		proc, er = os.StartProcess(c.process.executablePath, c.process.args, attr)
+		if er != nil {
+			return false, pid, NewError(ErrCosmosDaemonStartProcessFailed, er.Error()).AutoStack(nil, nil)
+		}
+		c.logFile.WriteAccessLog(fmt.Sprintf("Daemon Process, pid=(%d)\n", proc.Pid))
+		return false, proc.Pid, nil
+	} else {
+		return true, pid, nil
 	}
-	if err := c.checkLogPath(); err != nil {
-		return err.AutoStack(nil, nil)
-	}
+}
+
+func (c *CosmosDaemon) getEnvKey() string {
+	return fmt.Sprintf("_GO_ATOMOS_SUPERVISOR_%s", c.config.Cosmos)
+}
+
+// Check
+
+func (c *CosmosDaemon) Check() (hasRun bool, err *Error) {
 	if err := c.checkRunPath(); err != nil {
-		return err.AutoStack(nil, nil)
+		return false, err.AutoStack(nil, nil)
 	}
-	if err := c.checkRunPathProcessID(); err != nil {
-		return err.AutoStack(nil, nil)
+	hasRun, err = c.checkRunPathProcessID()
+	if err != nil {
+		return hasRun, err.AutoStack(nil, nil)
 	}
 	if err := c.checkRunPathDaemonSocket(); err != nil {
-		return err.AutoStack(nil, nil)
+		return false, err.AutoStack(nil, nil)
 	}
 
-	return nil
+	return false, nil
 }
 
-func (c *cosmosDaemon) checkConfigPath() *Error {
-	conf, err := ConfigFromYaml(c.configPath)
-	if err != nil {
-		return err.AutoStack(nil, err)
-	}
-	if err = conf.Check(); err != nil {
-		return err.AutoStack(nil, err)
-	}
-	c.config = conf
-
-	return nil
-}
-
-func (c *cosmosDaemon) checkLogPath() *Error {
-	logPath := c.config.LogPath
-	stat, er := os.Stat(logPath)
-	if er != nil {
-		return NewErrorf(ErrCosmosConfigLogPathInvalid, "invalid log path, err=(%v)", er).AutoStack(nil, nil)
-	}
-	if !stat.IsDir() {
-		return NewErrorf(ErrCosmosConfigLogPathInvalid, "log path is not directory").AutoStack(nil, nil)
-	}
-
-	logTestPath := logPath + "/test"
-	if er = ioutil.WriteFile(logTestPath, []byte{}, 0644); er != nil {
-		return NewErrorf(ErrCosmosConfigLogPathInvalid, "log path cannot write, err=(%v)", er).AutoStack(nil, nil)
-	}
-	if er = os.Remove(logTestPath); er != nil {
-		return NewErrorf(ErrCosmosConfigLogPathInvalid, "log path test file cannot delete, err=(%v)", er).AutoStack(nil, nil)
-	}
-
-	return nil
-}
-
-func (c *cosmosDaemon) checkRunPath() *Error {
+func (c *CosmosDaemon) checkRunPath() *Error {
 	runPath := c.config.RunPath
 	stat, er := os.Stat(runPath)
 	if er != nil {
@@ -127,16 +163,16 @@ func (c *cosmosDaemon) checkRunPath() *Error {
 	return nil
 }
 
-func (c *cosmosDaemon) checkRunPathProcessID() *Error {
+func (c *CosmosDaemon) checkRunPathProcessID() (bool, *Error) {
 	runPIDPath := c.config.RunPath + pidPath
 	pidBuf, er := ioutil.ReadFile(runPIDPath)
 	if er != nil {
-		return nil
+		return false, nil
 	}
 
 	processID, er := strconv.ParseInt(string(pidBuf), 10, 64)
 	if er != nil {
-		return NewErrorf(ErrCosmosConfigRunPIDInvalid, "run pid invalid, err=(%v)", er).AutoStack(nil, nil)
+		return false, NewErrorf(ErrCosmosConfigRunPIDInvalid, "run pid invalid, err=(%v)", er).AutoStack(nil, nil)
 	}
 
 	var ok bool
@@ -148,7 +184,7 @@ func (c *cosmosDaemon) checkRunPathProcessID() *Error {
 	}
 	er = proc.Signal(syscall.Signal(0))
 	if er == nil {
-		return NewErrorf(ErrCosmosConfigRunPIDIsRunning, "run pid process is running, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
+		return true, NewErrorf(ErrCosmosConfigRunPIDIsRunning, "run pid process is running, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
 	}
 	if er.Error() == "os: process already finished" {
 		goto removePID
@@ -161,17 +197,17 @@ func (c *cosmosDaemon) checkRunPathProcessID() *Error {
 	case syscall.ESRCH:
 		goto removePID
 	case syscall.EPERM:
-		return NewErrorf(ErrCosmosConfigRunPIDIsRunning, "run pid process is running, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
+		return true, NewErrorf(ErrCosmosConfigRunPIDIsRunning, "run pid process EPERM, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
 	}
 
 removePID:
 	if er = os.Remove(runPIDPath); er != nil {
-		return NewErrorf(ErrCosmosConfigRemovePIDPathFailed, "run pid file remove failed, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
+		return false, NewErrorf(ErrCosmosConfigRemovePIDPathFailed, "run pid file remove failed, pid=(%d),err=(%v)", processID, er).AutoStack(nil, nil)
 	}
-	return nil
+	return false, nil
 }
 
-func (c *cosmosDaemon) checkRunPathDaemonSocket() *Error {
+func (c *CosmosDaemon) checkRunPathDaemonSocket() *Error {
 	runSocketPath := c.config.RunPath + socketPath
 	_, er := os.Stat(runSocketPath)
 	if er != nil && !os.IsNotExist(er) {
@@ -185,37 +221,20 @@ func (c *cosmosDaemon) checkRunPathDaemonSocket() *Error {
 	return nil
 }
 
-func (c *cosmosDaemon) Daemon() *Error {
-	if err := c.daemonLogPath(); err != nil {
+// Daemon
+
+func (c *CosmosDaemon) Daemon() *Error {
+	if err := c.daemonRunPathProcess(); err != nil {
 		return err.AutoStack(nil, nil)
 	}
-	if err := c.daemonRunPathProcessID(); err != nil {
+	if err := c.daemonRunPathSocket(); err != nil {
 		return err.AutoStack(nil, nil)
 	}
-	if err := c.daemonRunPathDaemonSocket(); err != nil {
-		return err.AutoStack(nil, nil)
-	}
+	go c.daemonNotify()
 	return nil
 }
 
-func (c *cosmosDaemon) daemonLogPath() *Error {
-	logFile, err := c.openLogFile(c.logFileFormatter(true, false, "startup"))
-	if err != nil {
-		return err.AutoStack(nil, nil)
-	}
-	c.curLogFile = logFile
-
-	errFile, err := c.openLogFile(c.logFileFormatter(false, true, "startup"))
-	if err != nil {
-		c.curLogFile.Close()
-		return err.AutoStack(nil, nil)
-	}
-	c.curErrFile = errFile
-
-	return nil
-}
-
-func (c *cosmosDaemon) daemonRunPathProcessID() *Error {
+func (c *CosmosDaemon) daemonRunPathProcess() *Error {
 	runPIDPath := c.config.RunPath + pidPath
 	pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
 	if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
@@ -224,7 +243,7 @@ func (c *cosmosDaemon) daemonRunPathProcessID() *Error {
 	return nil
 }
 
-func (c *cosmosDaemon) daemonRunPathDaemonSocket() *Error {
+func (c *CosmosDaemon) daemonRunPathSocket() *Error {
 	runSocketPath := c.config.RunPath + socketPath
 	l, er := net.Listen("unix", runSocketPath)
 	if er != nil {
@@ -235,44 +254,52 @@ func (c *cosmosDaemon) daemonRunPathDaemonSocket() *Error {
 	return nil
 }
 
-func (c *cosmosDaemon) daemonSocketListener() {
+func (c *CosmosDaemon) daemonSocketListener() {
 	defer func() {
 		if r := recover(); r != nil {
-			// TODO
+			c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Listener Recover, reason=(%v)\n", r))
 		}
 	}()
 	for {
 		conn, er := c.socket.Accept()
 		if er != nil {
-			// TODO
+			c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Listener Accept Failed, err=(%v)\n", er))
 			continue
 		}
 		go c.daemonSocketConnect(conn)
 	}
 }
 
-func (c *cosmosDaemon) daemonSocketConnect(conn net.Conn) {
+func (c *CosmosDaemon) daemonSocketConnect(conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
-			// TODO
+			c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Connection Recover, reason=(%v)\n", r))
 		}
 	}()
+	c.logFile.WriteAccessLog(fmt.Sprintf("Daemon Connection, from=(%s)\n", conn.RemoteAddr().String()))
 	var err *Error
 	defer func(conn net.Conn) {
 		if err != nil {
-			conn.Write([]byte(fmt.Sprintf("Exit with error=(%v)\n", err)))
+			_, er := conn.Write([]byte(fmt.Sprintf("Exit with error=(%v)\n", err)))
+			if er != nil {
+				c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Connection Write Failed, err=(%v)\n", er))
+			}
 		}
-		conn.Write([]byte("Bye!\n"))
-		err := conn.Close()
-		if err != nil {
-			// TODO
+		_, er := conn.Write([]byte(c.command.Bye()))
+		if er != nil {
+			c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Connection Write Bye Failed, err=(%v)\n", er))
+		}
+		er = conn.Close()
+		if er != nil {
+			c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Connection Close Failed, err=(%v)\n", er))
 		}
 	}(conn)
 
-	hello := "Hello Atomos!"
-	now := "Now:\t" + time.Now().Format("2006-01-02 15:04:05 MST -07:00")
-	_, er := conn.Write([]byte(fmt.Sprintf("%s\n%s\n%s\n\n", hello, c.config.GetNodeFullName(), now)))
+	hello := c.command.Greeting()
+	now := c.command.PrintNow()
+	_, er := conn.Write([]byte(fmt.Sprintf("%s%s\n%s\n\n", hello, c.config.GetNodeFullName(), now)))
 	if er != nil {
+		c.logFile.WriteErrorLog(fmt.Sprintf("Daemon Connection Write Bye Failed, err=(%v)\n", er))
 		return
 	}
 	buffer := bytes.Buffer{}
@@ -281,21 +308,31 @@ func (c *cosmosDaemon) daemonSocketConnect(conn net.Conn) {
 		buf, prefix, er := reader.ReadLine()
 		if er != nil {
 			if errors.Is(er, io.EOF) {
-				err = NewError(ErrCosmosUnixSocketConnEOF, "user exit")
+				err = NewError(ErrCosmosUnixSocketConnEOF, "user exit").AutoStack(nil, nil)
 				return
 			}
-			err = NewErrorf(ErrCosmosUnixSocketConnError, "conn read failed, err=(%v)", er)
+			err = NewErrorf(ErrCosmosUnixSocketConnError, "conn read failed, err=(%v)", er).AutoStack(nil, nil)
 			return
 		}
 		buffer.Write(buf)
 		if !prefix {
-			response, exit := c.handleCommand(buffer.Bytes())
+			cmd := buffer.String()
+			c.logFile.WriteAccessLog(fmt.Sprintf("Daemon Connection Request, cmd=(%s)\n", cmd))
+			resp, exit, err := c.command.Command(cmd)
+			c.logFile.WriteAccessLog(fmt.Sprintf("Daemon Connection Response, response=(%s),exit=(%v),err=(%v)\n", resp, exit, err))
+			if err != nil {
+				_, er := conn.Write([]byte(fmt.Sprintf("Command returns error, err=(%v)", err)))
+				if er != nil {
+					err = NewError(ErrCosmosUnixSocketCommandNotSupported, "command is not supported")
+					return
+				}
+			}
 			buffer.Reset()
 			if exit {
-				err = NewError(ErrCosmosUnixSocketConnShouldQuit, "conn should quit")
+				c.logFile.WriteAccessLog(fmt.Sprintf("Daemon Connection Exit\n"))
 				return
 			}
-			if _, er = conn.Write(response); er != nil {
+			if _, er = conn.Write([]byte(resp)); er != nil {
 				err = NewErrorf(ErrCosmosUnixSocketConnWriteError, "conn write failed, err=(%v)", er)
 				return
 			}
@@ -303,32 +340,31 @@ func (c *cosmosDaemon) daemonSocketConnect(conn net.Conn) {
 	}
 }
 
-func (c *cosmosDaemon) handleCommand(buf []byte) ([]byte, bool) {
-	b := bytes.Split(buf, []byte(":"))
-	switch string(b[0]) {
-	case "exit":
-		return []byte("will exit\n"), true
-	case "write_test":
-		for i := 0; i < 100; i += 1 {
-			c.writeLog("abcdefghij\n")
-			time.Sleep(100 * time.Millisecond)
+func (c *CosmosDaemon) daemonNotify() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch)
+	defer signal.Stop(ch)
+	for {
+		select {
+		case s := <-ch:
+			switch s {
+			case os.Interrupt, os.Kill:
+				c.logFile.WriteAccessLog("Cosmos Daemon Received Kill Signal")
+				c.ExitCh <- true
+				return
+			}
 		}
-		//for i := 0; i < 10000; i += 1 {
-		//	c.writeErr("1234567890")
-		//}
-		return []byte("OK"), false
-	default:
-		return []byte("test\n"), false
 	}
 }
 
-func (c *cosmosDaemon) Exit() {
+// Close
+
+func (c *CosmosDaemon) Close() {
 	c.closeSocket()
 	c.deletePIDFile()
-	c.closeLogFile()
 }
 
-func (c *cosmosDaemon) closeSocket() {
+func (c *CosmosDaemon) closeSocket() {
 	runSocketPath := c.config.RunPath + socketPath
 	er := os.Remove(runSocketPath)
 	if er != nil {
@@ -336,7 +372,7 @@ func (c *cosmosDaemon) closeSocket() {
 	}
 }
 
-func (c *cosmosDaemon) deletePIDFile() {
+func (c *CosmosDaemon) deletePIDFile() {
 	runPIDPath := c.config.RunPath + pidPath
 	er := os.Remove(runPIDPath)
 	if er != nil {
@@ -344,102 +380,8 @@ func (c *cosmosDaemon) deletePIDFile() {
 	}
 }
 
-func (c *cosmosDaemon) closeLogFile() {
-	er := c.curLogFile.Close()
-	if er != nil {
-		// TODO
-	}
-	c.curLogFile = nil
-	er = c.curErrFile.Close()
-	if er != nil {
-		// TODO
-	}
-	c.curErrFile = nil
-}
+// Exit
 
-// Log
-
-func (c *cosmosDaemon) writeLog(s string) {
-	n, er := c.curLogFile.WriteString(s)
-	if er != nil {
-		// TODO: Write to System Error
-		return
-	}
-	c.curLogSize += n
-	log.Println("size =", c.curLogSize)
-	if c.curLogSize >= logMaxSize {
-		log.Println("new log file")
-		f, err := c.openLogFile(c.logFileFormatter(true, false, ""))
-		if err != nil {
-			// TODO
-			log.Println("new log file err=", err)
-		} else {
-			er := c.curLogFile.Close()
-			if er != nil {
-				// TODO
-				log.Println("new log file close err=", er)
-			}
-			c.curLogFile = f
-			log.Println("new log file f=", f.Name())
-		}
-		c.curLogSize = 0
-	}
-}
-
-func (c *cosmosDaemon) writeErr(s string) {
-	n, er := c.curErrFile.WriteString(s)
-	if er != nil {
-		// TODO: Write to System Error
-		return
-	}
-	c.curErrSize += n
-	log.Println("size =", c.curErrSize)
-	if c.curErrSize >= logMaxSize {
-		log.Println("new error file")
-		f, err := c.openLogFile(c.logFileFormatter(false, true, ""))
-		if err != nil {
-			// TODO
-		} else {
-			er := c.curErrFile.Close()
-			if er != nil {
-				// TODO
-			}
-			c.curErrFile = f
-		}
-		c.curErrSize = 0
-	}
-}
-
-func (c *cosmosDaemon) logFileFormatter(isLog, isError bool, flag string) string {
-	// Dir Path
-	dirPath := c.config.LogPath
-
-	// {Name}-{DateTime}{-Flag}.log
-	var name, datetime string
-
-	// Name
-	if isLog {
-		name = logPrefix
-	} else if isError {
-		name = logErrPrefix
-	} else {
-		name = logDaemon
-	}
-
-	// Datetime
-	datetime = time.Now().Format("2006-01-02-15-04-05")
-
-	// Flag
-	if len(flag) > 0 {
-		flag = logNameSep + flag
-	}
-	return fmt.Sprintf("%s/%s%s%s%s.log", dirPath, name, logNameSep, datetime, flag)
-}
-
-func (c *cosmosDaemon) openLogFile(path string) (*os.File, *Error) {
-	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, logFilePerm)
-	if er != nil {
-		return nil, NewErrorf(ErrCosmosLogOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AutoStack(nil, nil)
-	}
-	return f, nil
+func (c *CosmosDaemon) Exit() {
+	c.ExitCh <- true
 }

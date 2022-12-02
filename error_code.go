@@ -35,9 +35,11 @@ const (
 	ErrCosmosIsBusy
 	ErrCosmosIsClosed
 	ErrCosmosUnixSocketConnEOF
+	ErrCosmosUnixSocketCommandNotSupported
 	ErrCosmosUnixSocketConnError
-	ErrCosmosUnixSocketConnShouldQuit
 	ErrCosmosUnixSocketConnWriteError
+	ErrCosmosDaemonGetExecutableFailed
+	ErrCosmosDaemonStartProcessFailed
 
 	ErrElementLoaded
 	ErrElementReloadInvalid

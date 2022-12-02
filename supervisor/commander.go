@@ -95,6 +95,16 @@ func main() {
 			return
 		}
 		return
+	case "startup_supervisor":
+		if *cosmosName == "" {
+			fmt.Println("Error: -cosmos is empty")
+			goto help
+		}
+		if er := startupSupervisor(*cosmosName); er != nil {
+			fmt.Println("Error: Startup Supervisor failed:", er)
+			return
+		}
+		return
 		//case "status":
 		//	if *cosmosName == "" || nodeNameList == nil {
 		//		fmt.Println("Error: -cosmos or -node is empty")
@@ -103,11 +113,12 @@ func main() {
 		//	NewPath(VarRunPath + AtomosPrefix + *cosmosName)
 	}
 help:
-	fmt.Println("Usage:\n\t-action=[init|validate|list|build]\n\t-user={user_name}\n\t-group={group_name}\n\t-cosmos={cosmos_name}\n\t-go={go_binary_path}\n\t-node={node_name_1,node_name_2,...}")
+	fmt.Println("Usage:\n\t-action=[init|validate|list|build|daemon]\n\t-user={user_name}\n\t-group={group_name}\n\t-cosmos={cosmos_name}\n\t-go={go_binary_path}\n\t-node={node_name_1,node_name_2,...}")
 	fmt.Println("Example (Init):\n\tsudo atomos_commander -action=init -user=`whoami` -group=`id -ng` -cosmos=hello_cosmos -node=cosmos1,cosmos2")
 	fmt.Println("Example (Validate):\n\tatomos_commander -action=validate -user=`whoami` -group=`id -ng` -cosmos=hello_cosmos")
 	fmt.Println("Example (List):\n\tatomos_commander -action=list")
-	//-go=~/atomos/bin
+	fmt.Println("Example (Build):\n\tatomos_commander -action=build -cosmos=hello_cosmos -node=cosmos1")
+	fmt.Println("Example (StartUp Supervisor):\n\tatomos_commander -action=startup_supervisor -cosmos=hello_cosmos")
 }
 
 func checkCosmosName(cosmosName string) bool {
@@ -264,6 +275,15 @@ func initSupervisorPaths(cosmosName string, nodeNameList []string, u *user.User,
 			fmt.Printf("Error: Supervisor Config Invalid Cosmos Name, name=(%s)\n", conf.Cosmos)
 			return errors.New("invalid cosmos name")
 		}
+		if conf.LogPath != varLogPath {
+			fmt.Println("Error: Supervisor Log Path has changed to", conf.LogPath)
+		}
+		if conf.RunPath != varRunPath {
+			fmt.Println("Error: Supervisor Run Path has changed to", conf.RunPath)
+		}
+		if conf.EtcPath != etcPath {
+			fmt.Println("Error: Supervisor Etc Path has changed to", conf.EtcPath)
+		}
 		for _, nodeName := range nodeNameList {
 			fmt.Println("node=", nodeName)
 			has := false
@@ -282,6 +302,8 @@ func initSupervisorPaths(cosmosName string, nodeNameList []string, u *user.User,
 		conf.NodeList = nodeNameList
 		conf.LogPath = varLogPath
 		conf.LogLevel = "DEBUG"
+		conf.RunPath = varRunPath
+		conf.EtcPath = etcPath
 	}
 	buf, er := yaml.Marshal(conf)
 	if er != nil {
@@ -480,6 +502,12 @@ func validateSupervisorPath(cosmosName string, u *user.User) ([]string, error) {
 	}
 	if conf.LogPath != varLogPath {
 		fmt.Println("Error: Supervisor Config Path has changed to", conf.LogPath)
+	}
+	if conf.RunPath != varRunPath {
+		fmt.Println("Error: Supervisor Run Path has changed to", conf.RunPath)
+	}
+	if conf.EtcPath != etcPath {
+		fmt.Println("Error: Supervisor Etc Path has changed to", conf.EtcPath)
 	}
 	fmt.Println("Supervisor Config Validated")
 	return conf.NodeList, nil
@@ -710,6 +738,23 @@ func buildNodePath(cosmosName, goPath, nodeName string) error {
 	}
 
 	fmt.Printf("Node %s Config Built Result: %s\n", nodeName, binPath.path)
+	return nil
+}
+
+// Supervisor
+
+func startupSupervisor(cosmosName string) error {
+	supervisorConfigPath := EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf"
+
+	cmd := exec.Command("atomos_supervisor", "-config", supervisorConfigPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if er := cmd.Run(); er != nil {
+		fmt.Printf("Error: Startup Supervisor Failed: err=(%v)\n", er)
+		return er
+	}
+
+	fmt.Println("Startup Supervisor Executed")
 	return nil
 }
 

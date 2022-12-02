@@ -88,6 +88,7 @@ message String {
 message Config {
   string cosmos = 1;
   string node = 2;
+  repeated string node_list = 10;
 
   LogLevel log_level = 3;
   string log_path = 4;

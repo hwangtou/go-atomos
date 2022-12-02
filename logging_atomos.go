@@ -3,7 +3,6 @@ package go_atomos
 import (
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"os"
 	"sync"
 )
 
@@ -13,8 +12,10 @@ const defaultLogMailID = 0
 // Interface of Cosmos Log.
 
 type LoggingAtomos struct {
-	file *os.File
-	log  *mailBox
+	accessLogging LoggingFn
+	errorLogging  LoggingFn
+
+	log *mailBox
 }
 
 // Log内存池
@@ -25,21 +26,41 @@ var logMailsPool = sync.Pool{
 	},
 }
 
-func NewLoggingAtomos(logPath string) (*LoggingAtomos, *Error) {
-	f, er := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if er != nil {
-		return nil, NewErrorf(ErrLogFileCannotOpen, "Logging filepath is not accessible, err=(%v)", er)
-	}
+type LoggingFn func(string)
+
+func NewLoggingAtomos(accessLogFn, errLogFn LoggingFn) *LoggingAtomos {
 	m := &LoggingAtomos{}
-	m.file = f
+	m.accessLogging = accessLogFn
+	m.errorLogging = errLogFn
 	m.log = newMailBox(MailBoxHandler{
 		OnReceive: m.onLogMessage,
 		OnPanic:   m.onLogPanic,
 		OnStop:    m.onLogStop,
 	})
 	m.log.start()
-	return m, nil
+	return m
 }
+
+//func NewLoggingAtomosWithLogPath(accessLogPath, errLogPath string) (*LoggingAtomos, *Error) {
+//	accessLog, er := os.OpenFile(accessLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+//	if er != nil {
+//		return nil, NewErrorf(ErrLogFileCannotOpen, "Logging access log filepath is not accessible, err=(%v)", er)
+//	}
+//	errLog, er := os.OpenFile(errLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+//	if er != nil {
+//		return nil, NewErrorf(ErrLogFileCannotOpen, "Logging error log filepath is not accessible, err=(%v)", er)
+//	}
+//	m := &LoggingAtomos{}
+//	m.accessFile = accessLog
+//	m.errFile = errLog
+//	m.log = newMailBox(MailBoxHandler{
+//		OnReceive: m.onLogMessage,
+//		OnPanic:   m.onLogPanic,
+//		OnStop:    m.onLogStop,
+//	})
+//	m.log.start()
+//	return m, nil
+//}
 
 func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
 	id := &IDInfo{
@@ -64,7 +85,7 @@ func (c *LoggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
 	lm.Message = msg
 	m := newMail(defaultLogMailID, lm)
 	if ok := c.log.pushTail(m); !ok {
-		c.logWrite(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg))
+		c.errorLogWrite(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg))
 	}
 }
 
@@ -96,9 +117,12 @@ func (c *LoggingAtomos) onLogStop(killMail, remainMails *mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.onLogMessage(curMail)
 	}
-	if er := c.file.Close(); er != nil {
-		c.stderrWrite(fmt.Sprintf("CosmosLogging: Closing the log file fails when logging is stopped, err=(%v)", er))
-	}
+	//if er := c.accessFile.Close(); er != nil {
+	//	c.stderrWrite(fmt.Sprintf("CosmosLogging: Closing the log file fails when logging is stopped, err=(%v)", er))
+	//}
+	//if er := c.errFile.Close(); er != nil {
+	//	c.stderrWrite(fmt.Sprintf("CosmosLogging: Closing the log file fails when logging is stopped, err=(%v)", er))
+	//}
 }
 
 func (c *LoggingAtomos) logging(lm *LogMail) {
@@ -121,28 +145,30 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	}
 	switch lm.Level {
 	case LogLevel_DEBUG:
-		c.logWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.accessLogWrite(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_INFO:
-		c.logWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.accessLogWrite(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_WARN:
-		c.logWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLogWrite(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_ERROR:
-		c.logWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLogWrite(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_FATAL:
 		fallthrough
 	default:
-		c.logWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLogWrite(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	}
 }
 
 // Concrete log to file logic.
 
-func (c *LoggingAtomos) logWrite(msg string) {
-	if _, er := c.file.WriteString(msg); er != nil {
-		c.stderrWrite(msg)
-	}
+func (c *LoggingAtomos) accessLogWrite(msg string) {
+	c.accessLogging(msg)
 }
 
-func (c *LoggingAtomos) stderrWrite(msg string) {
-	os.Stderr.WriteString(msg)
+func (c *LoggingAtomos) errorLogWrite(msg string) {
+	c.errorLogging(msg)
 }
+
+//func (c *LoggingAtomos) stderrWrite(msg string) {
+//	os.Stderr.WriteString(msg)
+//}

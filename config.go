@@ -10,9 +10,9 @@ func (x *Config) Check() *Error {
 	if x == nil {
 		return NewError(ErrCosmosConfigInvalid, "No configuration")
 	}
-	if x.Node == "" {
-		return NewError(ErrCosmosConfigNodeNameInvalid, "Node name is empty")
-	}
+	//if x.Node == "" {
+	//	return NewError(ErrCosmosConfigNodeNameInvalid, "Node name is empty")
+	//}
 	if x.LogPath == "" {
 		return NewError(ErrCosmosConfigLogPathInvalid, "Log path is empty")
 	}
@@ -48,16 +48,16 @@ type yamlRemoteServerConfig struct {
 	Port int32 `yaml:"port"`
 }
 
-func NewConfigFromYamlFileArgument() (*Config, *Error) {
+func NewNodeConfigFromYamlFileArgument() (*Config, *Error) {
 	// Config
 	configPath := flag.String("config", "config/config.yaml", "yaml config path")
 	flag.Parse()
 
 	// Load config.
-	return ConfigFromYaml(*configPath)
+	return NodeConfigFromYaml(*configPath)
 }
 
-func ConfigFromYaml(filepath string) (*Config, *Error) {
+func NodeConfigFromYaml(filepath string) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)
@@ -102,6 +102,30 @@ func ConfigFromYaml(filepath string) (*Config, *Error) {
 	return conf, nil
 }
 
+func SupervisorConfigFromYaml(filepath string) (*Config, *Error) {
+	dat, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)
+	}
+	y := &SupervisorConfig{}
+	if err = yaml.Unmarshal(dat, y); err != nil {
+		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err)
+	}
+	logLevel := LogLevel_DEBUG
+	if lv, ok := LogLevel_value[y.LogLevel]; ok {
+		logLevel = LogLevel(lv)
+	}
+	conf := &Config{
+		Cosmos:   y.Cosmos,
+		NodeList: y.NodeList,
+		LogLevel: logLevel,
+		LogPath:  y.LogPath,
+		RunPath:  y.RunPath,
+		EtcPath:  y.EtcPath,
+	}
+	return conf, nil
+}
+
 // Config
 
 type SupervisorConfig struct {
@@ -110,6 +134,9 @@ type SupervisorConfig struct {
 
 	LogLevel string `yaml:"log-level"`
 	LogPath  string `yaml:"log-path"`
+
+	RunPath string `yaml:"run-path"`
+	EtcPath string `yaml:"etc-path"`
 }
 
 type NodeConfig struct {

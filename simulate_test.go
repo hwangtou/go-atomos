@@ -11,7 +11,7 @@ import (
 // Fake Data
 
 func newTestFakeCosmosProcess(t *testing.T) *CosmosProcess {
-	l, er := NewLoggingAtomos("tmp_test.log")
+	l, er := NewLoggingAtomosWithLogPath("tmp_test.log")
 	if er != nil {
 		t.Fatal(er)
 	}
