@@ -18,16 +18,7 @@ import (
 )
 
 func main() {
-	//process, err := os.StartProcess("sample_process", nil, &os.ProcAttr{})
-	//if err != nil {
-	//	panic(err)
-	//}
-	//time.Sleep(2 * time.Second)
-	//process.Signal(os.Interrupt)
-	//fmt.Println(process)
-	//time.Sleep(10 * time.Second)
-
-	fmt.Println("Welcome to Atomos Supervisor!")
+	fmt.Println("Welcome to Atomos Commander!")
 	fmt.Println("Now:\t", time.Now().Format("2006-01-02 15:04:05 MST -07:00"))
 
 	var (
@@ -261,7 +252,7 @@ func initSupervisorPaths(cosmosName string, nodeNameList []string, u *user.User,
 	}
 	fmt.Printf("Supervisor Config Path: %s\n", supervisorConfigPath)
 
-	conf := &go_atomos.SupervisorConfig{}
+	conf := &go_atomos.SupervisorYAMLConfig{}
 	if confPath.exist() {
 		buf, er := ioutil.ReadFile(confPath.path)
 		if er != nil {
@@ -354,7 +345,7 @@ func initNodePaths(cosmosName, nodeName string, u *user.User, g *user.Group) err
 	}
 	fmt.Printf("Node %s Config Path: %s\n", nodeName, configPath)
 
-	conf := &go_atomos.NodeConfig{
+	conf := &go_atomos.NodeYAMLConfig{
 		Cosmos:          cosmosName,
 		Node:            nodeName,
 		LogLevel:        "DEBUG",
@@ -492,7 +483,7 @@ func validateSupervisorPath(cosmosName string, u *user.User) ([]string, error) {
 	if er != nil {
 		return nil, er
 	}
-	conf := &go_atomos.SupervisorConfig{}
+	conf := &go_atomos.SupervisorYAMLConfig{}
 	er = yaml.Unmarshal(buf, conf)
 	if er != nil {
 		return nil, er
@@ -559,7 +550,7 @@ func validateNodePath(cosmosName, nodeName string, u *user.User) error {
 	if er != nil {
 		return er
 	}
-	conf := &go_atomos.NodeConfig{}
+	conf := &go_atomos.NodeYAMLConfig{}
 	er = yaml.Unmarshal(buf, conf)
 	if er != nil {
 		return er
@@ -666,14 +657,15 @@ func buildPaths(cosmosName, goPath string, nodeNameList []string) error {
 	if er != nil {
 		return er
 	}
-	conf := &go_atomos.SupervisorConfig{}
+	conf := &go_atomos.SupervisorYAMLConfig{}
 	er = yaml.Unmarshal(buf, conf)
 	if er != nil {
 		return er
 	}
 
+	now := time.Now().Format("20060102150405")
 	for _, nodeName := range nodeNameList {
-		if er := buildNodePath(cosmosName, goPath, nodeName); er != nil {
+		if er := buildNodePath(cosmosName, goPath, nodeName, now); er != nil {
 			return er
 		}
 	}
@@ -681,7 +673,7 @@ func buildPaths(cosmosName, goPath string, nodeNameList []string) error {
 	return nil
 }
 
-func buildNodePath(cosmosName, goPath, nodeName string) error {
+func buildNodePath(cosmosName, goPath, nodeName, nowStr string) error {
 	// Check whether cosmos name is legal.
 	// 检查cosmos名称是否合法。
 	if !checkNodeName(nodeName) {
@@ -703,7 +695,7 @@ func buildNodePath(cosmosName, goPath, nodeName string) error {
 	if er != nil {
 		return er
 	}
-	conf := &go_atomos.NodeConfig{}
+	conf := &go_atomos.NodeYAMLConfig{}
 	er = yaml.Unmarshal(buf, conf)
 	if er != nil {
 		return er
@@ -728,12 +720,24 @@ func buildNodePath(cosmosName, goPath, nodeName string) error {
 		return er
 	}
 
-	cmd := exec.Command(goPath, "build", "-o", binPath.path, buildPath.path)
+	outPath := binPath.path + "/" + nodeName + "_" + nowStr
+	cmd := exec.Command(goPath, "build", "-o", outPath, buildPath.path)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = path.Join(path.Dir(buildPath.path))
 	if er := cmd.Run(); er != nil {
 		fmt.Printf("Error: Node %s Config Built Failed: err=(%v)\n", nodeName, er)
+		return er
+	}
+
+	linkPath := binPath.path + "/" + nodeName + "_latest"
+	exec.Command("rm", linkPath).Run()
+
+	cmd = exec.Command("ln", "-s", outPath, linkPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if er := cmd.Run(); er != nil {
+		fmt.Printf("Error: Node %s Link Failed: err=(%v)\n", nodeName, er)
 		return er
 	}
 

@@ -20,7 +20,8 @@ const (
 	ErrMainCannotScale
 
 	ErrCosmosConfigInvalid
-	ErrCosmosConfigNodeNameInvalid
+	ErrCosmosNameInvalid
+	ErrCosmosNodeNameInvalid
 	ErrCosmosConfigLogPathInvalid
 	ErrCosmosConfigRunPathInvalid
 	ErrCosmosConfigRunPIDIsRunning
@@ -40,6 +41,20 @@ const (
 	ErrCosmosUnixSocketConnWriteError
 	ErrCosmosDaemonGetExecutableFailed
 	ErrCosmosDaemonStartProcessFailed
+
+	ErrPathUserInvalid
+	ErrPathGroupInvalid
+	ErrPathNotExist
+	ErrPathMakeDir
+	ErrPathGroupIDInvalid
+	ErrPathUserIDInvalid
+	ErrPathChangeOwnFailed
+	ErrPathChangeModeFailed
+	ErrPathIsNotDirectory
+	ErrPathIsNotOwner
+	ErrPathPermNotMatch
+	ErrPathSaveFileFailed
+	ErrPathGetGroupIDsFailed
 
 	ErrElementLoaded
 	ErrElementReloadInvalid

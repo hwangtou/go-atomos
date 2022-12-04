@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -97,7 +96,7 @@ func loadConfig(configPath string) (*atomos.Config, *atomos.Error) {
 
 type command struct {
 	configPath string
-	daemon     atomos.CosmosDaemon
+	daemon     *atomos.CosmosDaemon
 }
 
 func (c *command) Command(cmd string) (string, bool, *atomos.Error) {
@@ -186,14 +185,15 @@ type nodeProcess struct {
 }
 
 func (p nodeProcess) getStatus() string {
-	attr := &os.ProcAttr{
-		Dir:   c.process.workPath,
-		Env:   c.process.env,
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Sys:   &syscall.SysProcAttr{Setsid: true},
-	}
-	proc, er = os.StartProcess(c.process.executablePath, c.process.args, attr)
-	if er != nil {
-		return false, pid, NewError(ErrCosmosDaemonStartProcessFailed, er.Error()).AutoStack(nil, nil)
-	}
+	return ""
+	//attr := &os.ProcAttr{
+	//	Dir:   c.process.workPath,
+	//	Env:   c.process.env,
+	//	Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+	//	Sys:   &syscall.SysProcAttr{Setsid: true},
+	//}
+	//proc, er = os.StartProcess(c.process.executablePath, c.process.args, attr)
+	//if er != nil {
+	//	return false, pid, NewError(ErrCosmosDaemonStartProcessFailed, er.Error()).AutoStack(nil, nil)
+	//}
 }

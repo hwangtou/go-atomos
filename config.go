@@ -62,7 +62,7 @@ func NodeConfigFromYaml(filepath string) (*Config, *Error) {
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)
 	}
-	y := &NodeConfig{}
+	y := &NodeYAMLConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err)
 	}
@@ -107,7 +107,7 @@ func SupervisorConfigFromYaml(filepath string) (*Config, *Error) {
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)
 	}
-	y := &SupervisorConfig{}
+	y := &SupervisorYAMLConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err)
 	}
@@ -128,7 +128,7 @@ func SupervisorConfigFromYaml(filepath string) (*Config, *Error) {
 
 // Config
 
-type SupervisorConfig struct {
+type SupervisorYAMLConfig struct {
 	Cosmos   string   `yaml:"cosmos"`
 	NodeList []string `yaml:"node-list"`
 
@@ -139,7 +139,7 @@ type SupervisorConfig struct {
 	EtcPath string `yaml:"etc-path"`
 }
 
-type NodeConfig struct {
+type NodeYAMLConfig struct {
 	Cosmos string `yaml:"cosmos"`
 	Node   string `yaml:"node"`
 
