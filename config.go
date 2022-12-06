@@ -73,6 +73,8 @@ func NodeConfigFromYaml(filepath string) (*Config, *Error) {
 	conf := &Config{
 		Cosmos:       y.Cosmos,
 		Node:         y.Node,
+		ReporterUrl:  y.ReporterUrl,
+		ConfigerUrl:  y.ConfigerUrl,
 		LogLevel:     logLevel,
 		LogPath:      y.LogPath,
 		RunPath:      y.RunPath,
@@ -116,12 +118,15 @@ func SupervisorConfigFromYaml(filepath string) (*Config, *Error) {
 		logLevel = LogLevel(lv)
 	}
 	conf := &Config{
-		Cosmos:   y.Cosmos,
-		NodeList: y.NodeList,
-		LogLevel: logLevel,
-		LogPath:  y.LogPath,
-		RunPath:  y.RunPath,
-		EtcPath:  y.EtcPath,
+		Cosmos:            y.Cosmos,
+		NodeList:          y.NodeList,
+		KeepaliveNodeList: y.KeepaliveNodeList,
+		ReporterUrl:       y.ReporterUrl,
+		ConfigerUrl:       y.ConfigerUrl,
+		LogLevel:          logLevel,
+		LogPath:           y.LogPath,
+		RunPath:           y.RunPath,
+		EtcPath:           y.EtcPath,
 	}
 	return conf, nil
 }
@@ -129,8 +134,13 @@ func SupervisorConfigFromYaml(filepath string) (*Config, *Error) {
 // Config
 
 type SupervisorYAMLConfig struct {
-	Cosmos   string   `yaml:"cosmos"`
-	NodeList []string `yaml:"node-list"`
+	Cosmos string `yaml:"cosmos"`
+
+	NodeList          []string `yaml:"node-list"`
+	KeepaliveNodeList []string `yaml:"keepalive-node-list"`
+
+	ReporterUrl string `yaml:"reporter-url"`
+	ConfigerUrl string `yaml:"configer-url"`
 
 	LogLevel string `yaml:"log-level"`
 	LogPath  string `yaml:"log-path"`
@@ -142,6 +152,9 @@ type SupervisorYAMLConfig struct {
 type NodeYAMLConfig struct {
 	Cosmos string `yaml:"cosmos"`
 	Node   string `yaml:"node"`
+
+	ReporterUrl string `yaml:"reporter-url"`
+	ConfigerUrl string `yaml:"configer-url"`
 
 	LogLevel string `yaml:"log-level"`
 	LogPath  string `yaml:"log-path"`

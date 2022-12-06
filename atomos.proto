@@ -86,23 +86,30 @@ message String {
 // Configuration
 
 message Config {
+  // Cosmos Name
   string cosmos = 1;
+
+  // Node Name (For Node Config)
   string node = 2;
-  repeated string node_list = 10;
+  // Node List (For Supervisor Config)
+  repeated string node_list = 3;
+  // Keepalive Node List (For Supervisor Config)
+  repeated string keepalive_node_list = 4;
 
-  LogLevel log_level = 3;
-  string log_path = 4;
-  string run_path = 5;
-  string etc_path = 6;
+  string reporter_url = 5;
+  string configer_url = 6;
 
-//  repeated Manager managers = 6;
+  LogLevel log_level = 7;
+  string log_path = 8;
+  string run_path = 9;
+  string etc_path = 10;
 
   // 节点通讯
-  CertConfig enable_cert = 7;
-  RemoteServerConfig enable_server = 8;
+  CertConfig enable_cert = 11;
+  RemoteServerConfig enable_server = 12;
 
   // 自定义配置
-  map<string, bytes> customize = 9;
+  map<string, bytes> customize = 13;
 }
 
 message RemoteServerConfig {

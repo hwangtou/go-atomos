@@ -20,6 +20,7 @@ const (
 	ErrMainCannotScale
 
 	ErrCosmosConfigInvalid
+	ErrCosmosConfigNotFound
 	ErrCosmosNameInvalid
 	ErrCosmosNodeNameInvalid
 	ErrCosmosConfigLogPathInvalid
@@ -28,6 +29,11 @@ const (
 	ErrCosmosConfigRunPIDPathInvalid
 	ErrCosmosConfigRunPIDInvalid
 	ErrCosmosConfigRemovePIDPathFailed
+	ErrCosmosConfigBuildPathInvalid
+	ErrCosmosConfigBinPathInvalid
+	ErrCosmosConfigBuildFailed
+	ErrCosmosConfigBinLinkFileFailed
+	ErrCosmosReadEtcPath
 	ErrCosmosCertConfigInvalid
 	ErrCosmosLogOpenFailed
 	ErrCosmosWritePIDFileFailed
