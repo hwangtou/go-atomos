@@ -74,6 +74,9 @@ type BaseAtomos struct {
 	lastBusy time.Time
 	lastWait time.Time
 	lastStop time.Time
+
+	curMessage string
+	curTime    time.Time
 }
 
 // Atom对象的内存池
@@ -142,35 +145,114 @@ func (a *BaseAtomos) Task() Task {
 	return &a.task
 }
 
+type debugger struct {
+	name  string
+	args  proto.Message
+	begin time.Time
+
+	pos  int
+	done bool
+}
+
 func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	am := allocAtomosMail()
 	initMessageMail(am, from, name, args)
+
+	d := &debugger{}
+	if IsDebug {
+		d.name = name
+		d.args = args
+		d.begin = time.Now()
+		l := a.log.logging
+		go func(d *debugger, l *LoggingAtomos) {
+			time.After(DebugAtomosTimeout)
+			if !d.done && l != nil {
+				l.PushProcessLog(LogLevel_Warn, "Timeout: Message, message=(%s),args=(%v),debugger=(%v)",
+					d.name, d.args, d.pos)
+			}
+		}(d, l)
+
+		defer func() {
+			if time.Now().Sub(d.begin) > DebugAtomosTimeout {
+				l.PushProcessLog(LogLevel_Warn, "Timeout: Message Done, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
+			}
+		}()
+	}
+
+	d.pos = 1
 	if ok := a.mailbox.pushTail(am.mail); !ok {
+		d.pos = 2
+		d.done = true
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
-	replyInterface, err := am.waitReply()
+
+	d.pos = 3
+
+	var replyInterface proto.Message
+	if ShouldQuitBlocking {
+		select {
+		case r := <-am.waitCh:
+			replyInterface, err = r.resp, r.err
+		case <-time.After(QuitBlockingTimeout):
+			a.Log().Warn("Timeout: Message Base, message=(%s),args=(%v)", d.name, d.args)
+			err = NewErrorf(ErrAtomosPushTimeout, "Atomos Message Timeout, from=(%s),name=(%s),args=(%v)", from, name, args)
+		}
+	} else {
+		replyInterface, err = am.waitReply()
+	}
+	d.pos = 4
+
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
+		d.done = true
 		return nil, err
 	}
 	reply, ok := replyInterface.(proto.Message)
 	if !ok {
 		//return reply, fmt.Errorf("Atom.Mail: Reply type error, name=%s,args=%+v,reply=%+v",
 		//	name, args, replyInterface)
+		d.done = true
 		return nil, err
 	}
+	d.pos = 5
+	d.done = true
 	return reply, err
 }
 
 func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args proto.Message) (ID, *ErrorInfo) {
 	am := allocAtomosMail()
 	initScaleMail(am, from, message, args)
+
+	d := &debugger{}
+	if IsDebug {
+		go func(info, n string, m proto.Message, d *debugger, l *LoggingAtomos) {
+			time.After(DebugAtomosTimeout)
+			if !d.done {
+				l.PushProcessLog(LogLevel_Warn, "Timeout: Scale, id=(%s),message=(%s),args=(%v),debugger=(%v)", info, n, m, d)
+			}
+		}(a.id.Info(), message, args, d, a.log.logging)
+	}
+
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running, from=(%s),message=(%s),args=(%v)", from, message, args)
 	}
-	id, err := am.waitReplyID()
+
+	var id ID
+	var err *ErrorInfo
+	if ShouldQuitBlocking {
+		select {
+		case r := <-am.waitCh:
+			id, err = r.id, r.err
+		case <-time.After(QuitBlockingTimeout):
+			a.Log().Warn("Timeout: Scale Base, message=(%s),args=(%v)", d.name, d.args)
+			err = NewErrorf(ErrAtomosPushTimeout, "Atomos Scale Timeout, from=(%s),name=(%s),args=(%v)", from, message, args)
+		}
+	} else {
+		id, err = am.waitReplyID()
+	}
+
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
 		return nil, err
@@ -369,7 +451,10 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
 func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
-	am := mail.Content.(*atomosMail)
+	am, ok := mail.Content.(*atomosMail)
+	if !ok {
+		return
+	}
 	//defer deallocAtomosMail(am)
 
 	if !a.isNotHalt() {

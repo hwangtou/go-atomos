@@ -36,6 +36,9 @@ func NewLoggingAtomos() *LoggingAtomos {
 }
 
 func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
+	if c == nil {
+		return
+	}
 	id := &IDInfo{
 		Type:    IDType_Process,
 		Cosmos:  "",

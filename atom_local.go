@@ -348,6 +348,8 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 	}
 	//var stack []byte
 	func() {
+		a.atomos.curMessage = name
+		a.atomos.curTime = time.Now()
 		defer func() {
 			if r := recover(); r != nil {
 				_, file, line, ok := runtime.Caller(2)
@@ -359,7 +361,11 @@ func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply
 				}
 				err.Panic = string(debug.Stack())
 				err.AddStack(a, file, fmt.Sprintf("%v", r), line, args)
+				a.atomos.curMessage = err.Error()
+			} else {
+				a.atomos.curMessage = ""
 			}
+			a.atomos.curTime = time.Time{}
 		}()
 		fromID, _ := from.(ID)
 		reply, err = handler(fromID, a.atomos.GetInstance(), args)

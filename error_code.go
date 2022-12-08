@@ -42,6 +42,7 @@ const (
 	ErrAtomosTaskInvalidFn
 	ErrAtomosTaskNotExists
 	ErrAtomosNotSupportWormhole
+	ErrAtomosPushTimeout
 
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageHandlerPanic

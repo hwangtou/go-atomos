@@ -625,7 +625,27 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 	case 2:
 		val = append(val, id, arg)
 	}
+
+	d := &debugger{}
+	if IsDebug {
+		d.name = am.name
+		d.args = am.arg
+		d.begin = time.Now()
+		go func(d *debugger, l *LoggingAtomos) {
+			time.After(DebugAtomosTimeout)
+			if !d.done {
+				l.PushProcessLog(LogLevel_Warn, "Timeout: Task, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
+			}
+		}(d, at.atomos.log.logging)
+	}
+
 	method.Call(val)
+
+	if IsDebug {
+		if time.Now().Sub(d.begin) > DebugAtomosTimeout {
+			at.atomos.Log().Warn("Timeout: Task Done, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
+		}
+	}
 }
 
 // 供给Telnet使用的任务数量统计。
