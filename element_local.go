@@ -184,6 +184,8 @@ func (e *ElementLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo
 }
 
 func (e *ElementLocal) getCallChain() []ID {
+	e.atomos.mailbox.mutex.Lock()
+	defer e.atomos.mailbox.mutex.Unlock()
 	return e.callChain
 }
 
@@ -342,10 +344,10 @@ func (e *ElementLocal) KillAtom(fromID, toID ID) *ErrorInfo {
 		return NewErrorf(ErrAtomToIDInvalid, "To ID invalid, from=(%s),to=(%s)", fromID, toID)
 	}
 	// Dead Lock Checker.
-	if !a.checkCallChain(fromID.getCallChain()) {
-		return NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s)", fromID.getCallChain(), toID)
+	chain := fromID.getCallChain()
+	if !a.tryAddCallChain(chain) {
+		return NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s)", chain, toID)
 	}
-	a.addCallChain(fromID.getCallChain())
 	defer a.delCallChain()
 	// PushProcessLog.
 	return a.pushKillMail(fromID, true)
@@ -363,20 +365,21 @@ func (e *ElementLocal) Task() Task {
 
 // Check chain.
 
-func (e *ElementLocal) checkCallChain(fromIDList []ID) bool {
+func (e *ElementLocal) tryAddCallChain(fromIDList []ID) bool {
+	e.atomos.mailbox.mutex.Lock()
+	defer e.atomos.mailbox.mutex.Unlock()
 	for _, fromID := range fromIDList {
 		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
 			return false
 		}
 	}
+	e.callChain = append(fromIDList, e)
 	return true
 }
 
-func (e *ElementLocal) addCallChain(fromIDList []ID) {
-	e.callChain = append(fromIDList, e)
-}
-
 func (e *ElementLocal) delCallChain() {
+	e.atomos.mailbox.mutex.Lock()
+	defer e.atomos.mailbox.mutex.Unlock()
 	e.callChain = nil
 }
 
@@ -390,11 +393,11 @@ func (e *ElementLocal) delCallChain() {
 func (e *ElementLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	// Dead Lock Checker.
 	if from != nil {
-		if !e.checkCallChain(from.getCallChain()) {
+		chain := from.getCallChain()
+		if !e.tryAddCallChain(chain) {
 			return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-				from.getCallChain(), e, name, args)
+				chain, e, name, args)
 		}
-		e.addCallChain(from.getCallChain())
 		defer e.delCallChain()
 	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, args)
@@ -616,22 +619,51 @@ func (e *ElementLocal) elementAtomGet(name string) (*AtomLocal, *ErrorInfo) {
 func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence) (*AtomLocal, *ErrorInfo) {
 	// Element的容器逻辑。
 
+	d := &debugger{}
+	if IsDebug {
+		d.name = name
+		d.args = arg
+		d.begin = time.Now()
+		l := e.atomos.log.logging
+		//go func(d *debugger, l *LoggingAtomos) {
+		//	<-time.After(DebugAtomosTimeout)
+		//	if !d.done && l != nil {
+		//		l.PushProcessLog(LogLevel_Warn, "Timeout: Spawn, message=(%s),args=(%v),debugger=(%v)",
+		//			d.name, d.args, d.pos)
+		//	}
+		//}(d, l)
+
+		defer func() {
+			d.done = true
+			if time.Now().Sub(d.begin) > DebugAtomosTimeout {
+				l.PushProcessLog(LogLevel_Warn, "Timeout: Spawn Done, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
+			}
+		}()
+	}
+
 	// Alloc an atomos and try setting.
+	d.pos = 1
 	atom := newAtomLocal(name, e, e.atomos.reloads, current, e.atomos.logging, current.Interface.Config.LogLevel)
 	//atom := newAtomLocal(name, e, e.reloads, current, e.log, e.logLevel)
 	// If not exist, lock and set an new one.
 	e.lock.Lock()
+	d.pos = 2
 	oldAtom, has := e.atoms[name]
 	if !has {
+		d.pos = 3
 		e.atoms[name] = atom
 		atom.nameElement = e.names.PushBack(name)
 	}
 	e.lock.Unlock()
+	d.pos = 4
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
 	if has {
+		d.pos = 5
 		if oldAtom.atomos.isSpawnIdleAtomos() {
+			d.pos = 6
 			atom.deleteAtomLocal(false)
+			d.pos = 7
 			return oldAtom, NewErrorf(ErrAtomExists, "Atom exists, name=(%s),arg=(%v)", name, arg)
 		} else {
 			//// If exists and not running, release new and use old.
@@ -643,21 +675,28 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 			////	atom.atomos.mailbox.
 			////}
 
+			d.pos = 8
 			*oldAtom = *atom
 			atom = oldAtom
 		}
 	}
 	atom.count += 1
+	d.pos = 9
 
 	// Atom的Spawn逻辑。
 	atom.atomos.setSpawning()
+	d.pos = 10
 	err := atom.elementAtomSpawn(current, persistence, arg)
+	d.pos = 11
 	if err != nil {
+		d.pos = 12
 		atom.atomos.setHalt()
 		e.elementAtomRelease(atom)
+		d.pos = 13
 		return nil, err
 	}
 	atom.atomos.setWaiting()
+	d.pos = 14
 	return atom, nil
 }
 

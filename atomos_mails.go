@@ -91,34 +91,36 @@ type atomosMail struct {
 	// A channel used to block messaging goroutine, and return the result.
 	mailReply mailReply
 	waitCh    chan *mailReply
+
+	mutex sync.Mutex
 }
 
-// Atomos邮件内存池
-// Atomos Mails Pool
-var atomosMailsPool = sync.Pool{
-	New: func() interface{} {
-		return &atomosMail{
-			mailType:  0,
-			from:      nil,
-			name:      "",
-			arg:       nil,
-			mailReply: mailReply{},
-			waitCh:    nil,
-		}
-	},
-}
+//// Atomos邮件内存池
+//// Atomos Mails Pool
+//var atomosMailsPool = sync.Pool{
+//	New: func() interface{} {
+//		return &atomosMail{
+//			mailType:  0,
+//			from:      nil,
+//			name:      "",
+//			arg:       nil,
+//			mailReply: mailReply{},
+//			waitCh:    nil,
+//		}
+//	},
+//}
 
 // Construct and destruct of Mail may be in different part of code.
 
 func allocAtomosMail() *atomosMail {
-	am := atomosMailsPool.Get().(*atomosMail)
+	am := &atomosMail{}
 	am.mail = newMail(DefaultMailID, am)
 	return am
 }
 
 func deallocAtomosMail(am *atomosMail) {
 	delMail(am.mail)
-	atomosMailsPool.Put(am)
+	//atomosMailsPool.Put(am)
 }
 
 // 消息邮件
@@ -239,33 +241,44 @@ type mailReply struct {
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
 // has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
 func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
+	m.mutex.Lock()
+	waitCh := m.waitCh
+	m.waitCh = nil
+	m.mutex.Unlock()
+	if waitCh == nil {
+		return
+	}
+
 	m.mailReply.resp = resp
 	m.mailReply.err = err
-	if m.waitCh != nil {
-		m.waitCh <- &m.mailReply
-		m.waitCh = nil
-	} else {
-		// TODO: 可能会在Panic之后被设置成nil，然后又被继续返回，确认下panic之后的具体调用。
-		//panic("atomosMail: sendReply waitCh has been replied")
-	}
+	waitCh <- &m.mailReply
+	waitCh = nil
 }
 
 func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
+	m.mutex.Lock()
+	waitCh := m.waitCh
+	m.waitCh = nil
+	m.mutex.Unlock()
+	if waitCh == nil {
+		return
+	}
+
 	m.mailReply.id = id
 	m.mailReply.err = err
-	if m.waitCh != nil {
-		m.waitCh <- &m.mailReply
-		m.waitCh = nil
-	} else {
-		// TODO: 可能会在Panic之后被设置成nil，然后又被继续返回，确认下panic之后的具体调用。
-		//panic("atomosMail: sendReply waitCh has been replied")
-	}
+	waitCh <- &m.mailReply
 }
 
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
 func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
+	m.mutex.Lock()
+	waitCh := m.waitCh
+	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
-	reply := <-m.waitCh
+	if waitCh == nil {
+		return nil, NewErrorf(ErrFrameworkPanic, "no wait channel")
+	}
+	reply := <-waitCh
 	// Wait channel must be empty before delete a mail.
 	resp = reply.resp
 	err = reply.err
@@ -274,8 +287,16 @@ func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
 
 // TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
 func (m *atomosMail) waitReplyID() (id ID, err *ErrorInfo) {
+	m.mutex.Lock()
+	waitCh := m.waitCh
+	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
-	reply := <-m.waitCh
+	if waitCh == nil {
+		return nil, NewErrorf(ErrFrameworkPanic, "no wait channel")
+	}
+
+	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
+	reply := <-waitCh
 	// Wait channel must be empty before delete a mail.
 	id = reply.id
 	err = reply.err

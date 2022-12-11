@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"os"
-	"sync"
 )
 
 const defaultLogMailID = 0
@@ -16,13 +15,13 @@ type LoggingAtomos struct {
 	log *mailBox
 }
 
-// Log内存池
-// Log Mails Pool
-var logMailsPool = sync.Pool{
-	New: func() interface{} {
-		return &LogMail{}
-	},
-}
+//// Log内存池
+//// Log Mails Pool
+//var logMailsPool = sync.Pool{
+//	New: func() interface{} {
+//		return &LogMail{}
+//	},
+//}
 
 func NewLoggingAtomos() *LoggingAtomos {
 	m := &LoggingAtomos{}
@@ -58,7 +57,7 @@ func (c *LoggingAtomos) stop() {
 }
 
 func (c *LoggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
-	lm := logMailsPool.Get().(*LogMail)
+	lm := &LogMail{}
 	lm.Id = id
 	lm.Time = timestamppb.Now()
 	lm.Level = level
@@ -75,12 +74,15 @@ func (c *LoggingAtomos) pushLogging(id *IDInfo, level LogLevel, msg string) {
 func (c *LoggingAtomos) onLogMessage(mail *mail) {
 	lm := mail.Content.(*LogMail)
 	c.logging(lm)
-	logMailsPool.Put(lm)
+	//logMailsPool.Put(lm)
 	delMail(mail)
 }
 
 func (c *LoggingAtomos) onLogPanic(mail *mail, info *ErrorInfo) {
-	lm := mail.Content.(*LogMail)
+	lm, ok := mail.Content.(*LogMail)
+	if !ok {
+		return
+	}
 	var message string
 	if info != nil {
 		message = info.Message

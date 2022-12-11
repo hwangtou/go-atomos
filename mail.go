@@ -20,14 +20,14 @@ const (
 	MailActionExit = 1
 )
 
-var mailsPool = sync.Pool{
-	New: func() interface{} {
-		return &mail{}
-	},
-}
+//var mailsPool = sync.Pool{
+//	New: func() interface{} {
+//		return &mail{}
+//	},
+//}
 
 func newMail(id uint64, content interface{}) *mail {
-	m := mailsPool.Get().(*mail)
+	m := &mail{}
 	m.reset()
 	m.id = id
 	m.action = MailActionRun
@@ -43,7 +43,7 @@ func newExitMail(waitCh chan struct{}) *mail {
 }
 
 func delMail(m *mail) {
-	mailsPool.Put(m)
+	//mailsPool.Put(m)
 }
 
 func (m *mail) reset() {
@@ -76,16 +76,17 @@ type mailBox struct {
 	num     uint32
 }
 
-var mailBoxPool = sync.Pool{
-	New: func() interface{} {
-		b := &mailBox{}
-		b.cond = sync.NewCond(&b.mutex)
-		return b
-	},
-}
+//var mailBoxPool = sync.Pool{
+//	New: func() interface{} {
+//		b := &mailBox{}
+//		b.cond = sync.NewCond(&b.mutex)
+//		return b
+//	},
+//}
 
 func newMailBox(handler MailBoxHandler) *mailBox {
-	mb := mailBoxPool.Get().(*mailBox)
+	mb := &mailBox{}
+	mb.cond = sync.NewCond(&mb.mutex)
 	mb.running = false
 	mb.handler = handler
 	mb.head, mb.tail, mb.num = nil, nil, 0
@@ -103,7 +104,7 @@ func newMailBoxWithHandler(a *BaseAtomos) {
 
 func delMailBox(b *mailBox) {
 	b.reset()
-	mailBoxPool.Put(b)
+	//mailBoxPool.Put(b)
 }
 
 func (mb *mailBox) start() {

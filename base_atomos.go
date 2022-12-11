@@ -1,8 +1,10 @@
 package go_atomos
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
-	"sync"
+	"os"
+	"runtime/debug"
 	"time"
 )
 
@@ -79,16 +81,16 @@ type BaseAtomos struct {
 	curTime    time.Time
 }
 
-// Atom对象的内存池
-// Atom instance pools.
-var atomosPool = sync.Pool{
-	New: func() interface{} {
-		return &BaseAtomos{}
-	},
-}
+//// Atom对象的内存池
+//// Atom instance pools.
+//var atomosPool = sync.Pool{
+//	New: func() interface{} {
+//		return &BaseAtomos{}
+//	},
+//}
 
 func NewBaseAtomos(id *IDInfo, log *LoggingAtomos, lv LogLevel, holder AtomosHolder, inst Atomos, reloads int) *BaseAtomos {
-	a := atomosPool.Get().(*BaseAtomos)
+	a := &BaseAtomos{}
 	a.id = id
 	a.state = AtomosHalt
 	a.logging = log
@@ -110,9 +112,9 @@ func (a *BaseAtomos) DeleteAtomos(wait bool) {
 	} else {
 		a.mailbox.stop()
 	}
-	releaseAtomosTask(&a.task)
+	//releaseAtomosTask(&a.task)
 	releaseAtomosLog(&a.log)
-	atomosPool.Put(a)
+	//atomosPool.Put(a)
 }
 
 func (a *BaseAtomos) GetIDInfo() *IDInfo {
@@ -165,7 +167,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 		d.begin = time.Now()
 		l := a.log.logging
 		go func(d *debugger, l *LoggingAtomos) {
-			time.After(DebugAtomosTimeout)
+			<-time.After(DebugAtomosTimeout)
 			if !d.done && l != nil {
 				l.PushProcessLog(LogLevel_Warn, "Timeout: Message, message=(%s),args=(%v),debugger=(%v)",
 					d.name, d.args, d.pos)
@@ -173,6 +175,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 		}(d, l)
 
 		defer func() {
+			d.done = true
 			if time.Now().Sub(d.begin) > DebugAtomosTimeout {
 				l.PushProcessLog(LogLevel_Warn, "Timeout: Message Done, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
 			}
@@ -182,7 +185,6 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 	d.pos = 1
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		d.pos = 2
-		d.done = true
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args)
 	}
@@ -191,8 +193,11 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 
 	var replyInterface proto.Message
 	if ShouldQuitBlocking {
+		am.mutex.Lock()
+		waitCh := am.waitCh
+		am.mutex.Unlock()
 		select {
-		case r := <-am.waitCh:
+		case r := <-waitCh:
 			replyInterface, err = r.resp, r.err
 		case <-time.After(QuitBlockingTimeout):
 			a.Log().Warn("Timeout: Message Base, message=(%s),args=(%v)", d.name, d.args)
@@ -205,18 +210,15 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, args prot
 
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
-		d.done = true
 		return nil, err
 	}
 	reply, ok := replyInterface.(proto.Message)
 	if !ok {
 		//return reply, fmt.Errorf("Atom.Mail: Reply type error, name=%s,args=%+v,reply=%+v",
 		//	name, args, replyInterface)
-		d.done = true
 		return nil, err
 	}
 	d.pos = 5
-	d.done = true
 	return reply, err
 }
 
@@ -226,37 +228,59 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, args pro
 
 	d := &debugger{}
 	if IsDebug {
+		d.name = message
+		d.args = args
+		d.begin = time.Now()
 		go func(info, n string, m proto.Message, d *debugger, l *LoggingAtomos) {
-			time.After(DebugAtomosTimeout)
+			<-time.After(DebugAtomosTimeout)
 			if !d.done {
 				l.PushProcessLog(LogLevel_Warn, "Timeout: Scale, id=(%s),message=(%s),args=(%v),debugger=(%v)", info, n, m, d)
 			}
 		}(a.id.Info(), message, args, d, a.log.logging)
+
+		defer func() {
+			d.done = true
+			if time.Now().Sub(d.begin) > DebugAtomosTimeout {
+				a.log.logging.PushProcessLog(LogLevel_Warn, "Timeout: Scale Done, id=(%s),message=(%s),args=(%v),debugger=(%v)", a.id.Info(), message, args, d)
+			}
+		}()
 	}
 
+	d.pos = 1
 	if ok := a.mailbox.pushTail(am.mail); !ok {
+		d.pos = 2
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running, from=(%s),message=(%s),args=(%v)", from, message, args)
 	}
 
+	d.pos = 3
 	var id ID
 	var err *ErrorInfo
 	if ShouldQuitBlocking {
+		am.mutex.Lock()
+		waitCh := am.waitCh
+		am.mutex.Unlock()
 		select {
-		case r := <-am.waitCh:
+		case r := <-waitCh:
 			id, err = r.id, r.err
+			d.pos = 4
 		case <-time.After(QuitBlockingTimeout):
+			d.pos = 5
 			a.Log().Warn("Timeout: Scale Base, message=(%s),args=(%v)", d.name, d.args)
 			err = NewErrorf(ErrAtomosPushTimeout, "Atomos Scale Timeout, from=(%s),name=(%s),args=(%v)", from, message, args)
 		}
 	} else {
+		d.pos = 6
 		id, err = am.waitReplyID()
 	}
+	d.pos = 7
 
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
+		d.pos = 8
 		return nil, err
 	}
+	d.pos = 9
 	return id, err
 }
 
@@ -350,10 +374,14 @@ func (as AtomosState) String() string {
 // State of Atom
 
 func (a *BaseAtomos) isNotHalt() bool {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	return a.state > AtomosHalt
 }
 
 func (a *BaseAtomos) isSpawnIdleAtomos() bool {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	switch a.state {
 	case AtomosHalt:
 		return false
@@ -373,9 +401,13 @@ func (a *BaseAtomos) isSpawnIdleAtomos() bool {
 }
 
 func (a *BaseAtomos) GetState() AtomosState {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	return a.state
 }
 func (a *BaseAtomos) setSpawning() {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosSpawning
 	a.lastBusy = time.Now()
 	a.lastWait = time.Now()
@@ -383,21 +415,29 @@ func (a *BaseAtomos) setSpawning() {
 }
 
 func (a *BaseAtomos) setBusy() {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosBusy
 	a.lastWait = time.Now()
 }
 
 func (a *BaseAtomos) setWaiting() {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosWaiting
 	a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setStopping() {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosStopping
 	//a.lastBusy = time.Now()
 }
 
 func (a *BaseAtomos) setHalt() {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosHalt
 	a.lastStop = time.Now()
 }
@@ -451,6 +491,12 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 // 处理邮箱消息时发生的异常。
 // Handle mailbox panic while it is processing Mail.
 func (a *BaseAtomos) onPanic(mail *mail, err *ErrorInfo) {
+	defer func() {
+		if r := recover(); r != nil {
+			os.Stderr.WriteString(fmt.Sprintf("Atomos onPanic panic, mail=(%v),err=(%v),reason=(%v),debug=(%s)\n", mail, err, r, string(debug.Stack())))
+			return
+		}
+	}()
 	am, ok := mail.Content.(*atomosMail)
 	if !ok {
 		return

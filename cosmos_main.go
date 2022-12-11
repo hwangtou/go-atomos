@@ -158,6 +158,8 @@ func (c *CosmosMain) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
 }
 
 func (c *CosmosMain) getCallChain() []ID {
+	c.atomos.mailbox.mutex.Lock()
+	defer c.atomos.mailbox.mutex.Unlock()
 	return c.callChain
 }
 

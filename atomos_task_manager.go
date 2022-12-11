@@ -632,11 +632,18 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 		d.args = am.arg
 		d.begin = time.Now()
 		go func(d *debugger, l *LoggingAtomos) {
-			time.After(DebugAtomosTimeout)
+			<-time.After(DebugAtomosTimeout)
 			if !d.done {
 				l.PushProcessLog(LogLevel_Warn, "Timeout: Task, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
 			}
 		}(d, at.atomos.log.logging)
+
+		defer func() {
+			d.done = true
+			if time.Now().Sub(d.begin) > DebugAtomosTimeout {
+				at.atomos.log.logging.PushProcessLog(LogLevel_Warn, "Timeout: Task Done, message=(%s),args=(%v),debugger=(%v)", d.name, d.args, d.pos)
+			}
+		}()
 	}
 
 	method.Call(val)

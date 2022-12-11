@@ -8,7 +8,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"runtime"
 	"runtime/debug"
-	"sync"
 	"time"
 )
 
@@ -56,7 +55,7 @@ func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImp
 		Element: e.GetElementName(),
 		Atomos:  name,
 	}
-	a := atomLocalPool.Get().(*AtomLocal)
+	a := &AtomLocal{}
 	a.element = e
 	a.atomos = NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor(name), reloads)
 	//a.id = current.Interface.AtomIDConstructor(a)
@@ -70,16 +69,16 @@ func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImp
 
 func (a *AtomLocal) deleteAtomLocal(wait bool) {
 	a.atomos.DeleteAtomos(wait)
-	atomLocalPool.Put(a)
+	//atomLocalPool.Put(a)
 }
 
-// Atom对象的内存池
-// Atom instance pools.
-var atomLocalPool = sync.Pool{
-	New: func() interface{} {
-		return &AtomLocal{}
-	},
-}
+//// Atom对象的内存池
+//// Atom instance pools.
+//var atomLocalPool = sync.Pool{
+//	New: func() interface{} {
+//		return &AtomLocal{}
+//	},
+//}
 
 //
 // Implementation of ID
@@ -193,6 +192,8 @@ func (a *AtomLocal) IdleDuration() time.Duration {
 }
 
 func (a *AtomLocal) getCallChain() []ID {
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
 	return a.callChain
 }
 
@@ -295,20 +296,22 @@ func (a *AtomLocal) Task() Task {
 
 // Check chain.
 
-func (a *AtomLocal) checkCallChain(fromIDList []ID) bool {
+func (a *AtomLocal) tryAddCallChain(fromIDList []ID) bool {
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
+
 	for _, fromID := range fromIDList {
 		if fromID.GetIDInfo().IsEqual(a.GetIDInfo()) {
 			return false
 		}
 	}
+	a.callChain = append(fromIDList, a)
 	return true
 }
 
-func (a *AtomLocal) addCallChain(fromIDList []ID) {
-	a.callChain = append(fromIDList, a)
-}
-
 func (a *AtomLocal) delCallChain() {
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
 	a.callChain = nil
 }
 
@@ -330,11 +333,11 @@ func (a *AtomLocal) delCallChain() {
 func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
 	// Dead Lock Checker.
 	if from != nil {
-		if !a.checkCallChain(from.getCallChain()) {
+		chain := from.getCallChain()
+		if !a.tryAddCallChain(chain) {
 			return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-				from.getCallChain(), a, name, args)
+				chain, a, name, args)
 		}
-		a.addCallChain(from.getCallChain())
 		defer a.delCallChain()
 	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, args)

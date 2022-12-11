@@ -15,11 +15,11 @@ const (
 )
 
 const (
-	IsDebug            = true
-	DebugAtomosTimeout = 3 * time.Second
+	IsDebug            = false
+	DebugAtomosTimeout = 5 * time.Second
 )
 
 const (
 	ShouldQuitBlocking  = true
-	QuitBlockingTimeout = 5 * time.Second
+	QuitBlockingTimeout = 6 * time.Second
 )
