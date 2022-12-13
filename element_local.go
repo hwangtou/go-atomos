@@ -290,6 +290,18 @@ func (e *ElementLocal) GetAtomsNum() int {
 	return num
 }
 
+func (e *ElementLocal) GetActiveAtomsNum() int {
+	num := 0
+	e.lock.RLock()
+	for _, atomLocal := range e.atoms {
+		if atomLocal.State() > AtomosSpawning {
+			num += 1
+		}
+	}
+	e.lock.RUnlock()
+	return num
+}
+
 func (e *ElementLocal) SpawnAtom(name string, arg proto.Message) (*AtomLocal, *ErrorInfo) {
 	e.lock.RLock()
 	current := e.current

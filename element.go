@@ -35,6 +35,7 @@ type Element interface {
 	GetAtomID(atomName string) (ID, *ErrorInfo)
 
 	GetAtomsNum() int
+	GetActiveAtomsNum() int
 
 	// SpawnAtom
 	// 启动一个Atom。
