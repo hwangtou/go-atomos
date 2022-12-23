@@ -6,12 +6,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 )
 
 func (x *IDInfo) Info() string {
 	if x == nil {
-		return "InvalidAtomID"
+		return "UnknownID"
 	}
 	switch x.Type {
 	case IDType_Atomos:
@@ -34,45 +35,54 @@ func (x *IDInfo) IsEqual(r *IDInfo) bool {
 	return x.Atomos == r.Atomos && x.Element == r.Element && x.Cosmos == r.Cosmos
 }
 
-func NewError(code int64, message string) *ErrorInfo {
-	return &ErrorInfo{
-		Code:    code,
-		Message: message,
-		Stacks:  nil,
-	}
-}
-
-func NewErrorf(code int64, format string, args ...interface{}) *ErrorInfo {
-	return &ErrorInfo{
-		Code:    code,
-		Message: fmt.Sprintf(format, args...),
-		Stacks:  nil,
-	}
-}
-
-func (x *ErrorInfo) AddStack(id SelfID, file, recoverInfo string, line int, args proto.Message) {
-	// ID Info
-	var idInfo *IDInfo
+func SelfID2IDInfo(id SelfID) *IDInfo {
 	if id != nil && reflect.TypeOf(id).Kind() == reflect.Pointer && !reflect.ValueOf(id).IsNil() {
-		idInfo = id.GetIDInfo()
+		return id.GetIDInfo()
+	}
+	return nil
+}
+
+func NewError(code int64, message string) *Error {
+	return &Error{
+		Code:       code,
+		Message:    message,
+		CallStacks: nil,
+	}
+}
+
+func NewErrorf(code int64, format string, args ...interface{}) *Error {
+	return &Error{
+		Code:       code,
+		Message:    fmt.Sprintf(format, args...),
+		CallStacks: nil,
+	}
+}
+
+func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...proto.Message) *Error {
+	_, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		file, line = "???", 0
 	}
 	// Argument
-	var buf, jsonBuf []byte
-	if args != nil && reflect.TypeOf(args).Kind() == reflect.Pointer && !reflect.ValueOf(args).IsNil() {
-		buf, _ = proto.Marshal(args)
-		jsonBuf, _ = json.Marshal(args)
+	var argsBuf []string
+	for _, arg := range args {
+		if arg != nil && reflect.TypeOf(arg).Kind() == reflect.Pointer && !reflect.ValueOf(arg).IsNil() {
+			buf, _ := json.Marshal(arg)
+			argsBuf = append(argsBuf, string(buf))
+		}
 	}
-	x.Stacks = append(x.Stacks, &ErrorCallerInfo{
-		Id:       idInfo,
-		Reason:   recoverInfo,
-		File:     file,
-		Line:     uint32(line),
-		Args:     buf,
-		ArgsRead: string(jsonBuf),
+	x.CallStacks = append(x.CallStacks, &ErrorCallerInfo{
+		Id:          SelfID2IDInfo(id),
+		PanicStack:  string(debug.Stack()),
+		PanicReason: fmt.Sprintf("%v", reason),
+		File:        file,
+		Line:        uint32(line),
+		Args:        argsBuf,
 	})
+	return x
 }
 
-func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
+func (x *Error) AddStack(id SelfID, args ...proto.Message) *Error {
 	if x == nil {
 		return nil
 	}
@@ -80,32 +90,50 @@ func (x *ErrorInfo) AutoStack(id SelfID, args proto.Message) *ErrorInfo {
 	if !ok {
 		file, line = "???", 0
 	}
-	x.AddStack(id, file, "", line, args)
+	// Argument
+	var argsBuf []string
+	for _, arg := range args {
+		if arg != nil && reflect.TypeOf(arg).Kind() == reflect.Pointer && !reflect.ValueOf(arg).IsNil() {
+			buf, _ := json.Marshal(arg)
+			argsBuf = append(argsBuf, string(buf))
+		}
+	}
+	x.CallStacks = append(x.CallStacks, &ErrorCallerInfo{
+		Id:          SelfID2IDInfo(id),
+		PanicStack:  "",
+		PanicReason: "",
+		File:        file,
+		Line:        uint32(line),
+		Args:        argsBuf,
+	})
 	return x
 }
 
-func (x *ErrorInfo) Error() string {
+func (x *Error) Error() string {
 	if x == nil {
 		return ""
 	}
-	if len(x.Stacks) > 0 {
-		var stacks strings.Builder
-		n := len(x.Stacks)
-		for i, stack := range x.Stacks {
-			stacks.WriteString(fmt.Sprintf("Chain[%d] %s -> %s:%d\n", n-i-1, stack.Id.Info(), stack.File, stack.Line))
-			if stack.Reason != "" {
-				stacks.WriteString(fmt.Sprintf("\tRecover: %s\n", stack.Reason))
+	if len(x.CallStacks) > 0 {
+		var builder strings.Builder
+		n := len(x.CallStacks)
+		for i, stack := range x.CallStacks {
+			builder.WriteString(fmt.Sprintf("Stack[%d] %s -> %s:%d\n", n-i-1, stack.Id.Info(), stack.File, stack.Line))
+			if len(stack.Args) > 0 {
+				builder.WriteString(fmt.Sprintf("\tArguments: \n"))
+				for _, arg := range stack.Args {
+					builder.WriteString(fmt.Sprintf("\t\t%s\n", arg))
+				}
 			}
-			if stack.ArgsRead != "" {
-				stacks.WriteString(fmt.Sprintf("\tArguments: %s\n", stack.ArgsRead))
+			if stack.PanicReason != "" || stack.PanicStack != "" {
+				builder.WriteString(fmt.Sprintf("\tRecover: %s\n%s\n", stack.PanicReason, stack.PanicStack))
 			}
 		}
-		return fmt.Sprintf("[%v] %s\n%s", x.Code, x.Message, stacks.String())
+		return fmt.Sprintf("[%v] %s\n%s", x.Code, x.Message, builder.String())
 	}
 	return x.Message
 }
 
-func (x *ErrorInfo) IsAtomExist() bool {
+func (x *Error) IsAtomExist() bool {
 	return x.Code == ErrAtomExists
 }
 

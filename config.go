@@ -5,20 +5,6 @@ import (
 	"os"
 )
 
-func (x *Config) Check() *ErrorInfo {
-	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "No configuration")
-	}
-	if x.Node == "" {
-		return NewError(ErrCosmosConfigNodeNameInvalid, "Node name is empty")
-	}
-	if x.LogPath == "" {
-		return NewError(ErrCosmosConfigLogPathInvalid, "Log path is empty")
-	}
-	// TODO: Try open log file
-	return nil
-}
-
 type yamlConfig struct {
 	Node         string                  `yaml:"node"`
 	LogPath      string                  `yaml:"log_path"`
@@ -51,7 +37,7 @@ type yamlTelnetAdmin struct {
 	Password string `yaml:"password"`
 }
 
-func ConfigFromYaml(filepath string) (*Config, *ErrorInfo) {
+func ConfigFromYaml(filepath string) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err)

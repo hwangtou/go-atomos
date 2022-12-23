@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"time"
 )
 
 // Cosmos生命周期
@@ -15,29 +16,29 @@ type CosmosNode interface {
 
 	CosmosIsLocal() bool
 
-	CosmosGetElementID(elem string) (ID, *ErrorInfo)
+	CosmosGetElementID(elem string) (ID, *Error)
 
 	// GetElementAtomID
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the AtomID of an Atom by Element nodeName and Atom nodeName.
 
-	CosmosGetElementAtomID(elem, name string) (ID, *ErrorInfo)
+	CosmosGetElementAtomID(elem, name string) (ID, *IDTracker, *Error)
 
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
 
-	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *ErrorInfo)
+	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom/Element.
 
-	CosmosMessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	CosmosMessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
+	CosmosMessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 
-	CosmosScaleElementGetAtomID(fromID ID, elem, message string, args proto.Message) (ID ID, err *ErrorInfo)
+	CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, err *Error)
 }
 
 //////////////////////////////////////////////////
@@ -50,16 +51,24 @@ type CosmosRunnable struct {
 	interfaceOrder []*ElementInterface
 	implements     map[string]*ElementImplementation
 	implementOrder []*ElementImplementation
-	mainScript     Script
-	mainLogLevel   LogLevel
-	reloadScript   ReloadScript
+	mainScript     CosmosMainScript
 }
 
-// Script
-// Runnable相关入口脚本
-// Entrance script of runnable.
-type Script func(main *CosmosMain, killSignal chan bool)
-type ReloadScript func(main *CosmosMain)
+func (r *CosmosRunnable) Check() *Error {
+	if r.config == nil {
+		return NewError(ErrMainRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
+	}
+	if r.mainScript == nil {
+		return NewError(ErrMainRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
+	}
+	if r.interfaces == nil {
+		r.interfaces = map[string]*ElementInterface{}
+	}
+	if r.implements == nil {
+		r.implements = map[string]*ElementImplementation{}
+	}
+	return nil
+}
 
 func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
 	if r.interfaces == nil {
@@ -72,6 +81,7 @@ func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnabl
 	return r
 }
 
+// AddElementImplementation
 // CosmosRunnable构造器方法，用于添加Element。
 // Construct method of CosmosRunnable, uses to add Element.
 func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
@@ -91,14 +101,7 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 	return r
 }
 
-// CosmosRunnable构造器方法，用于设置Script。
-// Construct method of CosmosRunnable, uses to set Script.
-func (r *CosmosRunnable) SetScript(script Script) *CosmosRunnable {
+func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable {
 	r.mainScript = script
-	return r
-}
-
-func (r *CosmosRunnable) SetReloadScript(script ReloadScript) *CosmosRunnable {
-	r.reloadScript = script
 	return r
 }

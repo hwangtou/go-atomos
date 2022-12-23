@@ -33,7 +33,7 @@ enum LogLevel {
   Debug = 0;
   Info = 1;
   Warn = 2;
-  Error = 3;
+  Err = 3;
   Fatal = 4;
 }
 
@@ -44,21 +44,24 @@ message LogMail {
   string message = 4;
 }
 
-message ErrorInfo {
+// Error
+
+message Error {
   int64 code = 1;
   string message = 2;
-  string panic = 3;
-  repeated ErrorCallerInfo stacks = 4;
+  repeated ErrorCallerInfo call_stacks = 5;
 }
 
 message ErrorCallerInfo {
   IDInfo id = 1;
-  string reason = 2;
-  string file = 3;
-  uint32 line = 4;
-  bytes args = 5;
-  string args_read = 6;
+  string panic_stack = 2;
+  string panic_reason = 3;
+  string file = 4;
+  uint32 line = 5;
+  repeated string args = 6;
 }
+
+// Types
 
 message Nil {
 }

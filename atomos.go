@@ -13,10 +13,15 @@ type Atomos interface {
 	// Halt
 	// 关闭
 	Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message)
+}
 
-	// Reload
-	// 新的Atomos会收到调用，把旧的有用的东西转移到newInstance，旧的会被废弃。
-	Reload(oldInstance Atomos)
+type AtomosRecover interface {
+	ParallelRecover(err *Error)
+	SpawnRecover(arg proto.Message, err *Error)
+	MessageRecover(name string, arg proto.Message, err *Error)
+	ScaleRecover(name string, arg proto.Message, err *Error)
+	TaskRecover(taskID uint64, name string, arg proto.Message, err *Error)
+	StopRecover(err *Error)
 }
 
 type AtomosUtilities interface {

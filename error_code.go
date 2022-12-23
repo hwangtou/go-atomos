@@ -5,38 +5,39 @@ const (
 
 	ErrFrameworkPanic
 
-	ErrProcessRunnableInvalid
+	ErrCosmosProcessHasNotInitialized
+	ErrCosmosProcessHasBeenStarted
+	ErrCosmosProcessOnStartupPanic
+	ErrCosmosProcessOnShutdownPanic
+	ErrCosmosProcessCannotStopPrepareState
+	ErrCosmosProcessCannotStopStartupState
+	ErrCosmosProcessCannotStopShutdownState
+	ErrCosmosProcessCannotStopOffState
+	ErrCosmosProcessInvalidState
 
 	ErrMainLoadCertFailed
-	ErrMainCheckElementFailed
-	ErrMainRunnableNotFound
-	ErrMainIsReloading
 	ErrMainElementNotFound
-	ErrMainElementIsInvalid
 	ErrMainReloadFailed
 	ErrMainStartRunningPanic
 	ErrMainCannotKill
 	ErrMainCannotMessage
 	ErrMainCannotScale
+	ErrMainRunnableNotFound
+	ErrMainRunnableConfigNotFound
+	ErrMainRunnableScriptNotFound
 
 	ErrCosmosConfigInvalid
-	ErrCosmosConfigNodeNameInvalid
-	ErrCosmosConfigLogPathInvalid
 	ErrCosmosCertConfigInvalid
-	ErrCosmosHasAlreadyRun
-	ErrCosmosIsBusy
-	ErrCosmosIsClosed
 
 	ErrElementLoaded
-	ErrElementReloadInvalid
-	ErrElementMessageHandlerNotExists
 	ErrElementScaleHandlerNotExists
-	ErrElementMessageHandlerPanic
-	ErrElementKillHandlerPanic
-	ErrElementSpawnArgInvalid
-	ErrElementNotImplemented
+	ErrElementMessageHandlerNotExists
+	ErrElementMessageDecoderNotExists
+	ErrElementMessageReplyType
+	ErrElementCallDeadLock
+	ErrElementCannotKill
+	ErrElementNoFromID
 
-	ErrAtomosPanic
 	ErrAtomosIsStopping
 	ErrAtomosIsNotRunning
 	ErrAtomosTaskInvalidFn
@@ -45,24 +46,17 @@ const (
 	ErrAtomosPushTimeout
 
 	ErrAtomMessageHandlerNotExists
-	ErrAtomMessageHandlerPanic
-	ErrAtomKillHandlerPanic
+	ErrAtomMessageDecoderNotExists
 	ErrAtomKillElementNoImplement
 	ErrAtomKillElementNotImplementAutoDataPersistence
-	ErrAtomReloadInvalid
 	ErrAtomFromIDInvalid
 	ErrAtomToIDInvalid
 	ErrAtomSpawnArgInvalid
 	ErrAtomCallDeadLock
 	ErrAtomNotExists
 	ErrAtomExists
-	ErrAtomPersistenceRuntime
 	ErrAtomCannotScale
 
-	ErrAtomNotImplemented
-	ErrAtomMessageAtomType
 	ErrAtomMessageArgType
 	ErrAtomMessageReplyType
-
-	ErrElementCannotKill
 )

@@ -72,11 +72,11 @@ type HelloAtomID interface {
 }
 
 func GetHelloAtomID(c go_atomos.CosmosNode, name string) (HelloAtomID, *go_atomos.ErrorInfo) {
-	ca, err := c.CosmosGetElementAtomID(HelloName, name)
+	ca, tracker, err := c.CosmosGetElementAtomID(HelloName, name, go_atomos.NewIDTracker(2))
 	if err != nil {
 		return nil, err
 	}
-	return &helloAtomID{ca}, nil
+	return &helloAtomID{ca, tracker}, nil
 }
 
 // HelloElement is the atomos implements of Hello element.
@@ -111,11 +111,11 @@ type HelloAtom interface {
 }
 
 func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (HelloAtomID, *go_atomos.ErrorInfo) {
-	id, err := c.CosmosSpawnElementAtom(HelloName, name, arg)
+	id, tracker, err := c.CosmosSpawnElementAtom(HelloName, name, arg, go_atomos.NewIDTracker(2))
 	if id == nil {
-		return nil, err
+		return nil, err.AutoStack(nil, nil)
 	}
-	return &helloAtomID{id}, err
+	return &helloAtomID{id, tracker}, err
 }
 
 //////
@@ -165,6 +165,7 @@ func (c *helloElementID) ScaleBonjour(from go_atomos.ID, in *BonjourReq) (*Bonjo
 
 type helloAtomID struct {
 	go_atomos.ID
+	*go_atomos.IDTracker
 }
 
 func (c *helloAtomID) Bonjour(from go_atomos.ID, in *BonjourReq) (*BonjourResp, *go_atomos.ErrorInfo) {

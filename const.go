@@ -1,7 +1,5 @@
 package go_atomos
 
-import "time"
-
 // LoggingAtomos
 const (
 	logTimeFmt = "2006-01-02 15:04:05.000000"
@@ -15,11 +13,7 @@ const (
 )
 
 const (
-	IsDebug            = false
-	DebugAtomosTimeout = 5 * time.Second
-)
+	IsDebug = false
 
-const (
-	ShouldQuitBlocking  = true
-	QuitBlockingTimeout = 6 * time.Second
+	ShouldArgumentClone = false
 )
