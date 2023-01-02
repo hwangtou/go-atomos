@@ -67,7 +67,7 @@ type TestAtomosInstance struct {
 	reload int
 }
 
-func (t *TestAtomosInstance) Description() string {
+func (t *TestAtomosInstance) String() string {
 	return "Description"
 }
 

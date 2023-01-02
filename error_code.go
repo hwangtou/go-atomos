@@ -29,6 +29,13 @@ const (
 	ErrCosmosConfigInvalid
 	ErrCosmosCertConfigInvalid
 
+	ErrAtomosIsStopping
+	ErrAtomosIsNotRunning
+	ErrAtomosTaskInvalidFn
+	ErrAtomosTaskNotExists
+	ErrAtomosNotSupportWormhole
+	ErrAtomosPushTimeout
+
 	ErrElementLoaded
 	ErrElementScaleHandlerNotExists
 	ErrElementMessageHandlerNotExists
@@ -37,13 +44,6 @@ const (
 	ErrElementCallDeadLock
 	ErrElementCannotKill
 	ErrElementNoFromID
-
-	ErrAtomosIsStopping
-	ErrAtomosIsNotRunning
-	ErrAtomosTaskInvalidFn
-	ErrAtomosTaskNotExists
-	ErrAtomosNotSupportWormhole
-	ErrAtomosPushTimeout
 
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageDecoderNotExists
@@ -55,7 +55,9 @@ const (
 	ErrAtomCallDeadLock
 	ErrAtomNotExists
 	ErrAtomExists
+	ErrAtomIsStopping
 	ErrAtomCannotScale
+	ErrAtomNoFromID
 
 	ErrAtomMessageArgType
 	ErrAtomMessageReplyType

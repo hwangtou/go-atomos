@@ -150,7 +150,12 @@ func (e *ElementLocal) SendWormhole(from ID, timeout time.Duration, wormhole Ato
 func (e *ElementLocal) getCallChain() []ID {
 	e.atomos.mailbox.mutex.Lock()
 	defer e.atomos.mailbox.mutex.Unlock()
-	return e.callChain
+	idList := make([]ID, 0, len(e.callChain)+1)
+	for _, id := range e.callChain {
+		idList = append(idList, id)
+	}
+	idList = append(idList, e)
+	return idList
 }
 
 func (e *ElementLocal) getElementLocal() *ElementLocal {
@@ -355,9 +360,7 @@ func (e *ElementLocal) setMessageAndCallChain(fromID ID) *Error {
 	if e.callChain != nil {
 		return NewError(ErrFrameworkPanic, "OnMessage set chain meets non nil chain.").AddStack(e)
 	}
-	fromChain := fromID.getCallChain()
-	e.callChain = fromChain
-	e.callChain = append(e.callChain, e)
+	e.callChain = fromID.getCallChain()
 	return nil
 }
 
@@ -377,12 +380,13 @@ func (e *ElementLocal) unsetMessageAndCallChain() {
 func (e *ElementLocal) pushMessageMail(from ID, name string, timeout time.Duration, arg proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
 	// OnMessaging处理消息的时候，才做addChain操作
-	if from != nil {
-		fromChain := from.getCallChain()
-		if e.isInChain(fromChain) {
-			return reply, NewErrorf(ErrElementCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
-				fromChain, e, name, arg).AddStack(e)
-		}
+	if from == nil {
+		return nil, NewError(ErrElementNoFromID, "Element: No fromID.").AddStack(e)
+	}
+	fromChain := from.getCallChain()
+	if e.isInChain(fromChain) {
+		return reply, NewErrorf(ErrElementCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+			fromChain, e, name, arg).AddStack(e)
 	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
 }
@@ -509,7 +513,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	}
 	if err = elemPersistence.SetElementData(data); err != nil {
 		e.Log().Error("Element: Save data failed, set atom data error. id=(%s),instance=(%+v),err=(%s)",
-			e.GetIDInfo(), e.atomos.Description(), err)
+			e.GetIDInfo(), e.atomos.String(), err)
 		goto autoLoad
 	}
 autoLoad:
@@ -520,7 +524,7 @@ autoLoad:
 	}
 	if err = pa.Unload(); err != nil {
 		e.Log().Error("Element: Unload failed. id=(%s),instance=(%+v),err=(%s)",
-			e.GetIDInfo(), e.atomos.Description(), err)
+			e.GetIDInfo(), e.atomos.String(), err)
 		return err
 	}
 	return err
@@ -602,16 +606,24 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
 			atom.deleteAtomLocal(false)
-			return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists, name=(%s)", name).AddStack(oldAtom, arg)
+			if oldAtom.atomos.state < AtomosStopping {
+				return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
+			} else {
+				return nil, nil, NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. name=(%s)", name).AddStack(oldAtom, arg)
+			}
 		}
 		atom.messageTracker, atom.idTracker = oldAtom.messageTracker, oldAtom.idTracker
+		lock := &oldAtom.atomos.mailbox.mutex
 		*oldAtom = *atom
-		oldAtom.atomos.mailbox.mutex.Unlock()
+		lock.Unlock()
 		atom = oldAtom
 	}
 
 	// Atom的Spawn逻辑。
 	atom.atomos.setSpawning()
+	if e.main.runnable.hookAtomSpawning != nil {
+		e.main.runnable.hookAtomSpawning(e.atomos.id.Element, name)
+	}
 	err := atom.elementAtomSpawn(current, persistence, arg)
 	if err != nil {
 		atom.atomos.setHalt()
@@ -623,9 +635,6 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 }
 
 func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {
-	if tracker == nil {
-		return
-	}
 	atom.idTracker.Release(tracker)
 	if atom.atomos.isNotHalt() {
 		return

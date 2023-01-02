@@ -8,7 +8,7 @@ import "google.golang.org/protobuf/proto"
 // Atomos
 // Atomos类型
 type Atomos interface {
-	Description() string
+	String() string
 
 	// Halt
 	// 关闭

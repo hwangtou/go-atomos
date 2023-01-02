@@ -52,7 +52,14 @@ type CosmosRunnable struct {
 	implements     map[string]*ElementImplementation
 	implementOrder []*ElementImplementation
 	mainScript     CosmosMainScript
+
+	hookAtomSpawning hookAtomFn
+	hookAtomSpawn    hookAtomFn
+	hookAtomStopping hookAtomFn
+	hookAtomHalt     hookAtomFn
 }
+
+type hookAtomFn func(elem string, name string)
 
 func (r *CosmosRunnable) Check() *Error {
 	if r.config == nil {

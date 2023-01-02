@@ -100,7 +100,7 @@ func (c *CosmosMain) GetIDInfo() *IDInfo {
 }
 
 func (c *CosmosMain) String() string {
-	return c.atomos.Description()
+	return c.atomos.String()
 }
 
 //func (c *CosmosMain) Release() {
@@ -141,7 +141,12 @@ func (c *CosmosMain) SendWormhole(from ID, timeout time.Duration, wormhole Atomo
 func (c *CosmosMain) getCallChain() []ID {
 	c.atomos.mailbox.mutex.Lock()
 	defer c.atomos.mailbox.mutex.Unlock()
-	return c.callChain
+	idList := make([]ID, 0, len(c.callChain)+1)
+	for _, id := range c.callChain {
+		idList = append(idList, id)
+	}
+	idList = append(idList, c)
+	return idList
 }
 
 func (c *CosmosMain) getElementLocal() *ElementLocal {

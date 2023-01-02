@@ -105,10 +105,6 @@ func (a *BaseAtomos) GetInstance() Atomos {
 	return a.instance
 }
 
-func (a *BaseAtomos) Description() string {
-	return a.instance.Description()
-}
-
 func (a *BaseAtomos) Log() Logging {
 	return &a.log
 }
@@ -123,7 +119,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, timeout t
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
-			"Atomos is not running, from=(%s),name=(%s),args=(%v)", from, name, args).AddStack(nil)
+			"Atomos is not running. from=(%s),name=(%s),args=(%v)", from, name, args).AddStack(nil)
 	}
 	replyInterface, err := am.waitReply(timeout)
 
@@ -144,7 +140,7 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout 
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
-			"Atomos is not running, from=(%s),message=(%s),args=(%v)", from, message, args).AddStack(nil)
+			"Atomos is not running. from=(%s),message=(%s),args=(%v)", from, message, args).AddStack(nil)
 	}
 	id, err := am.waitReplyID(timeout)
 
@@ -160,7 +156,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool, timeout time.D
 	initKillMail(am, from)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),wait=(%v)", from, wait)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
 	}
 	if wait {
 		_, err = am.waitReply(timeout)
@@ -174,7 +170,7 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, timeout time.Duration
 	initWormholeMail(am, from, wormhole)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running, from=(%s),wormhole=(%v)", from, wormhole)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole)
 	}
 	_, err = am.waitReply(timeout)
 
@@ -295,6 +291,7 @@ func (a *BaseAtomos) setHalt() {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosHalt
+	a.holder.Halted()
 }
 
 // Mailbox
@@ -304,7 +301,7 @@ func (a *BaseAtomos) setHalt() {
 func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.Content.(*atomosMail)
 	if !a.IsInState(AtomosWaiting) {
-		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status, atomos=(%v),mail=(%v)",
+		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),mail=(%v)",
 			a, mail)
 	}
 	switch am.mailType {
@@ -322,8 +319,9 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		}
 	case MailTask:
 		{
-			a.setBusy(am.name)
-			defer a.setWaiting(am.name)
+			name := "Task-" + am.name
+			a.setBusy(name)
+			defer a.setWaiting(name)
 
 			a.task.handleTask(am)
 			// Mail dealloc in atomosTaskManager.handleTask and cancels.
@@ -339,8 +337,9 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 		}
 	case MailScale:
 		{
-			a.setBusy(am.name)
-			defer a.setWaiting(am.name)
+			name := "Scale-" + am.name
+			a.setBusy(name)
+			defer a.setWaiting(name)
 
 			id, err := a.holder.OnScaling(am.from, am.name, am.arg)
 			am.sendReplyID(id, err)
@@ -357,8 +356,16 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
-	if !a.IsInState(AtomosWaiting) {
-		SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets non-waiting status, atomos=(%v)", a)
+	state := a.GetState()
+	if state == AtomosHalt {
+		if a.mailbox.running {
+			SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets halted but mailbox running status. atomos=(%v)", a)
+			a.mailbox.stop()
+		}
+		return
+	}
+	if state != AtomosWaiting {
+		SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. atomos=(%v)", a)
 	}
 
 	a.setStopping()
@@ -378,7 +385,7 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
 		func(remainMail *mail) {
-			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping, mail=(%+v)", remainMail).AddStack(nil)
+			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%+v)", remainMail).AddStack(nil)
 			remainAtomMail := remainMail.Content.(*atomosMail)
 			//defer deallocAtomosMail(remainAtomMail)
 			switch remainAtomMail.mailType {
@@ -392,7 +399,7 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 				// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 				// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 				// but it's impossible to add task after locking.
-				a.log.Fatal("Atomos: Stopping task mails have been sent after start closing, id=(%s),mail=(%+v)", a.String(), remainMail)
+				a.log.Fatal("Atomos: Stopping task mails have been sent after start closing. id=(%s),mail=(%+v)", a.String(), remainMail)
 				t, err := a.task.cancelTask(remainMail.id, nil)
 				if err == nil {
 					cancels[remainMail.id] = t
@@ -402,7 +409,7 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 				remainAtomMail.sendReply(nil, err)
 				// Mail dealloc in AtomCore.pushWormholeMail.
 			default:
-				a.log.Fatal("Atomos: Stopping unknown message type, type=%v,mail=%+v",
+				a.log.Fatal("Atomos: Stopping unknown message type. type=%v,mail=%+v",
 					remainAtomMail.mailType, remainAtomMail)
 			}
 		}(remainMail)

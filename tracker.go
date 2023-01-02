@@ -45,6 +45,9 @@ func (i *IDTrackerManager) NewTracker(skip int) *IDTracker {
 }
 
 func (i *IDTrackerManager) Release(tracker *IDTracker) {
+	if tracker == nil {
+		return
+	}
 	i.Lock()
 	delete(i.idMap, tracker.id)
 	i.Unlock()
@@ -151,4 +154,8 @@ type MessageTrackInfo struct {
 
 	Min, Max, Total time.Duration
 	Count           int
+}
+
+func (m MessageTrackInfo) String() string {
+	return fmt.Sprintf("count=(%d),min=(%v),max=(%v),total=(%v)", m.Count, m.Min, m.Max, m.Total)
 }

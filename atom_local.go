@@ -152,7 +152,12 @@ func (a *AtomLocal) SendWormhole(from ID, timeout time.Duration, wormhole Atomos
 func (a *AtomLocal) getCallChain() []ID {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
-	return a.callChain
+	idList := make([]ID, 0, len(a.callChain)+1)
+	for _, id := range a.callChain {
+		idList = append(idList, id)
+	}
+	idList = append(idList, a)
+	return idList
 }
 
 func (a *AtomLocal) getElementLocal() *ElementLocal {
@@ -193,6 +198,10 @@ func (a *AtomLocal) Parallel(fn func()) {
 			if r := recover(); r != nil {
 				err := NewErrorf(ErrFrameworkPanic, "Atom: Parallel recovers from panic.").AddPanicStack(a, 3, r)
 				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Parallel recovers from panic. err=(%v)", err)
+					}()
 					ar.ParallelRecover(err)
 				} else {
 					a.Log().Fatal("Atom: Parallel recovers from panic. err=(%v)", err)
@@ -267,14 +276,15 @@ func (a *AtomLocal) isInChain(fromIDList []ID) bool {
 }
 
 func (a *AtomLocal) setMessageAndCallChain(fromID ID, message string) *Error {
+	if fromID == nil {
+		return NewError(ErrAtomNoFromID, "Element: No fromID.").AddStack(a)
+	}
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
 	if a.callChain != nil {
 		return NewError(ErrFrameworkPanic, "OnMessage set chain meets non nil chain.").AddStack(a)
 	}
-	fromChain := fromID.getCallChain()
-	a.callChain = fromChain
-	a.callChain = append(a.callChain, a)
+	a.callChain = fromID.getCallChain()
 	return nil
 }
 
@@ -298,12 +308,13 @@ func (a *AtomLocal) unsetMessageAndCallChain(message string) {
 func (a *AtomLocal) pushMessageMail(from ID, name string, timeout time.Duration, arg proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
 	// OnMessaging处理消息的时候，才做addChain操作
-	if from != nil {
-		fromChain := from.getCallChain()
-		if a.isInChain(fromChain) {
-			return reply, NewErrorf(ErrAtomCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
-				fromChain, a, name, arg).AddStack(a)
-		}
+	if from == nil {
+		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(a)
+	}
+	fromChain := from.getCallChain()
+	if a.isInChain(fromChain) {
+		return reply, NewErrorf(ErrAtomCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+			fromChain, a, name, arg).AddStack(a)
 	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
 }
@@ -324,6 +335,10 @@ func (a *AtomLocal) OnMessaging(from ID, name string, arg proto.Message) (reply 
 				if err == nil {
 					err = NewErrorf(ErrFrameworkPanic, "Atom: Messaging recovers from panic.").AddPanicStack(a, 3, r)
 					if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+						defer func() {
+							recover()
+							a.Log().Fatal("Atom: Messaging recovers from panic. err=(%v)", err)
+						}()
 						ar.MessageRecover(name, arg, err)
 					}
 				}
@@ -356,18 +371,24 @@ func (a *AtomLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *Err
 // Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
 func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
+	var save bool
+	var data proto.Message
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
-				err = NewErrorf(ErrFrameworkPanic, "Atom: Stopping recovers from panic.").AddPanicStack(a, 3, r)
+				err = NewErrorf(ErrFrameworkPanic, "Atom: Stopping recovers from panic.").AddPanicStack(a, 3, r, data)
 				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Stopping recovers from panic. err=(%v)", err)
+					}()
 					ar.StopRecover(err)
 				}
 			}
 		}
 		a.element.elementAtomStopping(a)
 	}()
-	save, data := a.atomos.GetInstance().Halt(from, cancelled)
+	save, data = a.atomos.GetInstance().Halt(from, cancelled)
 	if !save {
 		return nil
 	}
@@ -388,7 +409,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	if err = atomPersistence.SetAtomData(a.GetName(), data); err != nil {
-		return err.AddStack(a)
+		return err.AddStack(a, data)
 	}
 	return err
 }
@@ -408,6 +429,9 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 
 func (a *AtomLocal) Spawn() {
 	a.messageTracker.Start()
+	if a.element.main.runnable.hookAtomSpawn != nil {
+		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
 }
 
 func (a *AtomLocal) Set(message string) {
@@ -420,10 +444,16 @@ func (a *AtomLocal) Unset(message string) {
 
 func (a *AtomLocal) Stopping() {
 	a.messageTracker.Stopping()
+	if a.element.main.runnable.hookAtomStopping != nil {
+		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
 }
 
 func (a *AtomLocal) Halted() {
 	a.messageTracker.Halt()
+	if a.element.main.runnable.hookAtomHalt != nil {
+		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
 }
 
 func (a *AtomLocal) GetMessagingInfo() map[string]MessageTrackInfo {
@@ -440,6 +470,10 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 			if err == nil {
 				err = NewErrorf(ErrFrameworkPanic, "Atom: Spawn recovers from panic.").AddPanicStack(a, 3, r)
 				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Spawn recovers from panic. err=(%v)", err)
+					}()
 					ar.SpawnRecover(arg, err)
 				}
 			}

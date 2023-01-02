@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-var testElem *ElementLocal
-
 func TestElementLocal(t *testing.T) {
 	initTestFakeCosmosProcess(t)
 	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t)); err != nil {
@@ -103,7 +101,6 @@ func TestElementLocal(t *testing.T) {
 	t.Logf("PushMessage: Message succeed. reply=(%v),err=(%v)", reply, err)
 
 	// Push Deadlock Message.
-	elem.callChain = append(elem.callChain, elem)
 	reply, err = elem.pushMessageMail(elem, "testDeadLoop", 0, nil)
 	if err == nil {
 		t.Errorf("PushMessage: TestDeadLoop Failed. state=(%d),callChain=(%v)", elem.atomos.GetState(), elem.callChain)
