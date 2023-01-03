@@ -39,7 +39,7 @@ func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 		log:    lm,
 	}
 	if ok := c.logBox.pushTail(m); !ok {
-		c.errorLog(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg))
+		c.errorLog(fmt.Sprintf("LoggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)", id, level, msg))
 	}
 }
 

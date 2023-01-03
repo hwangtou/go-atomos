@@ -17,7 +17,6 @@ const (
 
 	ErrMainLoadCertFailed
 	ErrMainElementNotFound
-	ErrMainReloadFailed
 	ErrMainStartRunningPanic
 	ErrMainCannotKill
 	ErrMainCannotMessage
