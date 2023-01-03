@@ -83,6 +83,8 @@ type atomosMail struct {
 	mailReply mailReply
 	waitCh    chan *mailReply
 
+	executeStop bool
+
 	mutex sync.Mutex
 }
 
@@ -90,7 +92,7 @@ type atomosMail struct {
 
 func allocAtomosMail() *atomosMail {
 	am := &atomosMail{}
-	am.mail = newMail(DefaultMailID, am)
+	am.mail = &mail{mail: am}
 	return am
 }
 
@@ -117,6 +119,7 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	}
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -136,6 +139,7 @@ func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	}
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -151,6 +155,7 @@ func initTaskMail(am *atomosMail, taskID uint64, name string, arg proto.Message)
 	am.arg = arg
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -165,12 +170,13 @@ func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
 	am.arg = nil
 	am.wormhole = wormhole
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 // 终止邮件
 // Stopping Mail
-func initKillMail(am *atomosMail, from ID) {
+func initKillMail(am *atomosMail, from ID, executeStop bool) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
@@ -178,6 +184,7 @@ func initKillMail(am *atomosMail, from ID) {
 	am.name = ""
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = executeStop
 	am.waitCh = make(chan *mailReply, 1)
 }
 

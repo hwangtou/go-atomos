@@ -548,14 +548,9 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (cancel Cancel
 		err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
 		return cancel, err
 	}
-	am, ok := m.Content.(*atomosMail)
-	if !ok {
-		err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a task timer but its mail is invalid, task=(%+v)", t).AddStack(nil)
-		return cancel, err
-	}
 	cancel.ID = id
-	cancel.Name = am.name
-	cancel.Arg = am.arg
+	cancel.Name = m.mail.name
+	cancel.Arg = m.mail.arg
 	return cancel, nil
 }
 
@@ -568,7 +563,13 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 			if err == nil {
 				err = NewErrorf(ErrFrameworkPanic, "AtomosTask: Task recovers from panic.").AddPanicStack(nil, 2, r)
 				if ar, ok := at.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
+					}()
 					ar.TaskRecover(am.id, am.name, am.arg, err)
+				} else {
+					at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
 				}
 			}
 		}

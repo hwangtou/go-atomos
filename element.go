@@ -64,6 +64,11 @@ type ElementCustomizeLogLevel interface {
 	GetElementLogLevel() LogLevel
 }
 
+type ElementCustomizeExit interface {
+	StopTimeout() time.Duration
+	StopGap() time.Duration
+}
+
 type ElementCustomizeAutoDataPersistence interface {
 	// AtomAutoDataPersistence
 	// 数据持久化助手

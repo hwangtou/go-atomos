@@ -67,10 +67,6 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	return a
 }
 
-func (a *AtomLocal) deleteAtomLocal(wait bool) {
-	a.atomos.DeleteAtomos(wait)
-}
-
 //
 // Implementation of ID
 //
@@ -313,7 +309,7 @@ func (a *AtomLocal) pushMessageMail(from ID, name string, timeout time.Duration,
 	}
 	fromChain := from.getCallChain()
 	if a.isInChain(fromChain) {
-		return reply, NewErrorf(ErrAtomCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+		return reply, NewErrorf(ErrAtomosCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
 			fromChain, a, name, arg).AddStack(a)
 	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
@@ -340,6 +336,8 @@ func (a *AtomLocal) OnMessaging(from ID, name string, arg proto.Message) (reply 
 							a.Log().Fatal("Atom: Messaging recovers from panic. err=(%v)", err)
 						}()
 						ar.MessageRecover(name, arg, err)
+					} else {
+						a.Log().Fatal("Atom: Messaging recovers from panic. err=(%v)", err)
 					}
 				}
 			}
@@ -361,10 +359,10 @@ func (a *AtomLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *Err
 	if from != nil && wait {
 		fromChain := from.getCallChain()
 		if a.isInChain(fromChain) {
-			return NewErrorf(ErrAtomCallDeadLock, "Atom: Kill Deadlock. chain=(%v),to(%s)", fromChain, a).AddStack(a)
+			return NewErrorf(ErrAtomosCallDeadLock, "Atom: Kill Deadlock. chain=(%v),to(%s)", fromChain, a).AddStack(a)
 		}
 	}
-	return a.atomos.PushKillMailAndWaitReply(from, wait, timeout)
+	return a.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
@@ -383,6 +381,8 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 						a.Log().Fatal("Atom: Stopping recovers from panic. err=(%v)", err)
 					}()
 					ar.StopRecover(err)
+				} else {
+					a.Log().Fatal("Atom: Stopping recovers from panic. err=(%v)", err)
 				}
 			}
 		}
@@ -475,6 +475,8 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 						a.Log().Fatal("Atom: Spawn recovers from panic. err=(%v)", err)
 					}()
 					ar.SpawnRecover(arg, err)
+				} else {
+
 				}
 			}
 		}

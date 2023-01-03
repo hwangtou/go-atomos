@@ -174,11 +174,7 @@ func (c *CosmosMain) CosmosMain() *CosmosMain {
 // KillSelf
 // Atom kill itself from inner
 func (c *CosmosMain) KillSelf() {
-	if err := c.pushKillMail(c, false, 0); err != nil {
-		c.Log().Error("Cosmos: KillSelf failed. err=%v", err)
-		return
-	}
-	c.Log().Info("Cosmos: KillSelf.")
+	c.Log().Info("Cosmos: Cannot KillSelf.")
 }
 
 func (c *CosmosMain) Parallel(fn func()) {
@@ -187,6 +183,10 @@ func (c *CosmosMain) Parallel(fn func()) {
 			if r := recover(); r != nil {
 				err := NewErrorf(ErrFrameworkPanic, "Cosmos: Parallel recovers from panic.").AddPanicStack(c, 3, r)
 				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						c.Log().Fatal("Cosmos: Parallel recovers from panic. err=(%v)", err)
+					}()
 					ar.ParallelRecover(err)
 				} else {
 					c.Log().Fatal("Cosmos: Parallel recovers from panic. err=(%v)", err)
@@ -287,7 +287,7 @@ func (c *CosmosMain) OnMessaging(from ID, name string, args proto.Message) (repl
 }
 
 func (c *CosmosMain) pushKillMail(from ID, wait bool, timeout time.Duration) *Error {
-	return c.atomos.PushKillMailAndWaitReply(from, wait, timeout)
+	return c.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)
 }
 
 func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
@@ -387,6 +387,10 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 				if r := recover(); r != nil {
 					err := NewErrorf(ErrMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)
 					if ar, ok := c.atomos.instance.(AtomosRecover); ok {
+						defer func() {
+							recover()
+							c.Log().Fatal("Cosmos: StartRunning recovers from panic. err=(%v)", err)
+						}()
 						ar.ParallelRecover(err)
 					} else {
 						c.Log().Fatal("Cosmos: StartRunning recovers from panic. err=(%v)", err)
@@ -403,9 +407,15 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
-				err = NewErrorf(ErrFrameworkPanic, "Cosmos: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
+				err = NewErrorf(ErrFrameworkPanic, "Element: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
 				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						c.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
+					}()
 					ar.SpawnRecover(nil, err)
+				} else {
+					c.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
 				}
 			}
 		}

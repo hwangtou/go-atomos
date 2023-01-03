@@ -74,7 +74,7 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos) *B
 		task:     atomosTaskManager{},
 		log:      atomosLoggingManager{},
 	}
-	a.mailbox = newMailBox(MailBoxHandler{
+	a.mailbox = newMailBox(id.Info(), MailBoxHandler{
 		OnReceive: a.onReceive,
 		OnStop:    a.onStop,
 	})
@@ -83,14 +83,6 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos) *B
 	a.mailbox.start()
 	a.state = AtomosWaiting
 	return a
-}
-
-func (a *BaseAtomos) DeleteAtomos(wait bool) {
-	if wait {
-		a.mailbox.waitStop()
-	} else {
-		a.mailbox.stop()
-	}
 }
 
 func (a *BaseAtomos) GetIDInfo() *IDInfo {
@@ -151,9 +143,9 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout 
 	return id, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait bool, timeout time.Duration) (err *Error) {
+func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait, executeStop bool, timeout time.Duration) (err *Error) {
 	am := allocAtomosMail()
-	initKillMail(am, from)
+	initKillMail(am, from, executeStop)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
@@ -299,7 +291,7 @@ func (a *BaseAtomos) setHalt() {
 // 处理邮箱消息。
 // Handle mailbox messages.
 func (a *BaseAtomos) onReceive(mail *mail) {
-	am := mail.Content.(*atomosMail)
+	am := mail.mail
 	if !a.IsInState(AtomosWaiting) {
 		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),mail=(%v)",
 			a, mail)
@@ -360,7 +352,6 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	if state == AtomosHalt {
 		if a.mailbox.running {
 			SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets halted but mailbox running status. atomos=(%v)", a)
-			a.mailbox.stop()
 		}
 		return
 	}
@@ -375,18 +366,23 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 		if r := recover(); r != nil {
 			err := NewErrorf(ErrFrameworkPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
 			if ar, ok := a.instance.(AtomosRecover); ok {
+				defer func() {
+					recover()
+					a.Log().Fatal("Atomos: Stopping recovers from panic. err=(%v)", err)
+				}()
 				ar.StopRecover(err)
+			} else {
+				a.Log().Fatal("Atomos: Stopping recovers from panic. err=(%v)", err)
 			}
 		}
 	}()
 
-	killAtomMail, ok := killMail.Content.(*atomosMail)
 	//defer deallocAtomosMail(killAtomMail)
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
 		func(remainMail *mail) {
 			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%+v)", remainMail).AddStack(nil)
-			remainAtomMail := remainMail.Content.(*atomosMail)
+			remainAtomMail := remainMail.mail
 			//defer deallocAtomosMail(remainAtomMail)
 			switch remainAtomMail.mailType {
 			case MailHalt:
@@ -416,8 +412,6 @@ func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
 	}
 
 	// Handle Kill and Reply Kill.
-	if ok {
-		err := a.holder.OnStopping(killAtomMail.from, cancels)
-		killAtomMail.sendReply(nil, err)
-	}
+	err := a.holder.OnStopping(killMail.mail.from, cancels)
+	killMail.mail.sendReply(nil, err)
 }

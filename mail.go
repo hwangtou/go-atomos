@@ -8,10 +8,12 @@ import (
 // Mail
 
 type mail struct {
-	next    *mail
-	id      uint64
-	action  MailAction
-	Content interface{}
+	next   *mail
+	id     uint64
+	action MailAction
+
+	mail *atomosMail
+	log  *LogMail
 }
 
 type MailAction int
@@ -20,25 +22,6 @@ const (
 	MailActionRun  = 0
 	MailActionExit = 1
 )
-
-func newMail(id uint64, content interface{}) *mail {
-	m := &mail{
-		next:    nil,
-		id:      id,
-		action:  MailActionRun,
-		Content: content,
-	}
-	return m
-}
-
-func newExitMail(waitCh chan struct{}) *mail {
-	return &mail{
-		next:    nil,
-		id:      0,
-		action:  MailActionExit,
-		Content: waitCh,
-	}
-}
 
 // Mail Box
 
@@ -51,6 +34,7 @@ type MailBoxHandler struct {
 }
 
 type mailBox struct {
+	name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
@@ -60,8 +44,9 @@ type mailBox struct {
 	num     uint32
 }
 
-func newMailBox(handler MailBoxHandler) *mailBox {
+func newMailBox(name string, handler MailBoxHandler) *mailBox {
 	mb := &mailBox{
+		name:    name,
 		mutex:   sync.Mutex{},
 		cond:    nil,
 		running: false,
@@ -82,18 +67,6 @@ func (mb *mailBox) start() {
 	}
 	mb.running = true
 	go mb.loop()
-}
-
-func (mb *mailBox) waitStop() {
-	ch := make(chan struct{}, 1)
-	m := newExitMail(ch)
-	mb.pushHead(m)
-	<-ch
-}
-
-func (mb *mailBox) stop() {
-	m := newExitMail(nil)
-	mb.pushHead(m)
 }
 
 func (mb *mailBox) waitPop() *mail {
@@ -227,6 +200,10 @@ func (mb *mailBox) popByID(id uint64) *mail {
 }
 
 func (mb *mailBox) loop() {
+	sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
+	defer func() {
+		sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
+	}()
 	for {
 		if exit := func() (exit bool) {
 			exit = false
@@ -253,14 +230,11 @@ func (mb *mailBox) loop() {
 					exit = true
 					// Reject all mails backward.
 					mails, num := mb.popAll()
-					mb.handler.OnStop(curMail, mails, num)
-					// Wait channel.
-					if curMail.Content != nil {
-						ch, ok := curMail.Content.(chan struct{})
-						if ok {
-							ch <- struct{}{}
-						}
+					if curMail.mail.executeStop {
+						mb.handler.OnStop(curMail, mails, num)
 					}
+					// Wait channel.
+					curMail.mail.sendReply(nil, nil)
 					return
 				}
 			}

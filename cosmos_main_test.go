@@ -6,7 +6,7 @@ import (
 
 func TestCosmosMain(t *testing.T) {
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t)); err != nil {
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, false)); err != nil {
 		t.Errorf("CosmosMain: Start failed. err=(%v)", err)
 		return
 	}

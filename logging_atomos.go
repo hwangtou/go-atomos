@@ -25,12 +25,19 @@ func SharedLogging() *LoggingAtomos {
 }
 
 func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
-	m := newMail(defaultLogMailID, &LogMail{
+	lm := &LogMail{
 		Id:      id,
 		Time:    timestamppb.Now(),
 		Level:   level,
 		Message: msg,
-	})
+	}
+	m := &mail{
+		next:   nil,
+		id:     defaultLogMailID,
+		action: MailActionRun,
+		mail:   nil,
+		log:    lm,
+	}
 	if ok := c.logBox.pushTail(m); !ok {
 		c.errorLog(fmt.Sprintf("LoggingAtomos: Add log mail failed, id=(%+v),level=(%v),msg=(%s)", id, level, msg))
 	}
@@ -38,7 +45,7 @@ func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 
 func initSharedLoggingAtomos(accessLog, errLog LoggingFn) {
 	sharedLogging = LoggingAtomos{
-		logBox: newMailBox(MailBoxHandler{
+		logBox: newMailBox("sharedLogging", MailBoxHandler{
 			OnReceive: sharedLogging.onLogMessage,
 			OnStop:    sharedLogging.onLogStop,
 		}),
@@ -70,8 +77,7 @@ func (c *LoggingAtomos) pushProcessLog(level LogLevel, format string, args ...in
 // Implementation of Logging Atomos.
 
 func (c *LoggingAtomos) onLogMessage(mail *mail) {
-	lm := mail.Content.(*LogMail)
-	c.logging(lm)
+	c.logging(mail.log)
 }
 
 func (c *LoggingAtomos) onLogStop(killMail, remainMails *mail, num uint32) {

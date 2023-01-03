@@ -26,12 +26,6 @@ type ID interface {
 	GetIDInfo() *IDInfo
 	String() string
 
-	// Release
-	// 释放ID的引用计数
-	// Release reference count of ID.
-	// TODO:思考是否真的需要Release
-	//Release()
-
 	// Cosmos
 	// Atom所在Cosmos节点。
 	// Cosmos Node of the Atom.

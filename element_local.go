@@ -58,7 +58,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		Element: impl.Interface.Config.Name,
 		Atomos:  "",
 	}
-	elem := &ElementLocal{
+	e := &ElementLocal{
 		main:           main,
 		atomos:         nil,
 		atoms:          nil,
@@ -69,15 +69,15 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		messageTracker: NewMessageTrackerManager(len(impl.ElementHandlers)),
 		idTracker:      nil,
 	}
-	elem.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, elem, impl.Developer.ElementConstructor())
-	elem.idTracker = NewIDTrackerManager(elem)
+	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor())
+	e.idTracker = NewIDTrackerManager(e)
 	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomInitNum); ok {
 		num := atomsInitNum.GetElementAtomsInitNum()
-		elem.atoms = make(map[string]*AtomLocal, num)
+		e.atoms = make(map[string]*AtomLocal, num)
 	} else {
-		elem.atoms = map[string]*AtomLocal{}
+		e.atoms = map[string]*AtomLocal{}
 	}
-	return elem
+	return e
 }
 
 //
@@ -196,6 +196,10 @@ func (e *ElementLocal) Parallel(fn func()) {
 			if r := recover(); r != nil {
 				err := NewErrorf(ErrFrameworkPanic, "Element: Parallel recovers from panic.").AddPanicStack(e, 3, r)
 				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						e.Log().Fatal("Element: Parallel recovers from panic. err=(%v)", err)
+					}()
 					ar.ParallelRecover(err)
 				} else {
 					e.Log().Fatal("Element: Parallel recovers from panic. err=(%v)", err)
@@ -385,7 +389,7 @@ func (e *ElementLocal) pushMessageMail(from ID, name string, timeout time.Durati
 	}
 	fromChain := from.getCallChain()
 	if e.isInChain(fromChain) {
-		return reply, NewErrorf(ErrElementCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+		return reply, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
 			fromChain, e, name, arg).AddStack(e)
 	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
@@ -407,7 +411,13 @@ func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (rep
 				if err == nil {
 					err = NewErrorf(ErrFrameworkPanic, "Element: Messaging recovers from panic.").AddPanicStack(e, 3, r)
 					if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+						defer func() {
+							recover()
+							e.Log().Fatal("Element: Messaging recovers from panic. err=(%v)", err)
+						}()
 						ar.MessageRecover(name, arg, err)
+					} else {
+						e.Log().Fatal("Element: Messaging recovers from panic. err=(%v)", err)
 					}
 				}
 			}
@@ -423,7 +433,7 @@ func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration
 	if from != nil {
 		fromChain := from.getCallChain()
 		if e.isInChain(fromChain) {
-			return nil, NewErrorf(ErrElementCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+			return nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
 				fromChain, e, name, arg).AddStack(e)
 		}
 	}
@@ -446,7 +456,13 @@ func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message) (id ID
 				if err == nil {
 					err = NewErrorf(ErrFrameworkPanic, "Element: Scaling recovers from panic.").AddPanicStack(e, 3, r)
 					if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+						defer func() {
+							recover()
+							e.Log().Fatal("Element: Scaling recovers from panic. err=(%v)", err)
+						}()
 						ar.ScaleRecover(name, arg, err)
+					} else {
+						e.Log().Fatal("Element: Scaling recovers from panic. err=(%v)", err)
 					}
 				}
 			}
@@ -461,41 +477,58 @@ func (e *ElementLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *
 	if from != nil && wait {
 		fromChain := from.getCallChain()
 		if e.isInChain(fromChain) {
-			return NewErrorf(ErrAtomCallDeadLock, "Element: Kill Deadlock. chain=(%v),to(%s)", fromChain, e).AddStack(e)
+			return NewErrorf(ErrAtomosCallDeadLock, "Element: Kill Deadlock. chain=(%v),to(%s)", fromChain, e).AddStack(e)
 		}
 	}
-	return e.atomos.PushKillMailAndWaitReply(from, wait, timeout)
+	return e.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)
 }
 
 func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
-	// Atomos
+	impl := e.current
+	if impl == nil {
+		return NewErrorf(ErrAtomKillElementNoImplement,
+			"Element: OnStopping, no element implement. id=(%s),element=(%+v)", e.GetIDInfo(), e.GetElementName()).AddStack(e)
+	}
+	// Atoms
 	// Send Kill to all atoms.
+	var stopTimeout, stopGap time.Duration
+	elemExit, ok := impl.Developer.(ElementCustomizeExit)
+	if ok && elemExit != nil {
+		stopTimeout = elemExit.StopTimeout()
+		stopGap = elemExit.StopGap()
+	}
+	exitWG := sync.WaitGroup{}
 	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
 		name := nameElem.Value.(string)
-		atom := e.atoms[name]
+		atom, has := e.atoms[name]
+		if !has {
+			continue
+		}
 		e.Log().Info("Element: Kill atom. name=(%s)", name)
-		if err := atom.pushKillMail(e, true, 0); err != nil {
-			e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", name, err)
+		exitWG.Add(1)
+		go func(a *AtomLocal, n string) {
+			if err := a.pushKillMail(e, true, stopTimeout); err != nil {
+				e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", n, err)
+			}
+			exitWG.Done()
+		}(atom, name)
+		if stopGap > 0 {
+			<-time.After(stopGap)
 		}
 	}
+	exitWG.Wait()
 	e.Log().Info("Element: All atoms killed. element=(%s)", e.GetName())
 
-	var ok bool
 	var persistence ElementCustomizeAutoDataPersistence
 	var elemPersistence ElementAutoDataPersistence
 
 	// Element
 	save, data := e.atomos.GetInstance().Halt(from, cancelled)
-	impl := e.current
 	if !save {
 		goto autoLoad
 	}
 
 	// Save data.
-	if impl == nil {
-		return NewErrorf(ErrAtomKillElementNoImplement,
-			"Element: Save data error, no element implement. id=(%s),element=(%+v)", e.GetIDInfo(), e.GetElementName()).AddStack(e)
-	}
 	// Auto Save
 	persistence, ok = impl.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || persistence == nil {
@@ -605,7 +638,9 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		oldAtom.atomos.mailbox.mutex.Lock()
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
-			atom.deleteAtomLocal(false)
+			if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
+				sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+			}
 			if oldAtom.atomos.state < AtomosStopping {
 				return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
 			} else {
@@ -656,7 +691,9 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {
 		atom.nameElement = nil
 	}
 	e.lock.Unlock()
-	atom.deleteAtomLocal(false)
+	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
+		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+	}
 }
 
 func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
@@ -674,10 +711,28 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 		atom.nameElement = nil
 	}
 	e.lock.Unlock()
-	atom.deleteAtomLocal(false)
+	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
+		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+	}
 }
 
-func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) *Error {
+func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if err == nil {
+				err = NewErrorf(ErrFrameworkPanic, "Element: Spawn recovers from panic.").AddPanicStack(e, 3, r)
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						e.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
+					}()
+					ar.SpawnRecover(nil, err)
+				} else {
+					e.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
+				}
+			}
+		}
+	}()
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -685,19 +740,18 @@ func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *Ele
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	pa, ok := current.Developer.(ElementCustomizeAutoLoadPersistence)
 	if ok && pa != nil {
-		if err := pa.Load(e, runnable.config.Customize); err != nil {
-			return err
+		if err = pa.Load(e, runnable.config.Customize); err != nil {
+			return err.AddStack(e)
 		}
 	}
 	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
 	if ok && persistence != nil {
 		elemPersistence := persistence.ElementAutoDataPersistence()
 		if elemPersistence != nil {
-			d, err := elemPersistence.GetElementData()
+			data, err = elemPersistence.GetElementData()
 			if err != nil {
 				return err
 			}
-			data = d
 		}
 	}
 	if err := current.Interface.ElementSpawner(e, e.atomos.instance, data); err != nil {

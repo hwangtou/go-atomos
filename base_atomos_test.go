@@ -118,7 +118,7 @@ func TestBaseAtomos(t *testing.T) {
 	reply, err = a.PushMessageMailAndWaitReply(nil, "panic", 0, nil)
 	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
 	// Push Kill
-	err = a.PushKillMailAndWaitReply(nil, true, 0)
+	err = a.PushKillMailAndWaitReply(nil, true, true, 0)
 	t.Logf("PushKillMailAndWaitReply: state=(%d),err=(%v)", a.GetState(), err)
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "send_after_halt", 0, nil)

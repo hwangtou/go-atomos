@@ -128,7 +128,7 @@ func (p *CosmosProcess) Stop() *Error {
 		if err = p.main.runnable.mainScript.OnShutdown(); err != nil {
 			return err
 		}
-		return nil
+		return p.main.pushKillMail(p.main, true, 0)
 	}()
 
 	p.mutex.Lock()
