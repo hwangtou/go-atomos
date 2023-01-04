@@ -66,7 +66,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		lock:           sync.RWMutex{},
 		current:        impl,
 		callChain:      nil,
-		messageTracker: NewMessageTrackerManager(len(impl.ElementHandlers)),
+		messageTracker: NewMessageTrackerManager(id, len(impl.ElementHandlers)),
 		idTracker:      nil,
 	}
 	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor())

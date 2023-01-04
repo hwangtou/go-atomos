@@ -109,6 +109,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 	g.Annotate(elementIDName, service.Location)
 	g.P("type ", elementIDName, " interface {")
 	g.P(atomosPackage.Ident("ID"))
+	g.P("Release()")
 	// Element Methods
 	for _, method := range service.Methods {
 		methodName := method.GoName
@@ -175,7 +176,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 	g.P("func Get", elementIDName, " (c ", atomosPackage.Ident("CosmosNode"), ") (", elementIDName, ", *", atomosPackage.Ident("Error"), ") {")
 	g.P("ca, err := c.CosmosGetElementID(", elementName, "Name)")
 	g.P("if err != nil { return nil, err }")
-	g.P("return &", noExport(elementIDName), "{ca, ", atomosPackage.Ident("DefaultTimeout"), "}, nil")
+	g.P("return &", noExport(elementIDName), "{ca, nil, ", atomosPackage.Ident("DefaultTimeout"), "}, nil")
 	g.P("}")
 	g.P()
 }
@@ -194,6 +195,7 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.Annotate(atomNameID, service.Location)
 	g.P("type ", atomNameID, " interface {")
 	g.P(atomosPackage.Ident("ID"))
+	g.P("Release()")
 	// Atom
 	for _, method := range service.Methods {
 		methodName := method.GoName
@@ -409,6 +411,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 	// ID structure.
 	g.P("type ", noExport(idName), " struct {")
 	g.P(atomosPackage.Ident("ID"))
+	g.P("*", atomosPackage.Ident("IDTracker"))
 	g.P("Timeout ", timePackage.Ident("Duration"))
 	g.P("}")
 	g.P()

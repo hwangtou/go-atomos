@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -77,6 +78,9 @@ func (i *IDTracker) ToString() string {
 }
 
 func (i *IDTracker) Release() {
+	if i == nil {
+		return
+	}
 	i.manager.Lock()
 	delete(i.manager.idMap, i.id)
 	i.manager.Unlock()
@@ -86,14 +90,18 @@ func (i *IDTracker) Release() {
 // MessageTrackerManager
 
 type MessageTrackerManager struct {
+	id      *IDInfo
+	counter int64
+
 	spawningAt, spawnAt   time.Time
 	stoppingAt, stoppedAt time.Time
 
 	messages map[string]MessageTrackInfo
 }
 
-func NewMessageTrackerManager(num int) *MessageTrackerManager {
+func NewMessageTrackerManager(id *IDInfo, num int) *MessageTrackerManager {
 	return &MessageTrackerManager{
+		id:         id,
 		spawningAt: time.Now(),
 		messages:   make(map[string]MessageTrackInfo, num),
 	}
@@ -112,6 +120,16 @@ func (t *MessageTrackerManager) Set(message string) {
 	m.LastBegin = time.Now()
 	m.Count += 1
 	t.messages[message] = m
+
+	counter := atomic.AddInt64(&t.counter, 1)
+	if MessageTimeoutTracer {
+		time.AfterFunc(DefaultTimeout, func() {
+			if atomic.LoadInt64(&t.counter) == counter {
+				SharedLogging().PushLogging(t.id, LogLevel_Warn,
+					fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", t.id, message))
+			}
+		})
+	}
 }
 
 func (t *MessageTrackerManager) Unset(message string) {
@@ -129,6 +147,8 @@ func (t *MessageTrackerManager) Unset(message string) {
 	m.Total += d
 	m.Handling = false
 	t.messages[message] = m
+
+	atomic.AddInt64(&t.counter, 1)
 }
 
 func (t *MessageTrackerManager) Stopping() {

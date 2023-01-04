@@ -30,6 +30,7 @@ const HelloName = "Hello"
 
 type HelloElementID interface {
 	go_atomos.ID
+	Release()
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.Error)
@@ -45,7 +46,7 @@ func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.Error
 	if err != nil {
 		return nil, err
 	}
-	return &helloElementID{ca, go_atomos.DefaultTimeout}, nil
+	return &helloElementID{ca, nil, go_atomos.DefaultTimeout}, nil
 }
 
 /////////////////////////////////
@@ -56,6 +57,7 @@ func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.Error
 
 type HelloAtomID interface {
 	go_atomos.ID
+	Release()
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.Error)
@@ -129,6 +131,7 @@ func SpawnHelloAtom(c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (He
 
 type helloElementID struct {
 	go_atomos.ID
+	*go_atomos.IDTracker
 	Timeout time.Duration
 }
 

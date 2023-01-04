@@ -58,7 +58,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		nameElement:    nil,
 		current:        current,
 		callChain:      nil,
-		messageTracker: NewMessageTrackerManager(len(current.AtomHandlers)),
+		messageTracker: NewMessageTrackerManager(id, len(current.AtomHandlers)),
 		idTracker:      nil,
 	}
 	a.atomos = NewBaseAtomos(id, lv, a, current.Developer.AtomConstructor(name))
