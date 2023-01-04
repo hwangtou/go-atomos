@@ -4,13 +4,8 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"time"
 )
-
-// Element Error
-
-//var (
-//	ErrElementNotLoaded = errors.New("element not loaded")
-//)
 
 // 给Element生成器使用。
 // For Element Generator use.
@@ -32,7 +27,7 @@ type Element interface {
 	// GetAtomID
 	// 通过Atom名称获取指定的Atom的ID。
 	// Get AtomID by name of Atom.
-	GetAtomID(atomName string) (ID, *ErrorInfo)
+	GetAtomID(name string, skip int) (ID, *IDTracker, *Error)
 
 	GetAtomsNum() int
 	GetActiveAtomsNum() int
@@ -40,28 +35,22 @@ type Element interface {
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(atomName string, arg proto.Message) (*AtomLocal, *ErrorInfo)
+	SpawnAtom(name string, arg proto.Message, skip int) (*AtomLocal, *IDTracker, *Error)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
 	// Send Message to an Atom.
 
-	MessageElement(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
-	MessageAtom(fromID, toID ID, message string, args proto.Message) (reply proto.Message, err *ErrorInfo)
+	MessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
+	MessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 
-	ScaleGetAtomID(fromID ID, message string, args proto.Message) (ID, *ErrorInfo)
+	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message, skip int) (ID, *IDTracker, *Error)
 
 	// KillAtom
 	// 向一个Atom发送Kill。
 	// Send Kill to an Atom.
-	KillAtom(fromID, toID ID) *ErrorInfo
+	KillAtom(fromID, toID ID, timeout time.Duration) *Error
 }
-
-//type ElementLoadable interface {
-//	Load(mainID ElementID) *ErrorInfo
-//	Reload(mainID ElementID, atomos Atomos) *ErrorInfo
-//	Unload()
-//}
 
 type ElementCustomizeVersion interface {
 	GetElementVersion() uint64
@@ -75,6 +64,11 @@ type ElementCustomizeLogLevel interface {
 	GetElementLogLevel() LogLevel
 }
 
+type ElementCustomizeExit interface {
+	StopTimeout() time.Duration
+	StopGap() time.Duration
+}
+
 type ElementCustomizeAutoDataPersistence interface {
 	// AtomAutoDataPersistence
 	// 数据持久化助手
@@ -85,8 +79,8 @@ type ElementCustomizeAutoDataPersistence interface {
 }
 
 type ElementCustomizeAutoLoadPersistence interface {
-	Load(self ElementSelfID, config map[string]string) *ErrorInfo
-	Unload() *ErrorInfo
+	Load(self ElementSelfID, config map[string]string) *Error
+	Unload() *Error
 }
 
 type ElementCustomizeStartRunning interface {
@@ -99,21 +93,13 @@ type ElementCustomizeAuthorization interface {
 	// Atom保存函数的函数类型，只有有状态的Atom会被保存。
 	// Whether the Atom can be killed by the ID or not.
 	// Saver Function Type of Atom, only stateful Atom will be saved.
-	// TODO: 以后考虑改成AtomCanAdmin，就改个名字。
-	AtomCanKill(ID) *ErrorInfo
+	AtomCanKill(ID) *Error
 }
 
 // ElementDeveloper
 // 从*.proto文件生成到*_atomos.pb.go文件中的，具体的Element对象。
 // Concrete Element instance in *_atomos.pb.go, which is generated from developer defined *.proto file.
 type ElementDeveloper interface {
-	//// Info
-	//// 当前ElementImplement的信息，例如Element名称、版本号、日志记录级别、初始化的Atom数量。
-	//// Information of ElementDeveloper, such as nodeName of Element, version, Log level and initial atomos quantity.
-	//Info() (version uint64, logLevel LogLevel, initNum int)
-
-	//ElementConstructor() Atomos
-
 	// AtomConstructor
 	// Atom构造器
 	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
@@ -123,34 +109,30 @@ type ElementDeveloper interface {
 	ElementConstructor() Atomos
 }
 
-//type ElementStartRunning interface {
-//	StartRunning(isUpgrade bool)
-//}
-
 type AtomAutoDataPersistence interface {
 	// GetAtomData
 	// 读取Atom
 	// Get Atom.
 	// 没有数据时error应该返回nil。
-	GetAtomData(name string) (proto.Message, *ErrorInfo)
+	GetAtomData(name string) (proto.Message, *Error)
 
 	// SetAtomData
 	// 保存Atom
 	// Save Atom.
-	SetAtomData(name string, data proto.Message) *ErrorInfo
+	SetAtomData(name string, data proto.Message) *Error
 }
 
 type ElementAutoDataPersistence interface {
-	// GetAtomData
-	// 读取Atom
-	// Get Atom.
+	// GetElementData
+	// 读取Element
+	// Get Element.
 	// 没有数据时error应该返回nil。
-	GetElementData() (proto.Message, *ErrorInfo)
+	GetElementData() (proto.Message, *Error)
 
-	// SetAtomData
-	// 保存Atom
-	// Save Atom.
-	SetElementData(data proto.Message) *ErrorInfo
+	// SetElementData
+	// 保存Element
+	// Save Element.
+	SetElementData(data proto.Message) *Error
 }
 
 // TODO:

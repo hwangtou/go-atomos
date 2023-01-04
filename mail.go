@@ -1,16 +1,19 @@
 package go_atomos
 
 import (
+	"runtime/debug"
 	"sync"
 )
 
 // Mail
 
 type mail struct {
-	next    *mail
-	id      uint64
-	action  MailAction
-	Content interface{}
+	next   *mail
+	id     uint64
+	action MailAction
+
+	mail *atomosMail
+	log  *LogMail
 }
 
 type MailAction int
@@ -20,53 +23,18 @@ const (
 	MailActionExit = 1
 )
 
-//var mailsPool = sync.Pool{
-//	New: func() interface{} {
-//		return &mail{}
-//	},
-//}
-
-func newMail(id uint64, content interface{}) *mail {
-	m := &mail{}
-	m.reset()
-	m.id = id
-	m.action = MailActionRun
-	m.Content = content
-	return m
-}
-
-func newExitMail(waitCh chan struct{}) *mail {
-	m := newMail(0, nil)
-	m.action = MailActionExit
-	m.Content = waitCh
-	return m
-}
-
-func delMail(m *mail) {
-	//mailsPool.Put(m)
-}
-
-func (m *mail) reset() {
-	m.next = nil
-	m.id = 0
-	m.action = MailActionRun
-	m.Content = nil
-}
-
 // Mail Box
 
 type MailBoxOnReceiveFn func(mail *mail)
-type MailBoxOnPanicFn func(mail *mail, err *ErrorInfo)
 type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
 
 type MailBoxHandler struct {
 	OnReceive MailBoxOnReceiveFn
-	OnPanic   MailBoxOnPanicFn
 	OnStop    MailBoxOnStopFn
 }
 
 type mailBox struct {
-	//Name    string
+	name    string
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
@@ -76,35 +44,19 @@ type mailBox struct {
 	num     uint32
 }
 
-//var mailBoxPool = sync.Pool{
-//	New: func() interface{} {
-//		b := &mailBox{}
-//		b.cond = sync.NewCond(&b.mutex)
-//		return b
-//	},
-//}
-
-func newMailBox(handler MailBoxHandler) *mailBox {
-	mb := &mailBox{}
+func newMailBox(name string, handler MailBoxHandler) *mailBox {
+	mb := &mailBox{
+		name:    name,
+		mutex:   sync.Mutex{},
+		cond:    nil,
+		running: false,
+		handler: handler,
+		head:    nil,
+		tail:    nil,
+		num:     0,
+	}
 	mb.cond = sync.NewCond(&mb.mutex)
-	mb.running = false
-	mb.handler = handler
-	mb.head, mb.tail, mb.num = nil, nil, 0
 	return mb
-}
-
-func newMailBoxWithHandler(a *BaseAtomos) {
-	a.mailbox = newMailBox(MailBoxHandler{
-		OnReceive: a.onReceive,
-		OnPanic:   a.onPanic,
-		OnStop:    a.onStop,
-	})
-	//a.mailbox.Name = a.name
-}
-
-func delMailBox(b *mailBox) {
-	b.reset()
-	//mailBoxPool.Put(b)
 }
 
 func (mb *mailBox) start() {
@@ -115,18 +67,6 @@ func (mb *mailBox) start() {
 	}
 	mb.running = true
 	go mb.loop()
-}
-
-func (mb *mailBox) waitStop() {
-	ch := make(chan struct{}, 1)
-	m := newExitMail(ch)
-	mb.pushHead(m)
-	<-ch
-}
-
-func (mb *mailBox) stop() {
-	m := newExitMail(nil)
-	mb.pushHead(m)
 }
 
 func (mb *mailBox) waitPop() *mail {
@@ -259,23 +199,52 @@ func (mb *mailBox) popByID(id uint64) *mail {
 	return nil
 }
 
+func (mb *mailBox) removeMail(dm *mail) bool {
+	mb.mutex.Lock()
+	var pM, m *mail = nil, mb.head
+	if m == nil {
+		mb.mutex.Unlock()
+		return false
+	}
+	for m != nil {
+		if m == dm {
+			mb.num -= 1
+			if pM == nil {
+				mb.head = m.next
+				if m == mb.tail {
+					mb.tail = nil
+				}
+			} else {
+				pM.next = m.next
+				if m == mb.tail {
+					mb.tail = pM
+					mb.tail.next = nil
+				}
+			}
+			m.next = nil
+			mb.mutex.Unlock()
+			return true
+		}
+		pM = m
+		m = m.next
+	}
+	mb.mutex.Unlock()
+	return false
+}
+
 func (mb *mailBox) loop() {
+	sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
+	defer func() {
+		sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
+	}()
 	for {
 		if exit := func() (exit bool) {
 			exit = false
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					//// Only should AtomMailMessage and AtomMailTask 3rd-part logic
-					//// throws exception to here, otherwise it must be a bug of framework.
-					//traceMsg := debug.Stack()
-					//log.Printf("Recovering from developer logic\nreason=(%s)\n%s", r, traceMsg)
-					////curMail.sendReply(nil, errors.AddElementImplementation(traceMsg))
-					//// todo
-					//err := NewErrorf(ErrAtomosPanic,
-					//	"Recovering from developer logic, reason=(%v)", r).
-					//	AddStack(nil, traceMsg)
-					mb.handler.OnPanic(curMail, nil)
+					sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic, reason=(%v),stack=(%s)",
+						r, string(debug.Stack()))
 				}
 			}()
 			for {
@@ -294,14 +263,11 @@ func (mb *mailBox) loop() {
 					exit = true
 					// Reject all mails backward.
 					mails, num := mb.popAll()
-					mb.handler.OnStop(curMail, mails, num)
-					// Wait channel.
-					if curMail.Content != nil {
-						ch, ok := curMail.Content.(chan struct{})
-						if ok {
-							ch <- struct{}{}
-						}
+					if curMail.mail.executeStop {
+						mb.handler.OnStop(curMail, mails, num)
 					}
+					// Wait channel.
+					curMail.mail.sendReply(nil, nil)
 					return
 				}
 			}
@@ -309,19 +275,6 @@ func (mb *mailBox) loop() {
 			break
 		}
 	}
-	delMailBox(mb)
-}
-
-func (mb *mailBox) reset() {
-	mb.running = false
-	mb.handler = MailBoxHandler{}
-	mb.head = nil
-	mb.tail = nil
-	mb.num = 0
-}
-
-func (mb *mailBox) sharedLock() *sync.Mutex {
-	return &mb.mutex
 }
 
 //goos: darwin

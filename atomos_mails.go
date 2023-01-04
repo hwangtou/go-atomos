@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -26,7 +27,7 @@ type MailType int
 const (
 	// MailHalt
 	// 终止邮件，用于停止Atomos的运行。
-	// Halt Mail, for stopping an atomos from running.
+	// Stopping Mail, for stopping an atomos from running.
 	MailHalt MailType = 0
 
 	// MailMessage
@@ -39,19 +40,14 @@ const (
 	// Task Mail, for adding task to a running atomos from inner.
 	MailTask MailType = 2
 
-	// MailReload
-	// 重载邮件，用于升级Atomos的ElementLocal引用，以实现热更。
-	// Reload Mail, for upgrading ElementLocal reference of an atomos, to support hot-reload feature.
-	MailReload MailType = 3
-
 	// MailWormhole
 	// 虫洞邮件，用于传递不属于"Atomos宇宙"概念的对象。
 	// Wormhole Mail, for transporting non-"Atomos Cosmos" object.
-	MailWormhole MailType = 4
+	MailWormhole MailType = 3
 
 	// MailScale
 	// Scale邮件。
-	MailScale MailType = 5
+	MailScale MailType = 4
 )
 
 // Atomos邮件
@@ -65,7 +61,7 @@ type atomosMail struct {
 	// Atomos邮件类型
 	// Atomos mail type.
 	//
-	// Halt, Message, Task, Reload
+	// Stopping, Message, Task, Reload
 	mailType MailType
 
 	// 从哪个ID发来的邮件。
@@ -80,11 +76,6 @@ type atomosMail struct {
 	// Argument that pass to target, used by Message mail and Task mail.
 	arg proto.Message
 
-	// 需要升级的Element。
-	// Upgrade Element.
-	reload  AtomosReloadable
-	reloads int
-
 	wormhole AtomosWormhole
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
@@ -92,35 +83,20 @@ type atomosMail struct {
 	mailReply mailReply
 	waitCh    chan *mailReply
 
+	executeStop bool
+
 	mutex sync.Mutex
 }
-
-//// Atomos邮件内存池
-//// Atomos Mails Pool
-//var atomosMailsPool = sync.Pool{
-//	New: func() interface{} {
-//		return &atomosMail{
-//			mailType:  0,
-//			from:      nil,
-//			name:      "",
-//			arg:       nil,
-//			mailReply: mailReply{},
-//			waitCh:    nil,
-//		}
-//	},
-//}
 
 // Construct and destruct of Mail may be in different part of code.
 
 func allocAtomosMail() *atomosMail {
 	am := &atomosMail{}
-	am.mail = newMail(DefaultMailID, am)
+	am.mail = &mail{mail: am}
 	return am
 }
 
 func deallocAtomosMail(am *atomosMail) {
-	delMail(am.mail)
-	//atomosMailsPool.Put(am)
 }
 
 // 消息邮件
@@ -133,14 +109,17 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	am.name = name
 	// I think it has to be cloned, because argument is passing between atomos.
 	if arg != nil {
-		am.arg = proto.Clone(arg)
+		if ShouldArgumentClone {
+			am.arg = proto.Clone(arg)
+		} else {
+			am.arg = proto.Clone(arg)
+		}
 	} else {
 		am.arg = nil
 	}
-	am.reload = nil
-	am.reloads = 0
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -158,10 +137,9 @@ func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
-	am.reload = nil
-	am.reloads = 0
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -175,26 +153,9 @@ func initTaskMail(am *atomosMail, taskID uint64, name string, arg proto.Message)
 	am.name = name
 	// I think it doesn't have to clone, because Atomos is thread-safe.
 	am.arg = arg
-	am.reload = nil
-	am.reloads = 0
 	am.wormhole = nil
 	am.mailReply = mailReply{}
-	am.waitCh = make(chan *mailReply, 1)
-}
-
-// 重载邮件
-// Reload Mail
-func initReloadMail(am *atomosMail, newInstance AtomosReloadable, reloads int) {
-	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailReload
-	am.from = nil
-	am.name = ""
-	am.arg = nil
-	am.reload = newInstance
-	am.reloads = reloads
-	am.wormhole = nil
-	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -207,25 +168,23 @@ func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
 	am.from = from
 	am.name = ""
 	am.arg = nil
-	am.reload = nil
-	am.reloads = 0
 	am.wormhole = wormhole
 	am.mailReply = mailReply{}
+	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 // 终止邮件
-// Halt Mail
-func initKillMail(am *atomosMail, from ID) {
+// Stopping Mail
+func initKillMail(am *atomosMail, from ID, executeStop bool) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
 	am.from = from
 	am.name = ""
-	am.reload = nil
-	am.reloads = 0
 	am.wormhole = nil
 	am.mailReply = mailReply{}
+	am.executeStop = executeStop
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -234,13 +193,13 @@ func initKillMail(am *atomosMail, from ID) {
 type mailReply struct {
 	resp proto.Message
 	id   ID
-	err  *ErrorInfo
+	err  *Error
 }
 
 // Method sendReply() will only be called in for-loop of MailBox, it's safe to do so, because while an atomos is
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
 // has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
-func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
+func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.waitCh = nil
@@ -255,7 +214,7 @@ func (m *atomosMail) sendReply(resp proto.Message, err *ErrorInfo) {
 	waitCh = nil
 }
 
-func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
+func (m *atomosMail) sendReplyID(id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.waitCh = nil
@@ -270,33 +229,62 @@ func (m *atomosMail) sendReplyID(id ID, err *ErrorInfo) {
 }
 
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReply() (resp proto.Message, err *ErrorInfo) {
+func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkPanic, "no wait channel")
+		return nil, NewErrorf(ErrFrameworkPanic, "Atomos Message waits twice.").AddStack(nil)
 	}
-	reply := <-waitCh
+	var reply *mailReply
+	if timeout == 0 {
+		reply = <-waitCh
+	} else {
+		select {
+		case reply = <-waitCh:
+		case <-time.After(timeout):
+			if a.mailbox.removeMail(m.mail) {
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. timeout=(%v)", timeout).AddStack(nil)
+			} else {
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. timeout=(%v)", timeout).AddStack(nil)
+			}
+		}
+	}
 	// Wait channel must be empty before delete a mail.
+	if reply == nil {
+		return nil, NewErrorf(ErrFrameworkPanic, "Atomos: Message reply is invalid.").AddStack(nil)
+	}
 	resp = reply.resp
 	err = reply.err
 	return resp, err
 }
 
 // TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReplyID() (id ID, err *ErrorInfo) {
+func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkPanic, "no wait channel")
+		return nil, NewErrorf(ErrFrameworkPanic, "Atomos: Message waits twice.").AddStack(nil)
 	}
 
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
-	reply := <-waitCh
+	var reply *mailReply
+	if timeout == 0 {
+		reply = <-waitCh
+	} else {
+		select {
+		case reply = <-waitCh:
+		case <-time.After(timeout):
+			if a.mailbox.removeMail(m.mail) {
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. timeout=(%v)", timeout).AddStack(nil)
+			} else {
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. timeout=(%v)", timeout).AddStack(nil)
+			}
+		}
+	}
 	// Wait channel must be empty before delete a mail.
 	id = reply.id
 	err = reply.err

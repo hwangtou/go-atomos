@@ -4,10 +4,7 @@ package go_atomos
 
 import (
 	"container/list"
-	"fmt"
 	"google.golang.org/protobuf/proto"
-	"runtime"
-	"runtime/debug"
 	"time"
 )
 
@@ -28,11 +25,8 @@ type AtomLocal struct {
 	// Base atomos, the key of lockless queue of Atom.
 	atomos *BaseAtomos
 
-	//// 实际的ID类型
-	//id ID
 	// 引用计数，所以任何GetID操作之后都需要Release。
 	// Reference count, thus we have to Release any ID after GetID.
-	count int
 
 	// Element的List容器的Element
 	nameElement *list.Element
@@ -43,42 +37,35 @@ type AtomLocal struct {
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
 	callChain []ID
+
+	messageTracker *MessageTrackerManager
+	idTracker      *IDTrackerManager
 }
 
 // 生命周期相关
 // Life Cycle
 
-func newAtomLocal(name string, e *ElementLocal, reloads int, current *ElementImplementation, log *LoggingAtomos, lv LogLevel) *AtomLocal {
+func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, lv LogLevel) *AtomLocal {
 	id := &IDInfo{
 		Type:    IDType_Atomos,
 		Cosmos:  e.Cosmos().GetNodeName(),
 		Element: e.GetElementName(),
 		Atomos:  name,
 	}
-	a := &AtomLocal{}
-	a.element = e
-	a.atomos = NewBaseAtomos(id, log, lv, a, current.Developer.AtomConstructor(name), reloads)
-	//a.id = current.Interface.AtomIDConstructor(a)
-	a.count = 0
-	a.nameElement = nil
-	a.current = current
-	a.callChain = nil
+	a := &AtomLocal{
+		element:        e,
+		atomos:         nil,
+		nameElement:    nil,
+		current:        current,
+		callChain:      nil,
+		messageTracker: NewMessageTrackerManager(len(current.AtomHandlers)),
+		idTracker:      nil,
+	}
+	a.atomos = NewBaseAtomos(id, lv, a, current.Developer.AtomConstructor(name))
+	a.idTracker = NewIDTrackerManager(a)
 
 	return a
 }
-
-func (a *AtomLocal) deleteAtomLocal(wait bool) {
-	a.atomos.DeleteAtomos(wait)
-	//atomLocalPool.Put(a)
-}
-
-//// Atom对象的内存池
-//// Atom instance pools.
-//var atomLocalPool = sync.Pool{
-//	New: func() interface{} {
-//		return &AtomLocal{}
-//	},
-//}
 
 //
 // Implementation of ID
@@ -107,8 +94,8 @@ func (a *AtomLocal) String() string {
 	return a.atomos.String()
 }
 
-func (a *AtomLocal) Release() {
-	a.element.elementAtomRelease(a)
+func (a *AtomLocal) Release(tracker *IDTracker) {
+	a.element.elementAtomRelease(a, tracker)
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
@@ -123,34 +110,12 @@ func (a *AtomLocal) GetName() string {
 	return a.atomos.GetIDInfo().Atomos
 }
 
-//func (a *AtomLocal) MessageByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
-//	decoderFn, has := a.current.AtomDecoders[name]
-//	if !has {
-//		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
-//	}
-//	in, err := decoderFn.InDec(buf, protoOrJSON)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	var outBuf []byte
-//	out, err := a.pushMessageMail(from, name, in)
-//	if out != nil && reflect.TypeOf(out).Kind() == reflect.Pointer && !reflect.ValueOf(out).IsNil() {
-//		var e error
-//		if protoOrJSON {
-//			outBuf, e = proto.Marshal(out)
-//		} else {
-//			outBuf, e = json.Marshal(out)
-//		}
-//		if e != nil {
-//			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
-//		}
-//	}
-//	return outBuf, err
-//}
+func (a *AtomLocal) State() AtomosState {
+	return a.atomos.GetState()
+}
 
-func (a *AtomLocal) MessageByName(from ID, name string, in proto.Message) (proto.Message, *ErrorInfo) {
-	return a.pushMessageMail(from, name, in)
+func (a *AtomLocal) MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
+	return a.pushMessageMail(from, name, timeout, in)
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -165,36 +130,30 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(from ID) *ErrorInfo {
+func (a *AtomLocal) Kill(from ID, timeout time.Duration) *Error {
 	dev := a.element.current.Developer
 	elemAuth, ok := dev.(ElementCustomizeAuthorization)
 	if ok && elemAuth != nil {
 		if err := elemAuth.AtomCanKill(from); err != nil {
-			return err
+			return err.AddStack(a)
 		}
 	}
-	return a.pushKillMail(from, true)
+	return a.pushKillMail(from, true, timeout)
 }
 
-func (a *AtomLocal) SendWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
-	return a.atomos.PushWormholeMailAndWaitReply(from, wormhole)
-}
-
-func (a *AtomLocal) State() AtomosState {
-	return a.atomos.state
-}
-
-func (a *AtomLocal) IdleDuration() time.Duration {
-	//if a.atomos.state != AtomosWaiting {
-	//	return 0
-	//}
-	return time.Now().Sub(a.atomos.lastBusy)
+func (a *AtomLocal) SendWormhole(from ID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+	return a.atomos.PushWormholeMailAndWaitReply(from, timeout, wormhole)
 }
 
 func (a *AtomLocal) getCallChain() []ID {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
-	return a.callChain
+	idList := make([]ID, 0, len(a.callChain)+1)
+	for _, id := range a.callChain {
+		idList = append(idList, id)
+	}
+	idList = append(idList, a)
+	return idList
 }
 
 func (a *AtomLocal) getElementLocal() *ElementLocal {
@@ -203,6 +162,10 @@ func (a *AtomLocal) getElementLocal() *ElementLocal {
 
 func (a *AtomLocal) getAtomLocal() *AtomLocal {
 	return a
+}
+
+func (a *AtomLocal) getIDTrackerManager() *IDTrackerManager {
+	return a.idTracker
 }
 
 // Implementation of SelfID
@@ -218,27 +181,31 @@ func (a *AtomLocal) CosmosMain() *CosmosMain {
 	return a.element.main
 }
 
-func (a *AtomLocal) ElementLocal() *ElementLocal {
-	return a.element
-}
-
 // KillSelf
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
 	//id, elem := a.id, a.element
-	if err := a.pushKillMail(a, false); err != nil {
-		a.Log().Error("KillSelf error, err=%v", err)
+	if err := a.pushKillMail(a, false, 0); err != nil {
+		a.Log().Error("Atom: KillSelf failed. err=(%v)", err.AddStack(a))
 		return
 	}
-	a.Log().Info("KillSelf")
+	a.Log().Info("Atom: KillSelf.")
 }
 
 func (a *AtomLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				stack := debug.Stack()
-				a.Log().Fatal("Parallel PANIC, stack=(%s)", string(stack))
+				err := NewErrorf(ErrFrameworkPanic, "Atom: Parallel recovers from panic.").AddPanicStack(a, 3, r)
+				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Parallel recovers from panic. err=(%v)", err)
+					}()
+					ar.ParallelRecover(err)
+				} else {
+					a.Log().Fatal("Atom: Parallel recovers from panic. err=(%v)", err)
+				}
 			}
 		}()
 		fn()
@@ -259,14 +226,14 @@ func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
 	return p.AtomAutoDataPersistence()
 }
 
-func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *ErrorInfo) {
+func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 	handlerFn, has := a.current.AtomHandlers[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Handler not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
+		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: Handler not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
 	decoderFn, has := a.current.AtomDecoders[name]
 	if !has {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom message self decoder not exists, from=(%v),name=(%s)", from, name).AutoStack(nil, nil)
+		return nil, NewErrorf(ErrAtomMessageDecoderNotExists, "Atom: Decoder not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
 	in, err := decoderFn.InDec(buf, protoOrJSON)
 	if err != nil {
@@ -278,7 +245,7 @@ func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJ
 		var e error
 		outBuf, e = proto.Marshal(out)
 		if e != nil {
-			return nil, NewErrorf(ErrAtomMessageReplyType, "Reply marshal failed, err=(%v)", err)
+			return nil, NewErrorf(ErrAtomMessageReplyType, "Atom: Reply marshal failed. err=(%v)", err).AddStack(a)
 		}
 	}
 	return outBuf, err
@@ -296,20 +263,32 @@ func (a *AtomLocal) Task() Task {
 
 // Check chain.
 
-func (a *AtomLocal) tryAddCallChain(fromIDList []ID) bool {
+func (a *AtomLocal) isInChain(fromIDList []ID) bool {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
 
 	for _, fromID := range fromIDList {
 		if fromID.GetIDInfo().IsEqual(a.GetIDInfo()) {
-			return false
+			return true
 		}
 	}
-	a.callChain = append(fromIDList, a)
-	return true
+	return false
 }
 
-func (a *AtomLocal) delCallChain() {
+func (a *AtomLocal) setMessageAndCallChain(fromID ID, message string) *Error {
+	if fromID == nil {
+		return NewError(ErrAtomNoFromID, "Element: No fromID.").AddStack(a)
+	}
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
+	if a.callChain != nil {
+		return NewError(ErrFrameworkPanic, "OnMessage set chain meets non nil chain.").AddStack(a)
+	}
+	a.callChain = fromID.getCallChain()
+	return nil
+}
+
+func (a *AtomLocal) unsetMessageAndCallChain(message string) {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
 	a.callChain = nil
@@ -317,10 +296,6 @@ func (a *AtomLocal) delCallChain() {
 
 // 内部实现
 // INTERNAL
-
-// 邮箱控制器相关
-// Mailbox Handler
-// TODO: Performance tracer.
 
 // 推送邮件，并管理邮件对象的生命周期。
 // 处理邮件，并设置Atom的运行状态。
@@ -330,160 +305,186 @@ func (a *AtomLocal) delCallChain() {
 
 // Message Mail
 
-func (a *AtomLocal) pushMessageMail(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (a *AtomLocal) pushMessageMail(from ID, name string, timeout time.Duration, arg proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
-	if from != nil {
-		chain := from.getCallChain()
-		if !a.tryAddCallChain(chain) {
-			return reply, NewErrorf(ErrAtomCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-				chain, a, name, args)
-		}
-		defer a.delCallChain()
+	// OnMessaging处理消息的时候，才做addChain操作
+	if from == nil {
+		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(a)
 	}
-	return a.atomos.PushMessageMailAndWaitReply(from, name, args)
+	fromChain := from.getCallChain()
+	if a.isInChain(fromChain) {
+		return reply, NewErrorf(ErrAtomosCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+			fromChain, a, name, arg).AddStack(a)
+	}
+	return a.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
 }
 
-func (a *AtomLocal) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *ErrorInfo) {
+func (a *AtomLocal) OnMessaging(from ID, name string, arg proto.Message) (reply proto.Message, err *Error) {
+	if err = a.setMessageAndCallChain(from, name); err != nil {
+		return nil, err.AddStack(a)
+	}
+	defer a.unsetMessageAndCallChain(name)
 	handler := a.current.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
-			"AtomHandler: Message handler not found, from=(%s),name=(%s),args=(%v)", from, name, args)
+			"Atom: Message handler not found. from=(%s),name=(%s),arg=(%v)", from, name, arg).AddStack(a)
 	}
-	//var stack []byte
 	func() {
-		a.atomos.curMessage = name
-		a.atomos.curTime = time.Now()
 		defer func() {
 			if r := recover(); r != nil {
-				_, file, line, ok := runtime.Caller(2)
-				if !ok {
-					file, line = "???", 0
-				}
 				if err == nil {
-					err = NewErrorf(ErrFrameworkPanic, "OnMessage, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
+					err = NewErrorf(ErrFrameworkPanic, "Atom: Messaging recovers from panic.").AddPanicStack(a, 3, r)
+					if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+						defer func() {
+							recover()
+							a.Log().Fatal("Atom: Messaging recovers from panic. err=(%v)", err)
+						}()
+						ar.MessageRecover(name, arg, err)
+					} else {
+						a.Log().Fatal("Atom: Messaging recovers from panic. err=(%v)", err)
+					}
 				}
-				err.Panic = string(debug.Stack())
-				err.AddStack(a, file, fmt.Sprintf("%v", r), line, args)
-				a.atomos.curMessage = err.Error()
-			} else {
-				a.atomos.curMessage = ""
 			}
-			a.atomos.curTime = time.Time{}
 		}()
 		fromID, _ := from.(ID)
-		reply, err = handler(fromID, a.atomos.GetInstance(), args)
+		reply, err = handler(fromID, a.atomos.GetInstance(), arg)
 	}()
-	//if len(stack) != 0 {
-	//	err = NewErrorf(ErrAtomMessageHandlerPanic,
-	//		"AtomLocal: Message handler PANIC, from=(%s),name=(%s),args=(%v)\nstack=(%s)", from, name, args, stack).
-	//		AddStack(a.GetIDInfo(), stack)
-	//} else if err != nil && len(err.Stacks) > 0 {
-	//	err = err.AddStack(a.GetIDInfo(), debug.Stack())
-	//}
 	return
 }
 
-func (a *AtomLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *ErrorInfo) {
-	return nil, NewError(ErrAtomCannotScale, "OnScaling, atom not supported")
+func (a *AtomLocal) OnScaling(from ID, name string, arg proto.Message) (id ID, err *Error) {
+	return nil, NewError(ErrAtomCannotScale, "Atom: Atom not supported scaling")
 }
 
 // Kill Mail
 
-func (a *AtomLocal) pushKillMail(from ID, wait bool) *ErrorInfo {
-	return a.atomos.PushKillMailAndWaitReply(from, wait)
+func (a *AtomLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *Error {
+	// Dead Lock Checker.
+	if from != nil && wait {
+		fromChain := from.getCallChain()
+		if a.isInChain(fromChain) {
+			return NewErrorf(ErrAtomosCallDeadLock, "Atom: Kill Deadlock. chain=(%v),to(%s)", fromChain, a).AddStack(a)
+		}
+	}
+	return a.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
-// Stateful Atom will save data after Halt method has been called, while is doing this, Atom is set to Stopping.
+// Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
-func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *ErrorInfo) {
+func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err *Error) {
+	var save bool
+	var data proto.Message
 	defer func() {
 		if r := recover(); r != nil {
-			_, file, line, ok := runtime.Caller(2)
-			if !ok {
-				file, line = "???", 0
-			}
 			if err == nil {
-				err = NewErrorf(ErrFrameworkPanic, "OnStopping, Recover from panic, reason=(%s),file=(%s),line=(%d)", r, file, line)
+				err = NewErrorf(ErrFrameworkPanic, "Atom: Stopping recovers from panic.").AddPanicStack(a, 3, r, data)
+				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Stopping recovers from panic. err=(%v)", err)
+					}()
+					ar.StopRecover(err)
+				} else {
+					a.Log().Fatal("Atom: Stopping recovers from panic. err=(%v)", err)
+				}
 			}
-			err.Panic = string(debug.Stack())
-			err.AddStack(a, file, fmt.Sprintf("%v", r), line, nil)
 		}
 		a.element.elementAtomStopping(a)
 	}()
-	save, data := a.atomos.GetInstance().Halt(from, cancelled)
+	save, data = a.atomos.GetInstance().Halt(from, cancelled)
 	if !save {
 		return nil
 	}
 	// Save data.
 	impl := a.element.current
 	if impl == nil {
-		err = NewErrorf(ErrAtomKillElementNoImplement,
-			"AtomHandler: Save data error, no element implement, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
-		a.Log().Fatal(err.Message)
-		return err
+		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
+			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	persistence, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || persistence == nil {
-		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"AtomHandler: Save data error, no auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
-		a.Log().Fatal(err.Message)
-		return err
+		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
+			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	atomPersistence := persistence.AtomAutoDataPersistence()
 	if atomPersistence == nil {
-		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"AtomHandler: Save data error, no atom auto data persistence, id=(%s),element=(%+v)", a.atomos.GetIDInfo(), a.element)
-		a.Log().Fatal(err.Message)
-		return err
+		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
+			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	if err = atomPersistence.SetAtomData(a.GetName(), data); err != nil {
-		a.Log().Error("AtomHandler: Save data failed, set atom data error, id=(%s),instance=(%+v),err=(%s)",
-			a.atomos.GetIDInfo(), a.atomos.Description(), err)
-		return err
+		return err.AddStack(a, data)
 	}
 	return err
 }
 
-// Reload Mail
+// Wormhole Mail
 
-// 重载邮件，指定Atom的版本。
-// Reload Mail with specific version.
-func (a *AtomLocal) pushReloadMail(from ID, elem *ElementImplementation, upgrades int) *ErrorInfo {
-	return a.atomos.PushReloadMailAndWaitReply(from, elem, upgrades)
-}
-
-// 注意：Reload伴随着整个Element的Reload，会先调用Atom的Halt，再Spawn。但不会删除正在执行的任务。
-// Notice: Atom reload goes with the Element reload, Halt and Spawn will be called in order. It won't delete tasks.
-
-func (a *AtomLocal) OnReloading(oldAtom Atomos, reloadObject AtomosReloadable) (newAtom Atomos) {
-	// 如果没有新的Element，就用旧的Element。
-	// Use old Element if there is no new Element.
-	reload, ok := reloadObject.(*ElementImplementation)
-	if !ok || reload == nil {
-		err := NewErrorf(ErrAtomReloadInvalid, "Reload is invalid, reload=(%v),reloads=(%d)", reload, a.atomos.reloads)
-		a.Log().Fatal(err.Message)
-		return
-	}
-
-	newAtom = reload.Developer.AtomConstructor(a.GetName())
-	newAtom.Reload(oldAtom)
-	return newAtom
-}
-
-func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *ErrorInfo {
+func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrAtomosNotSupportWormhole, "ElementLocal: Not supported wormhole, type=(%T)", a.atomos.instance)
-		a.Log().Error(err.Message)
-		return err
+		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)",
+			a.atomos.instance).AddStack(a)
 	}
 	return holder.AcceptWormhole(from, wormhole)
 }
 
+// Set & Unset
+
+func (a *AtomLocal) Spawn() {
+	a.messageTracker.Start()
+	if a.element.main.runnable.hookAtomSpawn != nil {
+		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
+}
+
+func (a *AtomLocal) Set(message string) {
+	a.messageTracker.Set(message)
+}
+
+func (a *AtomLocal) Unset(message string) {
+	a.messageTracker.Unset(message)
+}
+
+func (a *AtomLocal) Stopping() {
+	a.messageTracker.Stopping()
+	if a.element.main.runnable.hookAtomStopping != nil {
+		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
+}
+
+func (a *AtomLocal) Halted() {
+	a.messageTracker.Halt()
+	if a.element.main.runnable.hookAtomHalt != nil {
+		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atomos)
+	}
+}
+
+func (a *AtomLocal) GetMessagingInfo() map[string]MessageTrackInfo {
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
+	return a.messageTracker.Dump()
+}
+
 // Element
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, arg proto.Message) *ErrorInfo {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, arg proto.Message) (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if err == nil {
+				err = NewErrorf(ErrFrameworkPanic, "Atom: Spawn recovers from panic.").AddPanicStack(a, 3, r)
+				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
+					defer func() {
+						recover()
+						a.Log().Fatal("Atom: Spawn recovers from panic. err=(%v)", err)
+					}()
+					ar.SpawnRecover(arg, err)
+				} else {
+
+				}
+			}
+		}
+	}()
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -493,18 +494,18 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 		atomPersistence := persistence.AtomAutoDataPersistence()
 		if atomPersistence != nil {
 			name := a.GetName()
-			d, err := atomPersistence.GetAtomData(name)
+			data, err = atomPersistence.GetAtomData(name)
 			if err != nil {
-				return err
+				return err.AddStack(a)
 			}
-			if d == nil && arg == nil {
-				return NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)", name)
+			if data == nil && arg == nil {
+				return NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)",
+					name).AddStack(a)
 			}
-			data = d
 		}
 	}
-	if err := current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
-		return err
+	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
+		return err.AddStack(a)
 	}
 	return nil
 }

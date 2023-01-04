@@ -1,50 +1,28 @@
 package main
 
 import (
-	"flag"
+	"fmt"
 	atomos "github.com/hwangtou/go-atomos"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func main() {
-	defer func() {
-		time.Sleep(1 * time.Second)
-	}()
-
-	// Load runnable.
-	cosmos, err := atomos.NewCosmosProcess()
-	if err != nil {
-		cosmos.Logging(atomos.LogLevel_Fatal, "Daemon failed, err=(%v)", err)
-		return
-	}
-	defer cosmos.Close()
-
-	exitCh, err := cosmos.Daemon()
-	if err != nil {
-		cosmos.Logging(atomos.LogLevel_Fatal, "Daemon failed, err=(%v)", err)
-		return
+	accessLog := func(s string) { os.Stdin.WriteString(s) }
+	errLog := func(s string) { os.Stdin.WriteString(s) }
+	atomos.InitCosmosProcess(accessLog, errLog)
+	if err := atomos.SharedCosmosProcess().Start(&AtomosRunnable); err != nil {
+		atomos.SharedLogging().PushLogging(nil, atomos.LogLevel_Err, fmt.Sprintf("Start failed. err=(%v)", err))
 	}
 
-	// Config
-	configPath := flag.String("config", "config/config.yaml", "yaml config path")
-	flag.Parse()
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM)
+	<-signalCh
 
-	// Load config.
-	conf, err := atomos.ConfigFromYaml(*configPath)
-	if err != nil {
-		cosmos.Logging(atomos.LogLevel_Fatal, "Load config error, err=%v", err)
-		return
+	if err := atomos.SharedCosmosProcess().Stop(); err != nil {
+		atomos.SharedLogging().PushLogging(nil, atomos.LogLevel_Err, fmt.Sprintf("Stop failed. err=(%v)", err))
 	}
-	if err = conf.Check(); err != nil {
-		cosmos.Logging(atomos.LogLevel_Fatal, "Check config error, err=%v", err)
-		return
-	}
-	AtomosRunnable.SetConfig(conf)
-
-	if err = cosmos.Send(atomos.NewRunnableCommand(&AtomosRunnable)); err != nil {
-		cosmos.Logging(atomos.LogLevel_Fatal, "Run atomos error, err=%v", err)
-		return
-	}
-	cosmos.WaitKillSignal()
-	<-exitCh
+	<-time.After(1 * time.Second)
 }

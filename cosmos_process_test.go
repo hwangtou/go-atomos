@@ -2,38 +2,22 @@ package go_atomos
 
 import (
 	"testing"
-	"time"
 )
 
-func TestCosmosProcess(t *testing.T) {
-	// Load runnable.
-	cosmos, err := NewCosmosProcess()
-	if err != nil {
-		t.Errorf(err.Message)
-		return
-	}
-	defer cosmos.Close()
+type testMainScript struct {
+	t *testing.T
+}
 
-	exitCh, err := cosmos.Daemon()
-	if err != nil {
-		t.Errorf(err.Message)
-		return
-	}
+func (s *testMainScript) OnStartup() *Error {
+	s.t.Log("testMainScript: StartUp Begin")
+	//panic("startup panic")
+	s.t.Log("testMainScript: StartUp End")
+	return nil
+}
 
-	go func() {
-		time.Sleep(1 * time.Second)
-		if err := cosmos.Send(NewExitCommand()); err != nil {
-			t.Errorf(err.Message)
-		}
-	}()
-
-	runnable := newTestFakeRunnable(t)
-	if err = cosmos.Send(NewRunnableCommand(runnable)); err != nil {
-		t.Errorf(err.Message)
-		return
-	}
-
-	cosmos.WaitKillSignal()
-	<-exitCh
-	// TODO: Cannot exit
+func (s *testMainScript) OnShutdown() *Error {
+	s.t.Log("testMainScript: Shutdown Begin")
+	//panic("shutdown panic")
+	s.t.Log("testMainScript: Shutdown End")
+	return nil
 }

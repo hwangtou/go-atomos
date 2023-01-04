@@ -15,11 +15,9 @@ const (
 )
 
 const (
-	IsDebug            = false
-	DebugAtomosTimeout = 5 * time.Second
+	ShouldArgumentClone = false
 )
 
-const (
-	ShouldQuitBlocking  = true
-	QuitBlockingTimeout = 6 * time.Second
+var (
+	DefaultTimeout = 2 * time.Second
 )
