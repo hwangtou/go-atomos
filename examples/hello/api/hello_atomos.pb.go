@@ -5,7 +5,7 @@ package api
 import (
 	go_atomos "github.com/hwangtou/go-atomos"
 	proto "google.golang.org/protobuf/proto"
-	"time"
+	time "time"
 )
 
 // This is a compile-time assertion to ensure that this generated file
