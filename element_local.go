@@ -647,7 +647,7 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
 			if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-				sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+				sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Spawn failed. name=(%s),err=(%v)", name, err)
 			}
 			if oldAtom.atomos.state < AtomosStopping {
 				return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
@@ -700,7 +700,7 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {
 	}
 	e.lock.Unlock()
 	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Release failed. name=(%s),err=(%v)", name, err)
 	}
 }
 
@@ -720,7 +720,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	}
 	e.lock.Unlock()
 	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply failed. err=(%v)", err)
+		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Stopping failed. name=(%s),err=(%v)", name, err)
 	}
 }
 

@@ -293,8 +293,8 @@ func (a *BaseAtomos) setHalt() {
 func (a *BaseAtomos) onReceive(mail *mail) {
 	am := mail.mail
 	if !a.IsInState(AtomosWaiting) {
-		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),mail=(%v)",
-			a, mail)
+		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
+			a, a.GetState(), mail)
 	}
 	switch am.mailType {
 	case MailMessage:
