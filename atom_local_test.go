@@ -105,16 +105,22 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Push Timeout Message.
 	reply, err = atom.pushMessageMail(testElem, "testMessageTimeout", 1*time.Millisecond, nil)
-	if err == nil || err.Code != ErrAtomosPushTimeout {
+	if err == nil || err.Code != ErrAtomosPushTimeoutHandling {
 		t.Errorf("TestAtomLocalBase: Push Message Timeout failed. err=(%v)", err)
 		return
 	}
 	messages += 1 // testMessageTimeout
+	// Push Timeout Reject Mail.
+	reply, err = atom.pushMessageMail(testElem, "testMessage", 1*time.Microsecond, nil)
+	if err == nil || err.Code != ErrAtomosPushTimeoutReject {
+		t.Errorf("TestAtomLocalBase: Push Message Timeout failed. err=(%v)", err)
+		return
+	}
 	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosBusy, 1); err != nil {
 		t.Errorf("TestAtomLocalBase: Push Message Timeout state invalid. err=(%v)", err)
 		return
 	}
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
 		t.Errorf("TestAtomLocalBase: Push Message Timeout state invalid. err=(%v)", err)
 		return

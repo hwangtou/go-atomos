@@ -140,3 +140,7 @@ func (p *CosmosProcess) Stop() *Error {
 	}
 	return nil
 }
+
+func (p *CosmosProcess) Self() *CosmosMain {
+	return p.main
+}

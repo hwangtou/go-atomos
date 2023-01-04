@@ -50,7 +50,7 @@ func TestElementLocalBase(t *testing.T) {
 
 	// Push Timeout Message.
 	reply, err = testElem.pushMessageMail(process.main, "testMessageTimeout", 1*time.Millisecond, nil)
-	if err == nil || err.Code != ErrAtomosPushTimeout {
+	if err == nil || err.Code != ErrAtomosPushTimeoutHandling {
 		t.Errorf("TestElementLocalBase: Push Message Timeout failed. err=(%v)", err)
 		return
 	}

@@ -199,6 +199,39 @@ func (mb *mailBox) popByID(id uint64) *mail {
 	return nil
 }
 
+func (mb *mailBox) removeMail(dm *mail) bool {
+	mb.mutex.Lock()
+	var pM, m *mail = nil, mb.head
+	if m == nil {
+		mb.mutex.Unlock()
+		return false
+	}
+	for m != nil {
+		if m == dm {
+			mb.num -= 1
+			if pM == nil {
+				mb.head = m.next
+				if m == mb.tail {
+					mb.tail = nil
+				}
+			} else {
+				pM.next = m.next
+				if m == mb.tail {
+					mb.tail = pM
+					mb.tail.next = nil
+				}
+			}
+			m.next = nil
+			mb.mutex.Unlock()
+			return true
+		}
+		pM = m
+		m = m.next
+	}
+	mb.mutex.Unlock()
+	return false
+}
+
 func (mb *mailBox) loop() {
 	sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
 	defer func() {
@@ -242,10 +275,6 @@ func (mb *mailBox) loop() {
 			break
 		}
 	}
-}
-
-func (mb *mailBox) sharedLock() *sync.Mutex {
-	return &mb.mutex
 }
 
 //goos: darwin

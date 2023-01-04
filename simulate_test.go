@@ -93,7 +93,7 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 			},
 			"testMessageTimeout": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageTimeout. from=(%v),to=(%v),in=(%v)", from, to, in)
-				time.Sleep(2 * time.Millisecond)
+				time.Sleep(5 * time.Millisecond)
 				return &String{S: "OK"}, nil
 			},
 			"testMessageDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
@@ -321,7 +321,7 @@ func (t *testElementAutoDataDev) SetElementData(data proto.Message) *Error {
 	if testElementSetDataError {
 		return NewError(ErrFrameworkPanic, "Set Element Data Error")
 	}
-	if testElementGetDataPanic {
+	if testElementSetDataPanic {
 		panic("Set Element Data Panic")
 	}
 	return nil

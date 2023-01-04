@@ -44,7 +44,7 @@ type Element interface {
 	MessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 	MessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 
-	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message) (ID, *Error)
+	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message, skip int) (ID, *IDTracker, *Error)
 
 	// KillAtom
 	// 向一个Atom发送Kill。

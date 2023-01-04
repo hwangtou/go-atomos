@@ -33,7 +33,8 @@ const (
 	ErrAtomosTaskInvalidFn
 	ErrAtomosTaskNotExists
 	ErrAtomosNotSupportWormhole
-	ErrAtomosPushTimeout
+	ErrAtomosPushTimeoutHandling
+	ErrAtomosPushTimeoutReject
 	ErrAtomosCallDeadLock
 
 	ErrElementLoaded
@@ -43,6 +44,7 @@ const (
 	ErrElementMessageReplyType
 	ErrElementCannotKill
 	ErrElementNoFromID
+	ErrElementNotImplemented
 
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageDecoderNotExists
@@ -56,6 +58,8 @@ const (
 	ErrAtomIsStopping
 	ErrAtomCannotScale
 	ErrAtomNoFromID
+	ErrAtomNotImplemented
+	ErrAtomMessageAtomType
 
 	ErrAtomMessageArgType
 	ErrAtomMessageReplyType

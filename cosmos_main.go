@@ -157,6 +157,10 @@ func (c *CosmosMain) getAtomLocal() *AtomLocal {
 	return nil
 }
 
+func (c *CosmosMain) getIDTrackerManager() *IDTrackerManager {
+	return nil
+}
+
 // Implementation of atomos.SelfID
 // Implementation of atomos.ParallelSelf
 //
@@ -228,7 +232,7 @@ func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *IDTracker, 
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return element.GetAtomID(name, 1)
+	return element.GetAtomID(name, 3)
 }
 
 func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
@@ -236,7 +240,7 @@ func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message
 	if err != nil {
 		return nil, nil, err
 	}
-	return element.SpawnAtom(name, arg, 1)
+	return element.SpawnAtom(name, arg, 3)
 }
 
 func (c *CosmosMain) CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
@@ -247,12 +251,12 @@ func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, timeout 
 	return toID.Element().MessageAtom(fromID, toID, message, timeout, args)
 }
 
-func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, err *Error) {
+func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
-		return nil, err.AddStack(c)
+		return nil, nil, err.AddStack(c)
 	}
-	return element.ScaleGetAtomID(fromID, message, timeout, args)
+	return element.ScaleGetAtomID(fromID, message, timeout, args, 3)
 }
 
 // Implementation of AtomosUtilities

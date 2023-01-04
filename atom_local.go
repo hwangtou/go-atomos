@@ -164,6 +164,10 @@ func (a *AtomLocal) getAtomLocal() *AtomLocal {
 	return a
 }
 
+func (a *AtomLocal) getIDTrackerManager() *IDTrackerManager {
+	return a.idTracker
+}
+
 // Implementation of SelfID
 //
 // SelfID，是Atom内部可以访问的Atom资源的概念。

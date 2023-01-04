@@ -1,5 +1,7 @@
 package go_atomos
 
+import "time"
+
 // LoggingAtomos
 const (
 	logTimeFmt = "2006-01-02 15:04:05.000000"
@@ -13,7 +15,9 @@ const (
 )
 
 const (
-	IsDebug = false
-
 	ShouldArgumentClone = false
+)
+
+var (
+	DefaultTimeout = 2 * time.Second
 )

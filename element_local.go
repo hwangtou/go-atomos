@@ -166,6 +166,10 @@ func (e *ElementLocal) getAtomLocal() *AtomLocal {
 	return nil
 }
 
+func (e *ElementLocal) getIDTrackerManager() *IDTrackerManager {
+	return e.idTracker
+}
+
 // Implementation of atomos.SelfID
 // Implementation of atomos.ParallelSelf
 //
@@ -320,12 +324,12 @@ func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, timeout time.Du
 	return a.pushMessageMail(fromID, name, timeout, args)
 }
 
-func (e *ElementLocal) ScaleGetAtomID(fromID ID, name string, timeout time.Duration, args proto.Message) (ID, *Error) {
+func (e *ElementLocal) ScaleGetAtomID(fromID ID, name string, timeout time.Duration, args proto.Message, skip int) (ID, *IDTracker, *Error) {
 	if fromID == nil {
-		return nil, NewErrorf(ErrAtomFromIDInvalid, "Element: ScaleGetAtomID, FromID invalid. from=(%s),name=(%s),args=(%v)",
+		return nil, nil, NewErrorf(ErrAtomFromIDInvalid, "Element: ScaleGetAtomID, FromID invalid. from=(%s),name=(%s),args=(%v)",
 			fromID, name, args).AddStack(e)
 	}
-	return e.pushScaleMail(fromID, name, timeout, args)
+	return e.pushScaleMail(fromID, name, timeout, args, skip+1)
 }
 
 func (e *ElementLocal) KillAtom(fromID, toID ID, timeout time.Duration) *Error {
@@ -428,16 +432,20 @@ func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (rep
 	return
 }
 
-func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message) (ID, *Error) {
+func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message, skip int) (ID, *IDTracker, *Error) {
 	// Dead Lock Checker.
 	if from != nil {
 		fromChain := from.getCallChain()
 		if e.isInChain(fromChain) {
-			return nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
+			return nil, nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
 				fromChain, e, name, arg).AddStack(e)
 		}
 	}
-	return e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg)
+	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg)
+	if err != nil {
+		return nil, nil, err.AddStack(e, &String{S: name}, arg)
+	}
+	return id, id.getIDTrackerManager().NewTracker(skip + 1), nil
 }
 
 func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message) (id ID, err *Error) {

@@ -69,7 +69,7 @@ type IDTracker struct {
 	name string
 }
 
-func (i *IDTracker) String() string {
+func (i *IDTracker) ToString() string {
 	if i == nil {
 		return "nil"
 	}

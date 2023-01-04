@@ -229,7 +229,7 @@ func (m *atomosMail) sendReplyID(id ID, err *Error) {
 }
 
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReply(timeout time.Duration) (resp proto.Message, err *Error) {
+func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
@@ -244,7 +244,11 @@ func (m *atomosMail) waitReply(timeout time.Duration) (resp proto.Message, err *
 		select {
 		case reply = <-waitCh:
 		case <-time.After(timeout):
-			return nil, NewErrorf(ErrAtomosPushTimeout, "Atomos: Message is timeout. timeout=(%v)", timeout).AddStack(nil)
+			if a.mailbox.removeMail(m.mail) {
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. timeout=(%v)", timeout).AddStack(nil)
+			} else {
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. timeout=(%v)", timeout).AddStack(nil)
+			}
 		}
 	}
 	// Wait channel must be empty before delete a mail.
@@ -257,7 +261,7 @@ func (m *atomosMail) waitReply(timeout time.Duration) (resp proto.Message, err *
 }
 
 // TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReplyID(timeout time.Duration) (id ID, err *Error) {
+func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
@@ -274,7 +278,11 @@ func (m *atomosMail) waitReplyID(timeout time.Duration) (id ID, err *Error) {
 		select {
 		case reply = <-waitCh:
 		case <-time.After(timeout):
-			return nil, NewErrorf(ErrAtomosPushTimeout, "Atomos: Message is timeout. timeout=(%v)", timeout).AddStack(nil)
+			if a.mailbox.removeMail(m.mail) {
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. timeout=(%v)", timeout).AddStack(nil)
+			} else {
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. timeout=(%v)", timeout).AddStack(nil)
+			}
 		}
 	}
 	// Wait channel must be empty before delete a mail.

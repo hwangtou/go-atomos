@@ -113,7 +113,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, timeout t
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running. from=(%s),name=(%s),args=(%v)", from, name, args).AddStack(nil)
 	}
-	replyInterface, err := am.waitReply(timeout)
+	replyInterface, err := am.waitReply(a, timeout)
 
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
@@ -134,7 +134,7 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout 
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running. from=(%s),message=(%s),args=(%v)", from, message, args).AddStack(nil)
 	}
-	id, err := am.waitReplyID(timeout)
+	id, err := am.waitReplyID(a, timeout)
 
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
@@ -151,7 +151,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait, executeStop bool, t
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
 	}
 	if wait {
-		_, err = am.waitReply(timeout)
+		_, err = am.waitReply(a, timeout)
 		return err.AddStack(nil)
 	}
 	return nil
@@ -164,7 +164,7 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, timeout time.Duration
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole)
 	}
-	_, err = am.waitReply(timeout)
+	_, err = am.waitReply(a, timeout)
 
 	deallocAtomosMail(am)
 	return err.AddStack(nil)
@@ -229,9 +229,9 @@ func (a *BaseAtomos) isNotHalt() bool {
 }
 
 func (a *BaseAtomos) GetState() AtomosState {
-	a.mailbox.sharedLock().Lock()
+	a.mailbox.mutex.Lock()
 	state := a.state
-	a.mailbox.sharedLock().Unlock()
+	a.mailbox.mutex.Unlock()
 	return state
 }
 
