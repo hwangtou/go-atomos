@@ -723,6 +723,10 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	if atom.atomos.mailbox.isRunning() {
 		sharedLogging.pushFrameworkErrorLog("elementAtomStopping: Mailbox is still running. name=(%s)", name)
 	}
+
+	if StoppingPrintStatic {
+		e.Log().Warn("Static >> AtomStopping IDTracker=(%v)", atom.idTracker)
+	}
 }
 
 func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {

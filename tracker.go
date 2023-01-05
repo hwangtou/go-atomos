@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,6 +60,21 @@ func (i *IDTrackerManager) RefCount() int {
 	num := len(i.idMap)
 	i.Unlock()
 	return num
+}
+
+func (i *IDTrackerManager) String() string {
+	i.Lock()
+	defer i.Unlock()
+	if len(i.idMap) == 0 {
+		return "No IDTracker remain"
+	}
+	b := strings.Builder{}
+	b.WriteString("IDTracker Info:")
+	for _, tracker := range i.idMap {
+		b.WriteString("\n")
+		b.WriteString(tracker.ToString())
+	}
+	return b.String()
 }
 
 type IDTracker struct {

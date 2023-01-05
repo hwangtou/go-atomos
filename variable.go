@@ -4,5 +4,7 @@ import "time"
 
 var (
 	MessageTimeoutTracer = true
-	DefaultTimeout       = 2 * time.Second
+	StoppingPrintStatic  = true
+
+	DefaultTimeout = 2 * time.Second
 )
