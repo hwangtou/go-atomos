@@ -54,6 +54,7 @@ func initCosmosMain(process *CosmosProcess) *CosmosMain {
 	}
 	main.atomos = NewBaseAtomos(id, LogLevel_Debug, main, main)
 	process.main = main
+	_ = process.main.atomos.start(nil)
 	return main
 }
 
@@ -438,16 +439,18 @@ func (c *CosmosMain) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementat
 		return nil, NewErrorf(ErrElementLoaded, "Cosmos: Spawn Element exists. name=(%s)", name).AddStack(c)
 	}
 
-	elem.atomos.setSpawning()
-	err = elem.cosmosElementSpawn(r, i)
-	if err != nil {
-		elem.atomos.setHalt()
+	// Element的Spawn逻辑。
+	if err = elem.atomos.start(func() *Error {
+		if err := elem.cosmosElementSpawn(r, i); err != nil {
+			return err.AddStack(elem)
+		}
+		return nil
+	}); err != nil {
 		c.mutex.Lock()
 		delete(c.elements, name)
 		c.mutex.Unlock()
-		return nil, err
+		return nil, err.AddStack(elem)
 	}
-	elem.atomos.setSpawn()
 	return elem, nil
 }
 

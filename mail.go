@@ -25,12 +25,10 @@ const (
 
 // Mail Box
 
-type MailBoxOnReceiveFn func(mail *mail)
-type MailBoxOnStopFn func(stopMail, remainMails *mail, num uint32)
-
-type MailBoxHandler struct {
-	OnReceive MailBoxOnReceiveFn
-	OnStop    MailBoxOnStopFn
+type MailboxHandler interface {
+	mailboxOnStartUp(fn func() *Error) *Error
+	mailboxOnReceive(mail *mail)
+	mailboxOnStop(stopMail, remainMails *mail, num uint32)
 }
 
 type mailBox struct {
@@ -38,13 +36,13 @@ type mailBox struct {
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
-	handler MailBoxHandler
+	handler MailboxHandler
 	head    *mail
 	tail    *mail
 	num     uint32
 }
 
-func newMailBox(name string, handler MailBoxHandler) *mailBox {
+func newMailBox(name string, handler MailboxHandler) *mailBox {
 	mb := &mailBox{
 		name:    name,
 		mutex:   sync.Mutex{},
@@ -59,14 +57,28 @@ func newMailBox(name string, handler MailBoxHandler) *mailBox {
 	return mb
 }
 
-func (mb *mailBox) start() {
+func (mb *mailBox) isRunning() bool {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
+	return mb.running
+}
+
+func (mb *mailBox) start(fn func() *Error) *Error {
+	mb.mutex.Lock()
 	if mb.running {
-		return
+		mb.mutex.Unlock()
+		return NewError(ErrFrameworkPanic, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
+	mb.mutex.Unlock()
+	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
+		mb.mutex.Lock()
+		mb.running = false
+		mb.mutex.Unlock()
+		return err.AddStack(nil)
+	}
 	go mb.loop()
+	return nil
 }
 
 func (mb *mailBox) waitPop() *mail {
@@ -253,7 +265,7 @@ func (mb *mailBox) loop() {
 				switch curMail.action {
 				case MailActionRun:
 					// When this line can be executed, it means there is mail in box.
-					mb.handler.OnReceive(curMail)
+					mb.handler.mailboxOnReceive(curMail)
 				case MailActionExit:
 					// Set stop running.
 					// To refuse all incoming mails.
@@ -263,11 +275,13 @@ func (mb *mailBox) loop() {
 					exit = true
 					// Reject all mails backward.
 					mails, num := mb.popAll()
-					if curMail.mail.executeStop {
-						mb.handler.OnStop(curMail, mails, num)
+					if m := curMail.mail; m != nil {
+						if m.executeStop {
+							mb.handler.mailboxOnStop(curMail, mails, num)
+						}
+						// Wait channel.
+						m.sendReply(nil, nil)
 					}
-					// Wait channel.
-					curMail.mail.sendReply(nil, nil)
 					return
 				}
 			}

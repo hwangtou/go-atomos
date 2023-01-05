@@ -300,7 +300,7 @@ func (a *AtomLocal) unsetMessageAndCallChain(message string) {
 // 推送邮件，并管理邮件对象的生命周期。
 // 处理邮件，并设置Atom的运行状态。
 //
-// PushProcessLog Mail, and manage life cycle of Mail instance.
+// Push Mail, and manage life cycle of Mail instance.
 // Handle Mail, and set the state of Atom.
 
 // Message Mail

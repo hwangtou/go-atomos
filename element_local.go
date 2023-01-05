@@ -383,7 +383,6 @@ func (e *ElementLocal) unsetMessageAndCallChain() {
 
 // 邮箱控制器相关
 // Mailbox Handler
-// TODO: Performance tracer.
 
 func (e *ElementLocal) pushMessageMail(from ID, name string, timeout time.Duration, arg proto.Message) (reply proto.Message, err *Error) {
 	// Dead Lock Checker.
@@ -646,34 +645,34 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		oldAtom.atomos.mailbox.mutex.Lock()
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
-			if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-				sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Spawn failed. name=(%s),err=(%v)", name, err)
-			}
 			if oldAtom.atomos.state < AtomosStopping {
 				return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
 			} else {
 				return nil, nil, NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. name=(%s)", name).AddStack(oldAtom, arg)
 			}
 		}
-		atom.messageTracker, atom.idTracker = oldAtom.messageTracker, oldAtom.idTracker
-		lock := &oldAtom.atomos.mailbox.mutex
+		// TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
+		oldLock := &oldAtom.atomos.mailbox.mutex
+		atom.nameElement = oldAtom.nameElement
+		atom.idTracker = oldAtom.idTracker
 		*oldAtom = *atom
-		lock.Unlock()
+		oldLock.Unlock()
 		atom = oldAtom
 	}
 
 	// Atom的Spawn逻辑。
-	atom.atomos.setSpawning()
-	if e.main.runnable.hookAtomSpawning != nil {
-		e.main.runnable.hookAtomSpawning(e.atomos.id.Element, name)
-	}
-	err := atom.elementAtomSpawn(current, persistence, arg)
-	if err != nil {
-		atom.atomos.setHalt()
+	if err := atom.atomos.start(func() *Error {
+		if e.main.runnable.hookAtomSpawning != nil {
+			e.main.runnable.hookAtomSpawning(e.atomos.id.Element, name)
+		}
+		if err := atom.elementAtomSpawn(current, persistence, arg); err != nil {
+			return err.AddStack(nil)
+		}
+		return nil
+	}); err != nil {
 		e.elementAtomRelease(atom, nil)
-		return nil, nil, err.AddStack(e)
+		return nil, nil, err.AddStack(nil)
 	}
-	atom.atomos.setSpawn()
 	return atom, atom.idTracker.NewTracker(skip + 1), nil
 }
 
@@ -699,8 +698,9 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {
 		atom.nameElement = nil
 	}
 	e.lock.Unlock()
-	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Release failed. name=(%s),err=(%v)", name, err)
+	// assert
+	if atom.atomos.mailbox.isRunning() {
+		sharedLogging.pushFrameworkErrorLog("elementAtomRelease: Mailbox is still running. name=(%s)", name)
 	}
 }
 
@@ -719,8 +719,9 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 		atom.nameElement = nil
 	}
 	e.lock.Unlock()
-	if err := atom.atomos.PushKillMailAndWaitReply(nil, false, false, 0); err != nil {
-		sharedLogging.pushFrameworkErrorLog("PushKillMailAndWaitReply: Stopping failed. name=(%s),err=(%v)", name, err)
+	// assert
+	if atom.atomos.mailbox.isRunning() {
+		sharedLogging.pushFrameworkErrorLog("elementAtomStopping: Mailbox is still running. name=(%s)", name)
 	}
 }
 

@@ -216,6 +216,17 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: KillSelf state invalid. err=(%v)", err)
 		return
 	}
+
+	// Message Tracker.
+	messageCount := 0
+	for _, info := range atom.messageTracker.messages {
+		messageCount += info.Count
+	}
+	if messages != messageCount {
+		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
+		return
+	}
+
 	// Spawn again.
 	start := time.Now()
 	for {
@@ -242,7 +253,7 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Spawn twice Push Message failed. err=(%v)", err)
 		return
 	}
-	messages += 1 // testMessage
+	messages = 1 // testMessage
 	reply, err = atomTwice.pushMessageMail(testElem, "testMessage", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Spawn twice Push Message failed. err=(%v)", err)
@@ -305,7 +316,7 @@ func TestAtomLocalBase(t *testing.T) {
 		return
 	}
 	// Message Tracker.
-	messageCount := 0
+	messageCount = 0
 	for _, info := range atom.messageTracker.messages {
 		messageCount += info.Count
 	}
@@ -313,7 +324,6 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
 		return
 	}
-	// TODO: 重新Spawn之后的Spawn统计时间不准确。
 	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
 		atom.messageTracker.spawnAt.Sub(atom.messageTracker.spawningAt),
 		atom.messageTracker.stoppingAt.Sub(atom.messageTracker.spawnAt),

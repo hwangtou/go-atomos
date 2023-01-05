@@ -74,14 +74,9 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos) *B
 		task:     atomosTaskManager{},
 		log:      atomosLoggingManager{},
 	}
-	a.mailbox = newMailBox(id.Info(), MailBoxHandler{
-		OnReceive: a.onReceive,
-		OnStop:    a.onStop,
-	})
+	a.mailbox = newMailBox(id.Info(), a)
 	initAtomosLog(&a.log, a, lv)
 	initAtomosTasksManager(&a.task, a)
-	a.mailbox.start()
-	a.state = AtomosWaiting
 	return a
 }
 
@@ -288,9 +283,26 @@ func (a *BaseAtomos) setHalt() {
 
 // Mailbox
 
+func (a *BaseAtomos) start(fn func() *Error) *Error {
+	return a.mailbox.start(fn)
+}
+
+// 处理邮箱启动
+func (a *BaseAtomos) mailboxOnStartUp(fn func() *Error) *Error {
+	a.setSpawning()
+	if fn != nil {
+		if err := fn(); err != nil {
+			a.setHalt()
+			return err.AddStack(nil)
+		}
+	}
+	a.setSpawn()
+	return nil
+}
+
 // 处理邮箱消息。
 // Handle mailbox messages.
-func (a *BaseAtomos) onReceive(mail *mail) {
+func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	am := mail.mail
 	if !a.IsInState(AtomosWaiting) {
 		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
@@ -344,7 +356,7 @@ func (a *BaseAtomos) onReceive(mail *mail) {
 
 // 处理邮箱退出。
 // Handle mailbox stops.
-func (a *BaseAtomos) onStop(killMail, remainMail *mail, num uint32) {
+func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 

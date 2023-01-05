@@ -26,6 +26,12 @@ func initTestFakeCosmosProcess(t *testing.T) {
 	InitCosmosProcess(accessLog, errorLog)
 }
 
+func initTestFakeCosmosProcessBenchmark(b *testing.B) {
+	accessLog := func(s string) { b.Logf(s) }
+	errorLog := func(s string) { b.Logf(s) }
+	InitCosmosProcess(accessLog, errorLog)
+}
+
 func newTestFakeRunnable(t *testing.T, autoData bool) *CosmosRunnable {
 	runnable := &CosmosRunnable{}
 	runnable.

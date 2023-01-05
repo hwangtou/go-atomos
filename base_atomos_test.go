@@ -6,6 +6,24 @@ import (
 	"time"
 )
 
+type testMainScript struct {
+	t *testing.T
+}
+
+func (s *testMainScript) OnStartup() *Error {
+	s.t.Log("testMainScript: StartUp Begin")
+	//panic("startup panic")
+	s.t.Log("testMainScript: StartUp End")
+	return nil
+}
+
+func (s *testMainScript) OnShutdown() *Error {
+	s.t.Log("testMainScript: Shutdown Begin")
+	//panic("shutdown panic")
+	s.t.Log("testMainScript: Shutdown End")
+	return nil
+}
+
 type TestAtomosHolder struct {
 	T *testing.T
 }
@@ -98,31 +116,56 @@ func TestBaseAtomos(t *testing.T) {
 	instance := &TestAtomosInstance{T: t, reload: 1}
 	holder := &TestAtomosHolder{T: t}
 	atom := NewBaseAtomos(id, LogLevel_Debug, holder, instance)
+	_ = atom.start(nil)
 	a = atom
 	// Push Message
 	reply, err := a.PushMessageMailAndWaitReply(nil, "message", 0, nil)
-	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+	if err != nil {
+		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+		return
+	}
 	// Push Task
 	taskID, err := a.Task().AddAfter(0, instance.TestTask, nil)
-	t.Logf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
+	if err != nil {
+		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
+		return
+	}
 	// Push Task
 	taskID, err = a.Task().AddAfter(1*time.Second, instance.TestTask, nil)
-	t.Logf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
+	if err != nil {
+		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
+		return
+	}
 	// Push Wormhole
 	err = a.PushWormholeMailAndWaitReply(nil, 0, "wormhole_message")
-	t.Logf("PushWormholeMailAndWaitReply: err=(%v)", err)
+	if err != nil {
+		t.Errorf("PushWormholeMailAndWaitReply: err=(%v)", err)
+		return
+	}
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "message", 0, nil)
-	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+	if err != nil {
+		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+		return
+	}
 	// Push Message Panic
 	reply, err = a.PushMessageMailAndWaitReply(nil, "panic", 0, nil)
-	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
+		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+		return
+	}
 	// Push Kill
 	err = a.PushKillMailAndWaitReply(nil, true, true, 0)
-	t.Logf("PushKillMailAndWaitReply: state=(%d),err=(%v)", a.GetState(), err)
+	if err != nil {
+		t.Errorf("PushKillMailAndWaitReply: state=(%d),err=(%v)", a.GetState(), err)
+		return
+	}
 	// Push Message
 	reply, err = a.PushMessageMailAndWaitReply(nil, "send_after_halt", 0, nil)
-	t.Logf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+	if err == nil || err.Code != ErrAtomosIsNotRunning {
+		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
+		return
+	}
 	time.Sleep(10 * time.Millisecond)
 }
 

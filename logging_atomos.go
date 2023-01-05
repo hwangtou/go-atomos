@@ -45,14 +45,12 @@ func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 
 func initSharedLoggingAtomos(accessLog, errLog LoggingFn) {
 	sharedLogging = LoggingAtomos{
-		logBox: newMailBox("sharedLogging", MailBoxHandler{
-			OnReceive: sharedLogging.onLogMessage,
-			OnStop:    sharedLogging.onLogStop,
-		}),
+		logBox:    nil,
 		accessLog: accessLog,
 		errorLog:  errLog,
 	}
-	sharedLogging.logBox.start()
+	sharedLogging.logBox = newMailBox("sharedLogging", &sharedLogging)
+	_ = sharedLogging.logBox.start(func() *Error { return nil })
 }
 
 func (c *LoggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}) {
@@ -76,13 +74,17 @@ func (c *LoggingAtomos) pushProcessLog(level LogLevel, format string, args ...in
 // Logging Atomos的实现。
 // Implementation of Logging Atomos.
 
-func (c *LoggingAtomos) onLogMessage(mail *mail) {
+func (c *LoggingAtomos) mailboxOnStartUp(func() *Error) *Error {
+	return nil
+}
+
+func (c *LoggingAtomos) mailboxOnReceive(mail *mail) {
 	c.logging(mail.log)
 }
 
-func (c *LoggingAtomos) onLogStop(killMail, remainMails *mail, num uint32) {
+func (c *LoggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
-		c.onLogMessage(curMail)
+		c.logging(curMail.log)
 	}
 }
 
