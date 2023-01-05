@@ -151,7 +151,7 @@ func TestElementLocalBase(t *testing.T) {
 		atom.messageTracker.spawnAt.Sub(atom.messageTracker.spawningAt),
 		atom.messageTracker.stoppingAt.Sub(atom.messageTracker.spawnAt),
 		atom.messageTracker.stoppedAt.Sub(atom.messageTracker.stoppingAt),
-		atom.messageTracker.Dump())
+		atom.messageTracker.dump())
 	//t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
 
 	if err = process.Stop(); err != nil {

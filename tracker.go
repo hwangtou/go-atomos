@@ -71,7 +71,7 @@ func (i *IDTrackerManager) String() string {
 	b := strings.Builder{}
 	b.WriteString("IDTracker Info:")
 	for _, tracker := range i.idMap {
-		b.WriteString("\n")
+		b.WriteString("\n\t")
 		b.WriteString(tracker.ToString())
 	}
 	return b.String()
@@ -175,12 +175,19 @@ func (t *MessageTrackerManager) Halt() {
 	t.stoppedAt = time.Now()
 }
 
-func (t *MessageTrackerManager) Dump() map[string]MessageTrackInfo {
-	messages := make(map[string]MessageTrackInfo, len(t.messages))
-	for message, info := range t.messages {
-		messages[message] = info
+func (t *MessageTrackerManager) dump() string {
+	if len(t.messages) == 0 {
+		return "No MessageTracker"
 	}
-	return messages
+	b := strings.Builder{}
+	b.WriteString("MessageTracker Info:")
+	for message, info := range t.messages {
+		b.WriteString("\n\t")
+		b.WriteString(message)
+		b.WriteString(": ")
+		b.WriteString(info.String())
+	}
+	return b.String()
 }
 
 type MessageTrackInfo struct {

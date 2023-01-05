@@ -31,6 +31,7 @@ type Element interface {
 
 	GetAtomsNum() int
 	GetActiveAtomsNum() int
+	GetAllInactiveAtomsIDTrackerInfo() map[string]string
 
 	// SpawnAtom
 	// 启动一个Atom。

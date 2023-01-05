@@ -289,6 +289,22 @@ func (e *ElementLocal) GetActiveAtomsNum() int {
 	return num
 }
 
+func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
+	info := make(map[string]string, len(e.atoms))
+	atoms := make([]*AtomLocal, 0, len(e.atoms))
+	e.lock.RLock()
+	for _, atomLocal := range e.atoms {
+		if atomLocal.atomos.IsInState(AtomosHalt) {
+			atoms = append(atoms, atomLocal)
+		}
+	}
+	e.lock.RUnlock()
+	for _, atomLocal := range atoms {
+		info[atomLocal.String()] = atomLocal.idTracker.String()
+	}
+	return info
+}
+
 func (e *ElementLocal) SpawnAtom(name string, arg proto.Message, skip int) (*AtomLocal, *IDTracker, *Error) {
 	e.lock.RLock()
 	current := e.current
@@ -526,6 +542,11 @@ func (e *ElementLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (
 	exitWG.Wait()
 	e.Log().Info("Element: All atoms killed. element=(%s)", e.GetName())
 
+	if StoppingPrintStatic {
+		e.Log().Warn("Static >> AtomStopping IDTracker=(%v)", e.idTracker)
+		e.Log().Warn("Static >> AtomStopping MessageTracker=(%v)", e.GetMessagingInfo())
+	}
+
 	var persistence ElementCustomizeAutoDataPersistence
 	var elemPersistence ElementAutoDataPersistence
 
@@ -602,10 +623,10 @@ func (e *ElementLocal) Halted() {
 	e.messageTracker.Halt()
 }
 
-func (e *ElementLocal) GetMessagingInfo() map[string]MessageTrackInfo {
+func (e *ElementLocal) GetMessagingInfo() string {
 	e.atomos.mailbox.mutex.Lock()
 	defer e.atomos.mailbox.mutex.Unlock()
-	return e.messageTracker.Dump()
+	return e.messageTracker.dump()
 }
 
 // Internal
@@ -726,6 +747,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 
 	if StoppingPrintStatic {
 		e.Log().Warn("Static >> AtomStopping IDTracker=(%v)", atom.idTracker)
+		e.Log().Warn("Static >> AtomStopping MessageTracker=(%v)", atom.GetMessagingInfo())
 	}
 }
 

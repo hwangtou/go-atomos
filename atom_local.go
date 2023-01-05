@@ -460,10 +460,10 @@ func (a *AtomLocal) Halted() {
 	}
 }
 
-func (a *AtomLocal) GetMessagingInfo() map[string]MessageTrackInfo {
+func (a *AtomLocal) GetMessagingInfo() string {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
-	return a.messageTracker.Dump()
+	return a.messageTracker.dump()
 }
 
 // Element
