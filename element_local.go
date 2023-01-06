@@ -300,7 +300,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	}
 	e.lock.RUnlock()
 	for _, atomLocal := range atoms {
-		info[atomLocal.String()] = atomLocal.idTracker.String()
+		info[atomLocal.String()] = atomLocal.idTracker.String() + "\n"
 	}
 	return info
 }
