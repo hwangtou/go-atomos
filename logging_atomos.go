@@ -112,7 +112,7 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	case LogLevel_Info:
 		c.accessLog(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_Warn:
-		c.accessLog(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLog(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_Err:
 		c.errorLog(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
 	case LogLevel_Fatal:
