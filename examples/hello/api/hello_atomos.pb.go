@@ -29,8 +29,7 @@ const HelloName = "Hello"
 // HelloElementID is the interface of Hello element.
 
 type HelloElementID interface {
-	go_atomos.ID
-	Release()
+	go_atomos.ReleasableID
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.Error)
@@ -56,8 +55,7 @@ func GetHelloElementID(c go_atomos.CosmosNode) (HelloElementID, *go_atomos.Error
 // HelloAtomID is the interface of Hello atom.
 
 type HelloAtomID interface {
-	go_atomos.ID
-	Release()
+	go_atomos.ReleasableID
 
 	// Sends a greeting
 	SayHello(from go_atomos.ID, in *HelloReq) (*HelloResp, *go_atomos.Error)
