@@ -27,7 +27,7 @@ func NewIDTrackerManager(release AtomosRelease) *IDTrackerManager {
 	}
 }
 
-func (i *IDTrackerManager) NewTracker(skip int) *IDTracker {
+func (i *IDTrackerManager) NewIDTracker(skip int) *IDTracker {
 	i.Lock()
 	i.counter += 1
 	tracker := &IDTracker{id: i.counter}
@@ -44,6 +44,19 @@ func (i *IDTrackerManager) NewTracker(skip int) *IDTracker {
 		}
 	}
 	return tracker
+}
+
+func (i *IDTrackerManager) NewScaleIDTracker(tracker *IDTracker) {
+	if tracker == nil {
+		return
+	}
+	i.Lock()
+	i.counter += 1
+	tracker.id = i.counter
+	i.idMap[tracker.id] = tracker
+	i.Unlock()
+
+	tracker.manager = i
 }
 
 func (i *IDTrackerManager) Release(tracker *IDTracker) {
@@ -86,6 +99,19 @@ type IDTracker struct {
 	name string
 }
 
+func NewScaleIDTracker(skip int) *IDTracker {
+	tracker := &IDTracker{}
+	caller, file, line, ok := runtime.Caller(skip)
+	if ok {
+		tracker.file = file
+		tracker.line = line
+		if pc := runtime.FuncForPC(caller); pc != nil {
+			tracker.name = pc.Name()
+		}
+	}
+	return tracker
+}
+
 func (i *IDTracker) ToString() string {
 	if i == nil {
 		return "nil"
@@ -115,12 +141,30 @@ type MessageTrackerManager struct {
 	messages map[string]MessageTrackInfo
 }
 
+// Warn: Remember to lock with atomos mutex.
+
 func NewMessageTrackerManager(id *IDInfo, num int) *MessageTrackerManager {
 	return &MessageTrackerManager{
 		id:         id,
 		spawningAt: time.Now(),
 		messages:   make(map[string]MessageTrackInfo, num),
 	}
+}
+
+func (t *MessageTrackerManager) idleTime() time.Duration {
+	if len(t.messages) == 0 {
+		return time.Now().Sub(t.spawnAt)
+	}
+	var lastEnd time.Time
+	for _, info := range t.messages {
+		if info.LastEnd.After(lastEnd) {
+			lastEnd = info.LastEnd
+		}
+	}
+	if lastEnd.IsZero() {
+		return time.Now().Sub(t.spawnAt)
+	}
+	return time.Now().Sub(lastEnd)
 }
 
 func (t *MessageTrackerManager) Start() {

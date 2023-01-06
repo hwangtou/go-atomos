@@ -114,6 +114,12 @@ func (a *AtomLocal) State() AtomosState {
 	return a.atomos.GetState()
 }
 
+func (a *AtomLocal) IdleTime() time.Duration {
+	a.atomos.mailbox.mutex.Lock()
+	defer a.atomos.mailbox.mutex.Unlock()
+	return a.messageTracker.idleTime()
+}
+
 func (a *AtomLocal) MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
 	return a.pushMessageMail(from, name, timeout, in)
 }
@@ -352,7 +358,7 @@ func (a *AtomLocal) OnMessaging(from ID, name string, arg proto.Message) (reply 
 	return
 }
 
-func (a *AtomLocal) OnScaling(from ID, name string, arg proto.Message) (id ID, err *Error) {
+func (a *AtomLocal) OnScaling(from ID, name string, arg proto.Message, tracker *IDTracker) (id ID, err *Error) {
 	return nil, NewError(ErrAtomCannotScale, "Atom: Atom not supported scaling")
 }
 

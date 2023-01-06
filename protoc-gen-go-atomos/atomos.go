@@ -108,8 +108,7 @@ func genElementIDInterface(g *protogen.GeneratedFile, service *protogen.Service)
 	}
 	g.Annotate(elementIDName, service.Location)
 	g.P("type ", elementIDName, " interface {")
-	g.P(atomosPackage.Ident("ID"))
-	g.P("Release()")
+	g.P(atomosPackage.Ident("ReleasableID"))
 	// Element Methods
 	for _, method := range service.Methods {
 		methodName := method.GoName
@@ -194,8 +193,7 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	}
 	g.Annotate(atomNameID, service.Location)
 	g.P("type ", atomNameID, " interface {")
-	g.P(atomosPackage.Ident("ID"))
-	g.P("Release()")
+	g.P(atomosPackage.Ident("ReleasableID"))
 	// Atom
 	for _, method := range service.Methods {
 		methodName := method.GoName

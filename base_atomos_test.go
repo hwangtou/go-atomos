@@ -46,7 +46,7 @@ func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message)
 	return
 }
 
-func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
+func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
 	panic("not supported")
 }
 

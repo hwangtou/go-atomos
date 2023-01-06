@@ -42,6 +42,7 @@ type ID interface {
 	GetName() string
 
 	State() AtomosState
+	IdleTime() time.Duration
 
 	MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error)
 
@@ -66,6 +67,11 @@ type ID interface {
 	getElementLocal() *ElementLocal
 	getAtomLocal() *AtomLocal
 	getIDTrackerManager() *IDTrackerManager
+}
+
+type ReleasableID interface {
+	ID
+	Release()
 }
 
 //

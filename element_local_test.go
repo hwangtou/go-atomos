@@ -161,6 +161,80 @@ func TestElementLocalBase(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 }
 
+func TestElementLocalScaleID(t *testing.T) {
+	initTestFakeCosmosProcess(t)
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, false)); err != nil {
+		t.Errorf("CosmosMain: Start failed. err=(%v)", err)
+		return
+	}
+	process := SharedCosmosProcess()
+	elemName := "testElement"
+	testElem := process.main.elements[elemName]
+	testAtomName := "testAtom"
+
+	// Check Spawn state.
+	if err := checkElementLocalInElement(t, process, elemName, AtomosWaiting); err != nil {
+		t.Errorf("TestElementLocalBase: State invalid. err=(%v)", err)
+		return
+	}
+
+	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+	if err != nil {
+		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
+		return
+	}
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+		t.Errorf("TestAtomLocalBase: Spawn waiting state invalid. err=(%v)", err)
+		return
+	}
+	sharedTestAtom1 = atom
+
+	scaleID, scaleTracker, err := testElem.pushScaleMail(process.main, "ScaleTestMessage", 0, nil, 1)
+	if err != nil {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 2); err != nil {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	if scaleID != atom {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	if scaleTracker.id == tracker.id {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	scaleTracker.Release()
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+
+	// Test Return Error.
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessageError", 0, nil, 1)
+	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack != "" {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+
+	// Test Return Panic.
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessagePanic", 0, nil, 1)
+	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
+		return
+	}
+}
+
 func TestElementLocalLifeCycle(t *testing.T) {
 	//elemName := "testElement"
 	initTestFakeCosmosProcess(t)

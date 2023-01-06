@@ -12,7 +12,7 @@ type AtomosHolder interface {
 
 	// OnScaling
 	// 负载均衡决策
-	OnScaling(from ID, name string, args proto.Message) (id ID, err *Error)
+	OnScaling(from ID, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error)
 
 	// OnWormhole
 	// 收到Wormhole
@@ -121,9 +121,9 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, timeout t
 	return reply, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout time.Duration, args proto.Message) (ID, *Error) {
+func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout time.Duration, args proto.Message, tracker *IDTracker) (ID, *Error) {
 	am := allocAtomosMail()
-	initScaleMail(am, from, message, args)
+	initScaleMail(am, from, message, args, tracker)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
@@ -345,7 +345,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name)
 			defer a.setWaiting(name)
 
-			id, err := a.holder.OnScaling(am.from, am.name, am.arg)
+			id, err := a.holder.OnScaling(am.from, am.name, am.arg, am.tracker)
 			am.sendReplyID(id, err)
 			// Mail dealloc in AtomCore.pushScaleMail.
 		}

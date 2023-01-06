@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -125,6 +126,12 @@ func (e *ElementLocal) GetName() string {
 
 func (e *ElementLocal) State() AtomosState {
 	return e.atomos.GetState()
+}
+
+func (e *ElementLocal) IdleTime() time.Duration {
+	e.atomos.mailbox.mutex.Lock()
+	defer e.atomos.mailbox.mutex.Unlock()
+	return e.messageTracker.idleTime()
 }
 
 func (e *ElementLocal) MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
@@ -300,7 +307,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	}
 	e.lock.RUnlock()
 	for _, atomLocal := range atoms {
-		info[atomLocal.String()] = atomLocal.idTracker.String() + "\n"
+		info[atomLocal.String()] = fmt.Sprintf(" -> %s\n", atomLocal.idTracker)
 	}
 	return info
 }
@@ -456,14 +463,15 @@ func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration
 				fromChain, e, name, arg).AddStack(e)
 		}
 	}
-	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg)
+	tracker := NewScaleIDTracker(skip + 1)
+	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg, tracker)
 	if err != nil {
 		return nil, nil, err.AddStack(e, &String{S: name}, arg)
 	}
-	return id, id.getIDTrackerManager().NewTracker(skip + 1), nil
+	return id, tracker, nil
 }
 
-func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message) (id ID, err *Error) {
+func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message, tracker *IDTracker) (id ID, err *Error) {
 	if err = e.setMessageAndCallChain(from); err != nil {
 		return nil, err.AddStack(e)
 	}
@@ -491,6 +499,13 @@ func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message) (id ID
 			}
 		}()
 		id, err = handler(from, e.atomos.instance, name, arg)
+		// Retain New.
+		id.getIDTrackerManager().NewScaleIDTracker(tracker)
+		// Release Old.
+		releasable, ok := id.(ReleasableID)
+		if ok {
+			releasable.Release()
+		}
 	}()
 	return
 }
@@ -637,7 +652,7 @@ func (e *ElementLocal) elementAtomGet(name string, skip int) (*AtomLocal, *IDTra
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
-		return atom, atom.idTracker.NewTracker(skip + 1), nil
+		return atom, atom.idTracker.NewIDTracker(skip + 1), nil
 	}
 	// Auto data persistence.
 	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
@@ -667,7 +682,7 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
 			if oldAtom.atomos.state < AtomosStopping {
-				return oldAtom, oldAtom.idTracker.NewTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
+				return oldAtom, oldAtom.idTracker.NewIDTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
 			} else {
 				return nil, nil, NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. name=(%s)", name).AddStack(oldAtom, arg)
 			}
@@ -694,7 +709,7 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		e.elementAtomRelease(atom, nil)
 		return nil, nil, err.AddStack(nil)
 	}
-	return atom, atom.idTracker.NewTracker(skip + 1), nil
+	return atom, atom.idTracker.NewIDTracker(skip + 1), nil
 }
 
 func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {

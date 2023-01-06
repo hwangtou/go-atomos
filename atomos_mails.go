@@ -76,6 +76,8 @@ type atomosMail struct {
 	// Argument that pass to target, used by Message mail and Task mail.
 	arg proto.Message
 
+	tracker *IDTracker
+
 	wormhole AtomosWormhole
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
@@ -117,6 +119,7 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
+	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.executeStop = false
@@ -125,7 +128,7 @@ func initMessageMail(am *atomosMail, from ID, name string, arg proto.Message) {
 
 // Scale邮件
 // Scale Mail
-func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
+func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message, tracker *IDTracker) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailScale
@@ -137,6 +140,7 @@ func initScaleMail(am *atomosMail, from ID, name string, arg proto.Message) {
 	} else {
 		am.arg = nil
 	}
+	am.tracker = tracker
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.executeStop = false
@@ -153,6 +157,7 @@ func initTaskMail(am *atomosMail, taskID uint64, name string, arg proto.Message)
 	am.name = name
 	// I think it doesn't have to clone, because Atomos is thread-safe.
 	am.arg = arg
+	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.executeStop = false
@@ -168,6 +173,7 @@ func initWormholeMail(am *atomosMail, from ID, wormhole AtomosWormhole) {
 	am.from = from
 	am.name = ""
 	am.arg = nil
+	am.tracker = nil
 	am.wormhole = wormhole
 	am.mailReply = mailReply{}
 	am.executeStop = false
@@ -182,6 +188,7 @@ func initKillMail(am *atomosMail, from ID, executeStop bool) {
 	am.mailType = MailHalt
 	am.from = from
 	am.name = ""
+	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.executeStop = executeStop

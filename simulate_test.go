@@ -240,6 +240,17 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				return &String{S: "OK"}, nil
 			},
 		},
+		ScaleHandlers: map[string]ScaleHandler{
+			"ScaleTestMessage": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
+				return sharedTestAtom1, nil
+			},
+			"ScaleTestMessageError": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
+				return sharedTestAtom1, NewError(ErrFrameworkPanic, "Scale ID failed")
+			},
+			"ScaleTestMessagePanic": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
+				panic("Get scale ID panic")
+			},
+		},
 	}
 	return impl
 }
@@ -315,7 +326,7 @@ func (t *testElementAutoDataDev) ElementAutoDataPersistence() ElementAutoDataPer
 
 func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
 	if testElementGetDataError {
-		return nil, NewError(ErrFrameworkPanic, "Get Element Data Error")
+		return nil, NewError(ErrFrameworkPanic, "Get Element Data Error").AddStack(nil)
 	}
 	if testElementGetDataPanic {
 		panic("Get Element Data Panic")
@@ -325,7 +336,7 @@ func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
 
 func (t *testElementAutoDataDev) SetElementData(data proto.Message) *Error {
 	if testElementSetDataError {
-		return NewError(ErrFrameworkPanic, "Set Element Data Error")
+		return NewError(ErrFrameworkPanic, "Set Element Data Error").AddStack(nil).AddStack(nil)
 	}
 	if testElementSetDataPanic {
 		panic("Set Element Data Panic")

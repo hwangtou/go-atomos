@@ -123,6 +123,10 @@ func (c *CosmosMain) State() AtomosState {
 	return c.atomos.GetState()
 }
 
+func (c *CosmosMain) IdleTime() time.Duration {
+	return 0
+}
+
 func (c *CosmosMain) MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot message main.").AddStack(c)
 }
@@ -210,7 +214,7 @@ func (c *CosmosMain) MessageSelfByName(from ID, name string, buf []byte, protoOr
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot message.").AddStack(c)
 }
 
-func (c *CosmosMain) OnScaling(from ID, name string, arg proto.Message) (id ID, err *Error) {
+func (c *CosmosMain) OnScaling(from ID, name string, arg proto.Message, tracker *IDTracker) (id ID, err *Error) {
 	return nil, NewError(ErrMainCannotScale, "Cosmos: Cannot scale.").AddStack(c)
 }
 
