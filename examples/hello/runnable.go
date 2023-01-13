@@ -11,7 +11,7 @@ var AtomosRunnable atomos.CosmosRunnable
 
 func init() {
 	AtomosRunnable.
-		SetConfig(&atomos.Config{
+		setConfig(&atomos.Config{
 			Node:         "testNode",
 			LogPath:      "/tmp/atomos_test.log",
 			LogLevel:     0,

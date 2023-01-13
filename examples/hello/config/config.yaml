@@ -1,17 +1,22 @@
-node: helloworld
-log_path: log
-log_level: 1
-enable_cert:
-  cert_path: config/server.crt
-  key_path: config/server.key
-  insecure_skip_verify: true
-enable_server:
-  host: 127.0.0.1
-  port: 12345
-enable_telnet:
-  network: tcp
-  address: 127.0.0.1:1234
-  admin:
-    username: admin
+cosmos: world
+node: hello
+
+log-level: Debug
+log-path: /tmp/hello_log
+
+build-path: ""
+bin-path: ""
+run-path: "/tmp/hello_run"
+etc-path: "/tmp/hello_etc"
+
+manage-port: 8100
+manager:
+  - username: admin
     password: admin123
+use-cert:
+  cert-path: config/server.crt
+  key-path: config/server.key
+  insecure-skip-verify: true
+enable-server:
+  port: 8101
 customize:

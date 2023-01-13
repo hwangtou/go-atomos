@@ -539,7 +539,7 @@ func testAppUDSServer(t *testing.T) (*appUDSServer, *Error) {
 
 func testAppSocketClient(t *testing.T) *AppUDSClient {
 	return &AppUDSClient{
-		logging: sharedLogging.PushProcessLog,
+		logging: newTestAppLogging(t),
 		mutex:   sync.Mutex{},
 		connID:  0,
 		connMap: map[int32]*AppUDSConn{},

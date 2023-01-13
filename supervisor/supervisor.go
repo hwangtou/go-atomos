@@ -1,577 +1,1052 @@
 package main
 
 import (
-	"errors"
-	"flag"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"log"
+	"fmt"
+	atomos "github.com/hwangtou/go-atomos"
+	"gopkg.in/fsnotify.v1"
 	"os"
-	"os/user"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
+
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 func main() {
-	//process, err := os.StartProcess("sample_process", nil, &os.ProcAttr{})
-	//if err != nil {
-	//	panic(err)
-	//}
-	//time.Sleep(2 * time.Second)
-	//process.Signal(os.Interrupt)
-	//log.Println(process)
-	//time.Sleep(10 * time.Second)
+	atomos.SupervisorSet(map[string]atomos.AppUDSCommandFn{
+		atomos.UDSPing:    udsPing,
+		atomos.UDSStatus:  udsStatus,
+		atomos.UDSStart:   udsStart,
+		atomos.UDSStop:    udsStop,
+		atomos.UDSRestart: udsRestart,
+	})
+	atomos.Main(runnable)
+}
 
-	log.Println("Welcome to Atomos Supervisor!")
+var runnable atomos.CosmosRunnable
 
-	var (
-		action     = flag.String("a", "help", "[init|validate|status|start|stop]")
-		userName   = flag.String("u", "", "user name")
-		groupName  = flag.String("g", "", "group name")
-		cosmosName = flag.String("c", "", "cosmos name")
-		nodeNames  = flag.String("n", "", "node name list (separates by ,)")
-	)
+func init() {
+	mainScript := &supervisorMainScript{nodesMap: map[string]*nodeWatcher{}}
+	runnable.SetMainScript(mainScript)
+}
 
-	flag.Parse()
+type supervisorMainScript struct {
+	confPathW *configPathWatcher
+	runPathW  *runPathWatcher
 
-	nodeNameList := strings.Split(*nodeNames, ",")
-	switch *action {
-	case "init":
-		if *cosmosName == "" || nodeNameList == nil {
-			log.Println("-c or -n is empty")
-			goto help
+	nodeMutex sync.Mutex
+	nodesMap  map[string]*nodeWatcher
+}
+
+func (s *supervisorMainScript) OnStartup() (err *atomos.Error) {
+	err = initSupervisorConfigWatcher(s, path.Join(atomos.SharedApp().GetConfig().EtcPath, "supervisor.conf"))
+	if err != nil {
+		return err.AddStack(nil)
+	}
+
+	err = newRunPathWatcher(s)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+
+	go s.confPathW.watch()
+	go s.runPathW.watch()
+
+	return nil
+}
+
+func (s *supervisorMainScript) OnShutdown() *atomos.Error {
+	return nil
+}
+
+// Supervisor watcher
+
+type configPathWatcher struct {
+	main    *supervisorMainScript
+	path    *atomos.Path
+	config  *atomos.Config
+	watcher *fsnotify.Watcher
+}
+
+func initSupervisorConfigWatcher(s *supervisorMainScript, supervisorConfPath string) *atomos.Error {
+	s.confPathW = &configPathWatcher{
+		main:   s,
+		path:   atomos.NewPath(supervisorConfPath),
+		config: nil,
+	}
+	// Check supervisor config path and create watcher.
+	if err := s.confPathW.path.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+	watcher, er := fsnotify.NewWatcher()
+	if er != nil {
+		return atomos.NewErrorf(atomos.ErrSupervisorCreateWatcherFailed, "Supervisor: Create config watcher failed. err=(%v)", er).AddStack(nil)
+	}
+	s.confPathW.watcher = watcher
+
+	// Check and first load supervisor config.
+	if err := s.confPathW.refreshSupervisorConfig(); err != nil {
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Supervisor config path error. err=(%v)", err.AddStack(nil))
+	}
+
+	if er := s.confPathW.watcher.Add(atomos.SharedApp().GetConfig().EtcPath); er != nil {
+		return atomos.NewErrorf(atomos.ErrSupervisorCreateWatcherFailed, "Supervisor: Supervisor config watcher adds path failed. err=(%v)").AddStack(nil)
+	}
+	return nil
+}
+
+func (w *configPathWatcher) watch() {
+	defer func() {
+		if r := recover(); r != nil {
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Supervisor config watcher panic. reason=(%v)", r)
 		}
-		if *groupName == "" {
-			log.Println("We should know which group is allowed to access, please give a group name with -g argument.")
-			goto help
-		}
-		if *userName == "" {
-			u, er := user.Current()
-			if er != nil {
-				log.Println("Get default user failed,", er)
-				goto help
+	}()
+
+	for {
+		select {
+		case event, ok := <-w.watcher.Events:
+			if !ok {
+				return
 			}
-			*userName = u.Username
+			if event.Op&fsnotify.Chmod == fsnotify.Chmod {
+				continue
+			}
+			if !strings.HasSuffix(event.Name, ".conf") {
+				continue
+			}
+			p := atomos.NewPath(event.Name)
+			if err := p.Refresh(); err != nil {
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Config path error. err=(%v)", err.AddStack(nil))
+				continue
+			}
+			name := filepath.Base(event.Name)
+			if name == "supervisor.conf" {
+				if err := w.refreshSupervisorConfig(); err != nil {
+					atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Supervisor config refresh error. err=(%v)", err.AddStack(nil))
+				}
+			} else {
+				nodeName := strings.Trim(name, ".conf")
+				n := w.main.getNode(nodeName)
+				if n == nil {
+					continue
+				}
+				if err := n.refreshNodeConfig(); err != nil {
+					atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Node config refresh error. err=(%v)", err.AddStack(nil))
+				}
+			}
+		case er, ok := <-w.watcher.Errors:
+			if !ok {
+				return
+			}
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: File watcher error. err=(%v)", er)
 		}
-		if er := initPaths(*userName, *groupName, *cosmosName, nodeNameList); er != nil {
-			log.Println("Paths init failed:", er)
-			return
-		}
-		return
-	case "validate":
-		if *cosmosName == "" || nodeNameList == nil {
-			log.Println("-c or -n is empty")
-			goto help
-		}
-		if *groupName == "" {
-			log.Println("We should know which group is allowed to access, please give a group name with -g argument.")
-			goto help
-		}
-		if er := validatePaths(*groupName, *cosmosName, nodeNameList); er != nil {
-			log.Println("Paths validate failed:", er)
-			return
-		}
-		return
-	case "status":
-		if *cosmosName == "" || nodeNameList == nil {
-			log.Println("-c or -n is empty")
-			goto help
-		}
-		NewPath(VarRunPath + AtomosPrefix + *cosmosName)
 	}
-help:
-	log.Println("Usage: -a [init|validate|status] -u {user_name} -g {group_name} -c {cosmos_name} -n {node_name_1,node_name_2,...}")
 }
 
-func checkCosmosName(cosmosName string) bool {
-	if cosmosName == "" {
-		return false
+func (w *configPathWatcher) refreshSupervisorConfig() *atomos.Error {
+	if err := w.path.Refresh(); err != nil {
+		return err.AddStack(nil)
 	}
-	for _, c := range cosmosName {
-		if !('0' <= c && c <= '9' || 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '.' || c == '_') {
-			return false
+	newConf, err := atomos.NewSupervisorConfigFromYaml(w.path.GetPath())
+	if err != nil {
+		return atomos.NewErrorf(atomos.ErrSupervisorReadSupervisorConfigFailed, "Supervisor: Read supervisor config failed. err=(%v)", err).AddStack(nil)
+	}
+
+	// Nothing changed.
+	if reflect.DeepEqual(w.config, newConf) {
+		return nil
+	}
+
+	// Config validate.
+	if err = newConf.ValidateSupervisorConfig(); err != nil {
+		return err.AddStack(nil)
+	}
+
+	// What has changed? Some kinds of changes should only take effect after restart.
+	notOk := false
+	if w.config != nil {
+		if newConf.Cosmos != w.config.Cosmos {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Cosmos name has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.ReporterUrl != w.config.ReporterUrl {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Reporter URL has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.ConfigerUrl != w.config.ConfigerUrl {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Configer URL has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.LogLevel != w.config.LogLevel {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Log level has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.LogPath != w.config.LogPath {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Log path has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.RunPath != w.config.RunPath {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Run path has changed. Restart the whole cosmos to take effect.")
+		}
+		if newConf.EtcPath != w.config.EtcPath {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Etc path has changed. Restart the whole cosmos to take effect.")
 		}
 	}
-	return true
-}
 
-func checkNodeName(nodeName string) bool {
-	if nodeName == "" {
-		return false
-	}
-	for _, c := range nodeName {
-		if !('0' <= c && c <= '9' || 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || c == '.' || c == '_') {
-			return false
+	// Check list.
+	nodeChecker := map[string]bool{}
+	for _, nodeName := range newConf.NodeList {
+		if !atomos.CheckNodeName(nodeName) {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Invalid node name. name=(%s)", nodeName)
 		}
-	}
-	return true
-}
-
-// Init Supervisor
-
-const (
-	AtomosPrefix = "atomos_"
-
-	VarRunPath = "/var/run/"
-	VarRunPerm = 0775
-
-	VarLogPath = "/var/log/"
-	VarLogPerm = 0775
-
-	EtcPath = "/etc/"
-	EtcPerm = 0770
-)
-
-// INIT
-
-func initPaths(cosmosUser, cosmosGroup, cosmosName string, nodeNameList []string) error {
-	if os.Getuid() != 0 {
-		return errors.New("init supervisor should run under root")
-	}
-	// Check user.
-	u, er := user.Lookup(cosmosUser)
-	if er != nil {
-		if _, ok := er.(user.UnknownUserError); ok {
-			log.Println("unknown user, err=", er)
-			return er
+		if nodeChecker[nodeName] {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Duplicated node name. name=(%s)", nodeName)
 		}
-		log.Println("lookup user failed, err=", er)
-		return er
-	}
-	// Check group.
-	g, er := user.LookupGroup(cosmosGroup)
-	if er != nil {
-		if _, ok := er.(*user.UnknownGroupError); ok {
-			log.Println("unknown group, err=", er)
-			return er
-		}
-		log.Println("lookup group failed, err=", er)
-		return er
-	}
-	userGroups, er := u.GroupIds()
-	if er != nil {
-		log.Println("iter user group failed, err=", er)
-		return er
-	}
-	inGroup := false
-	for _, gid := range userGroups {
-		if gid == g.Gid {
-			inGroup = true
-			break
-		}
-	}
-	if !inGroup {
-		log.Println("user not in group")
-		return er
-	}
-	if er := initSupervisorPaths(cosmosName, u, g); er != nil {
-		log.Println(er)
-		return er
-	}
-	for _, nodeName := range nodeNameList {
-		if er := initNodePaths(cosmosName, nodeName, u, g); er != nil {
-			log.Println(er)
-			return er
-		}
-	}
-	log.Println("Paths inited")
-	return nil
-}
-
-func initSupervisorPaths(cosmosName string, u *user.User, g *user.Group) error {
-	// Check whether cosmos name is legal.
-	// 检查cosmos名称是否合法。
-	if !checkCosmosName(cosmosName) {
-		return errors.New("invalid cosmos name")
+		nodeChecker[nodeName] = true
 	}
 
-	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
-	// 检查/var/run/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName).CreateDirectoryIfNotExist(u, g, VarRunPerm); er != nil {
-		return er
-	}
-	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
-	// 检查/var/log/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName).CreateDirectoryIfNotExist(u, g, VarLogPerm); er != nil {
-		return er
-	}
-	// Check whether /etc/atomos_{cosmosName} directory exists or not.
-	// 检查/etc/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(EtcPath+AtomosPrefix+cosmosName).CreateDirectoryIfNotExist(u, g, EtcPerm); er != nil {
-		return er
-	}
-	// Create supervisor.conf
-	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf")
-	if er := confPath.Refresh(); er != nil {
-		return er
-	}
-	conf := &SupervisorConfig{
-		CosmosName: cosmosName,
-		LogPath:    VarLogPath + AtomosPrefix + cosmosName,
-		LogLevel:   "DEBUG",
-	}
-	buf, er := yaml.Marshal(conf)
-	if er != nil {
-		return er
-	}
-	if er := confPath.CreateFileIfNotExist(buf, EtcPerm); er != nil {
-		return er
-	}
-	return nil
-}
-
-func initNodePaths(cosmosName, nodeName string, u *user.User, g *user.Group) error {
-	// Check whether cosmos name is legal.
-	// 检查cosmos名称是否合法。
-	if !checkNodeName(cosmosName) {
-		return errors.New("invalid node name")
-	}
-
-	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
-	// 检查/var/run/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, VarRunPerm); er != nil {
-		return er
-	}
-	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
-	// 检查/var/log/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, VarLogPerm); er != nil {
-		return er
-	}
-	// Check whether /etc/atomos_{cosmosName} directory exists or not.
-	// 检查/etc/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(EtcPath+AtomosPrefix+cosmosName+"/"+nodeName).CreateDirectoryIfNotExist(u, g, EtcPerm); er != nil {
-		return er
-	}
-	// Create {node}.conf
-	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/" + nodeName + ".conf")
-	if er := confPath.Refresh(); er != nil {
-		return er
-	}
-	conf := &NodeConfig{
-		CosmosName:      cosmosName,
-		Node:            nodeName,
-		LogPath:         VarLogPath + AtomosPrefix + cosmosName + "/" + nodeName,
-		LogLevel:        "DEBUG",
-		EnableCert:      nil,
-		EnableServer:    nil,
-		CustomizeConfig: nil,
-	}
-	buf, er := yaml.Marshal(conf)
-	if er != nil {
-		return er
-	}
-	if er := confPath.CreateFileIfNotExist(buf, EtcPerm); er != nil {
-		return er
-	}
-	return nil
-}
-
-// CHECK
-
-func validatePaths(cosmosGroup, cosmosName string, nodeNameList []string) error {
-	u, er := user.Current()
-	if er != nil {
-		return er
-	}
-	// Check group.
-	g, er := user.LookupGroup(cosmosGroup)
-	if er != nil {
-		if _, ok := er.(*user.UnknownGroupError); ok {
-			log.Println("unknown group, err=", er)
-			return er
-		}
-		log.Println("lookup group failed, err=", er)
-		return er
-	}
-	userGroups, er := u.GroupIds()
-	if er != nil {
-		log.Println("iter user group failed, err=", er)
-		return er
-	}
-	inGroup := false
-	for _, gid := range userGroups {
-		if gid == g.Gid {
-			inGroup = true
-			break
-		}
-	}
-	if !inGroup {
-		log.Println("user not in group")
-		return er
-	}
-	if er := validateSupervisorPath(cosmosName, u); er != nil {
-		return er
-	}
-	for _, nodeName := range nodeNameList {
-		if er := validateNodePath(cosmosName, nodeName, u); er != nil {
-			return er
-		}
-	}
-	log.Println("Paths checked")
-	return nil
-}
-
-func validateSupervisorPath(cosmosName string, u *user.User) error {
-	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
-	// 检查/var/run/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, VarRunPerm); er != nil {
-		return er
-	}
-	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
-	// 检查/var/log/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, VarLogPerm); er != nil {
-		return er
-	}
-	// Check whether /etc/atomos_{cosmosName} directory exists or not.
-	// 检查/etc/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(EtcPath+AtomosPrefix+cosmosName).CheckDirectoryOwnerAndMode(u, EtcPerm); er != nil {
-		return er
-	}
-	// Get supervisor.conf
-	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf")
-	if er := confPath.Refresh(); er != nil {
-		return er
-	}
-	if !confPath.exist() {
-		return errors.New("file not exist")
-	}
-	buf, er := ioutil.ReadFile(confPath.path)
-	if er != nil {
-		return er
-	}
-	conf := &SupervisorConfig{}
-	er = yaml.Unmarshal(buf, conf)
-	if er != nil {
-		return er
-	}
-	if conf.CosmosName != cosmosName {
-		return errors.New("invalid cosmos name")
-	}
-	if conf.LogPath != VarLogPath+AtomosPrefix+cosmosName {
-		log.Println("log path has changed to", conf.LogPath)
-	}
-	return nil
-}
-
-func validateNodePath(cosmosName, nodeName string, u *user.User) error {
-	// Check whether cosmos name is legal.
-	// 检查cosmos名称是否合法。
-	if !checkNodeName(cosmosName) {
-		return errors.New("invalid node name")
-	}
-
-	// Check whether /var/run/atomos_{cosmosName} directory exists or not.
-	// 检查/var/run/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarRunPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, VarRunPerm); er != nil {
-		return er
-	}
-	// Check whether /var/log/atomos_{cosmosName} directory exists or not.
-	// 检查/var/log/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, VarLogPerm); er != nil {
-		return er
-	}
-	// Check whether /etc/atomos_{cosmosName} directory exists or not.
-	// 检查/etc/atomos_{cosmosName}目录是否存在。
-	if er := NewPath(EtcPath+AtomosPrefix+cosmosName+"/"+nodeName).CheckDirectoryOwnerAndMode(u, EtcPerm); er != nil {
-		return er
-	}
-	// Get {node}.conf
-	confPath := NewPath(EtcPath + AtomosPrefix + cosmosName + "/" + nodeName + ".conf")
-	if er := confPath.Refresh(); er != nil {
-		return er
-	}
-	if !confPath.exist() {
-		return errors.New("file not exist")
-	}
-	buf, er := ioutil.ReadFile(confPath.path)
-	if er != nil {
-		return er
-	}
-	conf := &NodeConfig{}
-	er = yaml.Unmarshal(buf, conf)
-	if er != nil {
-		return er
-	}
-	if conf.CosmosName != cosmosName {
-		return errors.New("invalid cosmos name")
-	}
-	if conf.Node != nodeName {
-		return errors.New("invalid cosmos name")
-	}
-	if conf.LogPath != VarLogPath+AtomosPrefix+cosmosName+"/"+nodeName {
-		log.Println("log path has changed to", conf.LogPath)
-	}
-	return nil
-}
-
-// Path
-
-type Path struct {
-	os.FileInfo
-	path string
-}
-
-func NewPath(path string) *Path {
-	return &Path{path: path}
-}
-
-func (p *Path) Refresh() error {
-	stat, er := os.Stat(p.path)
-	if er != nil {
-		if !os.IsNotExist(er) {
-			return er
-		}
-	}
-	p.FileInfo = stat
-	return nil
-}
-
-func (p *Path) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm os.FileMode) error {
-	// If it is not exists, create it. If it is exists and not a directory, return failed.
-	if er := p.Refresh(); er != nil {
-		log.Println("refresh failed, err=", er)
-		return er
-	}
-	if !p.exist() {
-		if er := p.makeDir(perm); er != nil {
-			log.Println("make dir failed, err=", er)
-			return er
-		}
-		if er := p.changeOwnerAndMode(u, g, perm); er != nil {
-			log.Println("change owner and mode failed, err=", er)
-			return er
-		}
-	} else if !p.IsDir() {
-		log.Println("path should be dir")
-		return errors.New("path should be directory")
-	} else {
-		// Check its owner and mode.
-		if er := p.confirmOwnerAndMode(g, perm); er != nil {
-			log.Println("confirm owner and mode failed, err=", er)
-			return er
-		}
-	}
-	return nil
-}
-
-func (p *Path) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) error {
-	if er := p.Refresh(); er != nil {
-		log.Println("refresh failed, err=", er)
-		return er
-	}
-	if !p.exist() {
-		return errors.New("directory not exists")
-	}
-	// Owner
-	gidList, er := u.GroupIds()
-	if er != nil {
-		return er
-	}
-	switch stat := p.Sys().(type) {
-	case *syscall.Stat_t:
-		groupOwner := false
-		statGid := strconv.FormatUint(uint64(stat.Gid), 10)
-		for _, gid := range gidList {
-			if gid == statGid {
-				groupOwner = true
+	// Check nodes.
+	keepNodesMap := map[string]bool{}
+	for _, keepNodeName := range newConf.KeepaliveNodeList {
+		has := false
+		for _, nodeName := range newConf.NodeList {
+			if nodeName == keepNodeName {
+				has = true
 				break
 			}
 		}
-		if !groupOwner {
-			return errors.New("user's group is not owned directory")
+		if !has {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Keepalive node cannot found in node list. name=(%s)", keepNodeName)
 		}
-	default:
-		return errors.New("unsupported file system")
-	}
-	// Mode
-	if p.Mode().Perm() != perm {
-		return errors.New("invalid file mode")
-	}
-	return nil
-}
-
-func (p *Path) exist() bool {
-	return p.FileInfo != nil
-}
-
-func (p *Path) makeDir(mode os.FileMode) error {
-	return os.Mkdir(p.path, mode)
-}
-
-func (p *Path) changeOwnerAndMode(u *user.User, group *user.Group, perm os.FileMode) error {
-	gid, er := strconv.ParseInt(group.Gid, 10, 64)
-	if er != nil {
-		return er
-	}
-	uid, er := strconv.ParseInt(u.Uid, 10, 64)
-	if er != nil {
-		return er
-	}
-	if er = os.Chown(p.path, int(uid), int(gid)); er != nil {
-		return er
-	}
-	if er = os.Chmod(p.path, perm); er != nil {
-		return er
-	}
-	return nil
-}
-
-func (p *Path) confirmOwnerAndMode(group *user.Group, perm os.FileMode) error {
-	// Owner
-	switch stat := p.Sys().(type) {
-	case *syscall.Stat_t:
-		if strconv.FormatUint(uint64(stat.Gid), 10) != group.Gid {
-			return errors.New("not path owner")
+		if keepNodesMap[keepNodeName] {
+			notOk = true
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Duplicated keepalive node name. name=(%s)", keepNodeName)
 		}
-	default:
-		return errors.New("unsupported file system")
+		keepNodesMap[keepNodeName] = true
 	}
-	// Mode
-	if p.Mode().Perm() != perm {
-		return errors.New("invalid file mode")
+
+	// New or delete node?
+	var oldNodeNameList, newNodeNameList []string
+	var oldConfigNodeList []string
+	if w.config != nil {
+		oldConfigNodeList = w.config.NodeList
+	}
+	for _, oldNodeName := range oldConfigNodeList {
+		isDelNode := true
+		for _, newNodeName := range newConf.NodeList {
+			if newNodeName == oldNodeName {
+				isDelNode = false
+				break
+			}
+		}
+		if isDelNode {
+			oldNodeNameList = append(oldNodeNameList, oldNodeName)
+			if n := w.main.getNode(oldNodeName); n != nil {
+				run, err := n.isRunning()
+				if run || err != nil {
+					notOk = true
+					atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Deleted node is still running or status error. name=(%s),err=(%v)", oldNodeName, err)
+				}
+			}
+		}
+	}
+	for _, newNodeName := range newConf.NodeList {
+		isNewNode := true
+		for _, oldNodeName := range oldConfigNodeList {
+			if oldNodeName == newNodeName {
+				isNewNode = false
+				break
+			}
+		}
+		if isNewNode {
+			newNodeNameList = append(newNodeNameList, newNodeName)
+		}
+	}
+
+	if notOk {
+		return atomos.NewError(atomos.ErrSupervisorRestartToTakeEffect, "Supervisor: Restart to take effect.").AddStack(nil)
+	}
+	w.config = newConf
+
+	for _, nodeName := range oldNodeNameList {
+		w.main.delNode(nodeName)
+	}
+	for _, nodeName := range newNodeNameList {
+		w.main.newNode(nodeName)
+	}
+
+	return nil
+}
+
+// Run Path
+
+type runPathWatcher struct {
+	main    *supervisorMainScript
+	path    *atomos.Path
+	watcher *fsnotify.Watcher
+}
+
+func newRunPathWatcher(s *supervisorMainScript) *atomos.Error {
+	s.runPathW = &runPathWatcher{
+		main:    s,
+		path:    atomos.NewPath(s.confPathW.config.RunPath),
+		watcher: nil,
+	}
+
+	// Check run path and create watcher.
+	if err := s.runPathW.path.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+	watcher, er := fsnotify.NewWatcher()
+	if er != nil {
+		return atomos.NewErrorf(atomos.ErrSupervisorCreateWatcherFailed, "Supervisor: Create run watcher failed. err=(%v)", er).AddStack(nil)
+	}
+	s.runPathW.watcher = watcher
+
+	if err := s.runPathW.watcher.Add(s.runPathW.path.GetPath()); err != nil {
+		return atomos.NewErrorf(atomos.ErrSupervisorCreateWatcherFailed, "Supervisor: Run watcher adds path failed. err=(%v)", err).AddStack(nil)
 	}
 	return nil
 }
 
-func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) error {
-	if p.exist() {
+func (w *runPathWatcher) watch() {
+	defer func() {
+		if r := recover(); r != nil {
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Supervisor run watcher panic. reason=(%v)", r)
+		}
+	}()
+
+	for {
+		select {
+		// File Watcher
+		case event, ok := <-w.watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op&fsnotify.Chmod == fsnotify.Chmod {
+				continue
+			}
+			if !strings.HasSuffix(event.Name, ".pid") {
+				continue
+			}
+			nodeName := strings.Trim(filepath.Base(event.Name), ".pid")
+			n := w.main.getNode(nodeName)
+			if n == nil {
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Run watcher found unknown node. name=(%s)", nodeName)
+				continue
+			}
+			n.onPIDFileChanged()
+		case er, ok := <-w.watcher.Errors:
+			if !ok {
+				return
+			}
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: File watcher error. err=(%v)", er)
+		// Cycle Watcher
+		case <-time.After(time.Second):
+			nodes := w.main.getAllNodes()
+			for _, node := range nodes {
+				node.onPIDProcessCheck()
+			}
+		}
+	}
+}
+
+// Node
+
+func (s *supervisorMainScript) getNode(nodeName string) *nodeWatcher {
+	s.nodeMutex.Lock()
+	n := s.nodesMap[nodeName]
+	s.nodeMutex.Unlock()
+	return n
+}
+
+func (s *supervisorMainScript) isKeepNode(nodeName string) bool {
+	for _, name := range s.confPathW.config.KeepaliveNodeList {
+		if name == nodeName {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *supervisorMainScript) getAllNodes() []*nodeWatcher {
+	s.nodeMutex.Lock()
+	nodes := make([]*nodeWatcher, 0, len(s.nodesMap))
+	for _, node := range s.nodesMap {
+		nodes = append(nodes, node)
+	}
+	s.nodeMutex.Unlock()
+	return nodes
+}
+
+func (s *supervisorMainScript) newNode(nodeName string) {
+	s.nodeMutex.Lock()
+	n, has := s.nodesMap[nodeName]
+	if !has {
+		n = newNodeWatcher(s, nodeName, s.isKeepNode(nodeName))
+		s.nodesMap[nodeName] = n
+		go n.watch()
+	}
+	s.nodeMutex.Unlock()
+
+	if err := n.refreshNodeConfig(); err != nil {
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Refresh node config error. err=(%v)", err.AddStack(nil))
+	}
+}
+
+func (s *supervisorMainScript) delNode(nodeName string) {
+	s.nodeMutex.Lock()
+	n, has := s.nodesMap[nodeName]
+	s.nodeMutex.Unlock()
+	if !has {
+		return
+	}
+	n.stopWatch()
+	if run, err := n.isRunning(); run || err != nil {
+		n.nextConfig = nil
+		n.nextRemove = true
+		return
+	}
+	s.nodeMutex.Lock()
+	delete(s.nodesMap, nodeName)
+	s.nodeMutex.Unlock()
+}
+
+// Node watcher
+
+type nodeWatcher struct {
+	main *supervisorMainScript
+
+	nodeName  string
+	keepalive bool
+	isStopped bool
+	client    *atomos.AppUDSClient
+	cmdCh     chan *nodeCmd
+
+	config     *atomos.Config
+	configPath *atomos.Path
+
+	nextConfig     *atomos.Config
+	nextConfigPath *atomos.Path
+	nextRemove     bool
+
+	pid int
+}
+
+type nodeCmd struct {
+	command  string
+	buf      []byte
+	callback atomos.AppUDSClientCallback
+	timeout  time.Duration
+}
+
+func newNodeWatcher(s *supervisorMainScript, nodeName string, keepalive bool) *nodeWatcher {
+	return &nodeWatcher{
+		main:      s,
+		nodeName:  nodeName,
+		keepalive: keepalive,
+		isStopped: false,
+		client:    atomos.NewAppUDSClient(atomos.SharedLogging().PushProcessLog),
+	}
+}
+
+func (w *nodeWatcher) refreshNodeConfig() *atomos.Error {
+	p := atomos.NewPath(path.Join(w.main.confPathW.config.EtcPath, w.nodeName+".conf"))
+	if err := p.Refresh(); err != nil {
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Config path error. err=(%v)", err.AddStack(nil))
+		return err
+	}
+	newConf, err := atomos.NewCosmosNodeConfigFromYamlPath(p.GetPath())
+	if err != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeReadSupervisorConfigFailed, "Supervisor: Read node config failed. err=(%v)", err).AddStack(nil)
+	}
+
+	// Nothing changed.
+	if reflect.DeepEqual(w.config, newConf) {
 		return nil
 	}
-	er := ioutil.WriteFile(p.path, buf, perm)
+
+	// Config validate.
+	if err = newConf.ValidateCosmosNodeConfig(); err != nil {
+		return err.AddStack(nil)
+	}
+
+	// First load.
+	if w.config == nil {
+		w.config = newConf
+		w.configPath = p
+		return nil
+	}
+
+	// Update load. What has changed? Some kinds of changes should only take effect after restart.
+	notOk := false
+	if run, err := w.isRunning(); run || err != nil {
+		if w.config != nil {
+			if newConf.Cosmos != w.config.Cosmos {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Cosmos name has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.Node != w.config.Node {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Cosmos name has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.ReporterUrl != w.config.ReporterUrl {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Reporter URL has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.ConfigerUrl != w.config.ConfigerUrl {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Configer URL has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.LogLevel != w.config.LogLevel {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Log level has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.LogPath != w.config.LogPath {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Log path has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.RunPath != w.config.RunPath {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Run path has changed. Restart the whole cosmos to take effect.")
+			}
+			if newConf.EtcPath != w.config.EtcPath {
+				notOk = true
+				atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Etc path has changed. Restart the whole cosmos to take effect.")
+			}
+		}
+		w.nextConfig = newConf
+		w.nextConfigPath = p
+		w.nextRemove = false
+	}
+
+	if notOk {
+		return atomos.NewError(atomos.ErrCosmosNodeRestartToTakeEffect, "Supervisor: Restart to take effect.").AddStack(nil)
+	}
+	w.config = newConf
+	w.configPath = p
+
+	return nil
+}
+
+func (w *nodeWatcher) watch() {
+	defer func() {
+		if r := recover(); r != nil {
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Node watcher panic. reason=(%v)", r)
+		}
+	}()
+
+	for {
+		var conn *atomos.AppUDSConn
+		var err *atomos.Error
+		var lastSent time.Time
+
+		if w.config == nil {
+			goto wait
+		}
+		if run, err := w.isRunning(); err != nil || !run {
+			goto wait
+		}
+		if w.isStopped {
+			return
+		}
+		conn, err = w.client.Dial(path.Join(w.config.RunPath, w.config.Node+".socket"))
+		if err != nil {
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Warn, "Supervisor: Node dial failed. err=(%v)", err.AddStack(nil))
+			goto wait
+		}
+
+		for {
+			select {
+			case <-time.After(2 * time.Second):
+				if conn.IsClosed() {
+					goto wait
+				}
+				if time.Now().Sub(lastSent) > 2*time.Second {
+					w.client.Send(conn, atomos.UDSPing, []byte("ping"), 1*time.Second, func(packet *atomos.UDSCommandPacket, err *atomos.Error) {
+						if err != nil {
+							conn.DaemonClose()
+							atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Debug, "Supervisor: Node watcher ping-pong error. name=(%s),err=(%v)", w.nodeName, err.AddStack(nil))
+						} else {
+							//atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Debug, "Supervisor: Node watcher ping-pong. name=(%s),packet=(%v)", w.nodeName, packet)
+						}
+					})
+				}
+				lastSent = time.Now()
+			case cmd, ok := <-w.cmdCh:
+				if conn.IsClosed() || !ok {
+					goto wait
+				}
+				w.client.Send(conn, cmd.command, cmd.buf, cmd.timeout, func(packet *atomos.UDSCommandPacket, err *atomos.Error) {
+					if err != nil {
+						conn.DaemonClose()
+						atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Debug, "Supervisor: Node watcher send error. name=(%s),err=(%v)", w.nodeName, err.AddStack(nil))
+					} else {
+						//atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Debug, "Supervisor: Node watcher send. name=(%s)", w.nodeName)
+					}
+					cmd.callback(packet, err)
+				})
+				lastSent = time.Now()
+			case <-conn.CloseCh():
+				goto wait
+			}
+		}
+
+	wait:
+		<-time.After(100 * time.Millisecond)
+	}
+}
+
+func (w *nodeWatcher) stopWatch() {
+	w.isStopped = true
+}
+
+func (w *nodeWatcher) getPIDFile() (pid int, err *atomos.Error) {
+	c := w.config
+	if c == nil {
+		return -1, atomos.NewError(atomos.ErrCosmosNodeConfigInvalid, "Supervisor: Get node config failed.").AddStack(nil)
+	}
+	p := atomos.NewPath(path.Join(c.RunPath, c.Node+".pid"))
+	if err = p.Refresh(); err != nil {
+		return -1, err.AddStack(nil)
+	}
+	if !p.Exist() {
+		return -1, nil
+	}
+	pidBuf, er := os.ReadFile(p.GetPath())
 	if er != nil {
-		return er
+		return -1, atomos.NewErrorf(atomos.ErrCosmosNodePIDFileInvalid, "Supervisor: Get pid failed. err=(%v)", er).AddStack(nil)
+	}
+
+	processID, er := strconv.ParseInt(string(pidBuf), 10, 64)
+	if er != nil {
+		return -1, atomos.NewErrorf(atomos.ErrCosmosNodePIDFileInvalid, "Supervisor: Parse pid failed. err=(%v)", er).AddStack(nil)
+	}
+	return int(processID), nil
+}
+
+func (w *nodeWatcher) getProcess() (*process.Process, *atomos.Error) {
+	pid, err := w.getPIDFile()
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	if pid < 0 {
+		return nil, nil
+	}
+	p, er := process.NewProcess(int32(pid))
+	if er != nil {
+		return nil, atomos.NewErrorf(atomos.ErrCosmosNodeGetProcessFailed, "Supervisor: Get node process failed. err=(%v)", er).AddStack(nil)
+	}
+	return p, nil
+}
+
+func (w *nodeWatcher) isRunning() (bool, *atomos.Error) {
+	p, err := w.getProcess()
+	if err != nil {
+		return false, err.AddStack(nil)
+	}
+	if p == nil {
+		return false, nil
+	}
+	run, er := p.IsRunning()
+	if er != nil {
+		return false, atomos.NewErrorf(atomos.ErrCosmosNodeGetProcessFailed, "Supervisor: Get node process running info failed. err=(%v)", er).AddStack(nil)
+	}
+	return run, nil
+}
+
+func (w *nodeWatcher) build(goPath string, buildOptions []string) *atomos.Error {
+	nowStr := time.Now().Format("20060102150405")
+	c := w.config
+	if w.nextConfig != nil {
+		c = w.nextConfig
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Info, "Supervisor: Build with new config, which is still not take affect yet.")
+	}
+
+	// Build path.
+	buildPath := atomos.NewPath(c.BuildPath)
+	if err := buildPath.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+	if !buildPath.Exist() {
+		return atomos.NewError(atomos.ErrCosmosNodeConfigInvalid, "Supervisor: Build path is not exists.").AddStack(nil)
+	}
+	// Out binary path.
+	outPath := atomos.NewPath(path.Join(c.BinPath, c.Node+"_"+nowStr))
+	if err := outPath.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+	args := []string{"build"}
+	if len(buildOptions) > 0 {
+		args = append(args, buildOptions...)
+	}
+	args = append(args, "-o", outPath.GetPath(), buildPath.GetPath())
+	cmd := exec.Command(goPath, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = path.Join(path.Dir(buildPath.GetPath()))
+	if er := cmd.Run(); er != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeBuildBinaryFailed, "Supervisor: Node builds failed. name=(%s),err=(%v)\n", c.Node, er).AddStack(nil)
+	}
+
+	linkPath := atomos.NewPath(path.Join(c.BinPath, c.Node+"_latest"))
+	if err := linkPath.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+	_ = exec.Command("rm", linkPath.GetPath()).Run()
+
+	cmd = exec.Command("ln", "-s", outPath.GetPath(), linkPath.GetPath())
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if er := cmd.Run(); er != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeBuildBinaryFailed, "Supervisor: Node link binary failed. name=(%s),err=(%v)\n", c.Node, er).AddStack(nil)
+	}
+
+	atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Info, "Supervisor: Node binary builds succeed. name=(%s),bin=(%s)", c.Node, outPath.GetPath())
+	return nil
+}
+
+func (w *nodeWatcher) start() *atomos.Error {
+	run, err := w.isRunning()
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	if run {
+		return atomos.NewError(atomos.ErrCosmosNodeIsAlreadyRunning, "Supervisor: Node is already running.").AddStack(nil)
+	}
+
+	if w.nextConfig != nil {
+		w.config = w.nextConfig
+		w.configPath = w.nextConfigPath
+		w.nextConfig = nil
+		w.nextConfigPath = nil
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Info, "Supervisor: Build with new config, which is still not take affect yet.")
+	}
+	c, p := w.config, w.configPath
+
+	binPath := atomos.NewPath(path.Join(c.BinPath, c.Node+"_latest"))
+	if err = binPath.Refresh(); err != nil {
+		return err.AddStack(nil)
+	}
+
+	cmd := exec.Command(binPath.GetPath(), fmt.Sprintf("--config=%s", p.GetPath()))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if er := cmd.Run(); er != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeBuildBinaryFailed, "Supervisor: Node link binary failed. name=(%s),err=(%v)\n", c.Node, er).AddStack(nil)
+	}
+
+	if w.main.isKeepNode(w.nodeName) {
+		w.keepalive = true
+	}
+
+	return nil
+}
+
+func (w *nodeWatcher) stop() *atomos.Error {
+	p, err := w.getProcess()
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	if p == nil {
+		return nil
+	}
+	run, er := p.IsRunning()
+	if er != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeGetProcessFailed, "Supervisor: Get node process running info failed. err=(%v)", er).AddStack(nil)
+	}
+	if !run {
+		return atomos.NewError(atomos.ErrCosmosNodeIsAlreadyStopped, "Supervisor: Node is already stopped.").AddStack(nil)
+	}
+
+	w.keepalive = false
+	if er = p.SendSignal(syscall.SIGINT); er != nil {
+		return atomos.NewErrorf(atomos.ErrCosmosNodeStopsError, "Supervisor: Node stops error. err=(%v)", er).AddStack(nil)
+	}
+
+	for {
+		<-time.After(100 * time.Millisecond)
+		run, err = w.isRunning()
+		if err != nil {
+			return err.AddStack(nil)
+		}
+		if run {
+			continue
+		}
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Info, "Supervisor: Node stopped, will restart. name=(%s)", w.nodeName)
+		break
+	}
+
+	return nil
+}
+
+func (w *nodeWatcher) restart() *atomos.Error {
+	if err := w.stop(); err != nil {
+		return err.AddStack(nil)
+	}
+	if err := w.start(); err != nil {
+		return err.AddStack(nil)
 	}
 	return nil
 }
 
-// Config
-
-type SupervisorConfig struct {
-	CosmosName string `yaml:"cosmos-name"`
-	LogPath    string `yaml:"log-path"`
-	LogLevel   string `yaml:"log-level"`
+func (w *nodeWatcher) status() {
 }
 
-type NodeConfig struct {
-	CosmosName string `yaml:"cosmos-name"`
-	Node       string `yaml:"node"`
-	LogPath    string `yaml:"log-path"`
-	LogLevel   string `yaml:"log-level"`
-
-	EnableCert   *CertConfig         `yaml:"enable-cert"`
-	EnableServer *RemoteServerConfig `yaml:"enable-server"`
-
-	CustomizeConfig map[string]string `yaml:"customize"`
+func (w *nodeWatcher) sendCommand() {
 }
 
-type CertConfig struct {
-	CertPath           string `yaml:"cert_path"`
-	KeyPath            string `yaml:"key_path"`
-	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
+func (w *nodeWatcher) onPIDFileChanged() {
+	// TODO
 }
 
-type RemoteServerConfig struct {
-	Host string `yaml:"host"`
-	Port int32  `yaml:"port"`
+func (w *nodeWatcher) onPIDProcessCheck() {
+	run, err := w.isRunning()
+	if err != nil {
+		atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Fatal, "Supervisor: Check PID status failed. name=(%s),err=(%v)", w.nodeName, err.AddStack(nil))
+		return
+	}
+	if run {
+		// TODO: Send Ping to process to check.
+		return
+	}
+	if w.main.isKeepNode(w.nodeName) && w.keepalive {
+		if err := w.start(); err != nil {
+			atomos.SharedLogging().PushProcessLog(atomos.LogLevel_Info, "Supervisor: Keepalive error. name=(%s),err=(%v)", w.nodeName, err.AddStack(nil))
+		}
+	}
 }
+
+func udsPing(bytes []byte) ([]byte, *atomos.Error) {
+	return []byte("pong"), nil
+}
+
+func udsStatus(bytes []byte) ([]byte, *atomos.Error) {
+	p := atomos.SharedCosmosProcess()
+	if p == nil {
+		return nil, atomos.NewError(atomos.ErrCosmosIsClosed, "UDS: Node is not running").AddStack(nil)
+	}
+	return nil, nil
+}
+
+func udsStart(bytes []byte) ([]byte, *atomos.Error) {
+	return []byte("start"), nil
+}
+
+func udsStop(bytes []byte) ([]byte, *atomos.Error) {
+	return []byte("stop"), nil
+}
+
+func udsRestart(bytes []byte) ([]byte, *atomos.Error) {
+	return []byte("restart"), nil
+}
+
+//type command struct {
+//	configPath string
+//	daemon     *atomos.App
+//}
+//
+//func (c *command) Command(cmd string) (string, bool, *atomos.Error) {
+//	if len(cmd) > 0 {
+//		i := strings.Index(cmd, " ")
+//		if i == -1 {
+//			i = len(cmd)
+//		}
+//		switch cmd[:i] {
+//		case "status":
+//			return c.handleCommandStatus()
+//		case "start all":
+//			return c.handleCommandStartAll()
+//		case "stop all":
+//			return c.handleCommandStopAll()
+//		case "exit":
+//			return "closing", true, nil
+//		}
+//	}
+//	return fmt.Sprintf("invalid command \"%s\"\n", cmd), false, nil
+//}
+//
+//func (c *command) Greeting() string {
+//	return "Hello Atomos!\n"
+//}
+//
+//func (c *command) PrintNow() string {
+//	return "Now:\t" + time.Now().Format("2006-01-02 15:04:05 MST -07:00")
+//}
+//
+//func (c *command) Bye() string {
+//	return "Bye Atomos!\n"
+//}
+//
+//func (c *command) handleCommandStatus() (string, bool, *atomos.Error) {
+//	buf := strings.Builder{}
+//	for _, process := range nodeList {
+//		buf.WriteString(fmt.Sprintf("Node: %s, status=(%s)", process.config.Node, process.getStatus()))
+//	}
+//	return buf.String(), false, nil
+//}
+//
+//func (c *command) handleCommandStartAll() (string, bool, *atomos.Error) {
+//	return "", false, nil
+//}
+//
+//func (c *command) handleCommandStopAll() (string, bool, *atomos.Error) {
+//	return "stop all", false, nil
+//}
+//
+//func (c *command) getNodeListConfig() ([]*nodeProcess, *atomos.Error) {
+//	//log.Printf("Daemon process load config failed, config=(%s),err=(%v)", *configPath, err)
+//	var nodeListConfig []*nodeProcess
+//	// Load Config.
+//	conf, err := atomos.NewSupervisorConfigFromYaml(c.configPath)
+//	if err != nil {
+//		return nodeListConfig, err.AddStack(nil)
+//	}
+//	if err = conf.Check(); err != nil {
+//		return nodeListConfig, err.AddStack(nil)
+//	}
+//	for _, node := range conf.NodeList {
+//		np := &nodeProcess{}
+//		nodeListConfig = append(nodeListConfig, np)
+//
+//		np.confPath = conf.LogPath + "/" + node + ".conf"
+//		np.config, np.err = atomos.NewCosmosNodeConfigFromYamlPath(np.confPath)
+//		if err != nil {
+//			np.err = np.err.AddStack(nil)
+//			continue
+//		}
+//		if err = conf.Check(); err != nil {
+//			np.err = np.err.AddStack(nil)
+//			continue
+//		}
+//	}
+//	return nodeListConfig, nil
+//}
+//
+//// Node Process
+//
+//type nodeProcess struct {
+//	confPath string
+//	config   *atomos.Config
+//	err      *atomos.Error
+//}
+//
+//func (p nodeProcess) getStatus() string {
+//	return ""
+//	//attr := &os.ProcAttr{
+//	//	Dir:   c.process.workPath,
+//	//	Env:   c.process.env,
+//	//	Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+//	//	Sys:   &syscall.SysProcAttr{Setsid: true},
+//	//}
+//	//proc, er = os.StartProcess(c.process.executablePath, c.process.args, attr)
+//	//if er != nil {
+//	//	return false, pid, NewError(ErrAppLaunchedFailed, er.Error()).AddStack(nil)
+//	//}
+//}
+//// BUILD
+//
+//func buildPaths(cosmosName, goPath string, nodeNameList []string) error {
+//	supervisorConfigPath := EtcPath + AtomosPrefix + cosmosName + "/supervisor.conf"
+//	buf, er := ioutil.ReadFile(supervisorConfigPath)
+//	if er != nil {
+//		return er
+//	}
+//	conf := &go_atomos.SupervisorYAMLConfig{}
+//	er = yaml.Unmarshal(buf, conf)
+//	if er != nil {
+//		return er
+//	}
+//
+//	now := time.Now().Format("20060102150405")
+//	for _, nodeName := range nodeNameList {
+//		if er := buildNodePath(cosmosName, goPath, nodeName, now); er != nil {
+//			return er
+//		}
+//	}
+//	fmt.Println("Config built")
+//	return nil
+//}
+//
+//func buildNodePath(cosmosName, goPath, nodeName, nowStr string) error {
+//	// Check whether cosmos name is legal.
+//	// 检查cosmos名称是否合法。
+//	if !checkNodeName(nodeName) {
+//		return errors.New("invalid node name")
+//	}
+//
+//	// Get {node}.conf
+//	configPath := EtcPath + AtomosPrefix + cosmosName + "/" + nodeName + ".conf"
+//	confPath := NewPath(configPath)
+//	if er := confPath.Refresh(); er != nil {
+//		return er
+//	}
+//	fmt.Printf("Node %s Config Path Validated: %s\n", nodeName, configPath)
+//
+//	if !confPath.exist() {
+//		return errors.New("file not exist")
+//	}
+//	buf, er := ioutil.ReadFile(confPath.path)
+//	if er != nil {
+//		return er
+//	}
+//	conf := &go_atomos.NodeYAMLConfig{}
+//	er = yaml.Unmarshal(buf, conf)
+//	if er != nil {
+//		return er
+//	}
+//	if conf.Cosmos != cosmosName {
+//		fmt.Printf("Error: Node %s Config Invalid Cosmos Name, name=(%s)\n", nodeName, conf.Cosmos)
+//		return errors.New("invalid cosmos name")
+//	}
+//	if conf.Node != nodeName {
+//		fmt.Printf("Error: Node %s Config Invalid Node Name, name=(%s)\n", nodeName, conf.Node)
+//		return errors.New("invalid cosmos name")
+//	}
+//
+//	buildPath := NewPath(conf.BuildPath)
+//	if er := buildPath.Refresh(); er != nil || !buildPath.exist() {
+//		fmt.Printf("Error: Node %s Config Invalid Build Path, path=(%s)\n", nodeName, conf.BuildPath)
+//		return errors.New("invalid build path")
+//	}
+//	binPath := NewPath(conf.BinPath)
+//	if er := binPath.Refresh(); er != nil {
+//		fmt.Printf("Error: Node %s Config Invalid Bin Path, name=(%s),err=(%v)\n", nodeName, conf.BinPath, er)
+//		return er
+//	}
+//
+//	outPath := binPath.path + "/" + nodeName + "_" + nowStr
+//	cmd := exec.Command(goPath, "build", "-o", outPath, buildPath.path)
+//	cmd.Stdout = os.Stdout
+//	cmd.Stderr = os.Stderr
+//	cmd.Dir = path.Join(path.Dir(buildPath.path))
+//	if er := cmd.Run(); er != nil {
+//		fmt.Printf("Error: Node %s Config Built Failed: err=(%v)\n", nodeName, er)
+//		return er
+//	}
+//
+//	linkPath := binPath.path + "/" + nodeName + "_latest"
+//	exec.Command("rm", linkPath).Run()
+//
+//	cmd = exec.Command("ln", "-s", outPath, linkPath)
+//	cmd.Stdout = os.Stdout
+//	cmd.Stderr = os.Stderr
+//	if er := cmd.Run(); er != nil {
+//		fmt.Printf("Error: Node %s Link Failed: err=(%v)\n", nodeName, er)
+//		return er
+//	}
+//
+//	fmt.Printf("Node %s Config Built Result: %s\n", nodeName, binPath.path)
+//	return nil
+//}
