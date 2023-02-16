@@ -80,7 +80,7 @@ type ElementCustomizeAutoDataPersistence interface {
 }
 
 type ElementCustomizeAutoLoadPersistence interface {
-	Load(self ElementSelfID, config map[string]string) *Error
+	Load(self ElementSelfID, config map[string][]byte) *Error
 	Unload() *Error
 }
 

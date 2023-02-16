@@ -3,7 +3,6 @@ package go_atomos
 import (
 	"encoding/json"
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -12,19 +11,21 @@ import (
 
 func (x *IDInfo) Info() string {
 	if x == nil {
-		return "UnknownID"
+		return "NilID"
 	}
 	switch x.Type {
-	case IDType_Atomos:
+	case IDType_Atom:
 		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atomos)
 	case IDType_Element:
 		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
 	case IDType_Cosmos:
-		return fmt.Sprintf("%s", x.Cosmos)
-	case IDType_Main:
-		return fmt.Sprintf("Main")
+		return x.Cosmos
+	case IDType_AppLoader:
+		return "AppLoader"
+	case IDType_App:
+		return "App"
 	default:
-		return fmt.Sprintf("%s", x.Cosmos)
+		return x.Cosmos
 	}
 }
 
@@ -58,7 +59,7 @@ func NewErrorf(code int64, format string, args ...interface{}) *Error {
 	}
 }
 
-func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...proto.Message) *Error {
+func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...interface{}) *Error {
 	_, file, line, ok := runtime.Caller(skip)
 	if !ok {
 		file, line = "???", 0
@@ -82,7 +83,7 @@ func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...p
 	return x
 }
 
-func (x *Error) AddStack(id SelfID, args ...proto.Message) *Error {
+func (x *Error) AddStack(id SelfID, args ...interface{}) *Error {
 	if x == nil {
 		return nil
 	}

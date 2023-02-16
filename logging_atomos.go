@@ -3,9 +3,12 @@ package go_atomos
 import (
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 const defaultLogMailID = 0
+
+var processIDType = IDType_App
 
 // Cosmos的Log接口。
 // Interface of Cosmos Log.
@@ -55,16 +58,16 @@ func initSharedLoggingAtomos(accessLog, errLog LoggingFn) {
 
 func (c *LoggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}) {
 	c.PushLogging(&IDInfo{
-		Type:    IDType_Process,
+		Type:    processIDType,
 		Cosmos:  "",
 		Element: "",
 		Atomos:  "",
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
-func (c *LoggingAtomos) pushProcessLog(level LogLevel, format string, args ...interface{}) {
+func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
 	c.PushLogging(&IDInfo{
-		Type:    IDType_Process,
+		Type:    processIDType,
 		Cosmos:  "",
 		Element: "",
 		Atomos:  "",
@@ -92,29 +95,32 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	var msg string
 	if id := lm.Id; id != nil {
 		switch id.Type {
-		case IDType_Atomos:
+		case IDType_Atom:
 			msg = fmt.Sprintf("%s::%s::%s => %s", id.Cosmos, id.Element, id.Atomos, lm.Message)
 		case IDType_Element:
 			msg = fmt.Sprintf("%s::%s => %s", id.Cosmos, id.Element, lm.Message)
 		case IDType_Cosmos:
 			msg = fmt.Sprintf("%s => %s", id.Cosmos, lm.Message)
-		case IDType_Main:
-			msg = fmt.Sprintf("Main => %s", lm.Message)
+		case IDType_AppLoader:
+			msg = fmt.Sprintf("AppLoader => %s", lm.Message)
+		case IDType_App:
+			msg = fmt.Sprintf("App => %s", lm.Message)
 		default:
 			msg = fmt.Sprintf("Unknown => %s", lm.Message)
 		}
 	} else {
 		msg = fmt.Sprintf("%s", lm.Message)
 	}
+	t := time.Unix(int64(lm.Time.GetSeconds()), int64(lm.Time.GetNanos())).Local().Format(logTimeFmt)
 	switch lm.Level {
 	case LogLevel_Debug:
-		c.accessLog(fmt.Sprintf("%s [DEBUG] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.accessLog(fmt.Sprintf("%s [DEBUG] %s\n", t, msg))
 	case LogLevel_Info:
-		c.accessLog(fmt.Sprintf("%s [INFO]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.accessLog(fmt.Sprintf("%s [INFO]  %s\n", t, msg))
 	case LogLevel_Warn:
-		c.errorLog(fmt.Sprintf("%s [WARN]  %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLog(fmt.Sprintf("%s [WARN]  %s\n", t, msg))
 	case LogLevel_Err:
-		c.errorLog(fmt.Sprintf("%s [ERROR] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLog(fmt.Sprintf("%s [ERROR] %s\n", t, msg))
 	case LogLevel_Fatal:
 		fallthrough
 	default:

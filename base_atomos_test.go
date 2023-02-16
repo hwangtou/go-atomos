@@ -106,7 +106,7 @@ var a *BaseAtomos
 
 func TestBaseAtomos(t *testing.T) {
 	id := &IDInfo{
-		Type:    IDType_Atomos,
+		Type:    IDType_Atom,
 		Cosmos:  "cosmos",
 		Element: "element",
 		Atomos:  "atomos",

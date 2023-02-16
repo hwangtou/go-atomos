@@ -218,7 +218,7 @@ func TestElementLocalScaleID(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
-	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 2); err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
@@ -229,7 +229,7 @@ func TestElementLocalScaleID(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
-	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 2); err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}

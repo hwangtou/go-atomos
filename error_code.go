@@ -5,6 +5,8 @@ const (
 
 	ErrFrameworkPanic
 
+	// Cosmos Process
+
 	ErrCosmosProcessHasNotInitialized
 	ErrCosmosProcessHasBeenStarted
 	ErrCosmosProcessOnStartupPanic
@@ -14,6 +16,8 @@ const (
 	ErrCosmosProcessCannotStopShutdownState
 	ErrCosmosProcessCannotStopOffState
 	ErrCosmosProcessInvalidState
+
+	// Cosmos Main
 
 	ErrMainLoadCertFailed
 	ErrMainElementNotFound
@@ -25,8 +29,35 @@ const (
 	ErrMainRunnableConfigNotFound
 	ErrMainRunnableScriptNotFound
 
+	// Config
+
 	ErrCosmosConfigInvalid
-	ErrCosmosCertConfigInvalid
+	ErrCosmosConfigCertInvalid
+	ErrCosmosIsClosed
+
+	// App Env
+
+	ErrAppEnvGetExecutableFailed
+	ErrAppEnvLaunchedFailed
+	ErrAppEnvRunPathInvalid
+	ErrAppEnvRunPathPIDFileInvalid
+	ErrAppEnvRunPathPIDIsRunning
+	ErrAppEnvRunPathWritePIDFileFailed
+	ErrAppEnvRunPathRemovePIDFailed
+
+	// Unix Domain Socket
+
+	ErrAppUnixDomainSocketFileInvalid
+	ErrAppUnixDomainSocketListenFailed
+	ErrAppUnixDomainSocketDialFailed
+	ErrAppUnixDomainSocketConnWriteFailed
+
+	// Logging
+
+	ErrAppLoggingPathInvalid
+	ErrAppLoggingFileOpenFailed
+
+	// Atomos
 
 	ErrAtomosIsStopping
 	ErrAtomosIsNotRunning
@@ -37,6 +68,8 @@ const (
 	ErrAtomosPushTimeoutReject
 	ErrAtomosCallDeadLock
 
+	// Element
+
 	ErrElementLoaded
 	ErrElementScaleHandlerNotExists
 	ErrElementMessageHandlerNotExists
@@ -45,6 +78,8 @@ const (
 	ErrElementCannotKill
 	ErrElementNoFromID
 	ErrElementNotImplemented
+
+	// Atom
 
 	ErrAtomMessageHandlerNotExists
 	ErrAtomMessageDecoderNotExists
@@ -60,7 +95,36 @@ const (
 	ErrAtomNoFromID
 	ErrAtomNotImplemented
 	ErrAtomMessageAtomType
-
 	ErrAtomMessageArgType
 	ErrAtomMessageReplyType
+
+	// Util File
+
+	ErrUtilOSStatError
+	ErrUtilReadDirectoryFailed
+	ErrUtilNotSupportedOS
+	ErrUtilPathShouldBeDirectory
+	ErrUtilDirectoryNotExist
+	ErrUtilGetUserGroupIDsFailed
+	ErrUtilUsersGroupsHaveNotOwnedDirectory
+	ErrUtilFileModePermNotMatch
+	ErrUtilFileMakeDirectoryFailed
+	ErrUtilFileChangeOwnerAndModeFailed
+	ErrUtilFileConfirmOwnerAndModeFailed
+	ErrUtilCreateFileFailed
+
+	// Supervisor
+
+	ErrSupervisorCreateWatcherFailed
+	ErrSupervisorReadSupervisorConfigFailed
+	ErrSupervisorRestartToTakeEffect
+	ErrCosmosNodeReadSupervisorConfigFailed
+	ErrCosmosNodeRestartToTakeEffect
+	ErrCosmosNodeConfigInvalid
+	ErrCosmosNodePIDFileInvalid
+	ErrCosmosNodeGetProcessFailed
+	ErrCosmosNodeBuildBinaryFailed
+	ErrCosmosNodeIsAlreadyRunning
+	ErrCosmosNodeIsAlreadyStopped
+	ErrCosmosNodeStopsError
 )

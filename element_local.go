@@ -223,7 +223,7 @@ func (e *ElementLocal) Parallel(fn func()) {
 
 // Implementation of AtomSelfID
 
-func (e *ElementLocal) Config() map[string]string {
+func (e *ElementLocal) Config() map[string][]byte {
 	return e.main.runnable.config.Customize
 }
 

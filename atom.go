@@ -101,7 +101,7 @@ type SelfID interface {
 
 	Parallel(func())
 
-	Config() map[string]string
+	Config() map[string][]byte
 
 	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error)
 }

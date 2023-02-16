@@ -37,6 +37,11 @@ func SharedCosmosProcess() *CosmosProcess {
 
 func InitCosmosProcess(accessLogFn, errLogFn LoggingFn) {
 	onceInitSharedCosmosProcess.Do(func() {
+		if IsParentProcess() {
+			processIDType = IDType_AppLoader
+		} else {
+			processIDType = IDType_App
+		}
 		sharedCosmosProcess = &CosmosProcess{}
 		initSharedLoggingAtomos(accessLogFn, errLogFn)
 		initCosmosMain(sharedCosmosProcess)
@@ -101,18 +106,18 @@ func (p *CosmosProcess) Stop() *Error {
 		defer p.mutex.Unlock()
 		switch p.state {
 		case CosmosProcessStatePrepare:
-			return NewError(ErrCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping process is preparing.").AddStack(nil)
+			return NewError(ErrCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping app is preparing.").AddStack(nil)
 		case CosmosProcessStateStartup:
-			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping process is starting up.").AddStack(nil)
+			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(nil)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
 			return nil
 		case CosmosProcessStateShutdown:
-			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping process is shutting down.").AddStack(nil)
+			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(nil)
 		case CosmosProcessStateOff:
-			return NewError(ErrCosmosProcessCannotStopOffState, "CosmosProcess: Stopping process is halt.").AddStack(nil)
+			return NewError(ErrCosmosProcessCannotStopOffState, "CosmosProcess: Stopping app is halt.").AddStack(nil)
 		}
-		return NewError(ErrCosmosProcessInvalidState, "CosmosProcess: Stopping process is in invalid process state.").AddStack(nil)
+		return NewError(ErrCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(nil)
 	}(); err != nil {
 		return err
 	}

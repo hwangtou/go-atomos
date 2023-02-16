@@ -2,6 +2,8 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -19,6 +21,15 @@ var (
 	testElementSetDataPanic = false
 	testRecoverPanic        = false
 )
+
+const (
+	testLogMaxSize = 1000
+)
+
+func clearTest() {
+	sharedCosmosProcess = nil
+	onceInitSharedCosmosProcess = sync.Once{}
+}
 
 func initTestFakeCosmosProcess(t *testing.T) {
 	accessLog := func(s string) { t.Logf(s) }
@@ -42,15 +53,33 @@ func newTestFakeRunnable(t *testing.T, autoData bool) *CosmosRunnable {
 }
 
 func newTestFakeCosmosMainConfig() *Config {
+	os.Mkdir("/tmp/test_atomos_app_logging", 0777)
+	os.Mkdir("/tmp/test_atomos_app_run", 0777)
+	os.Mkdir("/tmp/test_atomos_app_etc", 0777)
 	return &Config{
-		Node:         "testNode",
-		LogPath:      "/tmp/atomos_test.log",
-		LogLevel:     0,
-		EnableCert:   nil,
-		EnableServer: nil,
-		EnableTelnet: nil,
-		Customize:    nil,
+		Cosmos:            "testCosmos",
+		Node:              "testNode",
+		NodeList:          nil,
+		KeepaliveNodeList: nil,
+		ReporterUrl:       "",
+		ConfigerUrl:       "",
+		LogLevel:          0,
+		LogPath:           "/tmp/test_atomos_app_logging",
+		RunPath:           "/tmp/test_atomos_app_run",
+		EtcPath:           "/tmp/test_atomos_app_etc",
+		EnableCert:        nil,
+		EnableServer:      nil,
+		Customize:         nil,
 	}
+}
+
+func newTestAppLogging(t *testing.T) *appLogging {
+	logging, err := NewAppLogging("/tmp/test_atomos_app_logging", testLogMaxSize)
+	if err != nil {
+		t.Errorf("AppLogging: err=(%v)", err)
+		panic(err)
+	}
+	return logging
 }
 
 func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
@@ -268,7 +297,7 @@ func (t *testElementDev) ElementConstructor() Atomos {
 	return &testElement{}
 }
 
-func (t *testElementDev) Load(self ElementSelfID, config map[string]string) *Error {
+func (t *testElementDev) Load(self ElementSelfID, config map[string][]byte) *Error {
 	if testElementLoadPanic {
 		panic("Test Element Load Panic")
 	}
@@ -478,4 +507,41 @@ func testElementSpawnPanic(s ElementSelfID, a Atomos, data proto.Message) *Error
 	ta.self = s
 	panic("Element Spawn Panic")
 	return nil
+}
+
+func testAppUDSServer(t *testing.T) (*appUDSServer, *Error) {
+	s := &appUDSServer{
+		config:         newTestFakeCosmosMainConfig(),
+		logging:        newTestAppLogging(t),
+		addr:           nil,
+		listener:       nil,
+		mutex:          sync.Mutex{},
+		connID:         0,
+		connMap:        map[int32]*AppUDSConn{},
+		commandHandler: udsNodeCommandHandler,
+	}
+	if err := s.check(); err != nil {
+		t.Errorf("testAppUDSServer: Check failed. err=(%v)", err.AddStack(nil))
+		return nil, err
+	}
+	if err := s.daemon(); err != nil {
+		t.Errorf("testAppUDSServer: Daemon failed. err=(%v)", err)
+		return nil, err.AddStack(nil)
+	}
+	file, er := s.listener.File()
+	if er != nil {
+		t.Errorf("testAppUDSServer: Socket error. err=(%v)", er)
+		return nil, NewErrorf(ErrFrameworkPanic, "Socket file error. err=(%v)", er).AddStack(nil)
+	}
+	t.Logf("TestAppSocketListener: File=(%v)", file)
+	return s, nil
+}
+
+func testAppSocketClient(t *testing.T) *AppUDSClient {
+	return &AppUDSClient{
+		logging: sharedLogging.PushProcessLog,
+		mutex:   sync.Mutex{},
+		connID:  0,
+		connMap: map[int32]*AppUDSConn{},
+	}
 }

@@ -8,11 +8,11 @@ import "google/protobuf/timestamp.proto";
 
 enum IDType {
   InvalidIDType = 0;
-  Process = 1;
-  Main = 2;
+  AppLoader = 1;
+  App = 2;
   Cosmos = 3;
   Element = 4;
-  Atomos = 5;
+  Atom = 5;
 }
 
 message IDInfo {
@@ -43,8 +43,6 @@ message LogMail {
   LogLevel level = 3;
   string message = 4;
 }
-
-// Error
 
 message Error {
   int64 code = 1;
@@ -89,29 +87,39 @@ message String {
 // Configuration
 
 message Config {
-  string node = 1;
-  string log_path = 2;
-  LogLevel log_level = 3;
-  CertConfig enable_cert = 4;
-  RemoteServerConfig enable_server = 5;
-  TelnetServerConfig enable_telnet = 6;
-  map<string, string> customize = 7;
+  // Cosmos Name
+  string cosmos = 1;
+
+  // Node Name (For Node Config)
+  string node = 2;
+  // Node List (For Supervisor Config)
+  repeated string node_list = 3;
+  // Keepalive Node List (For Supervisor Config)
+  repeated string keepalive_node_list = 4;
+
+  string reporter_url = 5;
+  string configer_url = 6;
+
+  LogLevel log_level = 7;
+  string log_path = 8;
+  int64 log_max_size = 9;
+
+  string build_path = 10;
+  string bin_path = 11;
+  string run_path = 12;
+  string etc_path = 13;
+
+  // 节点通讯
+  CertConfig enable_cert = 14;
+  RemoteServerConfig enable_server = 15;
+
+  // 自定义配置
+  map<string, bytes> customize = 16;
 }
 
 message RemoteServerConfig {
   string host = 1;
   int32 port = 2;
-}
-
-message TelnetServerConfig {
-  string network = 1;
-  string address = 2;
-  TelnetAdminConfig admin = 3;
-}
-
-message TelnetAdminConfig {
-  string username = 1;
-  string password = 2;
 }
 
 message CertConfig {
@@ -139,42 +147,34 @@ message AtomMessageConfig {
   google.protobuf.Any out = 2;
 }
 
-// Cosmos Watch
-
-enum CosmosWatchMessageType {
-  Init = 0;
+message UDSCommandPacket {
+  int64 session_id = 1;
+  string command = 2;
+  bytes buf = 3;
+  Error err = 4;
 }
 
-message CosmosWatch {
-  CosmosWatchMessageType message_type = 1;
-  CosmosRemoteConnectInit init_message = 2;
-}
-
-message CosmosRemoteConnectInit {
-  CosmosLocalConfig config = 1;
-}
-
-// Cosmos Requester
-
-message CosmosRemoteGetAtomIDReq {
-  string element = 1;
-  string name = 2;
-}
-
-message CosmosRemoteGetAtomIDResp {
-  bool has = 1;
-  string error = 2;
-}
-
-message CosmosRemoteMessagingReq {
-  IDInfo from = 1;
-  IDInfo to = 2;
-  string message = 3;
-  google.protobuf.Any args = 4;
-}
-
-message CosmosRemoteMessagingResp {
-  bool has = 1;
-  google.protobuf.Any reply = 2;
-  string error = 3;
-}
+//// Cosmos Requester
+//
+//message CosmosRemoteGetAtomIDReq {
+//  string element = 1;
+//  string name = 2;
+//}
+//
+//message CosmosRemoteGetAtomIDResp {
+//  bool has = 1;
+//  string error = 2;
+//}
+//
+//message CosmosRemoteMessagingReq {
+//  IDInfo from = 1;
+//  IDInfo to = 2;
+//  string message = 3;
+//  google.protobuf.Any args = 4;
+//}
+//
+//message CosmosRemoteMessagingResp {
+//  bool has = 1;
+//  google.protobuf.Any reply = 2;
+//  string error = 3;
+//}

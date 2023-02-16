@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"google.golang.org/protobuf/proto"
 	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 )
@@ -35,11 +36,11 @@ type CosmosMain struct {
 // Life cycle
 
 func initCosmosMain(process *CosmosProcess) *CosmosMain {
-	SharedLogging().pushProcessLog(LogLevel_Info, "Cosmos: Loading")
+	SharedLogging().PushProcessLog(LogLevel_Info, "Cosmos: Loading. pid=(%d)", os.Getpid())
 	id := &IDInfo{
-		Type:    IDType_Main,
+		Type:    processIDType,
 		Cosmos:  "",
-		Element: MainElementName,
+		Element: "",
 		Atomos:  "",
 	}
 	main := &CosmosMain{
@@ -63,7 +64,7 @@ func initCosmosMain(process *CosmosProcess) *CosmosMain {
 func (c *CosmosMain) loadOnce(runnable *CosmosRunnable) *Error {
 	_, err := c.tryLoadRunnable(runnable)
 	if err != nil {
-		c.Log().Fatal("Cosmos: Once load failed. err=(%v)", err)
+		c.Log().Fatal("Cosmos: Once load failed. err=(%s)", err.Message)
 		return err
 	}
 	return nil
@@ -206,7 +207,7 @@ func (c *CosmosMain) Parallel(fn func()) {
 	}()
 }
 
-func (c *CosmosMain) Config() map[string]string {
+func (c *CosmosMain) Config() map[string][]byte {
 	return c.runnable.config.Customize
 }
 
@@ -325,7 +326,7 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 func (c *CosmosMain) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole, type=(%T)", c.atomos.instance)
+		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
 		c.Log().Error(err.Message)
 		return err
 	}
@@ -372,7 +373,7 @@ func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Er
 		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl)
 		if e != nil {
 			err = e.AddStack(c)
-			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%v)", impl.Interface.Config.Name, err)
+			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%s)", impl.Interface.Config.Name, err.Message)
 			break
 		}
 		loaded = append(loaded, elem)
@@ -507,10 +508,10 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 	// Check enable Cert.
 	if cert := newRunnable.config.EnableCert; cert != nil {
 		if cert.CertPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Cosmos: Cert path is empty")
+			return nil, NewError(ErrCosmosConfigCertInvalid, "Cosmos: Cert path is empty")
 		}
 		if cert.KeyPath == "" {
-			return nil, NewError(ErrCosmosCertConfigInvalid, "Cosmos: Key path is empty")
+			return nil, NewError(ErrCosmosConfigCertInvalid, "Cosmos: Key path is empty")
 		}
 		// Load Key Pair.
 		c.Log().Info("Cosmos: Enabling Cert. cert=(%s),key=(%s)", cert.CertPath, cert.KeyPath)
@@ -528,7 +529,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		// Load Cert.
 		caCert, e := ioutil.ReadFile(cert.CertPath)
 		if e != nil {
-			return nil, NewErrorf(ErrCosmosCertConfigInvalid, "Cosmos: Cert file read error, err=(%v)", e)
+			return nil, NewErrorf(ErrCosmosConfigCertInvalid, "Cosmos: Cert file read error. err=(%v)", e)
 		}
 		tlsConfig := &tls.Config{}
 		if cert.InsecureSkipVerify {

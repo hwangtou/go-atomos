@@ -47,7 +47,7 @@ type AtomLocal struct {
 
 func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, lv LogLevel) *AtomLocal {
 	id := &IDInfo{
-		Type:    IDType_Atomos,
+		Type:    IDType_Atom,
 		Cosmos:  e.Cosmos().GetNodeName(),
 		Element: e.GetElementName(),
 		Atomos:  name,
@@ -220,7 +220,7 @@ func (a *AtomLocal) Parallel(fn func()) {
 
 // Implementation of AtomSelfID
 
-func (a *AtomLocal) Config() map[string]string {
+func (a *AtomLocal) Config() map[string][]byte {
 	return a.element.main.runnable.config.Customize
 }
 

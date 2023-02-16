@@ -245,9 +245,9 @@ func (mb *mailBox) removeMail(dm *mail) bool {
 }
 
 func (mb *mailBox) loop() {
-	sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
+	sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
 	defer func() {
-		sharedLogging.pushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
+		sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
 	}()
 	for {
 		if exit := func() (exit bool) {
