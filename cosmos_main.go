@@ -574,7 +574,7 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		if oldRunnable != nil && oldRunnable.config.EnableServer.IsEqual(newRunnable.config.EnableServer) {
 			goto noServerReconnect
 		}
-		if err := c.listen(newRunnable); err != nil {
+		if err := c.listen(newRunnable, server.Host, server.Port); err != nil {
 			return nil, err.AddStack(c)
 		}
 		//c.remoteServer = newCosmosRemoteHelper(a)
@@ -590,14 +590,9 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 
 // Remote
 
-func (c *CosmosMain) listen(runnable *CosmosRunnable) *Error {
+func (c *CosmosMain) listen(runnable *CosmosRunnable, host string, port int32) *Error {
 	config := runnable.config
-	if config.EnableCert == nil || config.EnableServer == nil {
-		return nil
-	}
 	// Http
-	host := config.EnableServer.Host
-	port := config.EnableServer.Port
 	listenAddr := fmt.Sprintf("%s:%d", host, port)
 
 	mux := http.NewServeMux()
@@ -616,18 +611,27 @@ func (c *CosmosMain) listen(runnable *CosmosRunnable) *Error {
 	}
 
 	// Listen the local port.
-	cert, er := tls.LoadX509KeyPair(config.EnableCert.CertPath, config.EnableCert.KeyPath)
-	if er != nil {
-		return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Server cert invalid. err=(%v)", er).AddStack(c)
+	if config.EnableCert != nil {
+		cert, er := tls.LoadX509KeyPair(config.EnableCert.CertPath, config.EnableCert.KeyPath)
+		if er != nil {
+			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Server cert invalid. err=(%v)", er).AddStack(c)
+		}
+		// Listen the local port.
+		listener, er := tls.Listen("tcp", listenAddr, &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		})
+		if er != nil {
+			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Loading server failed. err=(%v)", er).AddStack(c)
+		}
+		c.listener = listener
+	} else {
+		// Listen the local port.
+		listener, er := net.Listen("tcp", listenAddr)
+		if er != nil {
+			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Loading server failed. err=(%v)", er).AddStack(c)
+		}
+		c.listener = listener
 	}
-	// Listen the local port.
-	listener, er := tls.Listen("tcp", listenAddr, &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	})
-	if er != nil {
-		return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Loading server failed. err=(%v)", er).AddStack(c)
-	}
-	c.listener = listener
 	go c.server.Serve(c.listener)
 	return nil
 }
