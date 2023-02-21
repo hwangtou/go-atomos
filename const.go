@@ -16,3 +16,13 @@ const (
 const (
 	ShouldArgumentClone = false
 )
+
+const (
+	RemoteAtomosURIPrefix = "/remote"
+
+	RemoteAtomosConnect        = RemoteAtomosURIPrefix + "/connect"
+	RemoteAtomosElementScaling = RemoteAtomosURIPrefix + "/element/scaling"
+	RemoteAtomosGetAtom        = RemoteAtomosURIPrefix + "/id/get"
+	RemoteAtomosMessaging      = RemoteAtomosURIPrefix + "/id/messaging"
+	RemoteAtomosIDRelease      = RemoteAtomosURIPrefix + "/id/release"
+)

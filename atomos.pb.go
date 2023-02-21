@@ -1267,6 +1267,715 @@ func (x *UDSCommandPacket) GetErr() *Error {
 	return nil
 }
 
+type CosmosRemoteConnectInfo struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Config *CosmosRemoteInfo `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+}
+
+func (x *CosmosRemoteConnectInfo) Reset() {
+	*x = CosmosRemoteConnectInfo{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[17]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteConnectInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteConnectInfo) ProtoMessage() {}
+
+func (x *CosmosRemoteConnectInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[17]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteConnectInfo.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteConnectInfo) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CosmosRemoteConnectInfo) GetConfig() *CosmosRemoteInfo {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+type CosmosRemoteInfo struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id       *IDInfo            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Elements map[string]*IDInfo `protobuf:"bytes,2,rep,name=elements,proto3" json:"elements,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Changed  int64              `protobuf:"varint,3,opt,name=changed,proto3" json:"changed,omitempty"`
+}
+
+func (x *CosmosRemoteInfo) Reset() {
+	*x = CosmosRemoteInfo{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[18]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteInfo) ProtoMessage() {}
+
+func (x *CosmosRemoteInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[18]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteInfo.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteInfo) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CosmosRemoteInfo) GetId() *IDInfo {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *CosmosRemoteInfo) GetElements() map[string]*IDInfo {
+	if x != nil {
+		return x.Elements
+	}
+	return nil
+}
+
+func (x *CosmosRemoteInfo) GetChanged() int64 {
+	if x != nil {
+		return x.Changed
+	}
+	return 0
+}
+
+type IDTrackerInfo struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	File string `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Line int32  `protobuf:"varint,2,opt,name=line,proto3" json:"line,omitempty"`
+	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *IDTrackerInfo) Reset() {
+	*x = IDTrackerInfo{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *IDTrackerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IDTrackerInfo) ProtoMessage() {}
+
+func (x *IDTrackerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IDTrackerInfo.ProtoReflect.Descriptor instead.
+func (*IDTrackerInfo) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *IDTrackerInfo) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *IDTrackerInfo) GetLine() int32 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *IDTrackerInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CosmosRemoteScalingReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	From        *IDInfo        `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	FromAddr    string         `protobuf:"bytes,2,opt,name=from_addr,json=fromAddr,proto3" json:"from_addr,omitempty"`
+	FromTracker *IDTrackerInfo `protobuf:"bytes,3,opt,name=from_tracker,json=fromTracker,proto3" json:"from_tracker,omitempty"`
+	To          *IDInfo        `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Timeout     float32        `protobuf:"fixed32,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Message     string         `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	Args        *anypb.Any     `protobuf:"bytes,7,opt,name=args,proto3" json:"args,omitempty"`
+}
+
+func (x *CosmosRemoteScalingReq) Reset() {
+	*x = CosmosRemoteScalingReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[20]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteScalingReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteScalingReq) ProtoMessage() {}
+
+func (x *CosmosRemoteScalingReq) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[20]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteScalingReq.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteScalingReq) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CosmosRemoteScalingReq) GetFrom() *IDInfo {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *CosmosRemoteScalingReq) GetFromAddr() string {
+	if x != nil {
+		return x.FromAddr
+	}
+	return ""
+}
+
+func (x *CosmosRemoteScalingReq) GetFromTracker() *IDTrackerInfo {
+	if x != nil {
+		return x.FromTracker
+	}
+	return nil
+}
+
+func (x *CosmosRemoteScalingReq) GetTo() *IDInfo {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *CosmosRemoteScalingReq) GetTimeout() float32 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
+func (x *CosmosRemoteScalingReq) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *CosmosRemoteScalingReq) GetArgs() *anypb.Any {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+type CosmosRemoteScalingRsp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        *IDInfo `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Error     *Error  `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TrackerId uint64  `protobuf:"varint,3,opt,name=tracker_id,json=trackerId,proto3" json:"tracker_id,omitempty"`
+}
+
+func (x *CosmosRemoteScalingRsp) Reset() {
+	*x = CosmosRemoteScalingRsp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[21]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteScalingRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteScalingRsp) ProtoMessage() {}
+
+func (x *CosmosRemoteScalingRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[21]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteScalingRsp.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteScalingRsp) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CosmosRemoteScalingRsp) GetId() *IDInfo {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *CosmosRemoteScalingRsp) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+func (x *CosmosRemoteScalingRsp) GetTrackerId() uint64 {
+	if x != nil {
+		return x.TrackerId
+	}
+	return 0
+}
+
+type CosmosRemoteGetIDReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	FromAddr    string         `protobuf:"bytes,1,opt,name=from_addr,json=fromAddr,proto3" json:"from_addr,omitempty"`
+	FromTracker *IDTrackerInfo `protobuf:"bytes,2,opt,name=from_tracker,json=fromTracker,proto3" json:"from_tracker,omitempty"`
+	Element     string         `protobuf:"bytes,3,opt,name=element,proto3" json:"element,omitempty"`
+	Atom        string         `protobuf:"bytes,4,opt,name=atom,proto3" json:"atom,omitempty"`
+}
+
+func (x *CosmosRemoteGetIDReq) Reset() {
+	*x = CosmosRemoteGetIDReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteGetIDReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteGetIDReq) ProtoMessage() {}
+
+func (x *CosmosRemoteGetIDReq) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteGetIDReq.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteGetIDReq) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CosmosRemoteGetIDReq) GetFromAddr() string {
+	if x != nil {
+		return x.FromAddr
+	}
+	return ""
+}
+
+func (x *CosmosRemoteGetIDReq) GetFromTracker() *IDTrackerInfo {
+	if x != nil {
+		return x.FromTracker
+	}
+	return nil
+}
+
+func (x *CosmosRemoteGetIDReq) GetElement() string {
+	if x != nil {
+		return x.Element
+	}
+	return ""
+}
+
+func (x *CosmosRemoteGetIDReq) GetAtom() string {
+	if x != nil {
+		return x.Atom
+	}
+	return ""
+}
+
+type CosmosRemoteGetIDRsp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        *IDInfo `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Error     *Error  `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	TrackerId uint64  `protobuf:"varint,3,opt,name=tracker_id,json=trackerId,proto3" json:"tracker_id,omitempty"`
+}
+
+func (x *CosmosRemoteGetIDRsp) Reset() {
+	*x = CosmosRemoteGetIDRsp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteGetIDRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteGetIDRsp) ProtoMessage() {}
+
+func (x *CosmosRemoteGetIDRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteGetIDRsp.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteGetIDRsp) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CosmosRemoteGetIDRsp) GetId() *IDInfo {
+	if x != nil {
+		return x.Id
+	}
+	return nil
+}
+
+func (x *CosmosRemoteGetIDRsp) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+func (x *CosmosRemoteGetIDRsp) GetTrackerId() uint64 {
+	if x != nil {
+		return x.TrackerId
+	}
+	return 0
+}
+
+type CosmosRemoteMessagingReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	From      *IDInfo    `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	FromAddr  string     `protobuf:"bytes,2,opt,name=from_addr,json=fromAddr,proto3" json:"from_addr,omitempty"`
+	To        *IDInfo    `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	CallChain []*IDInfo  `protobuf:"bytes,4,rep,name=call_chain,json=callChain,proto3" json:"call_chain,omitempty"`
+	Timeout   float32    `protobuf:"fixed32,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Message   string     `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	Args      *anypb.Any `protobuf:"bytes,7,opt,name=args,proto3" json:"args,omitempty"`
+}
+
+func (x *CosmosRemoteMessagingReq) Reset() {
+	*x = CosmosRemoteMessagingReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[24]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteMessagingReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteMessagingReq) ProtoMessage() {}
+
+func (x *CosmosRemoteMessagingReq) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[24]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteMessagingReq.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteMessagingReq) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CosmosRemoteMessagingReq) GetFrom() *IDInfo {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *CosmosRemoteMessagingReq) GetFromAddr() string {
+	if x != nil {
+		return x.FromAddr
+	}
+	return ""
+}
+
+func (x *CosmosRemoteMessagingReq) GetTo() *IDInfo {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *CosmosRemoteMessagingReq) GetCallChain() []*IDInfo {
+	if x != nil {
+		return x.CallChain
+	}
+	return nil
+}
+
+func (x *CosmosRemoteMessagingReq) GetTimeout() float32 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
+func (x *CosmosRemoteMessagingReq) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *CosmosRemoteMessagingReq) GetArgs() *anypb.Any {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+type CosmosRemoteMessagingRsp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Reply *anypb.Any `protobuf:"bytes,1,opt,name=reply,proto3" json:"reply,omitempty"`
+	Error *Error     `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (x *CosmosRemoteMessagingRsp) Reset() {
+	*x = CosmosRemoteMessagingRsp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteMessagingRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteMessagingRsp) ProtoMessage() {}
+
+func (x *CosmosRemoteMessagingRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteMessagingRsp.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteMessagingRsp) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CosmosRemoteMessagingRsp) GetReply() *anypb.Any {
+	if x != nil {
+		return x.Reply
+	}
+	return nil
+}
+
+func (x *CosmosRemoteMessagingRsp) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+type CosmosRemoteReleaseIDReq struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	TrackerId uint64 `protobuf:"varint,1,opt,name=tracker_id,json=trackerId,proto3" json:"tracker_id,omitempty"`
+}
+
+func (x *CosmosRemoteReleaseIDReq) Reset() {
+	*x = CosmosRemoteReleaseIDReq{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[26]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteReleaseIDReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteReleaseIDReq) ProtoMessage() {}
+
+func (x *CosmosRemoteReleaseIDReq) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[26]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteReleaseIDReq.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteReleaseIDReq) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CosmosRemoteReleaseIDReq) GetTrackerId() uint64 {
+	if x != nil {
+		return x.TrackerId
+	}
+	return 0
+}
+
+type CosmosRemoteReleaseIDRsp struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Error *Error `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+}
+
+func (x *CosmosRemoteReleaseIDRsp) Reset() {
+	*x = CosmosRemoteReleaseIDRsp{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_atomos_proto_msgTypes[27]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CosmosRemoteReleaseIDRsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CosmosRemoteReleaseIDRsp) ProtoMessage() {}
+
+func (x *CosmosRemoteReleaseIDRsp) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[27]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CosmosRemoteReleaseIDRsp.ProtoReflect.Descriptor instead.
+func (*CosmosRemoteReleaseIDRsp) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CosmosRemoteReleaseIDRsp) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
 var File_atomos_proto protoreflect.FileDescriptor
 
 var file_atomos_proto_rawDesc = []byte{
@@ -1415,19 +2124,117 @@ var file_atomos_proto_rawDesc = []byte{
 	0x01, 0x28, 0x09, 0x52, 0x07, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x10, 0x0a, 0x03,
 	0x62, 0x75, 0x66, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x62, 0x75, 0x66, 0x12, 0x1f,
 	0x0a, 0x03, 0x65, 0x72, 0x72, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x61, 0x74,
-	0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x03, 0x65, 0x72, 0x72, 0x2a,
-	0x56, 0x0a, 0x06, 0x49, 0x44, 0x54, 0x79, 0x70, 0x65, 0x12, 0x11, 0x0a, 0x0d, 0x49, 0x6e, 0x76,
-	0x61, 0x6c, 0x69, 0x64, 0x49, 0x44, 0x54, 0x79, 0x70, 0x65, 0x10, 0x00, 0x12, 0x0d, 0x0a, 0x09,
-	0x41, 0x70, 0x70, 0x4c, 0x6f, 0x61, 0x64, 0x65, 0x72, 0x10, 0x01, 0x12, 0x07, 0x0a, 0x03, 0x41,
-	0x70, 0x70, 0x10, 0x02, 0x12, 0x0a, 0x0a, 0x06, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x10, 0x03,
-	0x12, 0x0b, 0x0a, 0x07, 0x45, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x10, 0x04, 0x12, 0x08, 0x0a,
-	0x04, 0x41, 0x74, 0x6f, 0x6d, 0x10, 0x05, 0x2a, 0x3d, 0x0a, 0x08, 0x4c, 0x6f, 0x67, 0x4c, 0x65,
-	0x76, 0x65, 0x6c, 0x12, 0x09, 0x0a, 0x05, 0x44, 0x65, 0x62, 0x75, 0x67, 0x10, 0x00, 0x12, 0x08,
-	0x0a, 0x04, 0x49, 0x6e, 0x66, 0x6f, 0x10, 0x01, 0x12, 0x08, 0x0a, 0x04, 0x57, 0x61, 0x72, 0x6e,
-	0x10, 0x02, 0x12, 0x07, 0x0a, 0x03, 0x45, 0x72, 0x72, 0x10, 0x03, 0x12, 0x09, 0x0a, 0x05, 0x46,
-	0x61, 0x74, 0x61, 0x6c, 0x10, 0x04, 0x42, 0x1f, 0x5a, 0x1d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
-	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x68, 0x77, 0x61, 0x6e, 0x67, 0x74, 0x6f, 0x75, 0x2f, 0x67, 0x6f,
-	0x2d, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x03, 0x65, 0x72, 0x72, 0x22,
+	0x4b, 0x0a, 0x17, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x43,
+	0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x30, 0x0a, 0x06, 0x63, 0x6f,
+	0x6e, 0x66, 0x69, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x18, 0x2e, 0x61, 0x74, 0x6f,
+	0x6d, 0x6f, 0x73, 0x2e, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65,
+	0x49, 0x6e, 0x66, 0x6f, 0x52, 0x06, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x22, 0xdd, 0x01, 0x0a,
+	0x10, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x49, 0x6e, 0x66,
+	0x6f, 0x12, 0x1e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e,
+	0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x02, 0x69,
+	0x64, 0x12, 0x42, 0x0a, 0x08, 0x65, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x02, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x43, 0x6f, 0x73,
+	0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x49, 0x6e, 0x66, 0x6f, 0x2e, 0x45, 0x6c,
+	0x65, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x65, 0x6c, 0x65,
+	0x6d, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x64, 0x1a,
+	0x4b, 0x0a, 0x0d, 0x45, 0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79,
+	0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b,
+	0x65, 0x79, 0x12, 0x24, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66,
+	0x6f, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x4b, 0x0a, 0x0d,
+	0x49, 0x44, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x12, 0x0a,
+	0x04, 0x66, 0x69, 0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x66, 0x69, 0x6c,
+	0x65, 0x12, 0x12, 0x0a, 0x04, 0x6c, 0x69, 0x6e, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52,
+	0x04, 0x6c, 0x69, 0x6e, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x91, 0x02, 0x0a, 0x16, 0x43, 0x6f,
+	0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x53, 0x63, 0x61, 0x6c, 0x69, 0x6e,
+	0x67, 0x52, 0x65, 0x71, 0x12, 0x22, 0x0a, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e,
+	0x66, 0x6f, 0x52, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x12, 0x1b, 0x0a, 0x09, 0x66, 0x72, 0x6f, 0x6d,
+	0x5f, 0x61, 0x64, 0x64, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x72, 0x6f,
+	0x6d, 0x41, 0x64, 0x64, 0x72, 0x12, 0x38, 0x0a, 0x0c, 0x66, 0x72, 0x6f, 0x6d, 0x5f, 0x74, 0x72,
+	0x61, 0x63, 0x6b, 0x65, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x61, 0x74,
+	0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x49, 0x6e,
+	0x66, 0x6f, 0x52, 0x0b, 0x66, 0x72, 0x6f, 0x6d, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x12,
+	0x1e, 0x0a, 0x02, 0x74, 0x6f, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x61, 0x74,
+	0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x02, 0x74, 0x6f, 0x12,
+	0x18, 0x0a, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18, 0x05, 0x20, 0x01, 0x28, 0x02,
+	0x52, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x12, 0x28, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18, 0x07, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x22, 0x7c, 0x0a,
+	0x16, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x53, 0x63, 0x61,
+	0x6c, 0x69, 0x6e, 0x67, 0x52, 0x73, 0x70, 0x12, 0x1e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49,
+	0x6e, 0x66, 0x6f, 0x52, 0x02, 0x69, 0x64, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e,
+	0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x1d, 0x0a, 0x0a,
+	0x74, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x09, 0x74, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x49, 0x64, 0x22, 0x9b, 0x01, 0x0a, 0x14,
+	0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x47, 0x65, 0x74, 0x49,
+	0x44, 0x52, 0x65, 0x71, 0x12, 0x1b, 0x0a, 0x09, 0x66, 0x72, 0x6f, 0x6d, 0x5f, 0x61, 0x64, 0x64,
+	0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x72, 0x6f, 0x6d, 0x41, 0x64, 0x64,
+	0x72, 0x12, 0x38, 0x0a, 0x0c, 0x66, 0x72, 0x6f, 0x6d, 0x5f, 0x74, 0x72, 0x61, 0x63, 0x6b, 0x65,
+	0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73,
+	0x2e, 0x49, 0x44, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x0b,
+	0x66, 0x72, 0x6f, 0x6d, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x12, 0x18, 0x0a, 0x07, 0x65,
+	0x6c, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x65, 0x6c,
+	0x65, 0x6d, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x61, 0x74, 0x6f, 0x6d, 0x18, 0x04, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x61, 0x74, 0x6f, 0x6d, 0x22, 0x7a, 0x0a, 0x14, 0x43, 0x6f, 0x73,
+	0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x47, 0x65, 0x74, 0x49, 0x44, 0x52, 0x73,
+	0x70, 0x12, 0x1e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e,
+	0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x02, 0x69,
+	0x64, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x0d, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52,
+	0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x72, 0x61, 0x63, 0x6b, 0x65,
+	0x72, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x74, 0x72, 0x61, 0x63,
+	0x6b, 0x65, 0x72, 0x49, 0x64, 0x22, 0x88, 0x02, 0x0a, 0x18, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73,
+	0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x52,
+	0x65, 0x71, 0x12, 0x22, 0x0a, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f,
+	0x52, 0x04, 0x66, 0x72, 0x6f, 0x6d, 0x12, 0x1b, 0x0a, 0x09, 0x66, 0x72, 0x6f, 0x6d, 0x5f, 0x61,
+	0x64, 0x64, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x72, 0x6f, 0x6d, 0x41,
+	0x64, 0x64, 0x72, 0x12, 0x1e, 0x0a, 0x02, 0x74, 0x6f, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f, 0x52,
+	0x02, 0x74, 0x6f, 0x12, 0x2d, 0x0a, 0x0a, 0x63, 0x61, 0x6c, 0x6c, 0x5f, 0x63, 0x68, 0x61, 0x69,
+	0x6e, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73,
+	0x2e, 0x49, 0x44, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x09, 0x63, 0x61, 0x6c, 0x6c, 0x43, 0x68, 0x61,
+	0x69, 0x6e, 0x12, 0x18, 0x0a, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x18, 0x05, 0x20,
+	0x01, 0x28, 0x02, 0x52, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x12, 0x18, 0x0a, 0x07,
+	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x28, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18, 0x07,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73,
+	0x22, 0x6b, 0x0a, 0x18, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65,
+	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x69, 0x6e, 0x67, 0x52, 0x73, 0x70, 0x12, 0x2a, 0x0a, 0x05,
+	0x72, 0x65, 0x70, 0x6c, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e,
+	0x79, 0x52, 0x05, 0x72, 0x65, 0x70, 0x6c, 0x79, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f,
+	0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73,
+	0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x22, 0x39, 0x0a,
+	0x18, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x52, 0x65, 0x6c,
+	0x65, 0x61, 0x73, 0x65, 0x49, 0x44, 0x52, 0x65, 0x71, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x72, 0x61,
+	0x63, 0x6b, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x74,
+	0x72, 0x61, 0x63, 0x6b, 0x65, 0x72, 0x49, 0x64, 0x22, 0x3f, 0x0a, 0x18, 0x43, 0x6f, 0x73, 0x6d,
+	0x6f, 0x73, 0x52, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x52, 0x65, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x49,
+	0x44, 0x52, 0x73, 0x70, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x61, 0x74, 0x6f, 0x6d, 0x6f, 0x73, 0x2e, 0x45, 0x72, 0x72,
+	0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x2a, 0x56, 0x0a, 0x06, 0x49, 0x44, 0x54,
+	0x79, 0x70, 0x65, 0x12, 0x11, 0x0a, 0x0d, 0x49, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x49, 0x44,
+	0x54, 0x79, 0x70, 0x65, 0x10, 0x00, 0x12, 0x0d, 0x0a, 0x09, 0x41, 0x70, 0x70, 0x4c, 0x6f, 0x61,
+	0x64, 0x65, 0x72, 0x10, 0x01, 0x12, 0x07, 0x0a, 0x03, 0x41, 0x70, 0x70, 0x10, 0x02, 0x12, 0x0a,
+	0x0a, 0x06, 0x43, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x10, 0x03, 0x12, 0x0b, 0x0a, 0x07, 0x45, 0x6c,
+	0x65, 0x6d, 0x65, 0x6e, 0x74, 0x10, 0x04, 0x12, 0x08, 0x0a, 0x04, 0x41, 0x74, 0x6f, 0x6d, 0x10,
+	0x05, 0x2a, 0x3d, 0x0a, 0x08, 0x4c, 0x6f, 0x67, 0x4c, 0x65, 0x76, 0x65, 0x6c, 0x12, 0x09, 0x0a,
+	0x05, 0x44, 0x65, 0x62, 0x75, 0x67, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04, 0x49, 0x6e, 0x66, 0x6f,
+	0x10, 0x01, 0x12, 0x08, 0x0a, 0x04, 0x57, 0x61, 0x72, 0x6e, 0x10, 0x02, 0x12, 0x07, 0x0a, 0x03,
+	0x45, 0x72, 0x72, 0x10, 0x03, 0x12, 0x09, 0x0a, 0x05, 0x46, 0x61, 0x74, 0x61, 0x6c, 0x10, 0x04,
+	0x42, 0x1f, 0x5a, 0x1d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x68,
+	0x77, 0x61, 0x6e, 0x67, 0x74, 0x6f, 0x75, 0x2f, 0x67, 0x6f, 0x2d, 0x61, 0x74, 0x6f, 0x6d, 0x6f,
+	0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1443,56 +2250,88 @@ func file_atomos_proto_rawDescGZIP() []byte {
 }
 
 var file_atomos_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_atomos_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_atomos_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_atomos_proto_goTypes = []interface{}{
-	(IDType)(0),                   // 0: atomos.IDType
-	(LogLevel)(0),                 // 1: atomos.LogLevel
-	(*IDInfo)(nil),                // 2: atomos.IDInfo
-	(*LogMail)(nil),               // 3: atomos.LogMail
-	(*Error)(nil),                 // 4: atomos.Error
-	(*ErrorCallerInfo)(nil),       // 5: atomos.ErrorCallerInfo
-	(*Nil)(nil),                   // 6: atomos.Nil
-	(*Int32)(nil),                 // 7: atomos.Int32
-	(*Int64)(nil),                 // 8: atomos.Int64
-	(*UInt32)(nil),                // 9: atomos.UInt32
-	(*UInt64)(nil),                // 10: atomos.UInt64
-	(*String)(nil),                // 11: atomos.String
-	(*Config)(nil),                // 12: atomos.Config
-	(*RemoteServerConfig)(nil),    // 13: atomos.RemoteServerConfig
-	(*CertConfig)(nil),            // 14: atomos.CertConfig
-	(*CosmosLocalConfig)(nil),     // 15: atomos.CosmosLocalConfig
-	(*ElementConfig)(nil),         // 16: atomos.ElementConfig
-	(*AtomMessageConfig)(nil),     // 17: atomos.AtomMessageConfig
-	(*UDSCommandPacket)(nil),      // 18: atomos.UDSCommandPacket
-	nil,                           // 19: atomos.Config.CustomizeEntry
-	nil,                           // 20: atomos.ElementConfig.MessagesEntry
-	(*anypb.Any)(nil),             // 21: google.protobuf.Any
-	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
+	(IDType)(0),                      // 0: atomos.IDType
+	(LogLevel)(0),                    // 1: atomos.LogLevel
+	(*IDInfo)(nil),                   // 2: atomos.IDInfo
+	(*LogMail)(nil),                  // 3: atomos.LogMail
+	(*Error)(nil),                    // 4: atomos.Error
+	(*ErrorCallerInfo)(nil),          // 5: atomos.ErrorCallerInfo
+	(*Nil)(nil),                      // 6: atomos.Nil
+	(*Int32)(nil),                    // 7: atomos.Int32
+	(*Int64)(nil),                    // 8: atomos.Int64
+	(*UInt32)(nil),                   // 9: atomos.UInt32
+	(*UInt64)(nil),                   // 10: atomos.UInt64
+	(*String)(nil),                   // 11: atomos.String
+	(*Config)(nil),                   // 12: atomos.Config
+	(*RemoteServerConfig)(nil),       // 13: atomos.RemoteServerConfig
+	(*CertConfig)(nil),               // 14: atomos.CertConfig
+	(*CosmosLocalConfig)(nil),        // 15: atomos.CosmosLocalConfig
+	(*ElementConfig)(nil),            // 16: atomos.ElementConfig
+	(*AtomMessageConfig)(nil),        // 17: atomos.AtomMessageConfig
+	(*UDSCommandPacket)(nil),         // 18: atomos.UDSCommandPacket
+	(*CosmosRemoteConnectInfo)(nil),  // 19: atomos.CosmosRemoteConnectInfo
+	(*CosmosRemoteInfo)(nil),         // 20: atomos.CosmosRemoteInfo
+	(*IDTrackerInfo)(nil),            // 21: atomos.IDTrackerInfo
+	(*CosmosRemoteScalingReq)(nil),   // 22: atomos.CosmosRemoteScalingReq
+	(*CosmosRemoteScalingRsp)(nil),   // 23: atomos.CosmosRemoteScalingRsp
+	(*CosmosRemoteGetIDReq)(nil),     // 24: atomos.CosmosRemoteGetIDReq
+	(*CosmosRemoteGetIDRsp)(nil),     // 25: atomos.CosmosRemoteGetIDRsp
+	(*CosmosRemoteMessagingReq)(nil), // 26: atomos.CosmosRemoteMessagingReq
+	(*CosmosRemoteMessagingRsp)(nil), // 27: atomos.CosmosRemoteMessagingRsp
+	(*CosmosRemoteReleaseIDReq)(nil), // 28: atomos.CosmosRemoteReleaseIDReq
+	(*CosmosRemoteReleaseIDRsp)(nil), // 29: atomos.CosmosRemoteReleaseIDRsp
+	nil,                              // 30: atomos.Config.CustomizeEntry
+	nil,                              // 31: atomos.ElementConfig.MessagesEntry
+	nil,                              // 32: atomos.CosmosRemoteInfo.ElementsEntry
+	(*anypb.Any)(nil),                // 33: google.protobuf.Any
+	(*timestamppb.Timestamp)(nil),    // 34: google.protobuf.Timestamp
 }
 var file_atomos_proto_depIdxs = []int32{
 	0,  // 0: atomos.IDInfo.type:type_name -> atomos.IDType
-	21, // 1: atomos.IDInfo.ext:type_name -> google.protobuf.Any
+	33, // 1: atomos.IDInfo.ext:type_name -> google.protobuf.Any
 	2,  // 2: atomos.LogMail.id:type_name -> atomos.IDInfo
-	22, // 3: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
+	34, // 3: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
 	1,  // 4: atomos.LogMail.level:type_name -> atomos.LogLevel
 	5,  // 5: atomos.Error.call_stacks:type_name -> atomos.ErrorCallerInfo
 	2,  // 6: atomos.ErrorCallerInfo.id:type_name -> atomos.IDInfo
 	1,  // 7: atomos.Config.log_level:type_name -> atomos.LogLevel
 	14, // 8: atomos.Config.enable_cert:type_name -> atomos.CertConfig
 	13, // 9: atomos.Config.enable_server:type_name -> atomos.RemoteServerConfig
-	19, // 10: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
+	30, // 10: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
 	13, // 11: atomos.CosmosLocalConfig.enable_remote:type_name -> atomos.RemoteServerConfig
 	1,  // 12: atomos.ElementConfig.log_level:type_name -> atomos.LogLevel
-	20, // 13: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
-	21, // 14: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
-	21, // 15: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
+	31, // 13: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
+	33, // 14: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
+	33, // 15: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
 	4,  // 16: atomos.UDSCommandPacket.err:type_name -> atomos.Error
-	17, // 17: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	20, // 17: atomos.CosmosRemoteConnectInfo.config:type_name -> atomos.CosmosRemoteInfo
+	2,  // 18: atomos.CosmosRemoteInfo.id:type_name -> atomos.IDInfo
+	32, // 19: atomos.CosmosRemoteInfo.elements:type_name -> atomos.CosmosRemoteInfo.ElementsEntry
+	2,  // 20: atomos.CosmosRemoteScalingReq.from:type_name -> atomos.IDInfo
+	21, // 21: atomos.CosmosRemoteScalingReq.from_tracker:type_name -> atomos.IDTrackerInfo
+	2,  // 22: atomos.CosmosRemoteScalingReq.to:type_name -> atomos.IDInfo
+	33, // 23: atomos.CosmosRemoteScalingReq.args:type_name -> google.protobuf.Any
+	2,  // 24: atomos.CosmosRemoteScalingRsp.id:type_name -> atomos.IDInfo
+	4,  // 25: atomos.CosmosRemoteScalingRsp.error:type_name -> atomos.Error
+	21, // 26: atomos.CosmosRemoteGetIDReq.from_tracker:type_name -> atomos.IDTrackerInfo
+	2,  // 27: atomos.CosmosRemoteGetIDRsp.id:type_name -> atomos.IDInfo
+	4,  // 28: atomos.CosmosRemoteGetIDRsp.error:type_name -> atomos.Error
+	2,  // 29: atomos.CosmosRemoteMessagingReq.from:type_name -> atomos.IDInfo
+	2,  // 30: atomos.CosmosRemoteMessagingReq.to:type_name -> atomos.IDInfo
+	2,  // 31: atomos.CosmosRemoteMessagingReq.call_chain:type_name -> atomos.IDInfo
+	33, // 32: atomos.CosmosRemoteMessagingReq.args:type_name -> google.protobuf.Any
+	33, // 33: atomos.CosmosRemoteMessagingRsp.reply:type_name -> google.protobuf.Any
+	4,  // 34: atomos.CosmosRemoteMessagingRsp.error:type_name -> atomos.Error
+	4,  // 35: atomos.CosmosRemoteReleaseIDRsp.error:type_name -> atomos.Error
+	17, // 36: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
+	2,  // 37: atomos.CosmosRemoteInfo.ElementsEntry.value:type_name -> atomos.IDInfo
+	38, // [38:38] is the sub-list for method output_type
+	38, // [38:38] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_atomos_proto_init() }
@@ -1705,6 +2544,138 @@ func file_atomos_proto_init() {
 				return nil
 			}
 		}
+		file_atomos_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteConnectInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*IDTrackerInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteScalingReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteScalingRsp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteGetIDReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteGetIDRsp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteMessagingReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteMessagingRsp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteReleaseIDReq); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_atomos_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CosmosRemoteReleaseIDRsp); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1712,7 +2683,7 @@ func file_atomos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_atomos_proto_rawDesc,
 			NumEnums:      2,
-			NumMessages:   19,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

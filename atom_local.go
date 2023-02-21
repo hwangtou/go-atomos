@@ -170,6 +170,14 @@ func (a *AtomLocal) getAtomLocal() *AtomLocal {
 	return a
 }
 
+func (a *AtomLocal) getElementRemote() *ElementRemote {
+	return nil
+}
+
+func (a *AtomLocal) getAtomRemote() *AtomRemote {
+	return nil
+}
+
 func (a *AtomLocal) getIDTrackerManager() *IDTrackerManager {
 	return a.idTracker
 }

@@ -67,7 +67,7 @@ func TestElementLocalBase(t *testing.T) {
 
 	// Push Deadlock Message.
 	testAtomName := "testAtom"
-	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -178,7 +178,7 @@ func TestElementLocalScaleID(t *testing.T) {
 		return
 	}
 
-	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -189,7 +189,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 	sharedTestAtom1 = atom
 
-	scaleID, scaleTracker, err := testElem.pushScaleMail(process.main, "ScaleTestMessage", 0, nil, 1)
+	scaleID, scaleTracker, err := testElem.pushScaleMail(process.main, "ScaleTestMessage", 0, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
@@ -213,7 +213,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 
 	// Test Return Error.
-	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessageError", 0, nil, 1)
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessageError", 0, nil, NewIDTrackerInfo(1))
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack != "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
@@ -224,7 +224,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 
 	// Test Return Panic.
-	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessagePanic", 0, nil, 1)
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessagePanic", 0, nil, NewIDTrackerInfo(1))
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return

@@ -66,6 +66,8 @@ type ID interface {
 	getCallChain() []ID
 	getElementLocal() *ElementLocal
 	getAtomLocal() *AtomLocal
+	getElementRemote() *ElementRemote
+	getAtomRemote() *AtomRemote
 	getIDTrackerManager() *IDTrackerManager
 }
 

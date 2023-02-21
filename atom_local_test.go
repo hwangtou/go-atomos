@@ -42,7 +42,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Spawn an atom.
-	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+	atom, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -57,7 +57,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Get an atom.
-	checkAtom, checkTracker, err := testElem.GetAtomID(testAtomName, 1)
+	checkAtom, checkTracker, err := testElem.GetAtomID(testAtomName, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Get atom failed. err=(%v)", err)
 		return
@@ -69,7 +69,7 @@ func TestAtomLocalBase(t *testing.T) {
 	checkAtom.(*AtomLocal).Release(checkTracker)
 
 	// Spawn an atom.
-	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(testDeadlockAtomName, &String{S: testDeadlockAtomName}, 1)
+	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(testDeadlockAtomName, &String{S: testDeadlockAtomName}, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn deadlock atom failed. err=(%v)", err)
 		return
@@ -189,7 +189,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Try Spawning twice.
-	atomTwice, trackerTwice, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+	atomTwice, trackerTwice, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfo(1))
 	if err == nil || err.Code != ErrAtomExists {
 		t.Errorf("TestAtomLocalBase: Spawn twice state invalid. err=(%v)", err)
 		return
@@ -231,7 +231,7 @@ func TestAtomLocalBase(t *testing.T) {
 	start := time.Now()
 	for {
 		// Because the atom may be stopping, so we have to retry.
-		atomTwice, trackerTwice, err = testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, 1)
+		atomTwice, trackerTwice, err = testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfo(1))
 		if err != nil {
 			if err.Code == ErrAtomIsStopping {
 				time.Sleep(1 * time.Millisecond)
@@ -333,7 +333,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Spawn panic.
 	spawnPanicAtomName := "spawn_panic"
-	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(spawnPanicAtomName, &String{S: "panic"}, 1)
+	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(spawnPanicAtomName, &String{S: "panic"}, NewIDTrackerInfo(1))
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Spawn panic atom state invalid.")
 		return
@@ -349,7 +349,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Stopping panic.
 	stoppingPanicAtomName := "stopping_panic"
-	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(stoppingPanicAtomName, nil, 1)
+	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(stoppingPanicAtomName, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Stopping panic atom failed. err=(%v)", err)
 		return
@@ -374,7 +374,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Error.
 	dataAtomName := "get_data_error"
-	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(dataAtomName, nil, 1)
+	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfo(1))
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -390,7 +390,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Panic.
 	dataAtomName = "get_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, 1)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfo(1))
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -406,7 +406,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns OK.
 	dataAtomName = "data_ok"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, 1)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -435,7 +435,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns Error.
 	dataAtomName = "set_data_error"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, 1)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -453,7 +453,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns panic.
 	dataAtomName = "set_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, 1)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
