@@ -29,6 +29,24 @@ const (
 	ErrMainRunnableConfigNotFound
 	ErrMainRunnableScriptNotFound
 
+	// Cosmos Global
+
+	// Cosmos Remote
+
+	ErrCosmosRemoteElementNotFound
+	ErrCosmosRemoteListenFailed
+	ErrCosmosRemoteConnectFailed
+	ErrCosmosRemoteRequestFailed
+	ErrCosmosRemoteResponseFailed
+	ErrCosmosRemoteInfoInvalid
+	ErrCosmosRemoteCannotSpawn
+	ErrCosmosRemoteCannotMessage
+	ErrCosmosRemoteCannotScale
+	ErrCosmosRemoteCannotSendWormhole
+	ErrCosmosRemoteCannotKill
+	ErrElementRemoteCannotKill
+	ErrElementRemoteCannotSendWormhole
+
 	// Config
 
 	ErrCosmosConfigInvalid

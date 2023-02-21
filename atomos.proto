@@ -154,27 +154,74 @@ message UDSCommandPacket {
   Error err = 4;
 }
 
-//// Cosmos Requester
-//
-//message CosmosRemoteGetAtomIDReq {
-//  string element = 1;
-//  string name = 2;
-//}
-//
-//message CosmosRemoteGetAtomIDResp {
-//  bool has = 1;
-//  string error = 2;
-//}
-//
-//message CosmosRemoteMessagingReq {
-//  IDInfo from = 1;
-//  IDInfo to = 2;
-//  string message = 3;
-//  google.protobuf.Any args = 4;
-//}
-//
-//message CosmosRemoteMessagingResp {
-//  bool has = 1;
-//  google.protobuf.Any reply = 2;
-//  string error = 3;
-//}
+// Cosmos Requester
+
+message CosmosRemoteConnectInfo {
+  CosmosRemoteInfo config = 1;
+}
+
+message CosmosRemoteInfo {
+  IDInfo id = 1;
+  map<string, IDInfo> elements = 2;
+  int64 changed = 3;
+}
+
+// Cosmos Requester
+
+message IDTrackerInfo {
+  string file = 1;
+  int32 line = 2;
+  string name = 3;
+}
+
+message CosmosRemoteScalingReq {
+  IDInfo from = 1;
+  string from_addr = 2;
+  IDTrackerInfo from_tracker = 3;
+  IDInfo to = 4;
+  float timeout = 5;
+  string message = 6;
+  google.protobuf.Any args = 7;
+}
+
+message CosmosRemoteScalingRsp {
+  IDInfo id = 1;
+  Error error = 2;
+  uint64 tracker_id = 3;
+}
+
+message CosmosRemoteGetIDReq {
+  string from_addr = 1;
+  IDTrackerInfo from_tracker = 2;
+  string element = 3;
+  string atom = 4;
+}
+
+message CosmosRemoteGetIDRsp {
+  IDInfo id = 1;
+  Error error = 2;
+  uint64 tracker_id = 3;
+}
+
+message CosmosRemoteMessagingReq {
+  IDInfo from = 1;
+  string from_addr = 2;
+  IDInfo to = 3;
+  repeated IDInfo call_chain = 4;
+  float timeout = 5;
+  string message = 6;
+  google.protobuf.Any args = 7;
+}
+
+message CosmosRemoteMessagingRsp {
+  google.protobuf.Any reply = 1;
+  Error error = 2;
+}
+
+message CosmosRemoteReleaseIDReq {
+  uint64 tracker_id = 1;
+}
+message CosmosRemoteReleaseIDRsp {
+  Error error = 1;
+}
+

@@ -173,6 +173,14 @@ func (e *ElementLocal) getAtomLocal() *AtomLocal {
 	return nil
 }
 
+func (e *ElementLocal) getElementRemote() *ElementRemote {
+	return nil
+}
+
+func (e *ElementLocal) getAtomRemote() *AtomRemote {
+	return nil
+}
+
 func (e *ElementLocal) getIDTrackerManager() *IDTrackerManager {
 	return e.idTracker
 }
@@ -273,8 +281,8 @@ func (e *ElementLocal) GetElementName() string {
 	return e.GetIDInfo().Element
 }
 
-func (e *ElementLocal) GetAtomID(name string, skip int) (ID, *IDTracker, *Error) {
-	return e.elementAtomGet(name, skip+1)
+func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
+	return e.elementAtomGet(name, tracker)
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -312,13 +320,13 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return info
 }
 
-func (e *ElementLocal) SpawnAtom(name string, arg proto.Message, skip int) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
 	e.lock.RLock()
 	current := e.current
 	e.lock.RUnlock()
 	// Auto data persistence.
 	persistence, _ := current.Developer.(ElementCustomizeAutoDataPersistence)
-	return e.elementAtomSpawn(name, arg, current, persistence, skip+1)
+	return e.elementAtomSpawn(name, arg, current, persistence, tracker)
 }
 
 func (e *ElementLocal) MessageElement(fromID, toID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
@@ -347,12 +355,12 @@ func (e *ElementLocal) MessageAtom(fromID, toID ID, name string, timeout time.Du
 	return a.pushMessageMail(fromID, name, timeout, args)
 }
 
-func (e *ElementLocal) ScaleGetAtomID(fromID ID, name string, timeout time.Duration, args proto.Message, skip int) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) ScaleGetAtomID(fromID ID, name string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	if fromID == nil {
 		return nil, nil, NewErrorf(ErrAtomFromIDInvalid, "Element: ScaleGetAtomID, FromID invalid. from=(%s),name=(%s),args=(%v)",
 			fromID, name, args).AddStack(e)
 	}
-	return e.pushScaleMail(fromID, name, timeout, args, skip+1)
+	return e.pushScaleMail(fromID, name, timeout, args, tracker)
 }
 
 func (e *ElementLocal) KillAtom(fromID, toID ID, timeout time.Duration) *Error {
@@ -454,7 +462,7 @@ func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (rep
 	return
 }
 
-func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message, skip int) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message, t *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	// Dead Lock Checker.
 	if from != nil {
 		fromChain := from.getCallChain()
@@ -463,7 +471,7 @@ func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration
 				fromChain, e, name, arg).AddStack(e)
 		}
 	}
-	tracker := NewScaleIDTracker(skip + 1)
+	tracker := NewScaleIDRemoteIDTracker(t)
 	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg, tracker)
 	if err != nil {
 		return nil, nil, err.AddStack(e, &String{S: name}, arg)
@@ -646,23 +654,23 @@ func (e *ElementLocal) GetMessagingInfo() string {
 
 // Internal
 
-func (e *ElementLocal) elementAtomGet(name string, skip int) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomGet(name string, t *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
 	e.lock.RLock()
 	current := e.current
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
-		return atom, atom.idTracker.NewIDTracker(skip + 1), nil
+		return atom, atom.idTracker.NewIDTracker(t), nil
 	}
 	// Auto data persistence.
 	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	return e.elementAtomSpawn(name, nil, current, persistence, skip+1)
+	return e.elementAtomSpawn(name, nil, current, persistence, t)
 }
 
-func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, skip int) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, t *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.
 	atom := newAtomLocal(name, e, current, current.Interface.Config.LogLevel)
@@ -682,7 +690,8 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		if oldAtom.atomos.state > AtomosHalt {
 			oldAtom.atomos.mailbox.mutex.Unlock()
 			if oldAtom.atomos.state < AtomosStopping {
-				return oldAtom, oldAtom.idTracker.NewIDTracker(skip + 1), NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
+				tracker := oldAtom.idTracker.NewIDTracker(t)
+				return oldAtom, tracker, NewErrorf(ErrAtomExists, "Atom: Atom exists. name=(%s)", name).AddStack(oldAtom, arg)
 			} else {
 				return nil, nil, NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. name=(%s)", name).AddStack(oldAtom, arg)
 			}
@@ -709,7 +718,8 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 		e.elementAtomRelease(atom, nil)
 		return nil, nil, err.AddStack(nil)
 	}
-	return atom, atom.idTracker.NewIDTracker(skip + 1), nil
+	tracker := atom.idTracker.NewIDTracker(t)
+	return atom, tracker, nil
 }
 
 func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {

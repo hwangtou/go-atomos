@@ -21,7 +21,8 @@ type yamlCertConfig struct {
 }
 
 type yamlRemoteServerConfig struct {
-	Port int32 `yaml:"port"`
+	Host string `yaml:"host"`
+	Port int32  `yaml:"port"`
 }
 
 func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
@@ -62,7 +63,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 	}
 	if server := y.EnableServer; server != nil {
 		conf.EnableServer = &RemoteServerConfig{
-			Host: "",
+			Host: server.Host,
 			Port: server.Port,
 		}
 	}

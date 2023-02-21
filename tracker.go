@@ -27,7 +27,26 @@ func NewIDTrackerManager(release AtomosRelease) *IDTrackerManager {
 	}
 }
 
-func (i *IDTrackerManager) NewIDTracker(skip int) *IDTracker {
+//func (i *IDTrackerManager) NewIDTracker(skip int) *IDTracker {
+//	i.Lock()
+//	i.counter += 1
+//	tracker := &IDTracker{id: i.counter}
+//	i.idMap[tracker.id] = tracker
+//	i.Unlock()
+//
+//	tracker.manager = i
+//	caller, file, line, ok := runtime.Caller(skip)
+//	if ok {
+//		tracker.file = file
+//		tracker.line = line
+//		if pc := runtime.FuncForPC(caller); pc != nil {
+//			tracker.name = pc.Name()
+//		}
+//	}
+//	return tracker
+//}
+
+func (i *IDTrackerManager) NewIDTracker(rt *IDTrackerInfo) *IDTracker {
 	i.Lock()
 	i.counter += 1
 	tracker := &IDTracker{id: i.counter}
@@ -35,14 +54,9 @@ func (i *IDTrackerManager) NewIDTracker(skip int) *IDTracker {
 	i.Unlock()
 
 	tracker.manager = i
-	caller, file, line, ok := runtime.Caller(skip)
-	if ok {
-		tracker.file = file
-		tracker.line = line
-		if pc := runtime.FuncForPC(caller); pc != nil {
-			tracker.name = pc.Name()
-		}
-	}
+	tracker.file = rt.File
+	tracker.line = int(rt.Line)
+	tracker.name = rt.Name
 	return tracker
 }
 
@@ -99,17 +113,27 @@ type IDTracker struct {
 	name string
 }
 
-func NewScaleIDTracker(skip int) *IDTracker {
-	tracker := &IDTracker{}
+func NewIDTrackerInfo(skip int) *IDTrackerInfo {
+	tracker := &IDTrackerInfo{}
 	caller, file, line, ok := runtime.Caller(skip)
 	if ok {
-		tracker.file = file
-		tracker.line = line
+		tracker.File = file
+		tracker.Line = int32(line)
 		if pc := runtime.FuncForPC(caller); pc != nil {
-			tracker.name = pc.Name()
+			tracker.Name = pc.Name()
 		}
 	}
 	return tracker
+}
+
+func NewScaleIDRemoteIDTracker(rt *IDTrackerInfo) *IDTracker {
+	return &IDTracker{
+		id:      0,
+		manager: nil,
+		file:    rt.File,
+		line:    int(rt.Line),
+		name:    rt.Name,
+	}
 }
 
 func (i *IDTracker) ToString() string {

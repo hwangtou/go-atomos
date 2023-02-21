@@ -27,7 +27,7 @@ type Element interface {
 	// GetAtomID
 	// 通过Atom名称获取指定的Atom的ID。
 	// Get AtomID by name of Atom.
-	GetAtomID(name string, skip int) (ID, *IDTracker, *Error)
+	GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDTracker, *Error)
 
 	GetAtomsNum() int
 	GetActiveAtomsNum() int
@@ -36,7 +36,7 @@ type Element interface {
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(name string, arg proto.Message, skip int) (*AtomLocal, *IDTracker, *Error)
+	SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error)
 
 	// MessageAtom
 	// 向一个Atom发送消息。
@@ -45,7 +45,7 @@ type Element interface {
 	MessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 	MessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 
-	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message, skip int) (ID, *IDTracker, *Error)
+	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error)
 
 	// KillAtom
 	// 向一个Atom发送Kill。

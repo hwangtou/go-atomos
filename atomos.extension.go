@@ -147,3 +147,16 @@ func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
 	}
 	return true
 }
+
+func (x *CosmosRemoteConnectInfo) IsValid() *Error {
+	if x.Config == nil {
+		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info invalid.").AddStack(nil)
+	}
+	if x.Config.Id == nil {
+		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info ID invalid.").AddStack(nil)
+	}
+	if x.Config.Elements == nil {
+		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info elements invalid.").AddStack(nil)
+	}
+	return nil
+}
