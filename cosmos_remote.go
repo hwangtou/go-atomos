@@ -22,21 +22,27 @@ type CosmosRemote struct {
 	client *http.Client
 }
 
-func newCosmosRemote(main *CosmosMain, addr string) *CosmosRemote {
+func newCosmosRemote(main *CosmosMain, cosmos, addr string) *CosmosRemote {
 	c := &CosmosRemote{
 		RWMutex:   sync.RWMutex{},
 		main:      main,
 		atomos:    nil,
 		info:      nil,
 		available: false,
-		elements:  nil,
+		elements:  map[string]*ElementRemote{},
 		addr:      addr,
 		client:    nil,
 	}
-	if err := c.connect(); err != nil {
+	c.atomos = NewBaseAtomos(&IDInfo{
+		Type:    IDType_Cosmos,
+		Cosmos:  cosmos,
+		Element: "",
+		Atom:    "",
+		Ext:     nil,
+	}, main.runnable.config.LogLevel, c, c)
+	if err := c.connect(cosmos); err != nil {
 		c.main.Log().Fatal("Cosmos: Check remote connect failed. addr=(%s),err=(%v)", addr, err)
 	}
-	c.atomos = NewBaseAtomos(c.info.Config.Id, main.runnable.config.LogLevel, c, c)
 	return c
 }
 
@@ -203,7 +209,7 @@ func (c *CosmosRemote) getElement(name string) (*ElementRemote, *Error) {
 	return elem, nil
 }
 
-func (c *CosmosRemote) connect() *Error {
+func (c *CosmosRemote) connect(cosmos string) *Error {
 	// Check available
 	if c.available && c.client != nil {
 		return nil
@@ -220,7 +226,7 @@ func (c *CosmosRemote) connect() *Error {
 	if err := c.httpGet(c.addr+RemoteAtomosConnect, info, 0); err != nil {
 		return err.AddStack(c.main)
 	}
-	if err := info.IsValid(); err != nil {
+	if err := info.IsValid(cosmos); err != nil {
 		return err.AddStack(c.main)
 	}
 	elements := make(map[string]*ElementRemote, len(info.Config.Elements))

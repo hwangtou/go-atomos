@@ -50,7 +50,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		Type:    IDType_Atom,
 		Cosmos:  e.Cosmos().GetNodeName(),
 		Element: e.GetElementName(),
-		Atomos:  name,
+		Atom:    name,
 	}
 	a := &AtomLocal{
 		element:        e,
@@ -107,7 +107,7 @@ func (a *AtomLocal) Element() Element {
 }
 
 func (a *AtomLocal) GetName() string {
-	return a.atomos.GetIDInfo().Atomos
+	return a.atomos.GetIDInfo().Atom
 }
 
 func (a *AtomLocal) State() AtomosState {
@@ -448,7 +448,7 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 func (a *AtomLocal) Spawn() {
 	a.messageTracker.Start()
 	if a.element.main.runnable.hookAtomSpawn != nil {
-		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 
@@ -463,14 +463,14 @@ func (a *AtomLocal) Unset(message string) {
 func (a *AtomLocal) Stopping() {
 	a.messageTracker.Stopping()
 	if a.element.main.runnable.hookAtomStopping != nil {
-		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 
 func (a *AtomLocal) Halted() {
 	a.messageTracker.Halt()
 	if a.element.main.runnable.hookAtomHalt != nil {
-		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 

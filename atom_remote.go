@@ -53,7 +53,7 @@ func (a *AtomRemote) Element() Element {
 }
 
 func (a *AtomRemote) GetName() string {
-	return a.GetIDInfo().Atomos
+	return a.GetIDInfo().Atom
 }
 
 func (a *AtomRemote) State() AtomosState {

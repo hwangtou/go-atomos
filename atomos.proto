@@ -19,7 +19,7 @@ message IDInfo {
   IDType type = 1;
   string cosmos = 2;
   string element = 3;
-  string atomos = 4;
+  string atom = 4;
   google.protobuf.Any ext = 5;
 }
 

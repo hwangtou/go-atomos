@@ -57,7 +57,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		Type:    IDType_Element,
 		Cosmos:  runnable.config.Node,
 		Element: impl.Interface.Config.Name,
-		Atomos:  "",
+		Atom:    "",
 	}
 	e := &ElementLocal{
 		main:           main,
