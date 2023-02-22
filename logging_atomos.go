@@ -61,7 +61,7 @@ func (c *LoggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}
 		Type:    processIDType,
 		Cosmos:  "",
 		Element: "",
-		Atomos:  "",
+		Atom:    "",
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
@@ -70,7 +70,7 @@ func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...in
 		Type:    processIDType,
 		Cosmos:  "",
 		Element: "",
-		Atomos:  "",
+		Atom:    "",
 	}, level, fmt.Sprintf(format, args...))
 }
 
@@ -96,7 +96,7 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	if id := lm.Id; id != nil {
 		switch id.Type {
 		case IDType_Atom:
-			msg = fmt.Sprintf("%s::%s::%s => %s", id.Cosmos, id.Element, id.Atomos, lm.Message)
+			msg = fmt.Sprintf("%s::%s::%s => %s", id.Cosmos, id.Element, id.Atom, lm.Message)
 		case IDType_Element:
 			msg = fmt.Sprintf("%s::%s => %s", id.Cosmos, id.Element, lm.Message)
 		case IDType_Cosmos:
@@ -124,6 +124,6 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	case LogLevel_Fatal:
 		fallthrough
 	default:
-		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", t, msg))
 	}
 }

@@ -15,7 +15,7 @@ func (x *IDInfo) Info() string {
 	}
 	switch x.Type {
 	case IDType_Atom:
-		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atomos)
+		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atom)
 	case IDType_Element:
 		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
 	case IDType_Cosmos:
@@ -33,7 +33,7 @@ func (x *IDInfo) IsEqual(r *IDInfo) bool {
 	if x.Type != r.Type {
 		return false
 	}
-	return x.Atomos == r.Atomos && x.Element == r.Element && x.Cosmos == r.Cosmos
+	return x.Atom == r.Atom && x.Element == r.Element && x.Cosmos == r.Cosmos
 }
 
 func SelfID2IDInfo(id SelfID) *IDInfo {
@@ -148,12 +148,15 @@ func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
 	return true
 }
 
-func (x *CosmosRemoteConnectInfo) IsValid() *Error {
+func (x *CosmosRemoteConnectInfo) IsValid(cosmos string) *Error {
 	if x.Config == nil {
 		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info invalid.").AddStack(nil)
 	}
 	if x.Config.Id == nil {
 		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info ID invalid.").AddStack(nil)
+	}
+	if x.Config.Id.Type != IDType_Cosmos || x.Config.Id.Cosmos != cosmos {
+		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info id invalid.").AddStack(nil)
 	}
 	if x.Config.Elements == nil {
 		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info elements invalid.").AddStack(nil)

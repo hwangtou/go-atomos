@@ -41,7 +41,8 @@ type ElementLocal struct {
 
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
-	callChain []ID
+	callIDCounter uint64
+	curCallChain  string
 
 	messageTracker *MessageTrackerManager
 	idTracker      *IDTrackerManager
@@ -57,7 +58,7 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		Type:    IDType_Element,
 		Cosmos:  runnable.config.Node,
 		Element: impl.Interface.Config.Name,
-		Atomos:  "",
+		Atom:    "",
 	}
 	e := &ElementLocal{
 		main:           main,
@@ -66,7 +67,8 @@ func newElementLocal(main *CosmosMain, runnable *CosmosRunnable, impl *ElementIm
 		names:          list.New(),
 		lock:           sync.RWMutex{},
 		current:        impl,
-		callChain:      nil,
+		callIDCounter:  0,
+		curCallChain:   "",
 		messageTracker: NewMessageTrackerManager(id, len(impl.ElementHandlers)),
 		idTracker:      nil,
 	}
@@ -139,7 +141,7 @@ func (e *ElementLocal) MessageByName(from ID, name string, timeout time.Duration
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -152,17 +154,6 @@ func (e *ElementLocal) Kill(from ID, timeout time.Duration) *Error {
 
 func (e *ElementLocal) SendWormhole(from ID, timeout time.Duration, wormhole AtomosWormhole) *Error {
 	return e.atomos.PushWormholeMailAndWaitReply(from, timeout, wormhole)
-}
-
-func (e *ElementLocal) getCallChain() []ID {
-	e.atomos.mailbox.mutex.Lock()
-	defer e.atomos.mailbox.mutex.Unlock()
-	idList := make([]ID, 0, len(e.callChain)+1)
-	for _, id := range e.callChain {
-		idList = append(idList, id)
-	}
-	idList = append(idList, e)
-	return idList
 }
 
 func (e *ElementLocal) getElementLocal() *ElementLocal {
@@ -183,6 +174,21 @@ func (e *ElementLocal) getAtomRemote() *AtomRemote {
 
 func (e *ElementLocal) getIDTrackerManager() *IDTrackerManager {
 	return e.idTracker
+}
+
+func (e *ElementLocal) getCurCallChain() string {
+	e.atomos.mailbox.mutex.Lock()
+	c := e.curCallChain
+	e.atomos.mailbox.mutex.Unlock()
+	return c
+}
+
+func (e *ElementLocal) First() ID {
+	e.atomos.mailbox.mutex.Lock()
+	e.callIDCounter += 1
+	callID := e.callIDCounter
+	e.atomos.mailbox.mutex.Unlock()
+	return &FirstID{callID: callID, ID: e}
 }
 
 // Implementation of atomos.SelfID
@@ -245,7 +251,7 @@ func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, proto
 	if !has {
 		return nil, NewErrorf(ErrElementMessageHandlerNotExists, "Element: Handler not exists. from=(%v),name=(%s)", from, name).AddStack(nil)
 	}
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrElementMessageDecoderNotExists, "Element: Decoder not exists. from=(%v),name=(%s)", from, name).AddStack(nil)
 	}
@@ -378,35 +384,24 @@ func (e *ElementLocal) KillAtom(fromID, toID ID, timeout time.Duration) *Error {
 
 // Check chain.
 
-func (e *ElementLocal) isInChain(fromIDList []ID) bool {
+func (e *ElementLocal) isInChain(callChainID string) bool {
 	e.atomos.mailbox.mutex.Lock()
 	defer e.atomos.mailbox.mutex.Unlock()
 
-	for _, fromID := range fromIDList {
-		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
-			return true
-		}
-	}
-	return false
+	return e.curCallChain == callChainID
 }
 
-func (e *ElementLocal) setMessageAndCallChain(fromID ID) *Error {
-	if fromID == nil {
-		return NewError(ErrElementNoFromID, "Element: No fromID.").AddStack(e)
-	}
+func (e *ElementLocal) setMessageAndCallChain(callChain string) *Error {
 	e.atomos.mailbox.mutex.Lock()
 	defer e.atomos.mailbox.mutex.Unlock()
-	if e.callChain != nil {
-		return NewError(ErrFrameworkPanic, "OnMessage set chain meets non nil chain.").AddStack(e)
-	}
-	e.callChain = fromID.getCallChain()
+	e.curCallChain = callChain
 	return nil
 }
 
 func (e *ElementLocal) unsetMessageAndCallChain() {
 	e.atomos.mailbox.mutex.Lock()
 	defer e.atomos.mailbox.mutex.Unlock()
-	e.callChain = nil
+	e.curCallChain = ""
 }
 
 // 内部实现
@@ -421,16 +416,25 @@ func (e *ElementLocal) pushMessageMail(from ID, name string, timeout time.Durati
 	if from == nil {
 		return nil, NewError(ErrElementNoFromID, "Element: No fromID.").AddStack(e)
 	}
-	fromChain := from.getCallChain()
-	if e.isInChain(fromChain) {
-		return reply, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
-			fromChain, e, name, arg).AddStack(e)
+
+	_, ok := from.(*FirstID)
+	if !ok && e.curCallChain != "" && e.isInChain(from.getCurCallChain()) {
+		return reply, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. to=(%v),name=(%s),arg=(%v)", e, name, arg).AddStack(e)
 	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
 }
 
 func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (reply proto.Message, err *Error) {
-	if err = e.setMessageAndCallChain(from); err != nil {
+	if from == nil {
+		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(e)
+	}
+	var fromChain string
+	if f, ok := from.(*FirstID); ok {
+		fromChain = fmt.Sprintf("%s:%d", f.ID, f.callID)
+	} else {
+		fromChain = from.getCurCallChain()
+	}
+	if err = e.setMessageAndCallChain(fromChain); err != nil {
 		return nil, err.AddStack(e)
 	}
 	defer e.unsetMessageAndCallChain()
@@ -462,17 +466,17 @@ func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (rep
 	return
 }
 
-func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message, t *IDTrackerInfo) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) pushScaleMail(fromID ID, name string, timeout time.Duration, arg proto.Message, t *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	// Dead Lock Checker.
-	if from != nil {
-		fromChain := from.getCallChain()
-		if e.isInChain(fromChain) {
-			return nil, nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. chain=(%v),to(%s),name=(%s),arg=(%v)",
-				fromChain, e, name, arg).AddStack(e)
+	if fromID != nil {
+		cc := fromID.getCurCallChain()
+		if cc != "" && e.isInChain(cc) {
+			return nil, nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. to=(%v),name=(%s),arg=(%v)",
+				e, name, arg).AddStack(e)
 		}
 	}
-	tracker := NewScaleIDRemoteIDTracker(t)
-	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg, tracker)
+	tracker := newIDTracker(t)
+	id, err := e.atomos.PushScaleMailAndWaitReply(fromID, name, timeout, arg, tracker)
 	if err != nil {
 		return nil, nil, err.AddStack(e, &String{S: name}, arg)
 	}
@@ -480,7 +484,16 @@ func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration
 }
 
 func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message, tracker *IDTracker) (id ID, err *Error) {
-	if err = e.setMessageAndCallChain(from); err != nil {
+	if from == nil {
+		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(e)
+	}
+	var fromChain string
+	if f, ok := from.(*FirstID); ok {
+		fromChain = fmt.Sprintf("%s:%d", f.ID, f.callID)
+	} else {
+		fromChain = from.getCurCallChain()
+	}
+	if err = e.setMessageAndCallChain(fromChain); err != nil {
 		return nil, err.AddStack(e)
 	}
 	defer e.unsetMessageAndCallChain()
@@ -521,9 +534,9 @@ func (e *ElementLocal) OnScaling(from ID, name string, arg proto.Message, tracke
 func (e *ElementLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *Error {
 	// Dead Lock Checker.
 	if from != nil && wait {
-		fromChain := from.getCallChain()
-		if e.isInChain(fromChain) {
-			return NewErrorf(ErrAtomosCallDeadLock, "Element: Kill Deadlock. chain=(%v),to(%s)", fromChain, e).AddStack(e)
+		cc := from.getCurCallChain()
+		if cc != "" && e.isInChain(cc) {
+			return NewErrorf(ErrAtomosCallDeadLock, "Element: Kill Deadlock. from=(%v),to(%s)", from, e).AddStack(e)
 		}
 	}
 	return e.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)

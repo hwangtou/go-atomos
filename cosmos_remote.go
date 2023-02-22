@@ -22,21 +22,27 @@ type CosmosRemote struct {
 	client *http.Client
 }
 
-func newCosmosRemote(main *CosmosMain, addr string) *CosmosRemote {
+func newCosmosRemote(main *CosmosMain, cosmos, addr string) *CosmosRemote {
 	c := &CosmosRemote{
 		RWMutex:   sync.RWMutex{},
 		main:      main,
 		atomos:    nil,
 		info:      nil,
 		available: false,
-		elements:  nil,
+		elements:  map[string]*ElementRemote{},
 		addr:      addr,
 		client:    nil,
 	}
-	if err := c.connect(); err != nil {
+	c.atomos = NewBaseAtomos(&IDInfo{
+		Type:    IDType_Cosmos,
+		Cosmos:  cosmos,
+		Element: "",
+		Atom:    "",
+		Ext:     nil,
+	}, main.runnable.config.LogLevel, c, c)
+	if err := c.connect(cosmos); err != nil {
 		c.main.Log().Fatal("Cosmos: Check remote connect failed. addr=(%s),err=(%v)", addr, err)
 	}
-	c.atomos = NewBaseAtomos(c.info.Config.Id, main.runnable.config.LogLevel, c, c)
 	return c
 }
 
@@ -89,11 +95,6 @@ func (c *CosmosRemote) SendWormhole(from ID, timeout time.Duration, wormhole Ato
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(c.main)
 }
 
-func (c *CosmosRemote) getCallChain() []ID {
-	// TODO: Think about it.
-	return nil
-}
-
 func (c *CosmosRemote) getElementLocal() *ElementLocal {
 	return nil
 }
@@ -111,6 +112,16 @@ func (c *CosmosRemote) getAtomRemote() *AtomRemote {
 }
 
 func (c *CosmosRemote) getIDTrackerManager() *IDTrackerManager {
+	return nil
+}
+
+func (c *CosmosRemote) getCurCallChain() string {
+	// TODO: Think about it.
+	return ""
+}
+
+func (c *CosmosRemote) First() ID {
+	// TODO: Think about it.
 	return nil
 }
 
@@ -136,6 +147,14 @@ func (c *CosmosRemote) CosmosGetElementAtomID(elem, name string) (ID, *IDTracker
 	return element.GetAtomID(name, NewIDTrackerInfo(3))
 }
 
+func (c *CosmosRemote) CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
+	element, err := c.getElement(elem)
+	if err != nil {
+		return nil, nil, err.AddStack(nil)
+	}
+	return element.ScaleGetAtomID(fromID, message, timeout, args, NewIDTrackerInfo(3))
+}
+
 func (c *CosmosRemote) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
@@ -150,14 +169,6 @@ func (c *CosmosRemote) CosmosMessageElement(fromID, toID ID, message string, tim
 
 func (c *CosmosRemote) CosmosMessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
 	return toID.Element().MessageAtom(fromID, toID, message, timeout, args)
-}
-
-func (c *CosmosRemote) CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
-	element, err := c.getElement(elem)
-	if err != nil {
-		return nil, nil, err.AddStack(nil)
-	}
-	return element.ScaleGetAtomID(fromID, message, timeout, args, NewIDTrackerInfo(3))
 }
 
 func (c *CosmosRemote) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
@@ -203,15 +214,17 @@ func (c *CosmosRemote) getElement(name string) (*ElementRemote, *Error) {
 	return elem, nil
 }
 
-func (c *CosmosRemote) connect() *Error {
+func (c *CosmosRemote) connect(cosmos string) *Error {
 	// Check available
 	if c.available && c.client != nil {
 		return nil
 	}
 	if c.client == nil {
 		c.client = &http.Client{}
-		c.client.Transport = &http2.Transport{
-			TLSClientConfig: c.main.clientCert,
+		if c.main.clientCert != nil {
+			c.client.Transport = &http2.Transport{
+				TLSClientConfig: c.main.clientCert,
+			}
 		}
 	}
 
@@ -220,7 +233,7 @@ func (c *CosmosRemote) connect() *Error {
 	if err := c.httpGet(c.addr+RemoteAtomosConnect, info, 0); err != nil {
 		return err.AddStack(c.main)
 	}
-	if err := info.IsValid(); err != nil {
+	if err := info.IsValid(cosmos); err != nil {
 		return err.AddStack(c.main)
 	}
 	elements := make(map[string]*ElementRemote, len(info.Config.Elements))
@@ -228,10 +241,15 @@ func (c *CosmosRemote) connect() *Error {
 	for name, elementRemoteInfo := range info.Config.Elements {
 		e, has := c.main.elements[name]
 		if !has {
-			c.main.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", name)
-			continue
+			ei, has := c.main.runnable.interfaces[name]
+			if !has {
+				c.main.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", name)
+				continue
+			}
+			elements[name] = newElementRemote(c, name, elementRemoteInfo, ei)
+		} else {
+			elements[name] = newElementRemote(c, name, elementRemoteInfo, e.current.Interface)
 		}
-		elements[name] = newElementRemote(c, name, elementRemoteInfo, e.current)
 	}
 	c.main.mutex.RUnlock()
 	c.info = info
@@ -275,6 +293,15 @@ func (c *CosmosRemote) httpPost(addr string, request, response proto.Message, ti
 	if er != nil {
 		c.available = false
 		return NewErrorf(ErrCosmosRemoteRequestFailed, "CosmosRemote: HTTP POST response failed. err=(%v)", er).AddStack(c.main)
+	}
+	if rsp.StatusCode != http.StatusOK {
+		err := &Error{}
+		er = proto.Unmarshal(rspBuf, err)
+		if er != nil {
+			c.available = false
+			return NewErrorf(ErrCosmosRemoteRequestFailed, "CosmosRemote: HTTP POST unmarshal response failed. err=(%v)", er).AddStack(c.main)
+		}
+		return err.AddStack(c.main)
 	}
 	er = proto.Unmarshal(rspBuf, response)
 	if er != nil {

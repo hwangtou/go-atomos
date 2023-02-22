@@ -4,6 +4,7 @@ package go_atomos
 
 import (
 	"container/list"
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"time"
 )
@@ -36,7 +37,8 @@ type AtomLocal struct {
 
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
-	callChain []ID
+	callIDCounter uint64
+	curCallChain  string
 
 	messageTracker *MessageTrackerManager
 	idTracker      *IDTrackerManager
@@ -50,14 +52,15 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		Type:    IDType_Atom,
 		Cosmos:  e.Cosmos().GetNodeName(),
 		Element: e.GetElementName(),
-		Atomos:  name,
+		Atom:    name,
 	}
 	a := &AtomLocal{
 		element:        e,
 		atomos:         nil,
 		nameElement:    nil,
 		current:        current,
-		callChain:      nil,
+		callIDCounter:  0,
+		curCallChain:   "",
 		messageTracker: NewMessageTrackerManager(id, len(current.AtomHandlers)),
 		idTracker:      nil,
 	}
@@ -107,7 +110,7 @@ func (a *AtomLocal) Element() Element {
 }
 
 func (a *AtomLocal) GetName() string {
-	return a.atomos.GetIDInfo().Atomos
+	return a.atomos.GetIDInfo().Atom
 }
 
 func (a *AtomLocal) State() AtomosState {
@@ -125,7 +128,7 @@ func (a *AtomLocal) MessageByName(from ID, name string, timeout time.Duration, i
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -151,17 +154,6 @@ func (a *AtomLocal) SendWormhole(from ID, timeout time.Duration, wormhole Atomos
 	return a.atomos.PushWormholeMailAndWaitReply(from, timeout, wormhole)
 }
 
-func (a *AtomLocal) getCallChain() []ID {
-	a.atomos.mailbox.mutex.Lock()
-	defer a.atomos.mailbox.mutex.Unlock()
-	idList := make([]ID, 0, len(a.callChain)+1)
-	for _, id := range a.callChain {
-		idList = append(idList, id)
-	}
-	idList = append(idList, a)
-	return idList
-}
-
 func (a *AtomLocal) getElementLocal() *ElementLocal {
 	return nil
 }
@@ -180,6 +172,21 @@ func (a *AtomLocal) getAtomRemote() *AtomRemote {
 
 func (a *AtomLocal) getIDTrackerManager() *IDTrackerManager {
 	return a.idTracker
+}
+
+func (a *AtomLocal) getCurCallChain() string {
+	a.atomos.mailbox.mutex.Lock()
+	c := a.curCallChain
+	a.atomos.mailbox.mutex.Unlock()
+	return c
+}
+
+func (a *AtomLocal) First() ID {
+	a.atomos.mailbox.mutex.Lock()
+	a.callIDCounter += 1
+	c := a.callIDCounter
+	a.atomos.mailbox.mutex.Unlock()
+	return &FirstID{callID: c, ID: a}
 }
 
 // Implementation of SelfID
@@ -245,7 +252,7 @@ func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJ
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: Handler not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageDecoderNotExists, "Atom: Decoder not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
@@ -277,35 +284,24 @@ func (a *AtomLocal) Task() Task {
 
 // Check chain.
 
-func (a *AtomLocal) isInChain(fromIDList []ID) bool {
+func (a *AtomLocal) isInChain(callChainID string) bool {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
 
-	for _, fromID := range fromIDList {
-		if fromID.GetIDInfo().IsEqual(a.GetIDInfo()) {
-			return true
-		}
-	}
-	return false
+	return a.curCallChain == callChainID
 }
 
-func (a *AtomLocal) setMessageAndCallChain(fromID ID, message string) *Error {
-	if fromID == nil {
-		return NewError(ErrAtomNoFromID, "Element: No fromID.").AddStack(a)
-	}
+func (a *AtomLocal) setMessageAndCallChain(callChain string) *Error {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
-	if a.callChain != nil {
-		return NewError(ErrFrameworkPanic, "OnMessage set chain meets non nil chain.").AddStack(a)
-	}
-	a.callChain = fromID.getCallChain()
+	a.curCallChain = callChain
 	return nil
 }
 
-func (a *AtomLocal) unsetMessageAndCallChain(message string) {
+func (a *AtomLocal) unsetMessageAndCallChain() {
 	a.atomos.mailbox.mutex.Lock()
 	defer a.atomos.mailbox.mutex.Unlock()
-	a.callChain = nil
+	a.curCallChain = ""
 }
 
 // 内部实现
@@ -325,19 +321,29 @@ func (a *AtomLocal) pushMessageMail(from ID, name string, timeout time.Duration,
 	if from == nil {
 		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(a)
 	}
-	fromChain := from.getCallChain()
-	if a.isInChain(fromChain) {
-		return reply, NewErrorf(ErrAtomosCallDeadLock, "Atom: Message Deadlock. chain=(%v),to(%s),name=(%s),arg=(%v)",
-			fromChain, a, name, arg).AddStack(a)
+
+	_, ok := from.(*FirstID)
+	if !ok && a.curCallChain != "" && a.isInChain(from.getCurCallChain()) {
+		return reply, NewErrorf(ErrAtomosCallDeadLock, "Atom: Message Deadlock. to=(%v),name=(%s),arg=(%v)", a, name, arg).AddStack(a)
 	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
 }
 
 func (a *AtomLocal) OnMessaging(from ID, name string, arg proto.Message) (reply proto.Message, err *Error) {
-	if err = a.setMessageAndCallChain(from, name); err != nil {
+	if from == nil {
+		return nil, NewError(ErrAtomNoFromID, "Atom: No fromID.").AddStack(a)
+	}
+	var fromChain string
+	f, ok := from.(*FirstID)
+	if ok {
+		fromChain = fmt.Sprintf("%s:%d", f.String(), f.callID)
+	} else {
+		fromChain = from.getCurCallChain()
+	}
+	if err = a.setMessageAndCallChain(fromChain); err != nil {
 		return nil, err.AddStack(a)
 	}
-	defer a.unsetMessageAndCallChain(name)
+	defer a.unsetMessageAndCallChain()
 	handler := a.current.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
@@ -375,9 +381,9 @@ func (a *AtomLocal) OnScaling(from ID, name string, arg proto.Message, tracker *
 func (a *AtomLocal) pushKillMail(from ID, wait bool, timeout time.Duration) *Error {
 	// Dead Lock Checker.
 	if from != nil && wait {
-		fromChain := from.getCallChain()
-		if a.isInChain(fromChain) {
-			return NewErrorf(ErrAtomosCallDeadLock, "Atom: Kill Deadlock. chain=(%v),to(%s)", fromChain, a).AddStack(a)
+		cc := from.getCurCallChain()
+		if cc != "" && a.isInChain(cc) {
+			return NewErrorf(ErrAtomosCallDeadLock, "Atom: Kill Deadlock. to=(%v),to(%s)", from, a).AddStack(a)
 		}
 	}
 	return a.atomos.PushKillMailAndWaitReply(from, wait, true, timeout)
@@ -448,7 +454,7 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 func (a *AtomLocal) Spawn() {
 	a.messageTracker.Start()
 	if a.element.main.runnable.hookAtomSpawn != nil {
-		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomSpawn(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 
@@ -463,14 +469,14 @@ func (a *AtomLocal) Unset(message string) {
 func (a *AtomLocal) Stopping() {
 	a.messageTracker.Stopping()
 	if a.element.main.runnable.hookAtomStopping != nil {
-		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomStopping(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 
 func (a *AtomLocal) Halted() {
 	a.messageTracker.Halt()
 	if a.element.main.runnable.hookAtomHalt != nil {
-		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atomos)
+		a.element.main.runnable.hookAtomHalt(a.element.atomos.id.Element, a.atomos.id.Atom)
 	}
 }
 

@@ -27,7 +27,7 @@ func NewIDTrackerManager(release AtomosRelease) *IDTrackerManager {
 	}
 }
 
-//func (i *IDTrackerManager) NewIDTracker(skip int) *IDTracker {
+//func (i *IDTrackerManager) newIDTracker(skip int) *IDTracker {
 //	i.Lock()
 //	i.counter += 1
 //	tracker := &IDTracker{id: i.counter}
@@ -58,6 +58,17 @@ func (i *IDTrackerManager) NewIDTracker(rt *IDTrackerInfo) *IDTracker {
 	tracker.line = int(rt.Line)
 	tracker.name = rt.Name
 	return tracker
+}
+
+func newIDTrackerWithTrackerID(rt *IDTrackerInfo, er *ElementRemote, trackerID uint64) *IDTracker {
+	return &IDTracker{
+		id:      int(trackerID),
+		er:      er,
+		manager: nil,
+		file:    rt.File,
+		line:    int(rt.Line),
+		name:    rt.Name,
+	}
 }
 
 func (i *IDTrackerManager) NewScaleIDTracker(tracker *IDTracker) {
@@ -106,6 +117,7 @@ func (i *IDTrackerManager) String() string {
 
 type IDTracker struct {
 	id      int
+	er      *ElementRemote
 	manager *IDTrackerManager
 
 	file string
@@ -126,7 +138,7 @@ func NewIDTrackerInfo(skip int) *IDTrackerInfo {
 	return tracker
 }
 
-func NewScaleIDRemoteIDTracker(rt *IDTrackerInfo) *IDTracker {
+func newIDTracker(rt *IDTrackerInfo) *IDTracker {
 	return &IDTracker{
 		id:      0,
 		manager: nil,
@@ -147,10 +159,15 @@ func (i *IDTracker) Release() {
 	if i == nil {
 		return
 	}
-	i.manager.Lock()
-	delete(i.manager.idMap, i.id)
-	i.manager.Unlock()
-	i.manager.release.Release(i)
+	if i.er != nil {
+		i.er.elementAtomRelease(i)
+	}
+	if i.manager != nil {
+		i.manager.Lock()
+		delete(i.manager.idMap, i.id)
+		i.manager.Unlock()
+		i.manager.release.Release(i)
+	}
 }
 
 // MessageTrackerManager

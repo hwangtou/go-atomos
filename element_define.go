@@ -18,11 +18,6 @@ type ElementImplementation struct {
 	ElementHandlers map[string]MessageHandler
 	AtomHandlers    map[string]MessageHandler
 	ScaleHandlers   map[string]ScaleHandler
-
-	// 一个存储Atom的Call方法的容器。
-	// A holder to store all the Message method of Atom.
-	ElementDecoders map[string]*IOMessageDecoder
-	AtomDecoders    map[string]*IOMessageDecoder
 }
 
 // ElementInterface
@@ -41,6 +36,11 @@ type ElementInterface struct {
 
 	ElementSpawner ElementSpawner
 	AtomSpawner    AtomSpawner
+
+	// 一个存储Atom的Call方法的容器。
+	// A holder to store all the Message method of Atom.
+	ElementDecoders map[string]*IOMessageDecoder
+	AtomDecoders    map[string]*IOMessageDecoder
 }
 
 type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *Error

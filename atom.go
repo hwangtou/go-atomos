@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"time"
 )
@@ -63,12 +64,24 @@ type ID interface {
 
 	// Internal
 
-	getCallChain() []ID
 	getElementLocal() *ElementLocal
 	getAtomLocal() *AtomLocal
 	getElementRemote() *ElementRemote
 	getAtomRemote() *AtomRemote
 	getIDTrackerManager() *IDTrackerManager
+
+	getCurCallChain() string
+
+	First() ID
+}
+
+type FirstID struct {
+	callID uint64
+	ID
+}
+
+func (a *FirstID) getFirstIDCallChain() string {
+	return fmt.Sprintf("%s:%d", a.ID, a.callID)
 }
 
 type ReleasableID interface {

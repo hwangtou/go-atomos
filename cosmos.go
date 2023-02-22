@@ -24,6 +24,8 @@ type CosmosNode interface {
 
 	CosmosGetElementAtomID(elem, name string) (ID, *IDTracker, *Error)
 
+	CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error)
+
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
@@ -37,8 +39,6 @@ type CosmosNode interface {
 
 	CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 	CosmosMessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
-
-	CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error)
 }
 
 //////////////////////////////////////////////////
@@ -52,6 +52,7 @@ type CosmosRunnable struct {
 	implements     map[string]*ElementImplementation
 	implementOrder []*ElementImplementation
 	mainScript     CosmosMainScript
+	mainRouter     CosmosMainGlobalRouter
 
 	hookAtomSpawning hookAtomFn
 	hookAtomSpawn    hookAtomFn
@@ -110,5 +111,10 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 
 func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable {
 	r.mainScript = script
+	return r
+}
+
+func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnable {
+	r.mainRouter = router
 	return r
 }

@@ -33,7 +33,7 @@ func TestElementLocalBase(t *testing.T) {
 	}
 
 	// Push Message.
-	reply, err = testElem.pushMessageMail(process.main, "testMessage", 0, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testMessage", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestElementLocalBase: Push Message failed. err=(%v)", err)
 		return
@@ -41,7 +41,7 @@ func TestElementLocalBase(t *testing.T) {
 	messages += 1 // testMessage
 
 	// Push Panic Message.
-	reply, err = testElem.pushMessageMail(process.main, "testPanic", 0, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testPanic", 0, nil)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestElementLocalBase: Push Panic Message failed. err=(%v)", err)
 		return
@@ -49,7 +49,7 @@ func TestElementLocalBase(t *testing.T) {
 	messages += 1 // testPanic
 
 	// Push Timeout Message.
-	reply, err = testElem.pushMessageMail(process.main, "testMessageTimeout", 1*time.Millisecond, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testMessageTimeout", 1*time.Millisecond, nil)
 	if err == nil || err.Code != ErrAtomosPushTimeoutHandling {
 		t.Errorf("TestElementLocalBase: Push Message Timeout failed. err=(%v)", err)
 		return
@@ -74,7 +74,7 @@ func TestElementLocalBase(t *testing.T) {
 	}
 	sharedTestElement1 = testElem
 	sharedTestAtom1 = atom
-	reply, err = testElem.pushMessageMail(process.main, "testMessageDeadlock", 0, &String{S: testAtomName})
+	reply, err = testElem.pushMessageMail(process.main.First(), "testMessageDeadlock", 0, &String{S: testAtomName})
 	if err == nil || err.Code != ErrAtomosCallDeadLock {
 		t.Errorf("TestElementLocalBase: Push Message Deadlock failed. err=(%v)", err)
 		return
@@ -93,7 +93,7 @@ func TestElementLocalBase(t *testing.T) {
 	messages += 1 // testMessageDeadlock
 
 	// Push Tasking.
-	reply, err = testElem.pushMessageMail(process.main, "testTask", 0, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testTask", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestElementLocalBase: Task Failed. state=(%d),err=(%v)", testElem.atomos.GetState(), err)
 		return
@@ -111,7 +111,7 @@ func TestElementLocalBase(t *testing.T) {
 	}
 
 	// Push Tasking Panic.
-	reply, err = testElem.pushMessageMail(process.main, "testTaskPanic", 0, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testTaskPanic", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestElementLocalBase: Task Panic Failed. state=(%d),err=(%v)", testElem.atomos.GetState(), err)
 		return
@@ -126,7 +126,7 @@ func TestElementLocalBase(t *testing.T) {
 
 	// Push Parallel.
 	sharedTestElement1 = testElem
-	reply, err = testElem.pushMessageMail(process.main, "testParallel", 0, nil)
+	reply, err = testElem.pushMessageMail(process.main.First(), "testParallel", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestElementLocalBase: Parallel Failed. state=(%d),err=(%v)", testElem.atomos.GetState(), err)
 		return
@@ -189,7 +189,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 	sharedTestAtom1 = atom
 
-	scaleID, scaleTracker, err := testElem.pushScaleMail(process.main, "ScaleTestMessage", 0, nil, NewIDTrackerInfo(1))
+	scaleID, scaleTracker, err := testElem.pushScaleMail(process.main.First(), "ScaleTestMessage", 0, nil, NewIDTrackerInfo(1))
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
@@ -213,7 +213,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 
 	// Test Return Error.
-	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessageError", 0, nil, NewIDTrackerInfo(1))
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main.First(), "ScaleTestMessageError", 0, nil, NewIDTrackerInfo(1))
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack != "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
@@ -224,7 +224,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 
 	// Test Return Panic.
-	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main, "ScaleTestMessagePanic", 0, nil, NewIDTrackerInfo(1))
+	scaleID, scaleTracker, err = testElem.pushScaleMail(process.main.First(), "ScaleTestMessagePanic", 0, nil, NewIDTrackerInfo(1))
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return

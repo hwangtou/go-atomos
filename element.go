@@ -19,6 +19,8 @@ import (
 // A specific Element type is a type of the Atom and holder of Atoms, it's similar to the concept "class" of OOP,
 // and it contains its instance. There are two kinds of Element, Local Element and Remote Element.
 type Element interface {
+	ID
+
 	// GetElementName
 	// Element和其相关的Atom的名称。
 	// Name of the Element and its Atoms.

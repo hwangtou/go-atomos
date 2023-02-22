@@ -5,26 +5,6 @@ import (
 	"os"
 )
 
-type yamlConfig struct {
-	Node         string                  `yaml:"node"`
-	LogPath      string                  `yaml:"log_path"`
-	LogLevel     int                     `yaml:"log_level"`
-	EnableCert   *yamlCertConfig         `yaml:"enable_cert"`
-	EnableServer *yamlRemoteServerConfig `yaml:"enable_server"`
-	Customize    map[string]string       `yaml:"customize"`
-}
-
-type yamlCertConfig struct {
-	CertPath           string `yaml:"cert-path"`
-	KeyPath            string `yaml:"key-path"`
-	InsecureSkipVerify bool   `yaml:"insecure-skip-verify"`
-}
-
-type yamlRemoteServerConfig struct {
-	Host string `yaml:"host"`
-	Port int32  `yaml:"port"`
-}
-
 func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
@@ -65,6 +45,11 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 		conf.EnableServer = &RemoteServerConfig{
 			Host: server.Host,
 			Port: server.Port,
+		}
+	}
+	if etcd := y.EnableEtcd; etcd != nil {
+		conf.EnableEtcd = &EtcdConfig{
+			Endpoints: etcd.Endpoints,
 		}
 	}
 	if custom := y.CustomizeConfig; custom != nil {
@@ -176,6 +161,7 @@ type NodeYAMLConfig struct {
 
 	EnableCert   *CertConfig         `yaml:"enable-cert"`
 	EnableServer *RemoteServerConfig `yaml:"enable-server"`
+	EnableEtcd   *EtcdConfig         `yaml:"enable-etcd"`
 
 	CustomizeConfig map[string]string `yaml:"customize"`
 }
