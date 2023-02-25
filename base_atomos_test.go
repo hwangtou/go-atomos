@@ -109,7 +109,7 @@ func TestBaseAtomos(t *testing.T) {
 		Type:    IDType_Atom,
 		Cosmos:  "cosmos",
 		Element: "element",
-		Atomos:  "atomos",
+		Atom:    "atomos",
 	}
 	initTestFakeCosmosProcess(t)
 	time.Sleep(10 * time.Millisecond)

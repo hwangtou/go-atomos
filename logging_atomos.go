@@ -124,6 +124,6 @@ func (c *LoggingAtomos) logging(lm *LogMail) {
 	case LogLevel_Fatal:
 		fallthrough
 	default:
-		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", lm.Time.AsTime().Format(logTimeFmt), msg))
+		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", t, msg))
 	}
 }

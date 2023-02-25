@@ -45,7 +45,8 @@ type CosmosMain struct {
 
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
-	callChain []ID
+	callIDCounter uint64
+	curCallChain  string
 }
 
 // 生命周期相关
@@ -70,7 +71,8 @@ func initCosmosMain(process *CosmosProcess) *CosmosMain {
 		mutex:                sync.RWMutex{},
 		listenCert:           nil,
 		clientCert:           nil,
-		callChain:            nil,
+		callIDCounter:        0,
+		curCallChain:         "",
 	}
 	main.atomos = NewBaseAtomos(id, LogLevel_Debug, main, main)
 	process.main = main
@@ -160,17 +162,6 @@ func (c *CosmosMain) SendWormhole(from ID, timeout time.Duration, wormhole Atomo
 	return c.atomos.PushWormholeMailAndWaitReply(from, timeout, wormhole)
 }
 
-func (c *CosmosMain) getCallChain() []ID {
-	c.atomos.mailbox.mutex.Lock()
-	defer c.atomos.mailbox.mutex.Unlock()
-	idList := make([]ID, 0, len(c.callChain)+1)
-	for _, id := range c.callChain {
-		idList = append(idList, id)
-	}
-	idList = append(idList, c)
-	return idList
-}
-
 func (c *CosmosMain) getElementLocal() *ElementLocal {
 	return nil
 }
@@ -189,6 +180,21 @@ func (c *CosmosMain) getAtomRemote() *AtomRemote {
 
 func (c *CosmosMain) getIDTrackerManager() *IDTrackerManager {
 	return nil
+}
+
+func (c *CosmosMain) getCurCallChain() string {
+	c.atomos.mailbox.mutex.Lock()
+	cc := c.curCallChain
+	c.atomos.mailbox.mutex.Unlock()
+	return cc
+}
+
+func (c *CosmosMain) First() ID {
+	c.atomos.mailbox.mutex.Lock()
+	c.callIDCounter += 1
+	cc := c.callIDCounter
+	c.atomos.mailbox.mutex.Unlock()
+	return &FirstID{callID: cc, ID: c}
 }
 
 // Implementation of atomos.SelfID
@@ -344,7 +350,6 @@ func (c *CosmosMain) OnStopping(from ID, cancelled map[uint64]CancelledTask) (er
 			c.Log().Error("Cosmos: Exiting kill element error. element=(%s),err=(%v)", name, err.Message)
 		}
 	}
-	c.callChain = nil
 	c.clientCert = nil
 	c.listenCert = nil
 	c.elements = nil

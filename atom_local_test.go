@@ -88,7 +88,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Push Message.
-	reply, err = atom.pushMessageMail(testElem, "testMessage", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessage", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Push Message failed. err=(%v)", err)
 		return
@@ -96,7 +96,7 @@ func TestAtomLocalBase(t *testing.T) {
 	messages += 1 // testMessage
 
 	// Push Panic Message.
-	reply, err = atom.pushMessageMail(testElem, "testPanic", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testPanic", 0, nil)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Push Panic Message failed. err=(%v)", err)
 		return
@@ -104,14 +104,14 @@ func TestAtomLocalBase(t *testing.T) {
 	messages += 1 // testPanic
 
 	// Push Timeout Message.
-	reply, err = atom.pushMessageMail(testElem, "testMessageTimeout", 1*time.Millisecond, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessageTimeout", 1*time.Millisecond, nil)
 	if err == nil || err.Code != ErrAtomosPushTimeoutHandling {
 		t.Errorf("TestAtomLocalBase: Push Message Timeout failed. err=(%v)", err)
 		return
 	}
 	messages += 1 // testMessageTimeout
 	// Push Timeout Reject Mail.
-	reply, err = atom.pushMessageMail(testElem, "testMessage", 1*time.Microsecond, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessage", 1*time.Microsecond, nil)
 	if err == nil || err.Code != ErrAtomosPushTimeoutReject {
 		t.Errorf("TestAtomLocalBase: Push Message Timeout failed. err=(%v)", err)
 		return
@@ -129,7 +129,7 @@ func TestAtomLocalBase(t *testing.T) {
 	// Push Deadlock Message.
 	sharedTestAtom1 = atom
 	sharedTestAtom2 = deadlockAtom
-	reply, err = atom.pushMessageMail(testElem, "testMessageDeadlock", 0, &String{S: testAtomName})
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessageDeadlock", 0, &String{S: testAtomName})
 	if err == nil || err.Code != ErrAtomosCallDeadLock {
 		t.Errorf("TestAtomLocalBase: Push Message Deadlock failed.")
 		return
@@ -143,7 +143,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Push Tasking.
-	reply, err = atom.pushMessageMail(testElem, "testTask", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testTask", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Task Failed. state=(%d),err=(%v)", atom.atomos.GetState(), err)
 		return
@@ -161,7 +161,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Push Tasking Panic.
-	reply, err = atom.pushMessageMail(testElem, "testTaskPanic", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testTaskPanic", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Task Panic Failed. state=(%d),err=(%v)", atom.atomos.GetState(), err)
 		return
@@ -176,7 +176,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Push Parallel.
 	sharedTestAtom1 = atom
-	reply, err = atom.pushMessageMail(testElem, "testParallel", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testParallel", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Parallel Failed. state=(%d),err=(%v)", atom.atomos.GetState(), err)
 		return
@@ -200,7 +200,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 	// Try kill self.
 	sharedTestAtom1 = atom
-	reply, err = atom.pushMessageMail(testElem, "testKillSelf", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testKillSelf", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: KillSelf Failed. state=(%d),err=(%v)", atom.atomos.GetState(), err)
 		return
@@ -248,13 +248,13 @@ func TestAtomLocalBase(t *testing.T) {
 		return
 	}
 	// Try message.
-	reply, err = atom.pushMessageMail(testElem, "testMessage", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessage", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Spawn twice Push Message failed. err=(%v)", err)
 		return
 	}
 	messages = 1 // testMessage
-	reply, err = atomTwice.pushMessageMail(testElem, "testMessage", 0, nil)
+	reply, err = atomTwice.pushMessageMail(testElem.First(), "testMessage", 0, nil)
 	if err != nil || reply.(*String).S != "OK" {
 		t.Errorf("TestAtomLocalBase: Spawn twice Push Message failed. err=(%v)", err)
 		return
@@ -300,7 +300,7 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Reference count state invalid. err=(%v)", err)
 		return
 	}
-	reply, err = atom.pushMessageMail(testElem, "testMessage", 0, nil)
+	reply, err = atom.pushMessageMail(testElem.First(), "testMessage", 0, nil)
 	if err == nil || err.Code != ErrAtomosIsNotRunning {
 		t.Errorf("TestAtomLocalBase: Reference count push message state invalid. err=(%v)", err)
 		return

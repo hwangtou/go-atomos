@@ -10,17 +10,25 @@ type AtomRemote struct {
 	element *ElementRemote
 	info    *IDInfo
 
-	callChain []ID
-	mutex     sync.RWMutex
+	mutex sync.RWMutex
 
 	idTracker *IDTrackerManager
+}
+
+func (a *AtomRemote) getCurCallChain() string {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (a *AtomRemote) First() ID {
+	//TODO implement me
+	panic("implement me")
 }
 
 func newAtomRemote(e *ElementRemote, info *IDInfo) *AtomRemote {
 	a := &AtomRemote{
 		element:   e,
 		info:      info,
-		callChain: nil,
 		mutex:     sync.RWMutex{},
 		idTracker: nil,
 	}
@@ -82,17 +90,6 @@ func (a *AtomRemote) Kill(from ID, timeout time.Duration) *Error {
 
 func (a *AtomRemote) SendWormhole(from ID, timeout time.Duration, wormhole AtomosWormhole) *Error {
 	return NewErrorf(ErrAtomosNotSupportWormhole, "remote atom")
-}
-
-func (a *AtomRemote) getCallChain() []ID {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-	idList := make([]ID, 0, len(a.callChain)+1)
-	for _, id := range a.callChain {
-		idList = append(idList, id)
-	}
-	idList = append(idList, a)
-	return idList
 }
 
 func (a *AtomRemote) getElementLocal() *ElementLocal {

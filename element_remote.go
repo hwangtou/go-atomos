@@ -17,22 +17,23 @@ type ElementRemote struct {
 	atoms map[string]*AtomRemote
 	lock  sync.RWMutex
 
-	callChain []ID
+	//callChain []ID
+	callChains map[string]bool
 
 	idTracker *IDTrackerManager
 }
 
 func newElementRemote(c *CosmosRemote, name string, info *IDInfo, i *ElementImplementation) *ElementRemote {
 	e := &ElementRemote{
-		cosmos:    c,
-		name:      name,
-		info:      info,
-		impl:      i,
-		state:     0,
-		atoms:     map[string]*AtomRemote{},
-		lock:      sync.RWMutex{},
-		callChain: nil,
-		idTracker: nil,
+		cosmos:     c,
+		name:       name,
+		info:       info,
+		impl:       i,
+		state:      0,
+		atoms:      map[string]*AtomRemote{},
+		lock:       sync.RWMutex{},
+		callChains: map[string]bool{},
+		idTracker:  nil,
 	}
 	e.idTracker = NewIDTrackerManager(e)
 	return e
@@ -95,17 +96,6 @@ func (e *ElementRemote) SendWormhole(from ID, timeout time.Duration, wormhole At
 	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(e.cosmos.main)
 }
 
-func (e *ElementRemote) getCallChain() []ID {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	idList := make([]ID, 0, len(e.callChain)+1)
-	for _, id := range e.callChain {
-		idList = append(idList, id)
-	}
-	idList = append(idList, e)
-	return idList
-}
-
 func (e *ElementRemote) getElementLocal() *ElementLocal {
 	return nil
 }
@@ -124,6 +114,16 @@ func (e *ElementRemote) getAtomRemote() *AtomRemote {
 
 func (e *ElementRemote) getIDTrackerManager() *IDTrackerManager {
 	return nil
+}
+
+func (e *ElementRemote) getCurCallChain() string {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *ElementRemote) First() ID {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Implementation of Element
@@ -237,12 +237,12 @@ func (e *ElementRemote) sendMessage(fromID ID, name string, timeout time.Duratio
 		return reply, NewErrorf(ErrAtomMessageArgType, "marshal failed, err=(%v)", er)
 	}
 	if fromID != nil {
-		if !e.checkCallChain(fromID.getCallChain()) {
-			return reply, NewErrorf(ErrAtomosCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-				fromID.getCallChain(), e, name, args)
-		}
-		e.addCallChain(fromID.getCallChain())
-		defer e.delCallChain()
+		//if !e.checkCallChain(fromID.getCallChain()) {
+		//	return reply, NewErrorf(ErrAtomosCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
+		//		fromID.getCallChain(), e, name, args)
+		//}
+		//e.addCallChain(fromID.getCallChain())
+		//defer e.delCallChain()
 	}
 
 	req := &CosmosRemoteMessagingReq{
@@ -254,13 +254,13 @@ func (e *ElementRemote) sendMessage(fromID ID, name string, timeout time.Duratio
 		Message:   name,
 		Args:      a,
 	}
-	for _, id := range e.callChain {
-		if id == nil {
-			req.CallChain = append(req.CallChain, nil)
-			continue
-		}
-		req.CallChain = append(req.CallChain, id.GetIDInfo())
-	}
+	//for _, id := range e.callChain {
+	//	if id == nil {
+	//		req.CallChain = append(req.CallChain, nil)
+	//		continue
+	//	}
+	//	req.CallChain = append(req.CallChain, id.GetIDInfo())
+	//}
 	rsp := &CosmosRemoteMessagingRsp{}
 	if err = e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosMessaging, req, rsp, timeout); err != nil {
 		return nil, err.AddStack(e.cosmos.main)
@@ -358,23 +358,4 @@ func (e *ElementRemote) elementAtomState(a *AtomRemote) AtomosState {
 func (e *ElementRemote) elementAtomIdleTime(a *AtomRemote) time.Duration {
 	// TODO
 	return 0
-}
-
-// Check chain.
-
-func (e *ElementRemote) checkCallChain(fromIDList []ID) bool {
-	for _, fromID := range fromIDList {
-		if fromID.GetIDInfo().IsEqual(e.GetIDInfo()) {
-			return false
-		}
-	}
-	return true
-}
-
-func (e *ElementRemote) addCallChain(fromIDList []ID) {
-	e.callChain = append(fromIDList, e)
-}
-
-func (e *ElementRemote) delCallChain() {
-	e.callChain = nil
 }
