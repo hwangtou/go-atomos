@@ -239,6 +239,58 @@ func GetHelloInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterfa
 		}
 		return atom.Spawn(s, argT, dataT)
 	}
+	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+		"ScaleBonjour": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
+			},
+		},
+	}
+	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
+		"Bonjour": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
+			},
+		},
+		"SayHello": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
+			},
+		},
+		"BuildNet": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetReq{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &BuildNetResp{}, p)
+			},
+		},
+		"MakePanic": {
+			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &MakePanicIn{}, p)
+			},
+			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
+				return go_atomos.MessageUnmarshal(b, &MakePanicOut{}, p)
+			},
+		},
+	}
 	return elem
 }
 
@@ -315,58 +367,6 @@ func GetHelloImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImpleme
 				return nil, go_atomos.NewErrorf(go_atomos.ErrAtomMessageAtomType, "Element type=(%T)", e)
 			}
 			return a.ScaleBonjour(from, req)
-		},
-	}
-	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
-		"SayHello": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
-			},
-		},
-		"ScaleBonjour": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
-			},
-		},
-	}
-	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
-		"Bonjour": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BonjourReq{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BonjourResp{}, p)
-			},
-		},
-		"SayHello": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &HelloReq{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &HelloResp{}, p)
-			},
-		},
-		"BuildNet": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BuildNetReq{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &BuildNetResp{}, p)
-			},
-		},
-		"MakePanic": {
-			InDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &MakePanicIn{}, p)
-			},
-			OutDec: func(b []byte, p bool) (proto.Message, *go_atomos.Error) {
-				return go_atomos.MessageUnmarshal(b, &MakePanicOut{}, p)
-			},
 		},
 	}
 	return elem
