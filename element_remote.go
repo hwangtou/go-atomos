@@ -1,9 +1,11 @@
 package go_atomos
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -11,32 +13,45 @@ type ElementRemote struct {
 	cosmos *CosmosRemote
 	name   string
 	info   *IDInfo
-	impl   *ElementImplementation
+	intf   *ElementInterface
 	state  AtomosState
 
 	atoms map[string]*AtomRemote
 	lock  sync.RWMutex
 
-	//callChain []ID
-	callChains map[string]bool
-
-	idTracker *IDTrackerManager
+	callIDCounter uint64
+	idTracker     *IDTrackerManager
 }
 
-func newElementRemote(c *CosmosRemote, name string, info *IDInfo, i *ElementImplementation) *ElementRemote {
+type ElementRemoteID struct {
+	*ElementRemote
+	callChain string
+}
+
+func newElementRemote(c *CosmosRemote, name string, info *IDInfo, i *ElementInterface) *ElementRemote {
 	e := &ElementRemote{
-		cosmos:     c,
-		name:       name,
-		info:       info,
-		impl:       i,
-		state:      0,
-		atoms:      map[string]*AtomRemote{},
-		lock:       sync.RWMutex{},
-		callChains: map[string]bool{},
-		idTracker:  nil,
+		cosmos:    c,
+		name:      name,
+		info:      info,
+		intf:      i,
+		state:     0,
+		atoms:     map[string]*AtomRemote{},
+		lock:      sync.RWMutex{},
+		idTracker: nil,
 	}
 	e.idTracker = NewIDTrackerManager(e)
 	return e
+}
+
+func (e *ElementRemote) newElementRemoteID(callChain string) *ElementRemoteID {
+	return &ElementRemoteID{
+		ElementRemote: e,
+		callChain:     callChain,
+	}
+}
+
+func (e *ElementRemote) Release(tracker *IDTracker) {
+	// TODO
 }
 
 // Implementation of ID
@@ -50,10 +65,6 @@ func (e *ElementRemote) GetIDInfo() *IDInfo {
 
 func (e *ElementRemote) String() string {
 	return e.GetIDInfo().Info()
-}
-
-func (e *ElementRemote) Release(id *IDTracker) {
-	e.idTracker.Release(id)
 }
 
 func (e *ElementRemote) Cosmos() CosmosNode {
@@ -77,11 +88,11 @@ func (e *ElementRemote) IdleTime() time.Duration {
 }
 
 func (e *ElementRemote) MessageByName(fromID ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
-	return e.sendMessage(fromID, name, timeout, in)
+	return e.sendElementMessage(fromID, name, timeout, in)
 }
 
 func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := e.impl.ElementDecoders[name]
+	decoderFn, has := e.intf.ElementDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -89,11 +100,11 @@ func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecod
 }
 
 func (e *ElementRemote) Kill(from ID, timeout time.Duration) *Error {
-	return NewError(ErrElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(e.cosmos.main)
+	return NewError(ErrElementRemoteCannotKill, "ElementRemoteID: Cannot kill remote element.").AddStack(e.cosmos.main)
 }
 
 func (e *ElementRemote) SendWormhole(from ID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(e.cosmos.main)
+	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemoteID: Cannot send remote wormhole.").AddStack(e.cosmos.main)
 }
 
 func (e *ElementRemote) getElementLocal() *ElementLocal {
@@ -117,13 +128,19 @@ func (e *ElementRemote) getIDTrackerManager() *IDTrackerManager {
 }
 
 func (e *ElementRemote) getCurCallChain() string {
-	//TODO implement me
-	panic("implement me")
+	return ""
 }
 
 func (e *ElementRemote) First() ID {
-	//TODO implement me
-	panic("implement me")
+	callChainID := atomic.AddUint64(&e.callIDCounter, 1)
+	return &ElementRemoteID{
+		ElementRemote: e,
+		callChain:     fmt.Sprintf("%s:%d", e.info, callChainID),
+	}
+}
+
+func (e *ElementRemoteID) getCurCallChain() string {
+	return e.callChain
 }
 
 // Implementation of Element
@@ -152,43 +169,37 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 }
 
 func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
-	return nil, nil, NewErrorf(ErrCosmosRemoteCannotSpawn, "").AddStack(e.cosmos.main)
+	panic("todo")
 }
 
 func (e *ElementRemote) MessageElement(fromID, toID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
 	if fromID == nil {
-		return reply, NewErrorf(ErrAtomFromIDInvalid, "ElementRemote: MessageElement, FromID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
+		return reply, NewErrorf(ErrElementFromIDInvalid, "ElementRemoteID: MessageElement, FromID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args).AddStack(e.cosmos.main)
 	}
 	elem := toID.getElementRemote()
 	if elem == nil {
-		return reply, NewErrorf(ErrAtomToIDInvalid, "ElementRemote: MessageElement, ToID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
+		return reply, NewErrorf(ErrElementToIDInvalid, "ElementRemoteID: MessageElement, ToID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args).AddStack(e.cosmos.main)
 	}
-	// PushProcessLog.
-	return e.sendMessage(fromID, name, timeout, args)
+	return e.sendElementMessage(fromID, name, timeout, args)
 }
 
 func (e *ElementRemote) MessageAtom(fromID, toID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
 	if fromID == nil {
-		return reply, NewErrorf(ErrAtomFromIDInvalid, "ElementRemote: MessageAtom, FromID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
+		return reply, NewErrorf(ErrAtomFromIDInvalid, "ElementRemoteID: MessageAtom, FromID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args).AddStack(e.cosmos.main)
 	}
 	a := toID.getAtomRemote()
 	if a == nil {
-		return reply, NewErrorf(ErrAtomToIDInvalid, "ElementRemote: MessageAtom, ToID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
+		return reply, NewErrorf(ErrAtomToIDInvalid, "ElementRemoteID: MessageAtom, ToID invalid. from=(%s),to=(%s),name=(%s),args=(%v)",
 			fromID, toID, name, args).AddStack(e.cosmos.main)
 	}
-	// PushProcessLog.
-	return e.sendMessage(fromID, name, timeout, args)
+	return e.sendAtomMessage(fromID, toID, name, timeout, args)
 }
 
 func (e *ElementRemote) ScaleGetAtomID(fromID ID, name string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
-	if fromID == nil {
-		return nil, nil, NewErrorf(ErrAtomFromIDInvalid, "ElementRemote: ScaleGetAtomID, FromID invalid. from=(%s),name=(%s),args=(%v)",
-			fromID, name, args).AddStack(e.cosmos.main)
-	}
-	return e.getScaleID(fromID, name, timeout, args, tracker)
+	return e.getElementScaleID(fromID, name, timeout, args, tracker)
 }
 
 func (e *ElementRemote) KillAtom(fromID, toID ID, timeout time.Duration) *Error {
@@ -197,16 +208,99 @@ func (e *ElementRemote) KillAtom(fromID, toID ID, timeout time.Duration) *Error 
 
 // Internal
 
-func (e *ElementRemote) elementAtomGet(name string, tracker *IDTrackerInfo) (*AtomRemote, *IDTracker, *Error) {
-	e.lock.RLock()
+func (e *ElementRemote) getElementScaleID(fromID ID, name string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
+	// Send failed, how to handle? at least delete atom, and retry
+	argProto, er := anypb.New(args)
+	if er != nil {
+		return nil, nil, NewErrorf(ErrAtomMessageArgType, "marshal failed, err=(%v)", er).AddStack(e.cosmos.main)
+	}
+	if fromID == nil {
+		return nil, nil, NewErrorf(ErrAtomFromIDInvalid, "ElementRemoteID: ScaleGetAtomID, FromID invalid. from=(%s),name=(%s),args=(%v)",
+			fromID, name, args).AddStack(e.cosmos.main)
+	}
+	var fromCallChain string
+	f, ok := fromID.(*FirstID)
+	if ok {
+		fromCallChain = f.getFirstIDCallChain()
+	} else {
+		fromCallChain = fromID.getCurCallChain()
+	}
+	req := &CosmosRemoteScalingReq{
+		From:          fromID.GetIDInfo(),
+		FromCallChain: fromCallChain,
+		FromTracker:   tracker,
+		To:            e.GetIDInfo(),
+		Timeout:       float32(timeout / time.Second),
+		Message:       name,
+		Args:          argProto,
+	}
+	rsp := &CosmosRemoteScalingRsp{}
+	if err := e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosElementScaling, req, rsp, timeout); err != nil {
+		return nil, nil, err.AddStack(e.cosmos.main)
+	}
+	if rsp.Error != nil {
+		return nil, nil, rsp.Error.AddStack(e.cosmos.main)
+	}
+	e.lock.Lock()
 	a, has := e.atoms[name]
-	e.lock.RUnlock()
 	if has {
-		return a, a.idTracker.NewIDTracker(tracker), nil
+		a.info = rsp.Id
+	} else {
+		a = newAtomRemote(e, rsp.Id)
+		e.atoms[name] = a
+	}
+	e.lock.Unlock()
+	return a.newAtomRemoteID(fromCallChain), newIDTrackerWithTrackerID(tracker, e, rsp.TrackerId), nil
+}
+
+func (e *ElementRemote) sendElementMessage(fromID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
+	// Send failed, how to handle? at least delete atom, and retry
+	a, er := anypb.New(args)
+	if er != nil {
+		return reply, NewErrorf(ErrElementMessageArgType, "ElementRemoteID: Marshal failed, err=(%v)", er)
+	}
+	if fromID == nil {
+		return nil, NewErrorf(ErrAtomosCallDeadLock, "ElementRemoteID: FromID is nil. to=(%v),name=(%s),arg=(%v)",
+			e, name, args).AddStack(e.cosmos.main)
 	}
 
+	var fromCallChain string
+	f, ok := fromID.(*FirstID)
+	if ok {
+		fromCallChain = f.getFirstIDCallChain()
+	} else {
+		fromCallChain = fromID.getCurCallChain()
+	}
+	req := &CosmosRemoteMessagingReq{
+		From:          fromID.GetIDInfo(),
+		FromCallChain: fromCallChain,
+		To:            e.GetIDInfo(),
+		Timeout:       float32(timeout),
+		Message:       name,
+		Args:          a,
+	}
+	rsp := &CosmosRemoteMessagingRsp{}
+	if err = e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosElementMessaging, req, rsp, timeout); err != nil {
+		return nil, err.AddStack(e.cosmos.main)
+	}
+	if rsp.Reply != nil {
+		reply, er = rsp.Reply.UnmarshalNew()
+		if er != nil && rsp.Error == nil {
+			err = NewErrorf(ErrElementMessageReplyType, "unmarshal failed, err=(%v)", er).AddStack(e.cosmos.main)
+		}
+	}
+	if rsp.Error != nil {
+		err = rsp.Error.AddStack(e.cosmos.main)
+	}
+	return reply, err
+}
+
+func (e *ElementRemote) spawnAtom() {
+	// TODO
+}
+
+func (e *ElementRemote) elementAtomGet(name string, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	req := &CosmosRemoteGetIDReq{
-		FromAddr:    e.cosmos.addr,
 		FromTracker: tracker,
 		Element:     e.name,
 		Atom:        name,
@@ -218,51 +312,59 @@ func (e *ElementRemote) elementAtomGet(name string, tracker *IDTrackerInfo) (*At
 	if rsp.Error != nil {
 		return nil, nil, rsp.Error.AddStack(e.cosmos.main)
 	}
-	a = newAtomRemote(e, rsp.Id)
 	e.lock.Lock()
-	a, has = e.atoms[name]
+	a, has := e.atoms[name]
 	if has {
 		a.info = rsp.Id
 	} else {
+		a = newAtomRemote(e, rsp.Id)
 		e.atoms[name] = a
 	}
 	e.lock.Unlock()
-	return a, a.idTracker.NewIDTracker(tracker), nil
+	return a.newAtomRemoteID(e.getCurCallChain()), newIDTrackerWithTrackerID(tracker, e, rsp.TrackerId), nil
 }
 
-func (e *ElementRemote) sendMessage(fromID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
+func (e *ElementRemote) elementAtomRelease(tracker *IDTracker) {
+	req := &CosmosRemoteReleaseIDReq{
+		TrackerId: uint64(tracker.id),
+	}
+	rsp := &CosmosRemoteReleaseIDRsp{}
+	if err := e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosIDRelease, req, rsp, 0); err != nil {
+		// TODO
+	}
+	if rsp.Error != nil {
+		// TODO
+	}
+}
+
+func (e *ElementRemote) sendAtomMessage(fromID, to ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
 	// Send failed, how to handle? at least delete atom, and retry
 	a, er := anypb.New(args)
 	if er != nil {
-		return reply, NewErrorf(ErrAtomMessageArgType, "marshal failed, err=(%v)", er)
+		return reply, NewErrorf(ErrAtomMessageArgType, "ElementRemoteID: Marshal failed, err=(%v)", er).AddStack(e.cosmos.main)
 	}
-	if fromID != nil {
-		//if !e.checkCallChain(fromID.getCallChain()) {
-		//	return reply, NewErrorf(ErrAtomosCallDeadLock, "Call Dead Lock, chain=(%v),to(%s),name=(%s),args=(%v)",
-		//		fromID.getCallChain(), e, name, args)
-		//}
-		//e.addCallChain(fromID.getCallChain())
-		//defer e.delCallChain()
+	if fromID == nil {
+		return nil, NewErrorf(ErrAtomosCallDeadLock, "ElementRemoteID: FromID is nil. to=(%v),name=(%s),arg=(%v)",
+			e, name, args).AddStack(e.cosmos.main)
 	}
 
-	req := &CosmosRemoteMessagingReq{
-		From:      fromID.GetIDInfo(),
-		FromAddr:  e.cosmos.main.getFromAddr(),
-		To:        e.GetIDInfo(),
-		CallChain: nil,
-		Timeout:   float32(timeout),
-		Message:   name,
-		Args:      a,
+	var fromCallChain string
+	f, ok := fromID.(*FirstID)
+	if ok {
+		fromCallChain = f.getFirstIDCallChain()
+	} else {
+		fromCallChain = fromID.getCurCallChain()
 	}
-	//for _, id := range e.callChain {
-	//	if id == nil {
-	//		req.CallChain = append(req.CallChain, nil)
-	//		continue
-	//	}
-	//	req.CallChain = append(req.CallChain, id.GetIDInfo())
-	//}
+	req := &CosmosRemoteMessagingReq{
+		From:          fromID.GetIDInfo(),
+		FromCallChain: fromCallChain,
+		To:            to.GetIDInfo(),
+		Timeout:       float32(timeout),
+		Message:       name,
+		Args:          a,
+	}
 	rsp := &CosmosRemoteMessagingRsp{}
-	if err = e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosMessaging, req, rsp, timeout); err != nil {
+	if err = e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosAtomMessaging, req, rsp, timeout); err != nil {
 		return nil, err.AddStack(e.cosmos.main)
 	}
 	if rsp.Reply != nil {
@@ -275,79 +377,6 @@ func (e *ElementRemote) sendMessage(fromID ID, name string, timeout time.Duratio
 		err = rsp.Error.AddStack(e.cosmos.main)
 	}
 	return reply, err
-}
-
-func (e *ElementRemote) getScaleID(fromID ID, name string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
-	// Send failed, how to handle? at least delete atom, and retry
-	argProto, er := anypb.New(args)
-	if er != nil {
-		return nil, nil, NewErrorf(ErrAtomMessageArgType, "marshal failed, err=(%v)", er)
-	}
-	req := &CosmosRemoteScalingReq{
-		From:     fromID.GetIDInfo(),
-		FromAddr: e.cosmos.main.getFromAddr(),
-		To:       e.GetIDInfo(),
-		Message:  name,
-		Args:     argProto,
-	}
-	rsp := &CosmosRemoteScalingRsp{}
-	if err := e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosElementScaling, req, rsp, timeout); err != nil {
-		return nil, nil, err.AddStack(e.cosmos.main)
-	}
-	if rsp.Error != nil {
-		return nil, nil, rsp.Error.AddStack(e.cosmos.main)
-	}
-	a := newAtomRemote(e, rsp.Id)
-	e.lock.Lock()
-	a, has := e.atoms[name]
-	if has {
-		a.info = rsp.Id
-	} else {
-		e.atoms[name] = a
-	}
-	e.lock.Unlock()
-	return a, a.idTracker.NewIDTracker(tracker), nil
-	//if rsp.Id != nil {
-	//	e.lock.Lock()
-	//	a, has := e.atoms[rsp.Id.Atomos]
-	//	if !has {
-	//		a = &AtomRemote{
-	//			element: e,
-	//			info: &AtomRemoteInfo{
-	//				Id: rsp.Id,
-	//			},
-	//			state:     AtomosStateUnknown,
-	//			count:     1,
-	//			callChain: nil,
-	//		}
-	//	} else {
-	//		a.count += 1
-	//	}
-	//	e.lock.Unlock()
-	//	id = a
-	//}
-	//if rsp.Error != nil {
-	//	err = rsp.Error
-	//}
-	//return id, tracker, err
-}
-
-//func (e *ElementRemote) release(a *AtomRemote) {
-//	a.count -= 1
-//	// TODO: Remove
-//}
-
-func (e *ElementRemote) elementAtomRelease(a *AtomRemote, tracker *IDTracker) {
-	req := &CosmosRemoteReleaseIDReq{
-		TrackerId: uint64(tracker.id),
-	}
-	rsp := &CosmosRemoteReleaseIDRsp{}
-	if err := e.cosmos.httpPost(e.cosmos.addr+RemoteAtomosIDRelease, req, rsp, 0); err != nil {
-		// TODO
-	}
-	if rsp.Error != nil {
-		// TODO
-	}
 }
 
 func (e *ElementRemote) elementAtomState(a *AtomRemote) AtomosState {

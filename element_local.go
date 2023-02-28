@@ -141,7 +141,7 @@ func (e *ElementLocal) MessageByName(from ID, name string, timeout time.Duration
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -251,7 +251,7 @@ func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, proto
 	if !has {
 		return nil, NewErrorf(ErrElementMessageHandlerNotExists, "Element: Handler not exists. from=(%v),name=(%s)", from, name).AddStack(nil)
 	}
-	decoderFn, has := e.current.ElementDecoders[name]
+	decoderFn, has := e.current.Interface.ElementDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrElementMessageDecoderNotExists, "Element: Decoder not exists. from=(%v),name=(%s)", from, name).AddStack(nil)
 	}
@@ -418,7 +418,7 @@ func (e *ElementLocal) pushMessageMail(from ID, name string, timeout time.Durati
 	}
 
 	_, ok := from.(*FirstID)
-	if !ok && e.isInChain(from.getCurCallChain()) {
+	if !ok && e.curCallChain != "" && e.isInChain(from.getCurCallChain()) {
 		return reply, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. to=(%v),name=(%s),arg=(%v)", e, name, arg).AddStack(e)
 	}
 	return e.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
@@ -466,17 +466,17 @@ func (e *ElementLocal) OnMessaging(from ID, name string, arg proto.Message) (rep
 	return
 }
 
-func (e *ElementLocal) pushScaleMail(from ID, name string, timeout time.Duration, arg proto.Message, t *IDTrackerInfo) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) pushScaleMail(fromID ID, name string, timeout time.Duration, arg proto.Message, t *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	// Dead Lock Checker.
-	if from != nil {
-		cc := from.getCurCallChain()
+	if fromID != nil {
+		cc := fromID.getCurCallChain()
 		if cc != "" && e.isInChain(cc) {
 			return nil, nil, NewErrorf(ErrAtomosCallDeadLock, "Element: Call Dead Lock. to=(%v),name=(%s),arg=(%v)",
 				e, name, arg).AddStack(e)
 		}
 	}
-	tracker := NewScaleIDRemoteIDTracker(t)
-	id, err := e.atomos.PushScaleMailAndWaitReply(from, name, timeout, arg, tracker)
+	tracker := newIDTracker(t)
+	id, err := e.atomos.PushScaleMailAndWaitReply(fromID, name, timeout, arg, tracker)
 	if err != nil {
 		return nil, nil, err.AddStack(e, &String{S: name}, arg)
 	}

@@ -20,9 +20,10 @@ const (
 const (
 	RemoteAtomosURIPrefix = "/remote"
 
-	RemoteAtomosConnect        = RemoteAtomosURIPrefix + "/connect"
-	RemoteAtomosElementScaling = RemoteAtomosURIPrefix + "/element/scaling"
-	RemoteAtomosGetAtom        = RemoteAtomosURIPrefix + "/id/get"
-	RemoteAtomosMessaging      = RemoteAtomosURIPrefix + "/id/messaging"
-	RemoteAtomosIDRelease      = RemoteAtomosURIPrefix + "/id/release"
+	RemoteAtomosConnect          = RemoteAtomosURIPrefix + "/connect"
+	RemoteAtomosElementScaling   = RemoteAtomosURIPrefix + "/element/scaling"
+	RemoteAtomosElementMessaging = RemoteAtomosURIPrefix + "/element/messaging"
+	RemoteAtomosGetAtom          = RemoteAtomosURIPrefix + "/atom/get"
+	RemoteAtomosAtomMessaging    = RemoteAtomosURIPrefix + "/atom/messaging"
+	RemoteAtomosIDRelease        = RemoteAtomosURIPrefix + "/id/release"
 )

@@ -39,7 +39,6 @@ const (
 	ErrCosmosRemoteRequestFailed
 	ErrCosmosRemoteResponseFailed
 	ErrCosmosRemoteInfoInvalid
-	ErrCosmosRemoteCannotSpawn
 	ErrCosmosRemoteCannotMessage
 	ErrCosmosRemoteCannotScale
 	ErrCosmosRemoteCannotSendWormhole
@@ -62,6 +61,11 @@ const (
 	ErrAppEnvRunPathPIDIsRunning
 	ErrAppEnvRunPathWritePIDFileFailed
 	ErrAppEnvRunPathRemovePIDFailed
+
+	// Global
+
+	ErrCosmosGlobalNoEtcdFailed
+	ErrCosmosGlobalEtcdConnectFailed
 
 	// Unix Domain Socket
 
@@ -96,6 +100,9 @@ const (
 	ErrElementCannotKill
 	ErrElementNoFromID
 	ErrElementNotImplemented
+	ErrElementFromIDInvalid
+	ErrElementToIDInvalid
+	ErrElementMessageArgType
 
 	// Atom
 

@@ -1,39 +1,36 @@
 package go_atomos
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type AtomRemote struct {
-	element *ElementRemote
-	info    *IDInfo
-
-	mutex sync.RWMutex
-
-	idTracker *IDTrackerManager
+	element       *ElementRemote
+	info          *IDInfo
+	callIDCounter uint64
 }
 
-func (a *AtomRemote) getCurCallChain() string {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (a *AtomRemote) First() ID {
-	//TODO implement me
-	panic("implement me")
+type AtomRemoteID struct {
+	*AtomRemote
+	callChain string
 }
 
 func newAtomRemote(e *ElementRemote, info *IDInfo) *AtomRemote {
 	a := &AtomRemote{
-		element:   e,
-		info:      info,
-		mutex:     sync.RWMutex{},
-		idTracker: nil,
+		element: e,
+		info:    info,
 	}
-	a.idTracker = NewIDTrackerManager(a)
 	return a
+}
+
+func (a *AtomRemote) newAtomRemoteID(callChain string) *AtomRemoteID {
+	return &AtomRemoteID{
+		AtomRemote: a,
+		callChain:  callChain,
+	}
 }
 
 //
@@ -49,7 +46,7 @@ func (a *AtomRemote) String() string {
 }
 
 func (a *AtomRemote) Release(tracker *IDTracker) {
-	a.element.elementAtomRelease(a, tracker)
+	a.element.elementAtomRelease(tracker)
 }
 
 func (a *AtomRemote) Cosmos() CosmosNode {
@@ -73,11 +70,11 @@ func (a *AtomRemote) IdleTime() time.Duration {
 }
 
 func (a *AtomRemote) MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error) {
-	return a.element.sendMessage(from, name, timeout, in)
+	return a.element.sendAtomMessage(from, a, name, timeout, in)
 }
 
 func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := a.element.impl.AtomDecoders[name]
+	decoderFn, has := a.element.intf.AtomDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -109,7 +106,19 @@ func (a *AtomRemote) getAtomRemote() *AtomRemote {
 }
 
 func (a *AtomRemote) getIDTrackerManager() *IDTrackerManager {
-	return a.idTracker
+	return nil
+}
+
+func (a *AtomRemote) getCurCallChain() string {
+	return ""
+}
+
+func (a *AtomRemote) First() ID {
+	callChainID := atomic.AddUint64(&a.callIDCounter, 1)
+	return &AtomRemoteID{
+		AtomRemote: a,
+		callChain:  fmt.Sprintf("%s:%d", a.info, callChainID),
+	}
 }
 
 //func (a *AtomRemote) sendMessage(fromID ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {

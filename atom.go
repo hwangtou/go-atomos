@@ -3,6 +3,7 @@ package go_atomos
 // CHECKED!
 
 import (
+	"fmt"
 	"google.golang.org/protobuf/proto"
 	"time"
 )
@@ -79,8 +80,8 @@ type FirstID struct {
 	ID
 }
 
-func (a *FirstID) isFirstAndGetRealID() (bool, ID) {
-	return true, a.ID
+func (a *FirstID) getFirstIDCallChain() string {
+	return fmt.Sprintf("%s:%d", a.ID, a.callID)
 }
 
 type ReleasableID interface {

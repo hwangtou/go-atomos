@@ -18,6 +18,11 @@ type CosmosMainScript interface {
 	OnShutdown() *Error
 }
 
+type CosmosMainGlobalRouter interface {
+	GetCosmosNodeName(element, atom string) (string, bool)
+	GetCosmosNodeAddress(node string) string
+}
+
 type CosmosProcessState int
 
 const (

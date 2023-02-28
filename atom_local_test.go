@@ -35,7 +35,7 @@ func TestAtomLocalBase(t *testing.T) {
 	testDeadlockAtomName := "testDeadlockAtom"
 
 	process := SharedCosmosProcess()
-	testElem, err := process.main.getElement(testElemName)
+	testElem, err := process.main.getLocalElement(testElemName)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Element not found. name=(%s)", testElemName)
 		return

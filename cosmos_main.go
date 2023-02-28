@@ -18,7 +18,6 @@ import (
 
 type CosmosMain struct {
 	process *CosmosProcess
-	global  *CosmosGlobal
 
 	// Config
 	runnable *CosmosRunnable
@@ -55,7 +54,7 @@ type CosmosMain struct {
 func initCosmosMain(process *CosmosProcess) *CosmosMain {
 	SharedLogging().PushProcessLog(LogLevel_Info, "Cosmos: Loading. pid=(%d)", os.Getpid())
 	id := &IDInfo{
-		Type:    processIDType,
+		Type:    IDType_Cosmos,
 		Cosmos:  "",
 		Element: "",
 		Atom:    "",
@@ -255,24 +254,36 @@ func (c *CosmosMain) CosmosIsLocal() bool {
 	return true
 }
 
-func (c *CosmosMain) CosmosGetElementID(elem string) (ID, *Error) {
-	return c.getElement(elem)
+func (c *CosmosMain) CosmosGetElementID(elemName string) (ID, *Error) {
+	e, err := c.getGlobalElement(elemName)
+	if err != nil {
+		return nil, err.AddStack(c)
+	}
+	return e, nil
 }
 
-func (c *CosmosMain) CosmosGetElementAtomID(elem, name string) (ID, *IDTracker, *Error) {
-	element, err := c.getElement(elem)
+func (c *CosmosMain) CosmosGetElementAtomID(elemName, name string) (id ID, tracker *IDTracker, err *Error) {
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return element.GetAtomID(name, NewIDTrackerInfo(3))
+	return e.GetAtomID(name, NewIDTrackerInfo(3))
 }
 
-func (c *CosmosMain) CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
-	element, err := c.getElement(elem)
+func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elemName, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, err.AddStack(c)
 	}
-	return element.SpawnAtom(name, arg, NewIDTrackerInfo(3))
+	return e.ScaleGetAtomID(fromID, message, timeout, args, NewIDTrackerInfo(3))
+}
+
+func (c *CosmosMain) CosmosSpawnElementAtom(elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
+	e, err := c.getGlobalElement(elemName)
+	if err != nil {
+		return nil, nil, err.AddStack(c)
+	}
+	return e.SpawnAtom(name, arg, NewIDTrackerInfo(3))
 }
 
 func (c *CosmosMain) CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
@@ -283,12 +294,36 @@ func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, timeout 
 	return toID.Element().MessageAtom(fromID, toID, message, timeout, args)
 }
 
-func (c *CosmosMain) CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
-	element, err := c.getElement(elem)
-	if err != nil {
-		return nil, nil, err.AddStack(c)
+func (c *CosmosMain) getGlobalElement(elemName string) (Element, *Error) {
+	router := c.runnable.mainRouter
+	if router == nil {
+		e, err := c.getLocalElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
 	}
-	return element.ScaleGetAtomID(fromID, message, timeout, args, NewIDTrackerInfo(3))
+
+	nodeName, has := router.GetCosmosNodeName(elemName, "")
+	if !has {
+		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", elemName).AddStack(c)
+	}
+
+	if nodeName == c.GetNodeName() {
+		e, err := c.getLocalElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
+	} else {
+		nodeAddress := router.GetCosmosNodeAddress(nodeName)
+		cr := c.GetRemote(nodeName, nodeAddress)
+		e, err := cr.getElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
+	}
 }
 
 // Implementation of AtomosUtilities
@@ -372,18 +407,16 @@ func (c *CosmosMain) Halted() {}
 
 // Element Inner
 
-func (c *CosmosMain) getElement(name string) (elem *ElementLocal, err *Error) {
+func (c *CosmosMain) getLocalElement(name string) (elem *ElementLocal, err *Error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil {
-		err = NewError(ErrMainRunnableNotFound, "Cosmos: It's not running.")
-		return nil, err
+		return nil, NewError(ErrMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
 	}
 	elem, has := c.elements[name]
 	if !has {
-		err = NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
-		return nil, err
+		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
 	}
 	return elem, nil
 }
@@ -493,6 +526,8 @@ type runnableLoadingHelper struct {
 
 	// TLS if exists
 	listenCert, clientCert *tls.Config
+
+	//etcd *etcdClient.Client
 }
 
 func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
@@ -527,6 +562,15 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 			}
 		}
 	}
+
+	//if etcd := newRunnable.config.EnableEtcd; etcd != nil {
+	//	c.Log().Info("Cosmos: Enable Etcd. endpoints=(%v)", etcd.Endpoints)
+	//	client, err := connectEtcd(etcd.Endpoints)
+	//	if err != nil {
+	//		return nil, err.AddStack(c)
+	//	}
+	//	helper.etcd = client
+	//}
 
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	// loadTlsCosmosNodeSupport()
@@ -604,20 +648,21 @@ func (c *CosmosMain) listen(runnable *CosmosRunnable, host string, port int32) *
 	mux := http.NewServeMux()
 	mux.HandleFunc(RemoteAtomosConnect, c.remoteConnect)
 	mux.HandleFunc(RemoteAtomosElementScaling, c.remoteElementScaling)
+	mux.HandleFunc(RemoteAtomosElementMessaging, c.remoteElementMessaging)
 	mux.HandleFunc(RemoteAtomosGetAtom, c.remoteAtomGet)
-	mux.HandleFunc(RemoteAtomosMessaging, c.remoteMessaging)
+	mux.HandleFunc(RemoteAtomosAtomMessaging, c.remoteAtomMessaging)
 	mux.HandleFunc(RemoteAtomosIDRelease, c.remoteIDRelease)
 
 	c.server = &http.Server{
 		Addr:    listenAddr,
 		Handler: mux,
 	}
-	if er := http2.ConfigureServer(c.server, &http2.Server{}); er != nil {
-		return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Configure server failed. err=(%v)", er).AddStack(c)
-	}
 
 	// Listen the local port.
 	if config.EnableCert != nil {
+		if er := http2.ConfigureServer(c.server, &http2.Server{}); er != nil {
+			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Configure server failed. err=(%v)", er).AddStack(c)
+		}
 		cert, er := tls.LoadX509KeyPair(config.EnableCert.CertPath, config.EnableCert.KeyPath)
 		if er != nil {
 			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Server cert invalid. err=(%v)", er).AddStack(c)
@@ -714,18 +759,20 @@ func (c *CosmosMain) remoteRequest(request *http.Request, req proto.Message) *Er
 }
 
 func (c *CosmosMain) remoteConnect(writer http.ResponseWriter, request *http.Request) {
-	info := &CosmosRemoteInfo{
-		Id:       c.GetIDInfo(),
-		Elements: map[string]*IDInfo{},
-		Changed:  0,
+	info := CosmosRemoteConnectInfo{
+		Config: &CosmosRemoteInfo{
+			Id:       c.GetIDInfo(),
+			Elements: map[string]*IDInfo{},
+			Changed:  0,
+		},
 	}
 	c.mutex.RLock()
 	for name, elem := range c.elements {
-		info.Elements[name] = elem.GetIDInfo()
+		info.Config.Elements[name] = elem.GetIDInfo()
 	}
 	c.mutex.RUnlock()
 
-	c.remoteResponse(request, writer, info, nil)
+	c.remoteResponse(request, writer, &info, nil)
 }
 
 func (c *CosmosMain) remoteElementScaling(writer http.ResponseWriter, request *http.Request) {
@@ -737,22 +784,22 @@ func (c *CosmosMain) remoteElementScaling(writer http.ResponseWriter, request *h
 	if req.From == nil {
 		req.From = &IDInfo{}
 	}
-	if req.To == nil {
-		req.To = &IDInfo{}
-	}
 	if req.FromTracker == nil {
 		req.FromTracker = &IDTrackerInfo{}
 	}
+	if req.To == nil {
+		req.To = &IDInfo{}
+	}
 
 	// FromID
-	fromID, err := c.getOrCreateRemoteID(req.From, req.From.Cosmos, req.FromAddr)
+	fromID, err := c.createRemoteID(req.From, req.From.Cosmos, req.FromCallChain)
 	if err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
 		return
 	}
 
 	// ToID
-	element, err := c.getElement(req.To.Element)
+	element, err := c.getLocalElement(req.To.Element)
 	if err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
 		return
@@ -770,7 +817,7 @@ func (c *CosmosMain) remoteElementScaling(writer http.ResponseWriter, request *h
 	}
 
 	rsp := &CosmosRemoteScalingRsp{}
-	scaleID, tracker, err := element.ScaleGetAtomID(fromID, req.Message, time.Duration(req.Timeout), args, req.FromTracker)
+	scaleID, tracker, err := element.ScaleGetAtomID(fromID, req.Message, time.Duration(req.Timeout)*time.Second, args, req.FromTracker)
 	if scaleID != nil {
 		c.mutex.Lock()
 		c.remoteTrackerCounter += 1
@@ -780,6 +827,64 @@ func (c *CosmosMain) remoteElementScaling(writer http.ResponseWriter, request *h
 		rsp.Id = scaleID.GetIDInfo()
 	}
 	rsp.Error = err
+
+	c.remoteResponse(request, writer, rsp, nil)
+}
+
+func (c *CosmosMain) remoteElementMessaging(writer http.ResponseWriter, request *http.Request) {
+	req := &CosmosRemoteMessagingReq{}
+	if err := c.remoteRequest(request, req); err != nil {
+		c.remoteResponse(request, writer, nil, err.AddStack(c))
+		return
+	}
+	if req.From == nil {
+		req.From = &IDInfo{}
+	}
+	if req.To == nil {
+		req.To = &IDInfo{}
+	}
+
+	// FromID
+	fromID, err := c.createRemoteID(req.From, req.From.Cosmos, req.FromCallChain)
+	if err != nil {
+		c.remoteResponse(request, writer, nil, err.AddStack(c))
+		return
+	}
+
+	// ToID
+	if req.To.Type != IDType_Element {
+		c.remoteResponse(request, writer, nil, NewErrorf(ErrCosmosRemoteResponseFailed, "CosmosRemote: Invalid FromID type.").AddStack(c))
+		return
+	}
+	element, err := c.getLocalElement(req.To.Element)
+	if err != nil {
+		c.remoteResponse(request, writer, nil, err.AddStack(c))
+		return
+	}
+
+	// Args
+	if req.Args == nil {
+		c.remoteResponse(request, writer, nil, NewErrorf(ErrCosmosRemoteResponseFailed, "CosmosRemote: Args invalid.").AddStack(c))
+		return
+	}
+	args, er := req.Args.UnmarshalNew()
+	if er != nil {
+		c.remoteResponse(request, writer, nil, NewErrorf(ErrCosmosRemoteResponseFailed, "CosmosRemote: Unmarshal failed. err=(%v)", er).AddStack(c))
+		return
+	}
+
+	rsp := &CosmosRemoteMessagingRsp{}
+	reply, err := element.MessageByName(fromID, req.Message, time.Duration(req.Timeout), args)
+	if reply != nil {
+		rsp.Reply, er = anypb.New(reply)
+		if er != nil {
+			c.remoteResponse(request, writer, nil, NewErrorf(ErrCosmosRemoteResponseFailed, "CosmosRemote: Marshal reply failed. err=(%v)", er).AddStack(c))
+			return
+		}
+	}
+	if err != nil {
+		rsp.Error = err
+	}
 
 	c.remoteResponse(request, writer, rsp, nil)
 }
@@ -794,15 +899,8 @@ func (c *CosmosMain) remoteAtomGet(writer http.ResponseWriter, request *http.Req
 		req.FromTracker = &IDTrackerInfo{}
 	}
 
-	//// FromID
-	//fromID, err := c.getOrCreateRemoteID(req.From, req.FromAddr)
-	//if err != nil {
-	//	c.remoteResponse(request, writer, nil, err.AddStack(c))
-	//	return
-	//}
-
 	// ToID
-	element, err := c.getElement(req.Element)
+	element, err := c.getLocalElement(req.Element)
 	if err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
 		return
@@ -823,7 +921,7 @@ func (c *CosmosMain) remoteAtomGet(writer http.ResponseWriter, request *http.Req
 	c.remoteResponse(request, writer, rsp, nil)
 }
 
-func (c *CosmosMain) remoteMessaging(writer http.ResponseWriter, request *http.Request) {
+func (c *CosmosMain) remoteAtomMessaging(writer http.ResponseWriter, request *http.Request) {
 	req := &CosmosRemoteMessagingReq{}
 	if err := c.remoteRequest(request, req); err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
@@ -837,34 +935,29 @@ func (c *CosmosMain) remoteMessaging(writer http.ResponseWriter, request *http.R
 	}
 
 	// FromID
-	fromID, err := c.getOrCreateRemoteID(req.From, req.From.Cosmos, req.FromAddr)
+	fromID, err := c.createRemoteID(req.From, req.From.Cosmos, req.FromCallChain)
 	if err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
 		return
 	}
 
 	// ToID
-	var toID ID
-	element, err := c.getElement(req.To.Element)
+	element, err := c.getLocalElement(req.To.Element)
 	if err != nil {
 		c.remoteResponse(request, writer, nil, err.AddStack(c))
 		return
 	}
-	switch req.To.Type {
-	case IDType_Element:
-		toID = element
-	case IDType_Atom:
-		id, tracker, err := element.GetAtomID(req.To.Atom, NewIDTrackerInfo(1))
-		if err != nil {
-			c.remoteResponse(request, writer, nil, err.AddStack(c))
-			return
-		}
-		defer tracker.Release()
-		toID = id
-	default:
+	if req.To.Type != IDType_Atom {
 		c.remoteResponse(request, writer, nil, NewErrorf(ErrCosmosRemoteResponseFailed, "CosmosRemote: Invalid FromID type.").AddStack(c))
 		return
 	}
+	// TODO: Remove Tracker
+	atomID, tracker, err := element.GetAtomID(req.To.Atom, NewIDTrackerInfo(1))
+	if err != nil {
+		c.remoteResponse(request, writer, nil, err.AddStack(c))
+		return
+	}
+	defer tracker.Release()
 
 	// Args
 	if req.Args == nil {
@@ -878,7 +971,7 @@ func (c *CosmosMain) remoteMessaging(writer http.ResponseWriter, request *http.R
 	}
 
 	rsp := &CosmosRemoteMessagingRsp{}
-	reply, err := toID.MessageByName(fromID, req.Message, time.Duration(req.Timeout), args)
+	reply, err := atomID.MessageByName(fromID, req.Message, time.Duration(req.Timeout), args)
 	if reply != nil {
 		rsp.Reply, er = anypb.New(reply)
 		if er != nil {
@@ -911,7 +1004,7 @@ func (c *CosmosMain) remoteIDRelease(writer http.ResponseWriter, request *http.R
 	c.remoteResponse(request, writer, rsp, nil)
 }
 
-func (c *CosmosMain) getOrCreateRemoteID(id *IDInfo, cosmos, addr string) (ID, *Error) {
+func (c *CosmosMain) createRemoteID(id *IDInfo, cosmos, callChain string) (ID, *Error) {
 	if id == nil {
 		return nil, NewErrorf(ErrAtomNotExists, "CosmosRemote: FromID is invalid.").AddStack(c)
 	}
@@ -920,6 +1013,7 @@ func (c *CosmosMain) getOrCreateRemoteID(id *IDInfo, cosmos, addr string) (ID, *
 	cr, has := c.remotes[cosmos]
 	c.mutex.RUnlock()
 	if !has {
+		addr := c.runnable.mainRouter.GetCosmosNodeAddress(cosmos)
 		cr = newCosmosRemote(c, cosmos, addr)
 		c.mutex.Lock()
 		if _, has = c.remotes[cosmos]; !has {
@@ -932,20 +1026,11 @@ func (c *CosmosMain) getOrCreateRemoteID(id *IDInfo, cosmos, addr string) (ID, *
 	elem, has := cr.elements[id.Element]
 	cr.RUnlock()
 	if !has {
-		elem = newElementRemote(cr, id.Element, &IDInfo{
-			Type:    IDType_Element,
-			Cosmos:  cr.atomos.id.Cosmos,
-			Element: id.Element,
-			Atom:    "",
-			Ext:     nil,
-		}, nil)
-		cr.Lock()
-		cr.elements[id.Element] = elem
-		cr.Unlock()
+		return nil, NewErrorf(ErrCosmosRemoteElementNotFound, "CosmosRemote: Element not found. name=(%s)", id.Element).AddStack(c)
 	}
 	switch id.Type {
 	case IDType_Element:
-		return elem, nil
+		return elem.newElementRemoteID(callChain), nil
 	case IDType_Atom:
 		elem.lock.RLock()
 		atom, has := elem.atoms[id.Atom]
@@ -960,16 +1045,7 @@ func (c *CosmosMain) getOrCreateRemoteID(id *IDInfo, cosmos, addr string) (ID, *
 			elem.atoms[id.Atom] = atom
 		}
 		elem.lock.Unlock()
-		return atom, nil
+		return atom.newAtomRemoteID(""), nil
 	}
 	return nil, NewErrorf(ErrAtomNotExists, "CosmosRemote: FromID invalid type.").AddStack(c)
-}
-
-func (c *CosmosMain) getFromAddr() string {
-	// TODO
-	s := c.runnable.config.EnableServer
-	if s == nil {
-		return ""
-	}
-	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }

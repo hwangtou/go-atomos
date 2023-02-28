@@ -128,7 +128,7 @@ func (a *AtomLocal) MessageByName(from ID, name string, timeout time.Duration, i
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -252,7 +252,7 @@ func (a *AtomLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJ
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: Handler not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
-	decoderFn, has := a.current.AtomDecoders[name]
+	decoderFn, has := a.current.Interface.AtomDecoders[name]
 	if !has {
 		return nil, NewErrorf(ErrAtomMessageDecoderNotExists, "Atom: Decoder not exists. from=(%v),name=(%s)", from, name).AddStack(a)
 	}
@@ -323,7 +323,7 @@ func (a *AtomLocal) pushMessageMail(from ID, name string, timeout time.Duration,
 	}
 
 	_, ok := from.(*FirstID)
-	if !ok && a.isInChain(from.getCurCallChain()) {
+	if !ok && a.curCallChain != "" && a.isInChain(from.getCurCallChain()) {
 		return reply, NewErrorf(ErrAtomosCallDeadLock, "Atom: Message Deadlock. to=(%v),name=(%s),arg=(%v)", a, name, arg).AddStack(a)
 	}
 	return a.atomos.PushMessageMailAndWaitReply(from, name, timeout, arg)
