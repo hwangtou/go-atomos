@@ -10,7 +10,7 @@ type testMainScript struct {
 	t *testing.T
 }
 
-func (s *testMainScript) OnStartup() *Error {
+func (s *testMainScript) OnStartup(*CosmosMain) *Error {
 	s.t.Log("testMainScript: StartUp Begin")
 	//panic("startup panic")
 	s.t.Log("testMainScript: StartUp End")

@@ -12,7 +12,7 @@ func main() {
 type mainScript struct {
 }
 
-func (m *mainScript) OnStartup() *atomos.Error {
+func (m *mainScript) OnStartup(*atomos.CosmosMain) *atomos.Error {
 	return nil
 }
 
