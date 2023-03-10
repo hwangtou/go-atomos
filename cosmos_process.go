@@ -14,7 +14,7 @@ type CosmosProcess struct {
 }
 
 type CosmosMainScript interface {
-	OnStartup() *Error
+	OnStartup(cosmosMain *CosmosMain) *Error
 	OnShutdown() *Error
 }
 
@@ -87,7 +87,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		if err = p.main.loadOnce(runnable); err != nil {
 			return err.AddStack(nil)
 		}
-		if err = p.main.runnable.mainScript.OnStartup(); err != nil {
+		if err = p.main.runnable.mainScript.OnStartup(p.main); err != nil {
 			p.mutex.Lock()
 			p.state = CosmosProcessStateOff
 			p.mutex.Unlock()

@@ -61,27 +61,59 @@ message ErrorCallerInfo {
 
 // Types
 
-message Nil {
-}
+message Nil {}
 
 message Int32 {
   int32 n = 1;
+}
+message Int32s {
+  repeated int32 ns = 1;
 }
 
 message Int64 {
   int64 n = 1;
 }
+message Int64s {
+  repeated int64 ns = 1;
+}
 
 message UInt32 {
   uint32 n = 1;
 }
+message UInt32s {
+  repeated uint32 ns = 1;
+}
 
 message UInt64 {
-  uint64 i = 1;
+  uint64 n = 1;
+}
+message UInt64s {
+  repeated uint64 ns = 1;
+}
+
+message Float32 {
+  float f = 1;
+}
+message Float32s {
+  repeated float fs = 1;
+}
+
+message Float64 {
+  double f = 1;
+}
+message Float64s {
+  repeated double fs = 1;
 }
 
 message String {
   string s = 1;
+}
+message Strings {
+  repeated string ss = 1;
+}
+
+message Bytes {
+  bytes b = 1;
 }
 
 // Configuration
