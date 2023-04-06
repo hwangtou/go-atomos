@@ -519,7 +519,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 				return err.AddStack(a)
 			}
 			if data == nil && arg == nil {
-				return NewErrorf(ErrAtomSpawnArgInvalid, "Spawn atom without arg, name=(%s)",
+				return NewErrorf(ErrAtomDataNotFound, "Atom data not found. name=(%s)",
 					name).AddStack(a)
 			}
 		}

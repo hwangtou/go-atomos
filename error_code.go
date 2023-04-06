@@ -112,7 +112,7 @@ const (
 	ErrAtomKillElementNotImplementAutoDataPersistence
 	ErrAtomFromIDInvalid
 	ErrAtomToIDInvalid
-	ErrAtomSpawnArgInvalid
+	ErrAtomDataNotFound
 	ErrAtomNotExists
 	ErrAtomExists
 	ErrAtomIsStopping
