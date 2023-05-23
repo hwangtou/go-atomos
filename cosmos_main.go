@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	etcdCli "go.etcd.io/etcd/client/v3"
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -41,6 +42,9 @@ type CosmosMain struct {
 	// Remote
 	server   *http.Server
 	listener net.Listener
+
+	// ETCD
+	etcdClient *etcdCli.Client
 
 	// 调用链
 	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
@@ -294,6 +298,31 @@ func (c *CosmosMain) CosmosMessageAtom(fromID, toID ID, message string, timeout 
 	return toID.Element().MessageAtom(fromID, toID, message, timeout, args)
 }
 
+func (c *CosmosMain) ElementBroadcast(fromID ID, key, contentType string, contentBuffer []byte) (err *Error) {
+	elems, err := c.getLocalAllElements()
+	if err != nil {
+		return err.AddStack(c)
+	}
+	for _, elem := range elems {
+		if elem.current == nil {
+			continue
+		}
+		handler, has := elem.current.ElementHandlers[ElementBroadcastName]
+		if !has {
+			continue
+		}
+		_, err := handler(fromID, elem.atomos.GetInstance(), &ElementBroadcastI{
+			Key:           key,
+			ContentType:   contentType,
+			ContentBuffer: contentBuffer,
+		})
+		if err != nil {
+			// TODO
+		}
+	}
+	return nil
+}
+
 func (c *CosmosMain) getGlobalElement(elemName string) (Element, *Error) {
 	router := c.runnable.mainRouter
 	if router == nil {
@@ -421,6 +450,19 @@ func (c *CosmosMain) getLocalElement(name string) (elem *ElementLocal, err *Erro
 	return elem, nil
 }
 
+func (c *CosmosMain) getLocalAllElements() (elems []*ElementLocal, err *Error) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if c.runnable == nil {
+		return nil, NewError(ErrMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
+	}
+	for _, elem := range c.elements {
+		elems = append(elems, elem)
+	}
+	return elems, nil
+}
+
 func (c *CosmosMain) trySpawningElements(helper *runnableLoadingHelper) (err *Error) {
 	c.atomos.id.Cosmos = helper.newRunnable.config.Node
 	c.atomos.log.level = helper.newRunnable.config.LogLevel
@@ -527,7 +569,7 @@ type runnableLoadingHelper struct {
 	// TLS if exists
 	listenCert, clientCert *tls.Config
 
-	//etcd *etcdClient.Client
+	etcd *etcdCli.Client
 }
 
 func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
@@ -563,14 +605,14 @@ func (c *CosmosMain) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRu
 		}
 	}
 
-	//if etcd := newRunnable.config.EnableEtcd; etcd != nil {
-	//	c.Log().Info("Cosmos: Enable Etcd. endpoints=(%v)", etcd.Endpoints)
-	//	client, err := connectEtcd(etcd.Endpoints)
-	//	if err != nil {
-	//		return nil, err.AddStack(c)
-	//	}
-	//	helper.etcd = client
-	//}
+	if etcd := newRunnable.config.EnableEtcd; etcd != nil {
+		c.Log().Info("Cosmos: Enable Etcd. endpoints=(%v)", etcd.Endpoints)
+		client, err := connectEtcd(etcd.Endpoints)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		helper.etcd = client
+	}
 
 	// 加载TLS Cosmos Node支持，用于加密链接。
 	// loadTlsCosmosNodeSupport()
@@ -677,6 +719,9 @@ func (c *CosmosMain) listen(runnable *CosmosRunnable, host string, port int32) *
 		c.listener = listener
 	} else {
 		// Listen the local port.
+		if er := http2.ConfigureServer(c.server, &http2.Server{}); er != nil {
+			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Configure server failed. err=(%v)", er).AddStack(c)
+		}
 		listener, er := net.Listen("tcp", listenAddr)
 		if er != nil {
 			return NewErrorf(ErrCosmosRemoteListenFailed, "Cosmos: Loading server failed. err=(%v)", er).AddStack(c)
@@ -686,6 +731,44 @@ func (c *CosmosMain) listen(runnable *CosmosRunnable, host string, port int32) *
 	go c.server.Serve(c.listener)
 	return nil
 }
+
+//func (c *CosmosMain) etcdConnect(endpoints []string) *Error {
+//	// Connect to etcd
+//	client, er := etcdCli.New(etcdCli.Config{
+//		Endpoints:   endpoints,
+//		DialTimeout: 3 * time.Second,
+//	})
+//	if er != nil {
+//		return NewErrorf(ErrCosmosGlobalEtcdConnectFailed, "Cosmos: Connect etcd failed. endpoints=(%v),err=(%v)", endpoints, er).AddStack(c)
+//	}
+//	defer client.Close()
+//
+//	c.etcdClient = client
+//
+//	// Run the keepalive function
+//	c.keepalive(client)
+//	return nil
+//}
+//
+//func (c *CosmosMain) keepalive(client *etcdCli.Client) {
+//	for {
+//		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+//		now := fmt.Sprintf("%d", time.Now().Unix())
+//		_, err := client.Put(ctx, c.etcdKeepaliveKey(), now)
+//		cancel()
+//
+//		if err != nil {
+//			log.Println("Keepalive update failed:", err)
+//		} else {
+//			log.Println("Keepalive updated:", now)
+//		}
+//
+//		time.Sleep(etcdKeepaliveInterval)
+//	}
+//}
+//
+//func (c *CosmosMain) etcdKeepaliveKey() string {
+//}
 
 func (c *CosmosMain) GetRemote(cosmos, addr string) *CosmosRemote {
 	c.mutex.RLock()

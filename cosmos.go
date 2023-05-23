@@ -39,6 +39,8 @@ type CosmosNode interface {
 
 	CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
 	CosmosMessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
+
+	ElementBroadcast(fromID ID, key, contentType string, contentBuffer []byte) (err *Error)
 }
 
 //////////////////////////////////////////////////

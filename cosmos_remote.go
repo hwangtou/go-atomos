@@ -171,6 +171,10 @@ func (c *CosmosRemote) CosmosMessageAtom(fromID, toID ID, message string, timeou
 	return toID.Element().MessageAtom(fromID, toID, message, timeout, args)
 }
 
+func (c *CosmosRemote) ElementBroadcast(fromID ID, key, contentType string, contentBuffer []byte) (err *Error) {
+	panic("not supported")
+}
+
 func (c *CosmosRemote) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
 	return nil, NewError(ErrCosmosRemoteCannotMessage, "CosmosRemote: Cannot send cosmos message.").AddStack(c.main)
 }
@@ -236,8 +240,8 @@ func (c *CosmosRemote) connect(cosmos string) *Error {
 	if err := info.IsValid(cosmos); err != nil {
 		return err.AddStack(c.main)
 	}
-	elements := make(map[string]*ElementRemote, len(info.Config.Elements))
 	c.main.mutex.RLock()
+	elements := make(map[string]*ElementRemote, len(info.Config.Elements))
 	for name, elementRemoteInfo := range info.Config.Elements {
 		e, has := c.main.elements[name]
 		if !has {

@@ -131,6 +131,7 @@ type ElementSelfID interface {
 	SelfID
 
 	Persistence() ElementCustomizeAutoDataPersistence
+	GetAtoms() []*AtomLocal
 }
 
 type ParallelFn func(self SelfID, message proto.Message, id ...ID)

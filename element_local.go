@@ -246,6 +246,18 @@ func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
 	return p
 }
 
+func (e *ElementLocal) GetAtoms() []*AtomLocal {
+	e.lock.RLock()
+	atoms := make([]*AtomLocal, 0, len(e.atoms))
+	for _, atomLocal := range e.atoms {
+		if atomLocal.atomos.IsInState(AtomosSpawning, AtomosWaiting, AtomosBusy) {
+			atoms = append(atoms, atomLocal)
+		}
+	}
+	e.lock.RUnlock()
+	return atoms
+}
+
 func (e *ElementLocal) MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error) {
 	handlerFn, has := e.current.ElementHandlers[name]
 	if !has {
@@ -311,9 +323,9 @@ func (e *ElementLocal) GetActiveAtomsNum() int {
 }
 
 func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
+	e.lock.RLock()
 	info := make(map[string]string, len(e.atoms))
 	atoms := make([]*AtomLocal, 0, len(e.atoms))
-	e.lock.RLock()
 	for _, atomLocal := range e.atoms {
 		if atomLocal.atomos.IsInState(AtomosHalt) {
 			atoms = append(atoms, atomLocal)

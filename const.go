@@ -1,12 +1,17 @@
 package go_atomos
 
+import "time"
+
 // LoggingAtomos
 const (
 	logTimeFmt = "2006-01-02 15:04:05.000000"
-	logStdout  = false
-	logStderr  = false
 	logTestOut = true
 	logTestErr = true
+)
+
+var (
+	LogStdout = false
+	LogStderr = false
 )
 
 const (
@@ -26,4 +31,12 @@ const (
 	RemoteAtomosGetAtom          = RemoteAtomosURIPrefix + "/atom/get"
 	RemoteAtomosAtomMessaging    = RemoteAtomosURIPrefix + "/atom/messaging"
 	RemoteAtomosIDRelease        = RemoteAtomosURIPrefix + "/id/release"
+)
+
+const (
+	etcdKeepaliveInterval = 10 * time.Second
+)
+
+const (
+	ElementBroadcastName = "Broadcast"
 )

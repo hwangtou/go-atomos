@@ -260,3 +260,10 @@ message CosmosRemoteReleaseIDRsp {
   Error error = 1;
 }
 
+// Try to call "Broadcast" on Element.
+message ElementBroadcastI {
+  string key = 1;
+  string content_type = 2;
+  bytes content_buffer = 3;
+}
+message ElementBroadcastO {}

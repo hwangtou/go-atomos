@@ -119,7 +119,7 @@ func (l *appLogging) logFileFormatter(prefix, flag string) string {
 // Log
 
 func (l *appLogging) WriteAccessLog(s string) {
-	if logStdout {
+	if LogStdout {
 		_, _ = os.Stdout.WriteString(s)
 	}
 	if logTestOut && appLoggingTestingT != nil {
@@ -151,7 +151,7 @@ func (l *appLogging) WriteAccessLog(s string) {
 func (l *appLogging) WriteErrorLog(s string) {
 	l.WriteAccessLog(s)
 
-	if logStderr {
+	if LogStderr {
 		_, _ = os.Stdout.WriteString(s)
 		_, _ = os.Stderr.WriteString(s)
 	}
