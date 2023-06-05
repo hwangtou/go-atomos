@@ -9,23 +9,36 @@ import (
 	"strings"
 )
 
+func (x *Config) Check() *Error {
+	if x == nil {
+		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+	}
+	if x.Cosmos == "" {
+		return NewError(ErrCosmosConfigInvalid, "Cosmos is empty").AddStack(nil)
+	}
+	if x.Node == "" {
+		return NewError(ErrCosmosConfigInvalid, "Node is empty").AddStack(nil)
+	}
+	return nil
+}
+
 func (x *IDInfo) Info() string {
 	if x == nil {
 		return "NilID"
 	}
 	switch x.Type {
 	case IDType_Atom:
-		return fmt.Sprintf("%s::%s::%s", x.Cosmos, x.Element, x.Atom)
+		return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Atom)
 	case IDType_Element:
-		return fmt.Sprintf("%s::%s", x.Cosmos, x.Element)
+		return fmt.Sprintf("%s::%s", x.Node, x.Element)
 	case IDType_Cosmos:
-		return x.Cosmos
-	case IDType_AppLoader:
-		return "AppLoader"
-	case IDType_App:
-		return "App"
+		return x.Node
+	//case IDType_AppLoader:
+	//	return "AppLoader"
+	//case IDType_App:
+	//	return "App"
 	default:
-		return x.Cosmos
+		return x.Node
 	}
 }
 
@@ -33,7 +46,7 @@ func (x *IDInfo) IsEqual(r *IDInfo) bool {
 	if x.Type != r.Type {
 		return false
 	}
-	return x.Atom == r.Atom && x.Element == r.Element && x.Cosmos == r.Cosmos
+	return x.Atom == r.Atom && x.Element == r.Element && x.Node == r.Node
 }
 
 func SelfID2IDInfo(id SelfID) *IDInfo {
@@ -135,31 +148,5 @@ func (x *Error) Error() string {
 }
 
 func (x *Error) IsAtomExist() bool {
-	return x.Code == ErrAtomExists
-}
-
-func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
-	if x.Host != server.Host {
-		return false
-	}
-	if x.Port != server.Port {
-		return false
-	}
-	return true
-}
-
-func (x *CosmosRemoteConnectInfo) IsValid(cosmos string) *Error {
-	if x.Config == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info invalid.").AddStack(nil)
-	}
-	if x.Config.Id == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info ID invalid.").AddStack(nil)
-	}
-	if x.Config.Id.Type != IDType_Cosmos || x.Config.Id.Cosmos != cosmos {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info id invalid.").AddStack(nil)
-	}
-	if x.Config.Elements == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info elements invalid.").AddStack(nil)
-	}
-	return nil
+	return x.Code == ErrAtomIsRunning
 }

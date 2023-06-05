@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"fmt"
 	"runtime/debug"
 	"sync"
 )
@@ -28,7 +29,7 @@ const (
 type MailboxHandler interface {
 	mailboxOnStartUp(fn func() *Error) *Error
 	mailboxOnReceive(mail *mail)
-	mailboxOnStop(stopMail, remainMails *mail, num uint32)
+	mailboxOnStop(stopMail, remainMails *mail, num uint32) *Error
 }
 
 type mailBox struct {
@@ -40,18 +41,25 @@ type mailBox struct {
 	head    *mail
 	tail    *mail
 	num     uint32
+
+	accessLogging loggingFn
+	errorLogging  loggingFn
+
+	goID uint64
 }
 
-func newMailBox(name string, handler MailboxHandler) *mailBox {
+func newMailBox(name string, handler MailboxHandler, accessLogging, errorLogging loggingFn) *mailBox {
 	mb := &mailBox{
-		name:    name,
-		mutex:   sync.Mutex{},
-		cond:    nil,
-		running: false,
-		handler: handler,
-		head:    nil,
-		tail:    nil,
-		num:     0,
+		name:          name,
+		mutex:         sync.Mutex{},
+		cond:          nil,
+		running:       false,
+		handler:       handler,
+		head:          nil,
+		tail:          nil,
+		num:           0,
+		accessLogging: accessLogging,
+		errorLogging:  errorLogging,
 	}
 	mb.cond = sync.NewCond(&mb.mutex)
 	return mb
@@ -67,17 +75,13 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
-		return NewError(ErrFrameworkPanic, "Mailbox: Has already run.").AddStack(nil)
+		return NewError(ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
 	mb.mutex.Unlock()
-	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
-		mb.mutex.Lock()
-		mb.running = false
-		mb.mutex.Unlock()
+	if err := mb.startLoop(fn); err != nil {
 		return err.AddStack(nil)
 	}
-	go mb.loop()
 	return nil
 }
 
@@ -244,19 +248,57 @@ func (mb *mailBox) removeMail(dm *mail) bool {
 	return false
 }
 
-func (mb *mailBox) loop() {
-	sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
-	defer func() {
-		sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
+func (mb *mailBox) startLoop(fn func() *Error) *Error {
+	waitStart := make(chan *Error, 1)
+	go mb.loop(waitStart, fn)
+	err := <-waitStart
+	if err != nil {
+		mb.mutex.Lock()
+		mb.running = false
+		mb.mutex.Unlock()
+		return err.AddStack(nil)
+	}
+	return nil
+}
+
+func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
+	// 获取当前进程Goroutine ID。
+	// TODO: 这种处理基本上认为不会出现getGoID失败而导致的情况，因此也没有做loop在这里退出的后续处理。
+	mb.goID = func() uint64 {
+		defer func() {
+			if r := recover(); r != nil {
+				mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)\n",
+					r, string(debug.Stack())))
+			}
+		}()
+		return getGoID()
 	}()
+	if mb.goID == 0 {
+		mb.errorLogging("Mailbox: Failed to get goID.\n")
+		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
+		return
+	}
+
+	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)\n", mb.name))
+	defer func() {
+		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)\n", mb.name))
+	}()
+
+	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
+		mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute start up. err=(%v)\n", err))
+		wait <- err.AddStack(nil)
+		return
+	}
+	wait <- nil
+
 	for {
 		if exit := func() (exit bool) {
 			exit = false
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic, reason=(%v),stack=(%s)",
-						r, string(debug.Stack()))
+					mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. reason=(%v),stack=(%s)\n",
+						r, string(debug.Stack())))
 				}
 			}()
 			for {
@@ -277,10 +319,17 @@ func (mb *mailBox) loop() {
 					mails, num := mb.popAll()
 					if m := curMail.mail; m != nil {
 						if m.executeStop {
-							mb.handler.mailboxOnStop(curMail, mails, num)
+							if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+								mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop. err=(%v)\n", err))
+							}
 						}
 						// Wait channel.
 						m.sendReply(nil, nil)
+					}
+					if l := curMail.log; l != nil {
+						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+							mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop, logMail. err=(%v)\n", err))
+						}
 					}
 					return
 				}

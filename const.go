@@ -1,8 +1,6 @@
 package go_atomos
 
-import "time"
-
-// LoggingAtomos
+// loggingAtomos
 const (
 	logTimeFmt = "2006-01-02 15:04:05.000000"
 	logTestOut = true
@@ -14,27 +12,20 @@ var (
 	LogStderr = false
 )
 
+func SetLogStdout(b bool) {
+	LogStdout = b
+}
+
+func SetLogStderr(b bool) {
+	LogStderr = b
+}
+
 const (
 	udsConnReadBufSize = 1024
 )
 
 const (
 	ShouldArgumentClone = false
-)
-
-const (
-	RemoteAtomosURIPrefix = "/remote"
-
-	RemoteAtomosConnect          = RemoteAtomosURIPrefix + "/connect"
-	RemoteAtomosElementScaling   = RemoteAtomosURIPrefix + "/element/scaling"
-	RemoteAtomosElementMessaging = RemoteAtomosURIPrefix + "/element/messaging"
-	RemoteAtomosGetAtom          = RemoteAtomosURIPrefix + "/atom/get"
-	RemoteAtomosAtomMessaging    = RemoteAtomosURIPrefix + "/atom/messaging"
-	RemoteAtomosIDRelease        = RemoteAtomosURIPrefix + "/id/release"
-)
-
-const (
-	etcdKeepaliveInterval = 10 * time.Second
 )
 
 const (

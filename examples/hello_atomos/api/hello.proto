@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package api;
+option go_package = "./api";
+
+import "atomos.proto";
+
+// 创建一个名叫HelloAtomos的Atomos服务。用于展示Atomos的基本功能。
+// Create an Atomos service named HelloAtomos. Used to demonstrate the basic functions of Atomos.
+//
+// 安装Atomos文件生成工具：go install github.com/hwangtou/go-atomos/protoc-gen-go-atomos
+// Install Atomos file generation tool: go install github.com/hwangtou/go-atomos/protoc-gen-go-atomos
+//
+// 在hello_atomos目录下执行：protoc --go_out=. --go-atomos_out=. api/hello.proto
+// Execute in the hello_atomos directory: protoc --go_out=. --go-atomos_out=. api/hello.proto
+
+service HelloAtomos {
+
+  // Element
+  //
+  // 以Element开头的方法，是用于创建Element相关的功能。
+  // The methods starting with Element are used to create Element related functions.
+  // HAE = HelloAtomosElement
+
+  // Element的创建（自旋）方法
+  // Element creation (spin) method
+  // 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
+  rpc ElementSpawn (atomos.Nil) returns (HAEData) {}
+  // 向Element发送SayHello消息
+  // Send SayHello message to Element
+  // I = Input
+  // O = Output
+  rpc ElementSayHello (HAEHelloI) returns (HAEHelloO) {}
+
+  // Atomos Special Implements
+  // Atomos的特殊实现
+  //
+  // 支持广播通知（类似MQ机制）
+  rpc ElementBroadcast (atomos.ElementBroadcastI) returns (atomos.ElementBroadcastO) {}
+
+  // Scale
+  //
+  // 以Scale开头的方法，是用于创建Scale相关的功能，以实现负债均衡。
+  // The methods starting with Scale are used to create Scale related functions to achieve load balancing.
+
+  // 向负载均衡的ID发送Bonjour消息
+  // Send Bonjour message to the ID of the load balancer
+  // HA = HelloAtomosAtom
+  rpc ScaleBonjour (HABonjourI) returns (HABonjourO) {}
+
+  // Atom
+  //
+  // 不以Element和Scale开头的方法，是用于创建Atom相关的功能。
+  // The methods that do not start with Element and Scale are used to create Atom related functions.
+
+  // Spawn
+  // Atom的创建（自旋）方法
+  // Atom creation (spin) method
+  // 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
+  rpc Spawn (HASpawnArg) returns (HAData) {}
+
+  // 向Atom发送Greeting消息
+  // Send Greeting message to Atom
+  rpc Greeting (HAGreetingI) returns (HAGreetingO) {}
+}
+
+message HAEData {}
+
+message HAEHelloI {
+  string name = 1;
+}
+message HAEHelloO {
+  string message = 1;
+}
+
+message HABonjourI {}
+message HABonjourO {}
+
+message HAData {}
+message HASpawnArg {
+  int32 id = 1;
+}
+
+message HAGreetingI {
+  // 测试模式
+  enum TestMode {
+    // 无
+    None = 0;
+    // 测试自我同步调用死锁
+    SyncSelfCallDeadlock = 1;
+  }
+  TestMode mode = 1;
+}
+message HAGreetingO {}

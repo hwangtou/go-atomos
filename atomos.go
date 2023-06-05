@@ -10,28 +10,19 @@ import "google.golang.org/protobuf/proto"
 type Atomos interface {
 	String() string
 
+	// Halt 关闭
 	// Halt
-	// 关闭
-	Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message)
+	Halt(from ID, cancelled []uint64) (save bool, data proto.Message)
 }
 
-type AtomosRecover interface {
-	ParallelRecover(err *Error)
-	SpawnRecover(arg proto.Message, err *Error)
-	MessageRecover(name string, arg proto.Message, err *Error)
-	ScaleRecover(name string, arg proto.Message, err *Error)
-	TaskRecover(taskID uint64, name string, arg proto.Message, err *Error)
-	StopRecover(err *Error)
-}
-
+// AtomosUtilities Atomos的实用工具集。
+// Atomos Utilities.
 type AtomosUtilities interface {
-	// Log
-	// Atom日志。
-	// Atom Logs.
+	// Log 日志。
+	// Logging.
 	Log() Logging
 
-	// Task
-	// Atom任务
-	// Atom Tasks.
+	// Task 任务，用于把任务放到Atomos的任务队列中。这是同步串行的执行逻辑。
+	// Task is used to put tasks into the Atomos task queue. This is a synchronous serial execution logic.
 	Task() Task
 }

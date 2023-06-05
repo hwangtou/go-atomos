@@ -3,7 +3,9 @@ package go_atomos
 const (
 	OK = iota
 
-	ErrFrameworkPanic
+	ErrFrameworkInternalError
+	ErrFrameworkRecoverFromPanic
+	ErrFrameworkIncorrectUsage
 
 	// Cosmos Process
 
@@ -23,11 +25,14 @@ const (
 	ErrMainElementNotFound
 	ErrMainStartRunningPanic
 	ErrMainCannotKill
+	ErrMainCannotSendWormhole
 	ErrMainCannotMessage
 	ErrMainCannotScale
 	ErrMainRunnableNotFound
-	ErrMainRunnableConfigNotFound
-	ErrMainRunnableScriptNotFound
+	ErrRunnableConfigNotFound
+	ErrRunnableInterfaceInvalid
+	ErrRunnableImplementInvalid
+	ErrRunnableScriptNotFound
 
 	// Cosmos Global
 
@@ -36,8 +41,11 @@ const (
 	ErrCosmosRemoteElementNotFound
 	ErrCosmosRemoteListenFailed
 	ErrCosmosRemoteConnectFailed
-	ErrCosmosRemoteRequestFailed
+	ErrCosmosRemoteRequestInvalid
 	ErrCosmosRemoteResponseFailed
+	ErrCosmosRemoteResponseInvalid
+	ErrCosmosRemoteServerInvalidArgs
+	ErrCosmosRemoteServerInvalidFirstSyncCall
 	ErrCosmosRemoteInfoInvalid
 	ErrCosmosRemoteCannotMessage
 	ErrCosmosRemoteCannotScale
@@ -49,6 +57,17 @@ const (
 	// Config
 
 	ErrCosmosConfigInvalid
+	ErrCosmosEtcdConnectFailed
+	ErrCosmosEtcdClusterTLSInvalid
+	ErrCosmosEtcdClusterVersionsCheckFailed
+	ErrCosmosEtcdClusterVersionLockFailed
+	ErrCosmosEtcdGRPCServerFailed
+	ErrCosmosEtcdKeepaliveFailed
+	ErrCosmosEtcdInvalidKey
+	ErrCosmosEtcdUpdateFailed
+	ErrCosmosEtcdGetFailed
+	ErrCosmosEtcdPutFailed
+	ErrCosmosEtcdDeleteFailed
 	ErrCosmosConfigCertInvalid
 	ErrCosmosIsClosed
 
@@ -85,10 +104,15 @@ const (
 	ErrAtomosIsNotRunning
 	ErrAtomosTaskInvalidFn
 	ErrAtomosTaskNotExists
+	ErrAtomosTaskAddCrontabFailed
+	ErrAtomosTaskRemoveCrontabFailed
 	ErrAtomosNotSupportWormhole
 	ErrAtomosPushTimeoutHandling
 	ErrAtomosPushTimeoutReject
-	ErrAtomosCallDeadLock
+
+	// idFirstSyncCall
+
+	ErrIDFirstSyncCallDeadlock
 
 	// Element
 
@@ -114,7 +138,7 @@ const (
 	ErrAtomToIDInvalid
 	ErrAtomDataNotFound
 	ErrAtomNotExists
-	ErrAtomExists
+	ErrAtomIsRunning
 	ErrAtomIsStopping
 	ErrAtomCannotScale
 	ErrAtomNoFromID

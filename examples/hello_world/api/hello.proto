@@ -15,7 +15,7 @@
 syntax = "proto3";
 
 package api;
-option go_package = "examples/hello/api";
+option go_package = "examples/hello_world/api";
 
 // The greeting service definition.
 // New line
