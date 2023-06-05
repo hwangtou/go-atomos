@@ -3,8 +3,8 @@ package elements
 import (
 	"fmt"
 	atomos "github.com/hwangtou/go-atomos"
-	"github.com/hwangtou/go-atomos/examples/hello/api"
 	"google.golang.org/protobuf/proto"
+	"hello_world/api"
 	"runtime"
 	"strconv"
 	"time"
@@ -16,11 +16,11 @@ type Hello struct {
 }
 
 func (h *Hello) ElementConstructor() atomos.Atomos {
-	return &HelloElement{}
+	return NewHelloElement()
 }
 
 func (h *Hello) AtomConstructor(name string) atomos.Atomos {
-	return &HelloAtom{}
+	return NewHelloAtom()
 }
 
 // Element
@@ -30,24 +30,28 @@ type HelloElement struct {
 	data *api.HelloData
 
 	scaleID int
-	scale   map[string]api.HelloAtomID
+	scale   map[string]*api.HelloAtomID
+}
+
+func NewHelloElement() api.HelloElement {
+	return &HelloElement{}
 }
 
 func (h *HelloElement) String() string {
-	return h.self.GetName()
+	return h.self.GetIDInfo().Atom
 }
 
 func (h *HelloElement) Spawn(self atomos.ElementSelfID, data *api.HelloData) *atomos.Error {
 	h.self = self
 	h.data = data
-	h.scale = map[string]api.HelloAtomID{}
+	h.scale = map[string]*api.HelloAtomID{}
 	h.self.Log().Info("Spawn")
 
-	h.self.Task().AddAfter(5*time.Second, h.CheckClear, nil)
+	h.CheckClear(0)
 	return nil
 }
 
-func (h *HelloElement) Halt(from atomos.ID, cancelled map[uint64]atomos.CancelledTask) (save bool, data proto.Message) {
+func (h *HelloElement) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.Message) {
 	h.self.Log().Info("Halt")
 	return false, nil
 }
@@ -57,7 +61,7 @@ func (h *HelloElement) SayHello(from atomos.ID, in *api.HelloReq) (*api.HelloRes
 	return &api.HelloResp{}, nil
 }
 
-func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (api.HelloAtomID, *atomos.Error) {
+func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (*api.HelloAtomID, *atomos.Error) {
 	// 不是一个完美的测试方法，因为scale中的waiting的atom，可能是上一个请求创建出来还未被使用的。
 	for name, id := range h.scale {
 		switch id.State() {
@@ -79,8 +83,11 @@ func (h *HelloElement) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (api.Hel
 	return id, nil
 }
 
-func (h *HelloElement) CheckClear(id uint64, data proto.Message) {
-	h.self.Task().AddAfter(5*time.Second, h.CheckClear, nil)
+func (h *HelloElement) CheckClear(id uint64) {
+	// 因为只有atomos运行时，才会调用到闭包里的内容，所以安全，且线程安全。
+	h.self.Task().AddAfter(5*time.Second, func(taskID uint64) {
+		h.CheckClear(taskID)
+	})
 	h.self.Log().Info("CheckClear scaleID=(%d)", h.scaleID)
 	for name, atomID := range h.scale {
 		switch atomID.State() {
@@ -105,8 +112,12 @@ type HelloAtom struct {
 	updated int64
 }
 
+func NewHelloAtom() api.HelloAtom {
+	return &HelloAtom{}
+}
+
 func (h *HelloAtom) String() string {
-	return h.self.GetName()
+	return h.self.GetIDInfo().Atom
 }
 
 func (h *HelloAtom) Spawn(self atomos.AtomSelfID, arg *api.HelloSpawnArg, data *api.HelloData) *atomos.Error {
@@ -116,7 +127,7 @@ func (h *HelloAtom) Spawn(self atomos.AtomSelfID, arg *api.HelloSpawnArg, data *
 	return nil
 }
 
-func (h *HelloAtom) Halt(from atomos.ID, cancelled map[uint64]atomos.CancelledTask) (save bool, data proto.Message) {
+func (h *HelloAtom) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.Message) {
 	h.self.Log().Info("Halt")
 	return false, nil
 }
@@ -152,9 +163,9 @@ func (h *HelloAtom) MakePanic(from atomos.ID, in *api.MakePanicIn) (*api.MakePan
 	panic("make panic")
 }
 
-func (h *HelloAtom) Bonjour(from atomos.ID, in *api.BonjourReq) (*api.BonjourResp, *atomos.Error) {
-	h.self.Log().Info("Bonjour, %s", h.self.GetName())
+func (h *HelloAtom) ScaleBonjour(from atomos.ID, in *api.BonjourReq) (*api.BonjourResp, *atomos.Error) {
+	h.self.Log().Info("Bonjour, %s", h.self.GetIDInfo().Atom)
 	time.Sleep(1 * time.Second)
-	h.self.Log().Info("Bye, %s", h.self.GetName())
+	h.self.Log().Info("Bye, %s", h.self.GetIDInfo().Atom)
 	return &api.BonjourResp{}, nil
 }

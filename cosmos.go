@@ -12,6 +12,8 @@ import (
 // 仅供生成器内部使用
 
 type CosmosNode interface {
+	ID
+
 	GetNodeName() string
 
 	CosmosIsLocal() bool
@@ -22,25 +24,18 @@ type CosmosNode interface {
 	// 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the AtomID of an Atom by Element nodeName and Atom nodeName.
 
-	CosmosGetElementAtomID(elem, name string) (ID, *IDTracker, *Error)
+	CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error)
 
-	CosmosScaleElementGetAtomID(fromID ID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error)
+	CosmosGetScaleAtomID(callerID SelfID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error)
 
 	// SpawnElementAtom
 	// 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
 
-	CosmosSpawnElementAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error)
+	CosmosSpawnAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error)
 
-	// MessageAtom
-	// 向一个Atom发送消息。
-	// Send Message to an Atom/Element.
-
-	CosmosMessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
-	CosmosMessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
-
-	ElementBroadcast(fromID ID, key, contentType string, contentBuffer []byte) (err *Error)
+	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error)
 }
 
 //////////////////////////////////////////////////
@@ -56,13 +51,13 @@ type CosmosRunnable struct {
 	mainScript     CosmosMainScript
 	mainRouter     CosmosMainGlobalRouter
 
-	hookAtomSpawning hookAtomFn
-	hookAtomSpawn    hookAtomFn
-	hookAtomStopping hookAtomFn
-	hookAtomHalt     hookAtomFn
-}
+	isCurrentVersion bool
 
-type hookAtomFn func(elem string, name string)
+	//hookAtomSpawning hookAtomFn
+	//hookAtomSpawn    hookAtomFn
+	//hookAtomStopping hookAtomFn
+	//hookAtomHalt     hookAtomFn
+}
 
 func (r *CosmosRunnable) Check() *Error {
 	if r.config == nil {
@@ -119,4 +114,9 @@ func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable 
 func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnable {
 	r.mainRouter = router
 	return r
+}
+
+func (r *CosmosRunnable) SetIsCurrentVersion() *Config {
+	r.isCurrentVersion = true
+	return r.config
 }

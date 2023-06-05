@@ -65,10 +65,12 @@ func newTestFakeCosmosMainConfig() *Config {
 		ConfigerUrl:       "",
 		LogLevel:          0,
 		LogPath:           "/tmp/test_atomos_app_logging",
+		LogMaxSize:        0,
+		BuildPath:         "",
+		BinPath:           "",
 		RunPath:           "/tmp/test_atomos_app_run",
 		EtcPath:           "/tmp/test_atomos_app_etc",
-		EnableCert:        nil,
-		EnableServer:      nil,
+		EnableCluster:     nil,
 		Customize:         nil,
 	}
 }
@@ -133,39 +135,45 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 			},
 			"testMessageDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageDeadlock. from=(%v),to=(%v),in=(%v)", from, to, in)
-				return sharedTestAtom2.pushMessageMail(sharedTestAtom1, "testMessageDeadlockTarget", 0, nil)
+				return sharedTestAtom2.SyncMessagingByName(sharedTestAtom1, "testMessageDeadlockTarget", 0, nil)
 			},
 			"testMessageElementDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageElementDeadlock. from=(%v),to=(%v),in=(%v)", from, to, in)
-				return sharedTestElement1.pushMessageMail(sharedTestAtom1, "testMessageDeadlockTarget", 0, nil)
+				return sharedTestElement1.SyncMessagingByName(sharedTestAtom1, "testMessageDeadlockTarget", 0, nil)
 			},
 			"testMessageDeadlockTarget": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageDeadlockTarget. from=(%v),to=(%v),in=(%v)", from, to, in)
-				return sharedTestAtom1.pushMessageMail(sharedTestAtom2, "testMessageDeadlock", 0, nil)
+				return sharedTestAtom1.SyncMessagingByName(sharedTestAtom2, "testMessageDeadlock", 0, nil)
 			},
 			"testTask": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				ta := to.(*testAtom)
 				t.Logf("AtomHandlers: testTask. from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				taskID, err := ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err := ta.self.Task().Add(func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append failed. err=(%v)", err)
 					return nil, err
 				}
 				// Append then cancel
-				taskID, err = ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err = ta.self.Task().Add(func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append failed. err=(%v)", err)
 					return nil, err
 				}
-				canceled, err := ta.self.Task().Cancel(taskID)
-				t.Logf("AtomHandlers: testTask, Cancel task, canceled=(%v)", canceled)
+				err = ta.self.Task().Cancel(taskID)
+				t.Logf("AtomHandlers: testTask, Cancel task, taskID=(%v),err=(%v)", taskID, err)
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append then cancel failed. err=(%v)", err)
 					return nil, err
 				}
 				// Timer
-				taskID, err = ta.self.Task().AddAfter(1*time.Millisecond, ta.Tasking, nil)
+				taskID, err = ta.self.Task().AddAfter(1*time.Millisecond, func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, AddAfter failed. err=(%v)", err)
 					return nil, err
@@ -177,7 +185,9 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				ta := to.(*testAtom)
 				t.Logf("AtomHandlers: testTaskPanic. from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				_, err = ta.self.Task().Append(ta.TaskingPanic, nil)
+				_, err = ta.self.Task().Add(func(taskID uint64) {
+					ta.TaskingPanic(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTaskPanic, Append failed. err=(%v)", err)
 					return nil, err
@@ -211,31 +221,37 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 			},
 			"testMessageDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageDeadlock. from=(%v),to=(%v),in=(%v)", from, to, in)
-				return sharedTestAtom1.pushMessageMail(sharedTestElement1, "testMessageElementDeadlock", 0, nil)
+				return sharedTestAtom1.SyncMessagingByName(sharedTestElement1, "testMessageElementDeadlock", 0, nil)
 			},
 			"testTask": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				ta := to.(*testElement)
 				t.Logf("AtomHandlers: testTask. from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				taskID, err := ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err := ta.self.Task().Add(func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append failed. err=(%v)", err)
 					return nil, err
 				}
 				// Append then cancel
-				taskID, err = ta.self.Task().Append(ta.Tasking, nil)
+				taskID, err = ta.self.Task().Add(func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append failed. err=(%v)", err)
 					return nil, err
 				}
-				canceled, err := ta.self.Task().Cancel(taskID)
-				t.Logf("AtomHandlers: testTask, Cancel task, canceled=(%v)", canceled)
+				err = ta.self.Task().Cancel(taskID)
+				t.Logf("AtomHandlers: testTask, Cancel task, canceled=(%v),err=(%v)", taskID, err)
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, Append then cancel failed. err=(%v)", err)
 					return nil, err
 				}
 				// Timer
-				taskID, err = ta.self.Task().AddAfter(1*time.Millisecond, ta.Tasking, nil)
+				taskID, err = ta.self.Task().AddAfter(1*time.Millisecond, func(taskID uint64) {
+					ta.Tasking(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTask, AddAfter failed. err=(%v)", err)
 					return nil, err
@@ -247,7 +263,9 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				ta := to.(*testElement)
 				t.Logf("AtomHandlers: testTaskPanic. from=(%v),to=(%v),in=(%v)", from, to, in)
 				// Append
-				_, err = ta.self.Task().Append(ta.TaskingPanic, nil)
+				_, err = ta.self.Task().Add(func(taskID uint64) {
+					ta.TaskingPanic(taskID, nil)
+				})
 				if err != nil {
 					ta.self.Log().Error("AtomHandlers: testTaskPanic, Append failed. err=(%v)", err)
 					return nil, err
@@ -274,7 +292,7 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				return sharedTestAtom1, nil
 			},
 			"ScaleTestMessageError": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
-				return sharedTestAtom1, NewError(ErrFrameworkPanic, "Scale ID failed")
+				return sharedTestAtom1, NewError(ErrFrameworkRecoverFromPanic, "Scale ID failed")
 			},
 			"ScaleTestMessagePanic": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
 				panic("Get scale ID panic")
@@ -329,7 +347,7 @@ func (t *testElementAutoDataDev) AtomAutoDataPersistence() AtomAutoDataPersisten
 func (t *testElementAutoDataDev) GetAtomData(name string) (proto.Message, *Error) {
 	switch name {
 	case "get_data_error":
-		return nil, NewError(ErrFrameworkPanic, "").AddStack(nil)
+		return nil, NewError(ErrFrameworkRecoverFromPanic, "").AddStack(nil)
 	case "get_data_panic":
 		panic("Data panic")
 	}
@@ -339,7 +357,7 @@ func (t *testElementAutoDataDev) GetAtomData(name string) (proto.Message, *Error
 func (t *testElementAutoDataDev) SetAtomData(name string, data proto.Message) *Error {
 	switch name {
 	case "set_data_error":
-		return NewError(ErrFrameworkPanic, "").AddStack(nil)
+		return NewError(ErrFrameworkRecoverFromPanic, "").AddStack(nil)
 	case "set_data_panic":
 		panic("Data panic")
 	}
@@ -355,7 +373,7 @@ func (t *testElementAutoDataDev) ElementAutoDataPersistence() ElementAutoDataPer
 
 func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
 	if testElementGetDataError {
-		return nil, NewError(ErrFrameworkPanic, "Get Element Data Error").AddStack(nil)
+		return nil, NewError(ErrFrameworkRecoverFromPanic, "Get Element Data Error").AddStack(nil)
 	}
 	if testElementGetDataPanic {
 		panic("Get Element Data Panic")
@@ -365,7 +383,7 @@ func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
 
 func (t *testElementAutoDataDev) SetElementData(data proto.Message) *Error {
 	if testElementSetDataError {
-		return NewError(ErrFrameworkPanic, "Set Element Data Error").AddStack(nil).AddStack(nil)
+		return NewError(ErrFrameworkRecoverFromPanic, "Set Element Data Error").AddStack(nil).AddStack(nil)
 	}
 	if testElementSetDataPanic {
 		panic("Set Element Data Panic")
@@ -421,9 +439,9 @@ func (t testAtom) String() string {
 	return "testAtom"
 }
 
-func (t *testAtom) Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message) {
+func (t *testAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
 	t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
-	if t.self.GetName() == "stopping_panic" {
+	if t.self.GetIDInfo().Atom == "stopping_panic" {
 		panic("Halt panic")
 	}
 	return t.data != nil, t.data
@@ -485,7 +503,7 @@ func (t testElement) String() string {
 	return "testElement"
 }
 
-func (t testElement) Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message) {
+func (t testElement) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
 	t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
 	if testElementHaltPanic {
 		panic("Element Halt Panic")
@@ -531,7 +549,7 @@ func testAppUDSServer(t *testing.T) (*appUDSServer, *Error) {
 	file, er := s.listener.File()
 	if er != nil {
 		t.Errorf("testAppUDSServer: Socket error. err=(%v)", er)
-		return nil, NewErrorf(ErrFrameworkPanic, "Socket file error. err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Socket file error. err=(%v)", er).AddStack(nil)
 	}
 	t.Logf("TestAppSocketListener: File=(%v)", file)
 	return s, nil

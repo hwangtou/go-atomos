@@ -3,7 +3,6 @@ package go_atomos
 // CHECKED!
 
 import (
-	"fmt"
 	"google.golang.org/protobuf/proto"
 	"time"
 )
@@ -23,6 +22,15 @@ const RunnableName = "AtomosRunnable"
 
 // ID 是Atom的类似句柄的对象。
 // ID, an instance that similar to file descriptor of the Atom.
+//
+// ID，相当于Atom的句柄的概念。
+// 通过ID，可以访问到Atom所在的Cosmos、Element、Name，以及发送Kill信息，但是否能成功Kill，还需要AtomCanKill函数的认证。
+// 直接用AtomLocal继承ID，因此本地的ID直接使用AtomLocal的引用即可。
+//
+// ID, a concept similar to file descriptor of an atomos.
+// With ID, we can access the Cosmos, Element and Name of the Atom. We can also send Kill signal to the Atom,
+// then the AtomCanKill method judge kill it or not.
+// AtomLocal implements ID interface directly, so local ID is able to use AtomLocal reference directly.
 type ID interface {
 	GetIDInfo() *IDInfo
 	String() string
@@ -32,56 +40,27 @@ type ID interface {
 	// Cosmos Node of the Atom.
 	Cosmos() CosmosNode
 
-	// Element
-	// Atom所属的Element类型。
-	// Element type of the Atom.
-	Element() Element
-
-	// GetName
-	// ID名称。
-	// Name of the ID.
-	GetName() string
-
 	State() AtomosState
 	IdleTime() time.Duration
 
-	MessageByName(from ID, name string, timeout time.Duration, in proto.Message) (proto.Message, *Error)
+	SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error)
+	AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error))
 
-	DecoderByName(name string) (MessageDecoder, MessageDecoder)
+	DecoderByName(name string) (in, out MessageDecoder)
 
 	// Kill
 	// 从其它Atom或者main发送Kill消息。
 	// write Kill signal from other Atom or main.
-	Kill(from ID, timeout time.Duration) *Error
+	Kill(callerID SelfID, timeout time.Duration) *Error
 
 	// SendWormhole
 	// Send wormhole to atomos.
-	SendWormhole(from ID, timeout time.Duration, wormhole AtomosWormhole) *Error
-
-	// Info
-
-	// Transaction
+	SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error
 
 	// Internal
 
-	getElementLocal() *ElementLocal
-	getAtomLocal() *AtomLocal
-	getElementRemote() *ElementRemote
-	getAtomRemote() *AtomRemote
-	getIDTrackerManager() *IDTrackerManager
-
-	getCurCallChain() string
-
-	First() ID
-}
-
-type FirstID struct {
-	callID uint64
-	ID
-}
-
-func (a *FirstID) getFirstIDCallChain() string {
-	return fmt.Sprintf("%s:%d", a.ID, a.callID)
+	getIDTrackerManager() *idTrackerManager
+	getGoID() uint64
 }
 
 type ReleasableID interface {
@@ -103,11 +82,12 @@ type ReleasableID interface {
 type SelfID interface {
 	ID
 	AtomosUtilities
+	idFirstSyncCall
 
-	// CosmosMain
+	// CosmosLocal
 	// 获取Atom的CosmosProcess。
 	// Access to the CosmosProcess of the Atom.
-	CosmosMain() *CosmosMain
+	CosmosMain() *CosmosLocal
 
 	// KillSelf
 	// Atom从内部杀死自己。
@@ -118,7 +98,8 @@ type SelfID interface {
 
 	Config() map[string][]byte
 
-	MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error)
+	pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
+	//MessageSelfByName(from ID, name string, buf []byte, protoOrJSON bool) ([]byte, *Error)
 }
 
 type AtomSelfID interface {

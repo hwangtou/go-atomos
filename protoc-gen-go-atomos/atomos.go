@@ -258,7 +258,7 @@ func genAtomIDInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P(deprecationComment)
 	}
 	g.P("func Get", atomNameID, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (", atomNameID, ", *", atomosPackage.Ident("Error"), ") {")
-	g.P("ca, tracker, err := c.CosmosGetElementAtomID(", atomName, "Name, name)")
+	g.P("ca, tracker, err := c.CosmosGetAtomID(", atomName, "Name, name)")
 	g.P("if err != nil { return nil, err }")
 	g.P("return &", noExport(atomNameID), "{ca, tracker, ", atomosPackage.Ident("DefaultTimeout"), "}, nil")
 	g.P("}")
@@ -396,7 +396,7 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("func Spawn", atomName, "(c ", atomosPackage.Ident("CosmosNode"),
 			", name string, arg *", spawnArgTypeName, ") (",
 			idName, ", *", atomosPackage.Ident("Error"), ") {")
-		g.P("id, tracker, err := c.CosmosSpawnElementAtom(", elementName, "Name, name, arg)")
+		g.P("id, tracker, err := c.CosmosSpawnAtom(", elementName, "Name, name, arg)")
 		g.P("if id == nil { return nil, err.AddStack(nil) }")
 		g.P("return &", noExport(idName), "{id, tracker, ", atomosPackage.Ident("DefaultTimeout"), "}, err")
 		g.P("}")
@@ -453,7 +453,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			") (*", g.QualifiedGoIdent(method.Output.GoIdent),
 			", *", atomosPackage.Ident("Error"), ")", " {")
-		g.P("id, tracker, err := c.Cosmos().CosmosScaleElementGetAtomID(from, ", service.GoName, "Name, \"", scaleName, "\", c.Timeout, in)")
+		g.P("id, tracker, err := c.Cosmos().CosmosGetScaleAtomID(from, ", service.GoName, "Name, \"", scaleName, "\", c.Timeout, in)")
 		g.P("if err != nil { return nil, err }")
 		g.P("defer tracker.Release()")
 		g.P("r, err := c.Cosmos().CosmosMessageAtom(from, id, \"", scaleName, "\", c.Timeout, in)")

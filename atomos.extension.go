@@ -135,31 +135,5 @@ func (x *Error) Error() string {
 }
 
 func (x *Error) IsAtomExist() bool {
-	return x.Code == ErrAtomExists
-}
-
-func (x *RemoteServerConfig) IsEqual(server *RemoteServerConfig) bool {
-	if x.Host != server.Host {
-		return false
-	}
-	if x.Port != server.Port {
-		return false
-	}
-	return true
-}
-
-func (x *CosmosRemoteConnectInfo) IsValid(cosmos string) *Error {
-	if x.Config == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info invalid.").AddStack(nil)
-	}
-	if x.Config.Id == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info ID invalid.").AddStack(nil)
-	}
-	if x.Config.Id.Type != IDType_Cosmos || x.Config.Id.Cosmos != cosmos {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info id invalid.").AddStack(nil)
-	}
-	if x.Config.Elements == nil {
-		return NewErrorf(ErrCosmosRemoteInfoInvalid, "CosmosRemote: Remote info elements invalid.").AddStack(nil)
-	}
-	return nil
+	return x.Code == ErrAtomIsRunning
 }

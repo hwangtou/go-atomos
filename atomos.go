@@ -12,7 +12,7 @@ type Atomos interface {
 
 	// Halt
 	// 关闭
-	Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message)
+	Halt(from ID, cancelled []uint64) (save bool, data proto.Message)
 }
 
 type AtomosRecover interface {

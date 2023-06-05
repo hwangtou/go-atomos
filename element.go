@@ -21,10 +21,10 @@ import (
 type Element interface {
 	ID
 
-	// GetElementName
-	// Element和其相关的Atom的名称。
-	// Name of the Element and its Atoms.
-	GetElementName() string
+	//// GetElementName
+	//// Element和其相关的Atom的名称。
+	//// Name of the Element and its Atoms.
+	//GetElementName() string
 
 	// GetAtomID
 	// 通过Atom名称获取指定的Atom的ID。
@@ -38,21 +38,9 @@ type Element interface {
 	// SpawnAtom
 	// 启动一个Atom。
 	// Spawn an Atom.
-	SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error)
+	SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error)
 
-	// MessageAtom
-	// 向一个Atom发送消息。
-	// Send Message to an Atom.
-
-	MessageElement(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
-	MessageAtom(fromID, toID ID, message string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error)
-
-	ScaleGetAtomID(fromID ID, message string, timeout time.Duration, args proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error)
-
-	// KillAtom
-	// 向一个Atom发送Kill。
-	// Send Kill to an Atom.
-	KillAtom(fromID, toID ID, timeout time.Duration) *Error
+	ScaleGetAtomID(callerID SelfID, name string, timeout time.Duration, in proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error)
 }
 
 type ElementCustomizeVersion interface {

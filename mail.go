@@ -40,6 +40,8 @@ type mailBox struct {
 	head    *mail
 	tail    *mail
 	num     uint32
+
+	goID uint64
 }
 
 func newMailBox(name string, handler MailboxHandler) *mailBox {
@@ -67,7 +69,7 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
-		return NewError(ErrFrameworkPanic, "Mailbox: Has already run.").AddStack(nil)
+		return NewError(ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
 	mb.mutex.Unlock()
@@ -245,6 +247,17 @@ func (mb *mailBox) removeMail(dm *mail) bool {
 }
 
 func (mb *mailBox) loop() {
+	// 获取当前进程Goroutine ID。
+	mb.goID = func() uint64 {
+		defer func() {
+			if r := recover(); r != nil {
+				sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)",
+					r, string(debug.Stack()))
+			}
+		}()
+		return getGoID()
+	}()
+
 	sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
 	defer func() {
 		sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
@@ -255,7 +268,7 @@ func (mb *mailBox) loop() {
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic, reason=(%v),stack=(%s)",
+					sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
 						r, string(debug.Stack()))
 				}
 			}()

@@ -20,14 +20,9 @@ message IDInfo {
   string cosmos = 2;
   string element = 3;
   string atom = 4;
-  google.protobuf.Any ext = 5;
+  uint64 go_id = 5;
+  google.protobuf.Any ext = 6;
 }
-
-//message AtomID {
-//  string node = 1;
-//  string element = 2;
-//  string name = 3;
-//}
 
 enum LogLevel {
   Debug = 0;
@@ -142,21 +137,23 @@ message Config {
   string etc_path = 13;
 
   // 节点通讯
-  CertConfig enable_cert = 14;
-  RemoteServerConfig enable_server = 15;
-  EtcdConfig enable_etcd = 16;
+  CosmosClusterConfig enable_cluster = 14;
 
   // 自定义配置
-  map<string, bytes> customize = 17;
+  map<string, bytes> customize = 15;
 }
 
-message RemoteServerConfig {
-  string host = 1;
-  int32 port = 2;
-}
+message CosmosClusterConfig{
+  // 是否使用集群
+  bool enable = 1;
 
-message EtcdConfig {
-  repeated string endpoints = 1;
+  // etcd节点
+  repeated string etcd_endpoints = 2;
+
+  repeated uint32 optional_ports = 3;
+
+  // 证书配置
+  CertConfig enable_cert = 4;
 }
 
 message CertConfig {
@@ -167,8 +164,7 @@ message CertConfig {
 
 message CosmosLocalConfig {
   string node_name = 1;
-  RemoteServerConfig enable_remote = 2;
-  repeated string elements = 3;
+  repeated string elements = 2;
 }
 
 message ElementConfig {
@@ -193,71 +189,12 @@ message UDSCommandPacket {
 
 // Cosmos Requester
 
-message CosmosRemoteConnectInfo {
-  CosmosRemoteInfo config = 1;
-}
-
-message CosmosRemoteInfo {
-  IDInfo id = 1;
-  map<string, IDInfo> elements = 2;
-  int64 changed = 3;
-}
-
 // Cosmos Requester
 
 message IDTrackerInfo {
   string file = 1;
   int32 line = 2;
   string name = 3;
-}
-
-message CosmosRemoteScalingReq {
-  IDInfo from = 1;
-  string from_call_chain = 2;
-  IDTrackerInfo from_tracker = 3;
-  IDInfo to = 4;
-  float timeout = 5;
-  string message = 6;
-  google.protobuf.Any args = 7;
-}
-
-message CosmosRemoteScalingRsp {
-  IDInfo id = 1;
-  Error error = 2;
-  uint64 tracker_id = 3;
-}
-
-message CosmosRemoteGetIDReq {
-  IDTrackerInfo from_tracker = 2;
-  string element = 3;
-  string atom = 4;
-}
-
-message CosmosRemoteGetIDRsp {
-  IDInfo id = 1;
-  Error error = 2;
-  uint64 tracker_id = 3;
-}
-
-message CosmosRemoteMessagingReq {
-  IDInfo from = 1;
-  string from_call_chain = 2;
-  IDInfo to = 3;
-  float timeout = 5;
-  string message = 6;
-  google.protobuf.Any args = 7;
-}
-
-message CosmosRemoteMessagingRsp {
-  google.protobuf.Any reply = 1;
-  Error error = 2;
-}
-
-message CosmosRemoteReleaseIDReq {
-  uint64 tracker_id = 1;
-}
-message CosmosRemoteReleaseIDRsp {
-  Error error = 1;
 }
 
 // Try to call "Broadcast" on Element.
@@ -267,3 +204,128 @@ message ElementBroadcastI {
   bytes content_buffer = 3;
 }
 message ElementBroadcastO {}
+
+// Cluster Supports
+
+message CosmosProcessInfo {
+  string node = 1;
+  string address = 2;
+  IDInfo id = 3;
+  map<string, IDInfo> elements = 4;
+}
+
+service AtomosRemoteService {
+  rpc ScaleGetAtomID(CosmosRemoteScaleGetAtomIDReq) returns (CosmosRemoteScaleGetAtomIDRsp) {}
+
+  rpc GetAtomID(CosmosRemoteGetAtomIDReq) returns (CosmosRemoteGetAtomIDRsp) {}
+  rpc GetIDState(CosmosRemoteGetIDStateReq) returns (CosmosRemoteGetIDStateRsp) {}
+  rpc GetIDIdleTime(CosmosRemoteGetIDIdleTimeReq) returns (CosmosRemoteGetIDIdleTimeRsp) {}
+  rpc GetElementInfo(CosmosRemoteGetElementInfoReq) returns (CosmosRemoteGetElementInfoRsp) {}
+
+  rpc SpawnAtom(CosmosRemoteSpawnAtomReq) returns (CosmosRemoteSpawnAtomRsp) {}
+  rpc SyncMessagingByName(CosmosRemoteSyncMessagingByNameReq) returns (CosmosRemoteSyncMessagingByNameRsp) {}
+  rpc ReleaseID(CosmosRemoteReleaseIDReq) returns (CosmosRemoteReleaseIDRsp) {}
+
+  rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
+}
+
+// Scale Get Atom ID
+message CosmosRemoteScaleGetAtomIDReq {
+  IDInfo caller_id = 1;
+  string caller_cur_first_sync_call = 2;
+  IDTrackerInfo from_tracker = 3;
+  IDInfo to = 4;
+  int64 timeout = 5;
+  string message = 6;
+  google.protobuf.Any args = 7;
+}
+message CosmosRemoteScaleGetAtomIDRsp {
+  IDInfo id = 1;
+  Error error = 2;
+  uint64 tracker_id = 3;
+}
+
+// Get Atom ID
+message CosmosRemoteGetAtomIDReq {
+  IDTrackerInfo from_tracker = 1;
+  string element = 2;
+  string atom = 3;
+}
+message CosmosRemoteGetAtomIDRsp {
+  IDInfo id = 1;
+  Error error = 2;
+  uint64 tracker_id = 3;
+}
+
+// Get ID State
+message CosmosRemoteGetIDStateReq {
+  IDInfo id = 1;
+}
+message CosmosRemoteGetIDStateRsp {
+  Error error = 1;
+  int32 state = 2;
+}
+
+// Get Idle Time
+message CosmosRemoteGetIDIdleTimeReq {
+  IDInfo id = 1;
+}
+message CosmosRemoteGetIDIdleTimeRsp {
+  Error error = 1;
+  int64 idle_time = 2;
+}
+
+// Get Element Info
+message CosmosRemoteGetElementInfoReq {
+  string element = 1;
+}
+message CosmosRemoteGetElementInfoRsp {
+  uint64 atoms_num = 1;
+  uint64 active_atoms_num = 2;
+}
+
+// Spawn Atom
+message CosmosRemoteSpawnAtomReq {
+  string element = 1;
+  string atom = 2;
+  IDTrackerInfo from_tracker = 3;
+  google.protobuf.Any args = 4;
+}
+message CosmosRemoteSpawnAtomRsp {
+  IDInfo id = 1;
+  Error error = 2;
+  uint64 tracker_id = 3;
+}
+
+// Sync Messaging
+message CosmosRemoteSyncMessagingByNameReq {
+  IDInfo caller_id = 1;
+  string caller_cur_first_sync_call = 2;
+  IDInfo to = 3;
+  int64 timeout = 4;
+  string message = 5;
+  google.protobuf.Any args = 6;
+}
+message CosmosRemoteSyncMessagingByNameRsp {
+  google.protobuf.Any reply = 1;
+  Error error = 2;
+}
+
+// Release ID
+message CosmosRemoteReleaseIDReq {
+  uint64 tracker_id = 1;
+}
+message CosmosRemoteReleaseIDRsp {
+  Error error = 1;
+}
+
+// Element Broadcast
+message CosmosRemoteElementBroadcastReq {
+  IDInfo caller_id = 1;
+  string key = 2;
+  string content_type = 3;
+  bytes content_buffer = 4;
+}
+message CosmosRemoteElementBroadcastRsp {
+  Error error = 1;
+}

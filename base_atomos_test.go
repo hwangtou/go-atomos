@@ -10,7 +10,7 @@ type testMainScript struct {
 	t *testing.T
 }
 
-func (s *testMainScript) OnStartup(*CosmosMain) *Error {
+func (s *testMainScript) OnStartup(*CosmosLocal) *Error {
 	s.t.Log("testMainScript: StartUp Begin")
 	//panic("startup panic")
 	s.t.Log("testMainScript: StartUp End")
@@ -28,13 +28,18 @@ type TestAtomosHolder struct {
 	T *testing.T
 }
 
-func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error) {
-	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", from, a.state, name, args)
+func (t *TestAtomosHolder) OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (t *TestAtomosHolder) OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error) {
+	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", fromID, a.state, name, in)
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
 				if err == nil {
-					err = NewErrorf(ErrFrameworkPanic, "Atom: Messaging recovers from panic.").AddPanicStack(nil, 1, r)
+					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Messaging recovers from panic.").AddPanicStack(nil, 1, r)
 				}
 			}
 		}()
@@ -46,7 +51,7 @@ func (t *TestAtomosHolder) OnMessaging(from ID, name string, args proto.Message)
 	return
 }
 
-func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
+func (t *TestAtomosHolder) OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
 	panic("not supported")
 }
 
@@ -55,7 +60,7 @@ func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	return nil
 }
 
-func (t *TestAtomosHolder) OnStopping(from ID, cancelled map[uint64]CancelledTask) *Error {
+func (t *TestAtomosHolder) OnStopping(from ID, cancelled []uint64) *Error {
 	t.T.Logf("OnStopping: from=(%v),state=(%v),cancelled=(%v)", from, a.state, cancelled)
 	return nil
 }
@@ -89,7 +94,7 @@ func (t *TestAtomosInstance) String() string {
 	return "Description"
 }
 
-func (t *TestAtomosInstance) Halt(from ID, cancelled map[uint64]CancelledTask) (save bool, data proto.Message) {
+func (t *TestAtomosInstance) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
 	t.T.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
 	return true, nil
 }
@@ -119,49 +124,53 @@ func TestBaseAtomos(t *testing.T) {
 	_ = atom.start(nil)
 	a = atom
 	// Push Message
-	reply, err := a.PushMessageMailAndWaitReply(nil, "message", 0, nil)
+	reply, err := a.PushMessageMailAndWaitReply(nil, "", "message", 0, nil)
 	if err != nil {
 		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
 		return
 	}
 	// Push Task
-	taskID, err := a.Task().AddAfter(0, instance.TestTask, nil)
+	taskID, err := a.Task().AddAfter(0, func(taskID uint64) {
+		instance.TestTask(taskID, nil)
+	})
 	if err != nil {
 		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
 		return
 	}
 	// Push Task
-	taskID, err = a.Task().AddAfter(1*time.Second, instance.TestTask, nil)
+	taskID, err = a.Task().AddAfter(1*time.Second, func(taskID uint64) {
+		instance.TestTask(taskID, nil)
+	})
 	if err != nil {
 		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
 		return
 	}
 	// Push Wormhole
-	err = a.PushWormholeMailAndWaitReply(nil, 0, "wormhole_message")
+	err = a.PushWormholeMailAndWaitReply(nil, "", 0, "wormhole_message")
 	if err != nil {
 		t.Errorf("PushWormholeMailAndWaitReply: err=(%v)", err)
 		return
 	}
 	// Push Message
-	reply, err = a.PushMessageMailAndWaitReply(nil, "message", 0, nil)
+	reply, err = a.PushMessageMailAndWaitReply(nil, "", "message", 0, nil)
 	if err != nil {
 		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
 		return
 	}
 	// Push Message Panic
-	reply, err = a.PushMessageMailAndWaitReply(nil, "panic", 0, nil)
+	reply, err = a.PushMessageMailAndWaitReply(nil, "", "panic", 0, nil)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
 		return
 	}
 	// Push Kill
-	err = a.PushKillMailAndWaitReply(nil, true, true, 0)
+	err = a.PushKillMailAndWaitReply(nil, "", true, true, 0)
 	if err != nil {
 		t.Errorf("PushKillMailAndWaitReply: state=(%d),err=(%v)", a.GetState(), err)
 		return
 	}
 	// Push Message
-	reply, err = a.PushMessageMailAndWaitReply(nil, "send_after_halt", 0, nil)
+	reply, err = a.PushMessageMailAndWaitReply(nil, "", "send_after_halt", 0, nil)
 	if err == nil || err.Code != ErrAtomosIsNotRunning {
 		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
 		return

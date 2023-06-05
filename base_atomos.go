@@ -8,11 +8,12 @@ import (
 type AtomosHolder interface {
 	// OnMessaging
 	// 收到消息
-	OnMessaging(from ID, name string, args proto.Message) (reply proto.Message, err *Error)
+	OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error)
+	OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
 
 	// OnScaling
 	// 负载均衡决策
-	OnScaling(from ID, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error)
+	OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error)
 
 	// OnWormhole
 	// 收到Wormhole
@@ -20,7 +21,7 @@ type AtomosHolder interface {
 
 	// OnStopping
 	// 停止中
-	OnStopping(from ID, cancelled map[uint64]CancelledTask) *Error
+	OnStopping(from ID, cancelled []uint64) *Error
 
 	// Spawn & Set & Unset & Stopping & Halt
 	Spawn()
@@ -100,13 +101,18 @@ func (a *BaseAtomos) Task() Task {
 	return &a.task
 }
 
-func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, timeout time.Duration, args proto.Message) (reply proto.Message, err *Error) {
+// go:noinline
+func (a *BaseAtomos) GetGoID() uint64 {
+	return a.mailbox.goID
+}
+
+func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, firstSyncCall, name string, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
 	am := allocAtomosMail()
-	initMessageMail(am, from, name, args)
+	initMessageMail(am, from, firstSyncCall, name, in)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
-			"Atomos is not running. from=(%s),name=(%s),args=(%v)", from, name, args).AddStack(nil)
+			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
 	replyInterface, err := am.waitReply(a, timeout)
 
@@ -121,13 +127,24 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, name string, timeout t
 	return reply, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout time.Duration, args proto.Message, tracker *IDTracker) (ID, *Error) {
+func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(name string, args proto.Message, err *Error, async func(proto.Message, *Error)) {
 	am := allocAtomosMail()
-	initScaleMail(am, from, message, args, tracker)
+	initAsyncMessageCallbackMail(am, name, async, args, err)
+
+	if ok := a.mailbox.pushHead(am.mail); !ok {
+		// TODO
+	}
+
+	deallocAtomosMail(am)
+}
+
+func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, firstSyncCall, name string, timeout time.Duration, in proto.Message, tracker *IDTracker) (ID, *Error) {
+	am := allocAtomosMail()
+	initScaleMail(am, from, firstSyncCall, name, in, tracker)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
-			"Atomos is not running. from=(%s),message=(%s),args=(%v)", from, message, args).AddStack(nil)
+			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
 	id, err := am.waitReplyID(a, timeout)
 
@@ -138,9 +155,9 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, message string, timeout 
 	return id, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait, executeStop bool, timeout time.Duration) (err *Error) {
+func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, firstSyncCall string, wait, executeStop bool, timeout time.Duration) (err *Error) {
 	am := allocAtomosMail()
-	initKillMail(am, from, executeStop)
+	initKillMail(am, from, firstSyncCall, executeStop)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
@@ -152,9 +169,9 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, wait, executeStop bool, t
 	return nil
 }
 
-func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
+func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, firstSyncCall string, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
 	am := allocAtomosMail()
-	initWormholeMail(am, from, wormhole)
+	initWormholeMail(am, from, firstSyncCall, wormhole)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole)
@@ -314,12 +331,20 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(am.name)
 			defer a.setWaiting(am.name)
 
-			resp, err := a.holder.OnMessaging(am.from, am.name, am.arg)
+			resp, err := a.holder.OnMessaging(am.from, am.firstSyncCall, am.name, am.arg)
 			if resp != nil {
 				resp = proto.Clone(resp)
 			}
 			am.sendReply(resp, err)
 			// Mail dealloc in AtomCore.pushMessageMail.
+		}
+	case MailAsyncMessageCallback:
+		{
+			name := "AsyncMessageCallback-" + am.name
+			a.setBusy(name)
+			defer a.setWaiting(name)
+
+			a.holder.OnSyncMessagingCallback(am.arg, am.err, am.asyncMessageCallbackClosure)
 		}
 	case MailTask:
 		{
@@ -345,7 +370,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name)
 			defer a.setWaiting(name)
 
-			id, err := a.holder.OnScaling(am.from, am.name, am.arg, am.tracker)
+			id, err := a.holder.OnScaling(am.from, am.firstSyncCall, am.name, am.arg, am.tracker)
 			am.sendReplyID(id, err)
 			// Mail dealloc in AtomCore.pushScaleMail.
 		}
@@ -376,7 +401,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err := NewErrorf(ErrFrameworkPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
+			err := NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
 			if ar, ok := a.instance.(AtomosRecover); ok {
 				defer func() {
 					recover()
@@ -408,9 +433,8 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 				// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 				// but it's impossible to add task after locking.
 				a.log.Fatal("Atomos: Stopping task mails have been sent after start closing. id=(%s),mail=(%+v)", a.String(), remainMail)
-				t, err := a.task.cancelTask(remainMail.id, nil)
-				if err == nil {
-					cancels[remainMail.id] = t
+				if err := a.task.cancelTask(remainMail.id, nil); err == nil {
+					cancels = append(cancels, remainMail.id)
 				}
 				// Mail dealloc in atomosTaskManager.cancelTask.
 			case MailWormhole:

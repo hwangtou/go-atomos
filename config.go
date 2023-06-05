@@ -19,39 +19,40 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 		logLevel = LogLevel(lv)
 	}
 	conf := &Config{
-		Cosmos:       y.Cosmos,
-		Node:         y.Node,
-		ReporterUrl:  y.ReporterUrl,
-		ConfigerUrl:  y.ConfigerUrl,
-		LogLevel:     logLevel,
-		LogPath:      y.LogPath,
-		LogMaxSize:   int64(y.LogMaxSize),
-		BuildPath:    y.BuildPath,
-		BinPath:      y.BinPath,
-		RunPath:      y.RunPath,
-		EtcPath:      y.EtcPath,
-		EnableCert:   nil,
-		EnableServer: nil,
-		Customize:    map[string][]byte{},
+		Cosmos:            y.Cosmos,
+		Node:              y.Node,
+		NodeList:          nil,
+		KeepaliveNodeList: nil,
+		ReporterUrl:       y.ReporterUrl,
+		ConfigerUrl:       y.ConfigerUrl,
+		LogLevel:          logLevel,
+		LogPath:           y.LogPath,
+		LogMaxSize:        int64(y.LogMaxSize),
+		BuildPath:         y.BuildPath,
+		BinPath:           y.BinPath,
+		RunPath:           y.RunPath,
+		EtcPath:           y.EtcPath,
+		EnableCluster:     nil,
+		Customize:         map[string][]byte{},
 	}
-	if cert := y.EnableCert; cert != nil {
-		conf.EnableCert = &CertConfig{
-			CertPath:           cert.CertPath,
-			KeyPath:            cert.KeyPath,
-			InsecureSkipVerify: cert.InsecureSkipVerify,
-		}
-	}
-	if server := y.EnableServer; server != nil {
-		conf.EnableServer = &RemoteServerConfig{
-			Host: server.Host,
-			Port: server.Port,
-		}
-	}
-	if etcd := y.EnableEtcd; etcd != nil {
-		conf.EnableEtcd = &EtcdConfig{
-			Endpoints: etcd.Endpoints,
-		}
-	}
+	//if cert := y.EnableCert; cert != nil {
+	//	conf.EnableCert = &CertConfig{
+	//		CertPath:           cert.CertPath,
+	//		KeyPath:            cert.KeyPath,
+	//		InsecureSkipVerify: cert.InsecureSkipVerify,
+	//	}
+	//}
+	//if server := y.EnableServer; server != nil {
+	//	conf.EnableServer = &RemoteServerConfig{
+	//		Host: server.Host,
+	//		Port: server.Port,
+	//	}
+	//}
+	//if etcd := y.EnableEtcd; etcd != nil {
+	//	conf.EnableEtcd = &EtcdConfig{
+	//		Endpoints: etcd.Endpoints,
+	//	}
+	//}
 	if custom := y.CustomizeConfig; custom != nil {
 		for key, value := range custom {
 			conf.Customize[key] = []byte(value)
@@ -159,9 +160,9 @@ type NodeYAMLConfig struct {
 	RunPath   string `yaml:"run-path"`
 	EtcPath   string `yaml:"etc-path"`
 
-	EnableCert   *CertConfig         `yaml:"enable-cert"`
-	EnableServer *RemoteServerConfig `yaml:"enable-server"`
-	EnableEtcd   *EtcdConfig         `yaml:"enable-etcd"`
+	EnableCert *CertConfig `yaml:"enable-cert"`
+	//EnableServer *RemoteServerConfig `yaml:"enable-server"`
+	//EnableEtcd   *EtcdConfig         `yaml:"enable-etcd"`
 
 	CustomizeConfig map[string]string `yaml:"customize"`
 }
