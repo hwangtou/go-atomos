@@ -16,6 +16,10 @@ type idTrackerManager struct {
 	idMap   map[uint64]*IDTracker
 }
 
+type AtomosRelease interface {
+	Release(tracker *IDTracker)
+}
+
 func (i *idTrackerManager) init(release AtomosRelease) {
 	i.release = release
 	i.idMap = map[uint64]*IDTracker{}

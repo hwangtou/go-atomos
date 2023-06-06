@@ -12,7 +12,6 @@ type CosmosLocal struct {
 
 	// Config
 	runnable *CosmosRunnable
-	//mainKillCh chan bool
 
 	atomos *BaseAtomos
 
@@ -391,11 +390,11 @@ func (c *CosmosLocal) trySpawningElements(helper *runnableLoadingHelper) (err *E
 		return
 	}
 	for _, elem := range loaded {
-		s, ok := elem.atomos.instance.(ElementCustomizeStartRunning)
+		s, ok := elem.atomos.instance.(ElementStartRunning)
 		if !ok || s == nil {
 			continue
 		}
-		go func(s ElementCustomizeStartRunning) {
+		go func(s ElementStartRunning) {
 			defer func() {
 				if r := recover(); r != nil {
 					err := NewErrorf(ErrMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)

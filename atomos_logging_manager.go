@@ -1,7 +1,5 @@
 package go_atomos
 
-// CHECKED!
-
 import (
 	"fmt"
 )

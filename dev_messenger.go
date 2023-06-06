@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"encoding/json"
 	"google.golang.org/protobuf/proto"
 	"time"
 )
@@ -18,11 +19,29 @@ type MessengerType interface {
 
 func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 	return &IOMessageDecoder{
-		InDec: func(b []byte, p bool) (proto.Message, *Error) {
-			return MessageUnmarshal(b, i, p)
+		InDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+			if isProtoOrJson {
+				if err := proto.Unmarshal(buf, i); err != nil {
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+				}
+			} else {
+				if err := json.Unmarshal(buf, i); err != nil {
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+				}
+			}
+			return i, nil
 		},
-		OutDec: func(b []byte, p bool) (proto.Message, *Error) {
-			return MessageUnmarshal(b, o, p)
+		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+			if isProtoOrJson {
+				if err := proto.Unmarshal(buf, i); err != nil {
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+				}
+			} else {
+				if err := json.Unmarshal(buf, i); err != nil {
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+				}
+			}
+			return i, nil
 		},
 	}
 }

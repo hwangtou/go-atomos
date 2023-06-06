@@ -340,7 +340,7 @@ func (t testElementAutoDataDev) ElementConstructor() Atomos {
 	return &testElement{}
 }
 
-func (t *testElementAutoDataDev) AtomAutoDataPersistence() AtomAutoDataPersistence {
+func (t *testElementAutoDataDev) AtomAutoDataPersistence() AtomAutoData {
 	return t
 }
 
@@ -367,7 +367,7 @@ func (t *testElementAutoDataDev) SetAtomData(name string, data proto.Message) *E
 	return nil
 }
 
-func (t *testElementAutoDataDev) ElementAutoDataPersistence() ElementAutoDataPersistence {
+func (t *testElementAutoDataDev) ElementAutoDataPersistence() ElementAutoData {
 	return t
 }
 

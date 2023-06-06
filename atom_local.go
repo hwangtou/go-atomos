@@ -1,7 +1,5 @@
 package go_atomos
 
-// CHECKED!
-
 import (
 	"container/list"
 	"google.golang.org/protobuf/proto"
@@ -191,7 +189,7 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
 func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 	dev := a.element.current.Developer
-	elemAuth, ok := dev.(ElementCustomizeAuthorization)
+	elemAuth, ok := dev.(ElementAuthorization)
 	if ok && elemAuth != nil {
 		if err := elemAuth.AtomCanKill(callerID); err != nil {
 			return err.AddStack(a)
@@ -317,8 +315,8 @@ func (a *AtomLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in pro
 
 // Implementation of AtomSelfID
 
-func (a *AtomLocal) Persistence() AtomAutoDataPersistence {
-	p, ok := a.element.atomos.instance.(ElementCustomizeAutoDataPersistence)
+func (a *AtomLocal) Persistence() AtomAutoData {
+	p, ok := a.element.atomos.instance.(AutoDataPersistence)
 	if ok || p == nil {
 		return nil
 	}
@@ -419,7 +417,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
-	persistence, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
+	persistence, ok := impl.Developer.(AutoDataPersistence)
 	if !ok || persistence == nil {
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
@@ -438,7 +436,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoDataPersistence, arg proto.Message) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {

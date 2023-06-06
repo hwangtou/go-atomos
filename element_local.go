@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"container/list"
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -71,7 +72,7 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 	e.messageTrackerManager.init(e.atomos, len(impl.ElementHandlers))
 
 	// 如果实现了ElementCustomizeAtomInitNum接口，那么就使用接口中定义的数量。
-	if atomsInitNum, ok := impl.Developer.(ElementCustomizeAtomInitNum); ok {
+	if atomsInitNum, ok := impl.Developer.(ElementAtomInitNum); ok {
 		num := atomsInitNum.GetElementAtomsInitNum()
 		e.atoms = make(map[string]*AtomLocal, num)
 	} else {
@@ -297,8 +298,8 @@ func (e *ElementLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in 
 
 // Implementation of ElementSelfID
 
-func (e *ElementLocal) Persistence() ElementCustomizeAutoDataPersistence {
-	p, ok := e.atomos.instance.(ElementCustomizeAutoDataPersistence)
+func (e *ElementLocal) Persistence() AutoDataPersistence {
+	p, ok := e.atomos.instance.(AutoDataPersistence)
 	if ok || p == nil {
 		return nil
 	}
@@ -309,6 +310,26 @@ func (e *ElementLocal) GetAtoms() []*AtomLocal {
 	e.lock.RLock()
 	atoms := make([]*AtomLocal, 0, len(e.atoms))
 	for _, atomLocal := range e.atoms {
+		if atomLocal.atomos.IsInState(AtomosSpawning, AtomosWaiting, AtomosBusy) {
+			atoms = append(atoms, atomLocal)
+		}
+	}
+	e.lock.RUnlock()
+	return atoms
+}
+
+func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
+	e.lock.RLock()
+	atoms := make([]*AtomLocal, 0, len(e.atoms))
+	for name, atomLocal := range e.atoms {
+		matched, err := regexp.MatchString(pattern, name)
+		if err != nil {
+			continue
+		}
+		if !matched {
+			continue
+		}
+
 		if atomLocal.atomos.IsInState(AtomosSpawning, AtomosWaiting, AtomosBusy) {
 			atoms = append(atoms, atomLocal)
 		}
@@ -330,7 +351,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDTr
 		return atom, atom.idTrackerManager.addIDTracker(tracker), nil
 	}
 	// Auto data persistence.
-	persistence, ok := e.current.Developer.(ElementCustomizeAutoDataPersistence)
+	persistence, ok := e.current.Developer.(AutoDataPersistence)
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
@@ -374,7 +395,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 
 func (e *ElementLocal) SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
 	// Auto data persistence.
-	persistence, _ := e.current.Developer.(ElementCustomizeAutoDataPersistence)
+	persistence, _ := e.current.Developer.(AutoDataPersistence)
 	return e.elementAtomSpawn(name, arg, e.current, persistence, tracker)
 }
 
@@ -531,7 +552,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 
 	// Send Kill to all atoms.
 	var stopTimeout, stopGap time.Duration
-	elemExit, ok := e.current.Developer.(ElementCustomizeExit)
+	elemExit, ok := e.current.Developer.(ElementAtomExit)
 	if ok && elemExit != nil {
 		stopTimeout = elemExit.StopTimeout()
 		stopGap = elemExit.StopGap()
@@ -561,8 +582,8 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	// Element
 	var save bool
 	var data proto.Message
-	var persistence ElementCustomizeAutoDataPersistence
-	var elemPersistence ElementAutoDataPersistence
+	var persistence AutoDataPersistence
+	var elemPersistence ElementAutoData
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
@@ -587,7 +608,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 
 	// Save data.
 	// Auto Save
-	persistence, ok = e.current.Developer.(ElementCustomizeAutoDataPersistence)
+	persistence, ok = e.current.Developer.(AutoDataPersistence)
 	if !ok || persistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
 			"Element: OnStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo()).AddStack(e)
@@ -610,7 +631,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 autoLoad:
 
 	// Auto Load
-	pa, ok := e.current.Developer.(ElementCustomizeAutoLoadPersistence)
+	pa, ok := e.current.Developer.(AutoDataPersistenceLoading)
 	if !ok || pa == nil {
 		return nil
 	}
@@ -625,7 +646,7 @@ autoLoad:
 // 内部实现
 // INTERNAL
 
-func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence ElementCustomizeAutoDataPersistence, t *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current *ElementImplementation, persistence AutoDataPersistence, t *IDTrackerInfo) (*AtomLocal, *IDTracker, *Error) {
 	if t == nil {
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
@@ -762,13 +783,13 @@ func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *Ele
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
-	pa, ok := current.Developer.(ElementCustomizeAutoLoadPersistence)
+	pa, ok := current.Developer.(AutoDataPersistenceLoading)
 	if ok && pa != nil {
 		if err = pa.Load(e, runnable.config.Customize); err != nil {
 			return err.AddStack(e)
 		}
 	}
-	persistence, ok := current.Developer.(ElementCustomizeAutoDataPersistence)
+	persistence, ok := current.Developer.(AutoDataPersistence)
 	if ok && persistence != nil {
 		elemPersistence := persistence.ElementAutoDataPersistence()
 		if elemPersistence != nil {

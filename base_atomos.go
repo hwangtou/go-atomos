@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// AtomosHolder Atomos持有者
+// Atomos Holder
 type AtomosHolder interface {
 	// OnMessaging
 	// 收到消息
@@ -31,14 +33,61 @@ type AtomosHolder interface {
 	Halted()
 }
 
-type AtomosAcceptWormhole interface {
-	AcceptWormhole(from ID, wormhole AtomosWormhole) *Error
+// Atom状态
+// AtomosState
+
+type AtomosState int
+
+const (
+	// AtomosHalt
+	// 停止
+	// Atom is stopped.
+	AtomosHalt AtomosState = 0
+
+	// AtomosSpawning
+	// 启动中
+	// Atom is starting up.
+	AtomosSpawning AtomosState = 1
+
+	// AtomosWaiting
+	// 启动成功，等待消息
+	// Atom is started and waiting for message.
+	AtomosWaiting AtomosState = 2
+
+	// AtomosBusy
+	// 启动成功，正在处理消息
+	// Atom is started and busy processing message.
+	AtomosBusy AtomosState = 3
+
+	// AtomosStopping
+	// 停止中
+	// Atom is stopping.
+	AtomosStopping AtomosState = 4
+)
+
+func (as AtomosState) String() string {
+	switch as {
+	case AtomosHalt:
+		return "Stopping"
+	case AtomosSpawning:
+		return "Spawning"
+	case AtomosWaiting:
+		return "Waiting"
+	case AtomosBusy:
+		return "Busy"
+	case AtomosStopping:
+		return "Stopping"
+	}
+	return "Unknown"
 }
 
-type AtomosRelease interface {
-	Release(tracker *IDTracker)
-}
+// AtomosWormhole
+// 虫洞传送的对象
+// Object of Wormhole.
+type AtomosWormhole interface{}
 
+// BaseAtomos 基础Atomos
+// Base Atomos
 type BaseAtomos struct {
 	// 句柄信息
 	id *IDInfo
@@ -180,54 +229,6 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, firstSyncCall string,
 
 	deallocAtomosMail(am)
 	return err.AddStack(nil)
-}
-
-// Atom状态
-// AtomosState
-
-type AtomosState int
-
-const (
-	// AtomosHalt
-	// 停止
-	// Atom is stopped.
-	AtomosHalt AtomosState = 0
-
-	// AtomosSpawning
-	// 启动中
-	// Atom is starting up.
-	AtomosSpawning AtomosState = 1
-
-	// AtomosWaiting
-	// 启动成功，等待消息
-	// Atom is started and waiting for message.
-	AtomosWaiting AtomosState = 2
-
-	// AtomosBusy
-	// 启动成功，正在处理消息
-	// Atom is started and busy processing message.
-	AtomosBusy AtomosState = 3
-
-	// AtomosStopping
-	// 停止中
-	// Atom is stopping.
-	AtomosStopping AtomosState = 4
-)
-
-func (as AtomosState) String() string {
-	switch as {
-	case AtomosHalt:
-		return "Stopping"
-	case AtomosSpawning:
-		return "Spawning"
-	case AtomosWaiting:
-		return "Waiting"
-	case AtomosBusy:
-		return "Busy"
-	case AtomosStopping:
-		return "Stopping"
-	}
-	return "Unknown"
 }
 
 // State

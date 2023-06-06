@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// AtomosRemoteService is the remote service of Atomos.
+// It is used to communicate with the remote Atomos.
 type atomosRemoteService struct {
 	process *CosmosProcess
 }
