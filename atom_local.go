@@ -419,20 +419,24 @@ func (a *AtomLocal) OnStopping(from ID, cancelled map[uint64]CancelledTask) (err
 	// Save data.
 	impl := a.element.current
 	if impl == nil {
+		a.Log().Fatal("Atom: Stopping save data error. no element implement. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo(), a.element, data)
 		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	persistence, ok := impl.Developer.(ElementCustomizeAutoDataPersistence)
 	if !ok || persistence == nil {
+		a.Log().Fatal("Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo(), a.element, data)
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	atomPersistence := persistence.AtomAutoDataPersistence()
 	if atomPersistence == nil {
+		a.Log().Fatal("Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo(), a.element, data)
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
 	if err = atomPersistence.SetAtomData(a.GetName(), data); err != nil {
+		a.Log().Fatal("Atom: Stopping save data error. id=(%s),element=(%+v),data=(%v),err=(%v)", a.atomos.GetIDInfo(), a.element, data, err)
 		return err.AddStack(a, data)
 	}
 	return err
