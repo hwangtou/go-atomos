@@ -8,20 +8,21 @@ import "google/protobuf/timestamp.proto";
 
 enum IDType {
   InvalidIDType = 0;
-  AppLoader = 1;
-  App = 2;
-  Cosmos = 3;
-  Element = 4;
-  Atom = 5;
+//  AppLoader = 1;
+//  App = 2;
+  Cosmos = 1;
+  Element = 2;
+  Atom = 3;
 }
 
 message IDInfo {
   IDType type = 1;
   string cosmos = 2;
-  string element = 3;
-  string atom = 4;
-  uint64 go_id = 5;
-  google.protobuf.Any ext = 6;
+  string node = 3;
+  string element = 4;
+  string atom = 5;
+  uint64 version = 6;
+  uint64 go_id = 7;
 }
 
 enum LogLevel {
@@ -207,14 +208,30 @@ message ElementBroadcastO {}
 
 // Cluster Supports
 
-message CosmosProcessInfo {
+message CosmosNodeVersionInfo {
   string node = 1;
   string address = 2;
   IDInfo id = 3;
-  map<string, IDInfo> elements = 4;
+  ClusterNodeState state = 4;
+  map<string, IDInfo> elements = 5;
+}
+
+enum ClusterNodeState {
+  ClusterNodeStateInvalid = 0;
+  Starting = 1;
+  Started = 2;
+  Stopping = 3;
+  Stopped = 4;
+}
+
+message CosmosNodeVersionLock {
+  int64 current = 1;
+  repeated int64 versions = 2;
 }
 
 service AtomosRemoteService {
+  rpc TryKilling(CosmosRemoteTryKillingReq) returns (CosmosRemoteTryKillingRsp) {}
+
   rpc ScaleGetAtomID(CosmosRemoteScaleGetAtomIDReq) returns (CosmosRemoteScaleGetAtomIDRsp) {}
 
   rpc GetAtomID(CosmosRemoteGetAtomIDReq) returns (CosmosRemoteGetAtomIDRsp) {}
@@ -227,6 +244,12 @@ service AtomosRemoteService {
   rpc ReleaseID(CosmosRemoteReleaseIDReq) returns (CosmosRemoteReleaseIDRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
+}
+
+// Try Killing Remote
+message CosmosRemoteTryKillingReq {}
+message CosmosRemoteTryKillingRsp {
+  Error error = 1;
 }
 
 // Scale Get Atom ID

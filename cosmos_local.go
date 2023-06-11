@@ -2,92 +2,23 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
-	"os"
 	"sync"
 	"time"
 )
 
 type CosmosLocal struct {
-	process *CosmosProcess
-
-	// Config
+	process  *CosmosProcess
 	runnable *CosmosRunnable
 
 	atomos *BaseAtomos
 
 	// Elements & Remote
+	mutex    sync.RWMutex
 	elements map[string]*ElementLocal
-
-	mutex sync.RWMutex
-
-	// 调用链
-	// 调用链用于检测是否有循环调用，在处理message时把fromID的调用链加上自己之后
-	callIDCounter uint64
-	curCallChain  string
 
 	*idFirstSyncCallLocal
 	*idTrackerManager
 	*messageTrackerManager
-}
-
-// 生命周期相关
-// Life cycle
-
-func initCosmosMain(process *CosmosProcess) *CosmosLocal {
-	SharedLogging().PushProcessLog(LogLevel_Info, "Cosmos: Loading. pid=(%d)", os.Getpid())
-	id := &IDInfo{
-		Type:    IDType_Cosmos,
-		Cosmos:  "",
-		Element: "",
-		Atom:    "",
-	}
-	main := &CosmosLocal{
-		process:               process,
-		runnable:              nil,
-		atomos:                nil,
-		elements:              map[string]*ElementLocal{},
-		mutex:                 sync.RWMutex{},
-		callIDCounter:         0,
-		curCallChain:          "",
-		idFirstSyncCallLocal:  &idFirstSyncCallLocal{},
-		idTrackerManager:      &idTrackerManager{},
-		messageTrackerManager: &messageTrackerManager{},
-	}
-	main.atomos = NewBaseAtomos(id, LogLevel_Debug, main, main)
-	main.idFirstSyncCallLocal.init(id)
-	main.idTrackerManager.init(main)
-	main.messageTrackerManager.init(main.atomos, len(main.elements))
-	process.local = main
-	_ = process.local.atomos.start(nil)
-	return main
-}
-
-// Load Runnable
-
-func (c *CosmosLocal) loadOnce(runnable *CosmosRunnable) *Error {
-	_, err := c.tryLoadRunnable(runnable)
-	if err != nil {
-		c.Log().Fatal("Cosmos: Once load failed. err=(%s)", err.Message)
-		return err
-	}
-	return nil
-}
-
-func (c *CosmosLocal) tryLoadRunnable(newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
-	oldRunnable := c.runnable
-	c.runnable = newRunnable
-	helper, err := c.newRunnableLoadingHelper(oldRunnable, newRunnable)
-	if err != nil {
-		c.runnable = oldRunnable
-		c.Log().Fatal(err.Message)
-		return nil, err
-	}
-	if err = c.trySpawningElements(helper); err != nil {
-		c.runnable = oldRunnable
-		c.Log().Fatal(err.Message)
-		return nil, err
-	}
-	return helper, nil
 }
 
 // Implementation of ID
@@ -201,7 +132,7 @@ func (c *CosmosLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in p
 // Implementation of CosmosNode
 
 func (c *CosmosLocal) GetNodeName() string {
-	return c.GetIDInfo().Cosmos
+	return c.GetIDInfo().Node
 }
 
 func (c *CosmosLocal) CosmosIsLocal() bool {
@@ -315,12 +246,9 @@ func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		}
 	}
 
-	// Unload cluster info.
-	c.process.unloadAtomosRemote()
-
-	c.elements = nil
-	c.runnable = nil
-	c.process = nil
+	//c.elements = nil
+	//c.runnable = nil
+	//c.process = nil
 
 	return nil
 }
@@ -365,14 +293,13 @@ func (c *CosmosLocal) getLocalAllElements() (elems []*ElementLocal, err *Error) 
 	return elems, nil
 }
 
-func (c *CosmosLocal) trySpawningElements(helper *runnableLoadingHelper) (err *Error) {
-	c.atomos.id.Cosmos = helper.newRunnable.config.Node
-	c.atomos.log.level = helper.newRunnable.config.LogLevel
+//func (c *CosmosLocal) trySpawningElements(helper *runnableLoadingHelper) (err *Error) {
+func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
-	for _, impl := range helper.spawnElement {
-		elem, e := c.cosmosElementSpawn(helper.newRunnable, impl)
+	for _, impl := range c.runnable.implementOrder {
+		elem, e := c.cosmosElementSpawn(c.runnable, impl)
 		if e != nil {
 			err = e.AddStack(c)
 			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%s)", impl.Interface.Config.Name, err.Message)
@@ -464,47 +391,47 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 	return elem, nil
 }
 
-// Runnable Loading Helper
+//// Runnable Loading Helper
+//
+//type runnableLoadingHelper struct {
+//	newRunnable *CosmosRunnable
+//
+//	spawnElement, reloadElement, delElement []*ElementImplementation
+//}
 
-type runnableLoadingHelper struct {
-	newRunnable *CosmosRunnable
-
-	spawnElement, reloadElement, delElement []*ElementImplementation
-}
-
-func (c *CosmosLocal) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
-	helper := &runnableLoadingHelper{
-		newRunnable:   newRunnable,
-		spawnElement:  nil,
-		reloadElement: nil,
-		delElement:    nil,
-	}
-
-	// Element
-	if oldRunnable == nil {
-		// All are cosmosElementSpawn elements.
-		for _, impl := range newRunnable.implementOrder {
-			helper.spawnElement = append(helper.spawnElement, impl)
-		}
-	} else {
-		for _, newImpl := range newRunnable.implementOrder {
-			_, has := oldRunnable.implements[newImpl.Interface.Config.Name]
-			if has {
-				helper.reloadElement = append(helper.reloadElement, newImpl)
-			} else {
-				helper.spawnElement = append(helper.spawnElement, newImpl)
-			}
-		}
-		for _, oldImpl := range oldRunnable.implementOrder {
-			_, has := newRunnable.implements[oldImpl.Interface.Config.Name]
-			if !has {
-				helper.delElement = append(helper.delElement, oldImpl)
-			}
-		}
-	}
-
-	return helper, nil
-}
+//func (c *CosmosLocal) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
+//	helper := &runnableLoadingHelper{
+//		newRunnable:   newRunnable,
+//		spawnElement:  nil,
+//		reloadElement: nil,
+//		delElement:    nil,
+//	}
+//
+//	// Element
+//	if oldRunnable == nil {
+//		// All are cosmosElementSpawn elements.
+//		for _, impl := range newRunnable.implementOrder {
+//			helper.spawnElement = append(helper.spawnElement, impl)
+//		}
+//	} else {
+//		for _, newImpl := range newRunnable.implementOrder {
+//			_, has := oldRunnable.implements[newImpl.Interface.Config.Name]
+//			if has {
+//				helper.reloadElement = append(helper.reloadElement, newImpl)
+//			} else {
+//				helper.spawnElement = append(helper.spawnElement, newImpl)
+//			}
+//		}
+//		for _, oldImpl := range oldRunnable.implementOrder {
+//			_, has := newRunnable.implements[oldImpl.Interface.Config.Name]
+//			if !has {
+//				helper.delElement = append(helper.delElement, oldImpl)
+//			}
+//		}
+//	}
+//
+//	return helper, nil
+//}
 
 func (c *CosmosLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Duration) *Error {
 	firstSyncCall := ""
@@ -562,6 +489,6 @@ func (c *CosmosLocal) hookStopping(*IDInfo) {
 func (c *CosmosLocal) hookHalt(id *IDInfo, err *Error, i *idTrackerManager, m *messageTrackerManager) {
 	defer recover()
 
-	c.Log().Info("Static >> AtomStopping IDTracker=(%v)", i)
-	c.Log().Info("Static >> AtomStopping MessageTracker=(%v)", m.GetMessagingInfo())
+	//c.Log().Info("Static >> AtomStopping IDTracker=(%v)", i)
+	//c.Log().Info("Static >> AtomStopping MessageTracker=(%v)", m.GetMessagingInfo())
 }

@@ -63,17 +63,30 @@ type CosmosRunnable struct {
 // Check 检查CosmosRunnable是否正确构造。
 // Check if CosmosRunnable is constructed correctly.
 func (r *CosmosRunnable) Check() *Error {
+	// Config
 	if r.config == nil {
-		return NewError(ErrMainRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
+		return NewError(ErrRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
 	}
-	if r.mainScript == nil {
-		return NewError(ErrMainRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
+	if err := r.config.Check(); err != nil {
+		return err.AddStack(nil)
 	}
+	// Interfaces
 	if r.interfaces == nil {
 		r.interfaces = map[string]*ElementInterface{}
 	}
+	if len(r.interfaceOrder) != len(r.interfaces) {
+		return NewError(ErrRunnableInterfaceInvalid, "Runnable: Interface order not match.").AddStack(nil)
+	}
+	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
+	}
+	if len(r.implements) != len(r.interfaces) {
+		return NewError(ErrRunnableImplementInvalid, "Runnable: Implement not match.").AddStack(nil)
+	}
+	// MainScript
+	if r.mainScript == nil {
+		return NewError(ErrRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
 	}
 	return nil
 }

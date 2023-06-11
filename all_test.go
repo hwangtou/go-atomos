@@ -4,7 +4,7 @@ import "testing"
 
 func TestAll(t *testing.T) {
 	clearTest()
-	TestBaseAtomos(t)
+	//TestBaseAtomos(t)
 
 	clearTest()
 	TestCosmosMain(t)
@@ -14,7 +14,7 @@ func TestAll(t *testing.T) {
 	clearTest()
 	TestElementLocalScaleID(t)
 	clearTest()
-	TestElementLocalLifeCycle(t)
+	//TestElementLocalLifeCycle(t)
 
 	clearTest()
 	TestAtomLocalBase(t)

@@ -29,8 +29,10 @@ const (
 	ErrMainCannotMessage
 	ErrMainCannotScale
 	ErrMainRunnableNotFound
-	ErrMainRunnableConfigNotFound
-	ErrMainRunnableScriptNotFound
+	ErrRunnableConfigNotFound
+	ErrRunnableInterfaceInvalid
+	ErrRunnableImplementInvalid
+	ErrRunnableScriptNotFound
 
 	// Cosmos Global
 
@@ -56,6 +58,8 @@ const (
 	ErrCosmosConfigInvalid
 	ErrCosmosEtcdConnectFailed
 	ErrCosmosEtcdClusterTLSInvalid
+	ErrCosmosEtcdClusterVersionsCheckFailed
+	ErrCosmosEtcdClusterVersionLockFailed
 	ErrCosmosEtcdGRPCServerFailed
 	ErrCosmosEtcdKeepaliveFailed
 	ErrCosmosEtcdInvalidKey

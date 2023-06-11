@@ -34,13 +34,13 @@ func clearTest() {
 func initTestFakeCosmosProcess(t *testing.T) {
 	accessLog := func(s string) { t.Logf(s) }
 	errorLog := func(s string) { t.Logf(s) }
-	InitCosmosProcess(accessLog, errorLog)
+	InitCosmosProcess("", "", accessLog, errorLog)
 }
 
 func initTestFakeCosmosProcessBenchmark(b *testing.B) {
 	accessLog := func(s string) { b.Logf(s) }
 	errorLog := func(s string) { b.Logf(s) }
-	InitCosmosProcess(accessLog, errorLog)
+	InitCosmosProcess("", "", accessLog, errorLog)
 }
 
 func newTestFakeRunnable(t *testing.T, autoData bool) *CosmosRunnable {
@@ -105,7 +105,7 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				ta := a.(*testElement)
 				ta.t = t
 				ta.self = s
-				t.Logf("ElementSpawner. data=(%v)", data)
+				//t.Logf("ElementSpawner. data=(%v)", data)
 				return nil
 			},
 			AtomSpawner: func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error {
@@ -504,7 +504,7 @@ func (t testElement) String() string {
 }
 
 func (t testElement) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
-	t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
+	//t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
 	if testElementHaltPanic {
 		panic("Element Halt Panic")
 	}
@@ -555,11 +555,11 @@ func testAppUDSServer(t *testing.T) (*appUDSServer, *Error) {
 	return s, nil
 }
 
-func testAppSocketClient(t *testing.T) *AppUDSClient {
-	return &AppUDSClient{
-		logging: sharedLogging.PushProcessLog,
-		mutex:   sync.Mutex{},
-		connID:  0,
-		connMap: map[int32]*AppUDSConn{},
-	}
-}
+//func testAppSocketClient(t *testing.T) *AppUDSClient {
+//	return &AppUDSClient{
+//		logging: sharedLogging.PushProcessLog,
+//		mutex:   sync.Mutex{},
+//		connID:  0,
+//		connMap: map[int32]*AppUDSConn{},
+//	}
+//}

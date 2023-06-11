@@ -50,24 +50,24 @@ func (s *appUDSServer) daemon() *Error {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server has recovered and exit. reason=(%v)", r)
+				//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server has recovered and exit. reason=(%v)", r)
 			}
 		}()
 		for {
-			conn, er := s.listener.AcceptUnix()
+			_, er := s.listener.AcceptUnix()
 			if er != nil {
 				if !isCloseError(er) {
-					SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server has exited. err=(%v)", er)
+					//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server has exited. err=(%v)", er)
 				}
 				return
 			}
 			s.mutex.Lock()
 			s.connID += 1
-			c := newAppUDSConn(s.connID, s, conn, SharedLogging().PushProcessLog, nil)
-			s.connMap[s.connID] = c
+			//c := newAppUDSConn(s.connID, s, conn, SharedLogging().PushProcessLog, nil)
+			//s.connMap[s.connID] = c
 			s.mutex.Unlock()
-			SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server accepts connection. conn=(%d)", c.id)
-			go c.Daemon()
+			//SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server accepts connection. conn=(%d)", c.id)
+			//go c.Daemon()
 		}
 	}()
 	return nil
@@ -76,13 +76,13 @@ func (s *appUDSServer) daemon() *Error {
 func (s *appUDSServer) close() {
 	// Listener close.
 	if er := s.listener.Close(); er != nil {
-		SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server closes error. err=(%v)", er)
+		//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server closes error. err=(%v)", er)
 	}
 	// Remove.
 	runSocketPath := path.Join(s.config.RunPath, s.config.Node+".socket")
 	er := os.Remove(runSocketPath)
 	if er != nil && !os.IsNotExist(er) {
-		SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server closes error. err=(%v)", er)
+		//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server closes error. err=(%v)", er)
 	}
 	// Close conn.
 	s.mutex.Lock()
@@ -98,7 +98,7 @@ func (s *appUDSServer) close() {
 	for _, conn := range connList {
 		conn.DaemonClose()
 	}
-	SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server has closed.")
+	//SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server has closed.")
 }
 
 func (s *appUDSServer) onReceive(conn *AppUDSConn, readBuf []byte) {
@@ -106,7 +106,7 @@ func (s *appUDSServer) onReceive(conn *AppUDSConn, readBuf []byte) {
 	var handlerFn AppUDSCommandFn
 	var has bool
 	if er := proto.Unmarshal(readBuf, &recvPacket); er != nil {
-		SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection has received invalid packet. buf=(%v),err=(%v)", readBuf, er)
+		//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection has received invalid packet. buf=(%v),err=(%v)", readBuf, er)
 		sendPacket.Command = UDSInvalidPacket
 		goto send
 	}
@@ -121,12 +121,12 @@ send:
 	sendBuf, er := proto.Marshal(&sendPacket)
 	if er != nil {
 		conn.DaemonClose()
-		SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection would send invalid packet. buf=(%v),err=(%v)", &sendPacket, er)
+		//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection would send invalid packet. buf=(%v),err=(%v)", &sendPacket, er)
 		return
 	}
 	if err := conn.Send(sendBuf); err != nil {
 		conn.DaemonClose()
-		SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection sends packet failed. buf=(%v),err=(%v)", &sendPacket, err)
+		//SharedLogging().PushProcessLog(LogLevel_Err, "App: UDS server connection sends packet failed. buf=(%v),err=(%v)", &sendPacket, err)
 		return
 	}
 }
@@ -135,7 +135,7 @@ func (s *appUDSServer) onClose(conn *AppUDSConn) {
 	s.mutex.Lock()
 	delete(s.connMap, conn.id)
 	s.mutex.Unlock()
-	SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server connection has closed. id=(%d)", conn.id)
+	//SharedLogging().PushProcessLog(LogLevel_Info, "App: UDS server connection has closed. id=(%d)", conn.id)
 }
 
 func (s *appUDSServer) log() *appLogging {

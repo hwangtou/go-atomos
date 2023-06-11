@@ -10,7 +10,7 @@ import (
 // 保持活跃
 // 1. 注册服务
 // 2. 保持活跃
-func etcdKeepalive(cli *clientv3.Client, key string, value []byte, ttl int64) (*clientv3.LeaseGrantResponse, *Error) {
+func etcdKeepalive(cli *clientv3.Client, key, value string, ttl int64) (*clientv3.LeaseGrantResponse, *Error) {
 	// grant a lease.
 	lease, er := cli.Grant(context.Background(), etcdKeepaliveTime)
 	if er != nil {
@@ -47,20 +47,20 @@ func etcdPut(cli *clientv3.Client, key string, value []byte) *Error {
 
 // etcdGet
 // Get a string from etcd.
-func etcdGet(cli *clientv3.Client, key string) ([]byte, *Error) {
+func etcdGet(cli *clientv3.Client, key string) ([]byte, int64, *Error) {
 	// Get the string back from etcd.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, er := cli.Get(ctx, key)
 	cancel()
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosEtcdGetFailed, "etcd: Get failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return nil, 0, NewErrorf(ErrCosmosEtcdGetFailed, "etcd: Get failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	for _, kv := range resp.Kvs {
 		if string(kv.Key) == key {
-			return kv.Value, nil
+			return kv.Value, kv.Version, nil
 		}
 	}
-	return nil, nil
+	return nil, 0, nil
 }
 
 // etcdDelete

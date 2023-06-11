@@ -11,6 +11,14 @@ import (
 // 必须实现的接口
 // Interfaces that must be implemented.
 
+// CosmosMainScript
+// Cosmos的Main脚本，由用户实现，用于在进程启动和关闭时执行一些操作。
+// Main script of Cosmos, which is implemented by developer, will execute some operations when process starts and closes.
+type CosmosMainScript interface {
+	OnStartUp(local *CosmosProcess) *Error
+	OnShutdown() *Error
+}
+
 // ElementDeveloper
 // 开发者实现的Element的构造器，将具体的Element对象和Atom的具体Atom对象构造出来，并在启动时传入到Atomos中。
 // Element Constructor of developer implements. It will construct Element object and Atom object, and pass them to Atomos when starts.

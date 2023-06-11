@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"fmt"
 	"runtime/debug"
 	"sync"
 )
@@ -41,19 +42,24 @@ type mailBox struct {
 	tail    *mail
 	num     uint32
 
+	accessLogging loggingFn
+	errorLogging  loggingFn
+
 	goID uint64
 }
 
-func newMailBox(name string, handler MailboxHandler) *mailBox {
+func newMailBox(name string, handler MailboxHandler, accessLogging, errorLogging loggingFn) *mailBox {
 	mb := &mailBox{
-		name:    name,
-		mutex:   sync.Mutex{},
-		cond:    nil,
-		running: false,
-		handler: handler,
-		head:    nil,
-		tail:    nil,
-		num:     0,
+		name:          name,
+		mutex:         sync.Mutex{},
+		cond:          nil,
+		running:       false,
+		handler:       handler,
+		head:          nil,
+		tail:          nil,
+		num:           0,
+		accessLogging: accessLogging,
+		errorLogging:  errorLogging,
 	}
 	mb.cond = sync.NewCond(&mb.mutex)
 	return mb
@@ -251,16 +257,16 @@ func (mb *mailBox) loop() {
 	mb.goID = func() uint64 {
 		defer func() {
 			if r := recover(); r != nil {
-				sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)",
-					r, string(debug.Stack()))
+				mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)",
+					r, string(debug.Stack())))
 			}
 		}()
 		return getGoID()
 	}()
 
-	sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Start. name=(%s)", mb.name)
+	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)", mb.name))
 	defer func() {
-		sharedLogging.PushProcessLog(LogLevel_Debug, "Mailbox: Stop. name=(%s)", mb.name)
+		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)", mb.name))
 	}()
 	for {
 		if exit := func() (exit bool) {
@@ -268,8 +274,8 @@ func (mb *mailBox) loop() {
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					sharedLogging.pushFrameworkErrorLog("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
-						r, string(debug.Stack()))
+					mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
+						r, string(debug.Stack())))
 				}
 			}()
 			for {
@@ -294,6 +300,9 @@ func (mb *mailBox) loop() {
 						}
 						// Wait channel.
 						m.sendReply(nil, nil)
+					}
+					if l := curMail.log; l != nil {
+						mb.handler.mailboxOnStop(curMail, mails, num)
 					}
 					return
 				}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 )
 
 var app *App
@@ -53,18 +54,22 @@ func Main(runnable CosmosRunnable) {
 	}
 
 	// Init.
-	InitCosmosProcess(app.logging.WriteAccessLog, app.logging.WriteErrorLog)
+	panic("")
+	if err := InitCosmosProcess("", "", app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
+		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
+		os.Exit(1)
+	}
 
 	isRunning, processID, err := app.Check()
 	if err != nil && !isRunning {
 		msg := fmt.Sprintf("App: Check failed. err=(%v)", err)
-		SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
+		//SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
 		log.Printf(msg)
 		os.Exit(1)
 	}
 	if isRunning {
 		msg := fmt.Sprintf("App: App is already running. pid=(%d)", processID)
-		SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
+		//SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
 		log.Printf(msg)
 		os.Exit(1)
 	}
@@ -76,12 +81,12 @@ func Main(runnable CosmosRunnable) {
 	if IsParentProcess() && !sa {
 		if err = app.ForkAppProcess(); err != nil {
 			msg := fmt.Sprintf("App: Fork app failed. err=(%v)", err)
-			SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
+			//SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
 			log.Printf(msg)
 			os.Exit(1)
 		}
 		msg := fmt.Sprintf("App: Fork app succeed. Loader will exit.")
-		SharedLogging().PushProcessLog(LogLevel_Info, msg)
+		//SharedLogging().PushProcessLog(LogLevel_Info, msg)
 		log.Printf(msg)
 		log.Printf("App: Access Log File=(%s)", app.logging.curAccessLogName)
 		log.Printf("App: Error Log File=(%s)", app.logging.curErrorLogName)
@@ -90,24 +95,45 @@ func Main(runnable CosmosRunnable) {
 	} else {
 		if err = app.LaunchApp(); err != nil {
 			msg := fmt.Sprintf("App: Launch app failed. err=(%v)", err)
-			SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
+			//SharedLogging().PushProcessLog(LogLevel_Fatal, msg)
 			log.Printf(msg)
 			os.Exit(1)
 		}
 		defer func() {
-			SharedLogging().PushProcessLog(LogLevel_Info, "App: Exiting.")
+			//SharedLogging().PushProcessLog(LogLevel_Info, "App: Exiting.")
 			app.close()
 		}()
 		runnable.SetConfig(app.config)
 		if err = SharedCosmosProcess().Start(&runnable); err != nil {
-			SharedLogging().PushProcessLog(LogLevel_Err, "App: Runnable starts failed. err=(%v)", err.AddStack(nil))
+			//SharedLogging().PushProcessLog(LogLevel_Err, "App: Runnable starts failed. err=(%v)", err.AddStack(nil))
 			return
 		}
-		SharedLogging().PushProcessLog(LogLevel_Info, "App: Started.")
+		//SharedLogging().PushProcessLog(LogLevel_Info, "App: Started.")
 		<-app.WaitExitApp()
 		if err = SharedCosmosProcess().Stop(); err != nil {
-			SharedLogging().PushProcessLog(LogLevel_Err, "App: Runnable stops with error. err=(%v)", err.AddStack(nil))
+			//SharedLogging().PushProcessLog(LogLevel_Err, "App: Runnable stops with error. err=(%v)", err.AddStack(nil))
 		}
 		return
 	}
+}
+
+// InitCosmosProcess 初始化进程
+// 该函数只能被调用一次，且必须在进程启动时调用。
+func InitCosmosProcess(cosmosName, cosmosNode string, accessLogFn, errLogFn loggingFn) (err *Error) {
+	onceInitSharedCosmosProcess.Do(func() {
+		//if IsParentProcess() {
+		//	processIDType = IDType_AppLoader
+		//} else {
+		//	processIDType = IDType_App
+		//}
+		sharedCosmosProcess, err = newCosmosProcess(cosmosName, cosmosNode, accessLogFn, errLogFn)
+	})
+	return
+}
+
+var sharedCosmosProcess *CosmosProcess
+var onceInitSharedCosmosProcess sync.Once
+
+func SharedCosmosProcess() *CosmosProcess {
+	return sharedCosmosProcess
 }

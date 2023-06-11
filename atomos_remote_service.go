@@ -13,6 +13,17 @@ type atomosRemoteService struct {
 	process *CosmosProcess
 }
 
+func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
+	rsp := &CosmosRemoteTryKillingRsp{}
+	if err := a.process.stopFromOtherNode(); err != nil {
+		rsp.Error = err.AddStack(a.process.local)
+	}
+	go func() {
+		a.process.stopFromOtherNodeAfterResponse()
+	}()
+	return rsp, nil
+}
+
 func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRemoteScaleGetAtomIDReq) (*CosmosRemoteScaleGetAtomIDRsp, error) {
 	rsp := &CosmosRemoteScaleGetAtomIDRsp{}
 	elem, err := a.process.local.getLocalElement(req.To.Element)
@@ -207,7 +218,7 @@ func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall 
 
 	// Cosmos
 	a.process.cluster.remoteMutex.RLock()
-	cosmosNode, has := a.process.cluster.remoteCosmos[callerIDInfo.Cosmos]
+	cosmosNode, has := a.process.cluster.remoteCosmos[callerIDInfo.Node]
 	a.process.cluster.remoteMutex.RUnlock()
 	if !has {
 		return nil

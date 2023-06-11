@@ -44,8 +44,10 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	id := &IDInfo{
 		Type:    IDType_Atom,
 		Cosmos:  e.atomos.id.Cosmos,
+		Node:    e.atomos.id.Node,
 		Element: e.atomos.id.Element,
 		Atom:    name,
+		GoId:    0,
 	}
 	a := &AtomLocal{
 		element:               e,
@@ -72,7 +74,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
-	a.atomos = NewBaseAtomos(id, lv, a, instance)
+	a.atomos = NewBaseAtomos(id, lv, a, instance, e.main.process.logging)
 	a.idFirstSyncCallLocal.init(e.atomos.id)
 	a.idTrackerManager.init(a)
 	a.messageTrackerManager.init(e.atomos, len(e.current.AtomHandlers))

@@ -8,26 +8,47 @@ import (
 
 const defaultLogMailID = 0
 
-var processIDType = IDType_App
+//var processIDType = IDType_App
 
 // Cosmos的Log接口。
 // Interface of Cosmos Log.
 
-type LoggingAtomos struct {
+type loggingAtomos struct {
 	logBox    *mailBox
-	accessLog LoggingFn
-	errorLog  LoggingFn
+	accessLog loggingFn
+	errorLog  loggingFn
+
+	exitCh chan struct{}
 }
 
-var sharedLogging LoggingAtomos
+type loggingFn func(string)
 
-type LoggingFn func(string)
-
-func SharedLogging() *LoggingAtomos {
-	return &sharedLogging
+func SharedLogging() *loggingAtomos {
+	return sharedCosmosProcess.logging
 }
 
-func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
+func (c *loggingAtomos) init(accessLog, errLog loggingFn) *Error {
+	c.accessLog = accessLog
+	c.errorLog = errLog
+	c.logBox = newMailBox("logging", c, accessLog, errLog)
+	return c.logBox.start(func() *Error { return nil })
+}
+
+func (c *loggingAtomos) stop() {
+	c.exitCh = make(chan struct{})
+	if ok := c.logBox.pushTail(&mail{
+		next:   nil,
+		id:     0,
+		action: MailActionExit,
+		mail:   nil,
+		log:    &LogMail{},
+	}); !ok {
+		c.errorLog("loggingAtomos: Stop failed.")
+	}
+	<-c.exitCh
+}
+
+func (c *loggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 	lm := &LogMail{
 		Id:      id,
 		Time:    timestamppb.Now(),
@@ -42,69 +63,64 @@ func (c *LoggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 		log:    lm,
 	}
 	if ok := c.logBox.pushTail(m); !ok {
-		c.errorLog(fmt.Sprintf("LoggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)", id, level, msg))
+		c.errorLog(fmt.Sprintf("loggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)", id, level, msg))
 	}
 }
 
-func initSharedLoggingAtomos(accessLog, errLog LoggingFn) {
-	sharedLogging = LoggingAtomos{
-		logBox:    nil,
-		accessLog: accessLog,
-		errorLog:  errLog,
-	}
-	sharedLogging.logBox = newMailBox("sharedLogging", &sharedLogging)
-	_ = sharedLogging.logBox.start(func() *Error { return nil })
-}
-
-func (c *LoggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}) {
+func (c *loggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}) {
 	c.PushLogging(&IDInfo{
-		Type:    processIDType,
-		Cosmos:  "",
+		//Type:    processIDType,
+		Node:    "",
 		Element: "",
 		Atom:    "",
+		GoId:    0,
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
-func (c *LoggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
-	c.PushLogging(&IDInfo{
-		Type:    processIDType,
-		Cosmos:  "",
-		Element: "",
-		Atom:    "",
-	}, level, fmt.Sprintf(format, args...))
-}
+//func (c *loggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
+//	c.PushLogging(&IDInfo{
+//		Type:    processIDType,
+//		Node:    "",
+//		Element: "",
+//		Atom:    "",
+//		GoId:    0,
+//	}, level, fmt.Sprintf(format, args...))
+//}
 
 // Logging Atomos的实现。
 // Implementation of Logging Atomos.
 
-func (c *LoggingAtomos) mailboxOnStartUp(func() *Error) *Error {
+func (c *loggingAtomos) mailboxOnStartUp(func() *Error) *Error {
 	return nil
 }
 
-func (c *LoggingAtomos) mailboxOnReceive(mail *mail) {
+func (c *loggingAtomos) mailboxOnReceive(mail *mail) {
 	c.logging(mail.log)
 }
 
-func (c *LoggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) {
+func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.logging(curMail.log)
 	}
+	if c.exitCh != nil {
+		c.exitCh <- struct{}{}
+	}
 }
 
-func (c *LoggingAtomos) logging(lm *LogMail) {
+func (c *loggingAtomos) logging(lm *LogMail) {
 	var msg string
 	if id := lm.Id; id != nil {
 		switch id.Type {
 		case IDType_Atom:
-			msg = fmt.Sprintf("%s::%s::%s => %s", id.Cosmos, id.Element, id.Atom, lm.Message)
+			msg = fmt.Sprintf("%s::%s::%s => %s", id.Node, id.Element, id.Atom, lm.Message)
 		case IDType_Element:
-			msg = fmt.Sprintf("%s::%s => %s", id.Cosmos, id.Element, lm.Message)
+			msg = fmt.Sprintf("%s::%s => %s", id.Node, id.Element, lm.Message)
 		case IDType_Cosmos:
-			msg = fmt.Sprintf("%s => %s", id.Cosmos, lm.Message)
-		case IDType_AppLoader:
-			msg = fmt.Sprintf("AppLoader => %s", lm.Message)
-		case IDType_App:
-			msg = fmt.Sprintf("App => %s", lm.Message)
+			msg = fmt.Sprintf("%s => %s", id.Node, lm.Message)
+		//case IDType_AppLoader:
+		//	msg = fmt.Sprintf("AppLoader => %s", lm.Message)
+		//case IDType_App:
+		//	msg = fmt.Sprintf("App => %s", lm.Message)
 		default:
 			msg = fmt.Sprintf("Unknown => %s", lm.Message)
 		}

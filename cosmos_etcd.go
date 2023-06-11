@@ -12,12 +12,12 @@ import (
 	"go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const (
+	etcdDialTime      = 5
 	etcdKeepaliveTime = 10
 )
 
@@ -30,46 +30,50 @@ const (
 )
 
 const (
-	etcdURICosmosPrefix            = "/cosmos/"
-	etcdURICosmosNodePrefix        = "/node/"
-	etcdURICosmosNodeVersionPrefix = "/version/"
-	etcdURICosmosNodeCurrentSuffix = "current"
-
-	etcdURICosmosFormat = etcdURICosmosPrefix + "%s"
-
-	// Resolved to /cosmos/{cosmosName}/node/{nodeName}
-	etcdURICosmosNodeFormat = etcdURICosmosFormat + etcdURICosmosNodePrefix + "%s"
-
-	// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version/{version}
-	etcdURICosmosNodeVersionFormat = etcdURICosmosNodeFormat + etcdURICosmosNodeVersionPrefix + "%d"
-
-	// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version/current
-	etcdURICosmosNodeCurrentVersionFormat = etcdURICosmosNodeFormat + etcdURICosmosNodeVersionPrefix + etcdURICosmosNodeCurrentSuffix
+	etcdCosmosName = "/cosmos"
+	etcdNodeName   = "/node"
+	etcdVerName    = "/version"
 )
 
 // Resolved to /cosmos/{cosmosName}/node/
-// Split to {nodeName}/version/{version|current}
-func etcdGetCosmosNodeWatchURI(cosmosName string) string {
-	return fmt.Sprintf(etcdURICosmosFormat+etcdURICosmosNodePrefix, cosmosName)
+// Use to trim prefix for suffix {nodeName}/version/{version}
+func etcdCosmosNodeWatchAllURI(cosmosName string) string {
+	s := etcdCosmosName + "/%s" + etcdNodeName + "/"
+	return fmt.Sprintf(s, cosmosName)
 }
 
-func etcdGetCosmosNodeVersionURI(cosmosName, nodeName string, version int64) string {
-	return fmt.Sprintf(etcdURICosmosNodeVersionFormat, cosmosName, nodeName, version)
+// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version/
+// Use to set or unset a current version of a node
+func etcdCosmosNodeLockURI(cosmosName, nodeName string) string {
+	// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version
+	s := etcdCosmosName + "/%s" + etcdNodeName + "/%s" + etcdVerName + "/"
+	return fmt.Sprintf(s, cosmosName, nodeName)
 }
 
-func etcdGetCosmosNodeCurrentVersionURI(cosmosName, nodeName string) string {
-	return fmt.Sprintf(etcdURICosmosNodeCurrentVersionFormat, cosmosName, nodeName)
+// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version/{version}
+func etcdCosmosNodeVersionURI(cosmosName, nodeName string, version int64) string {
+	// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version/{version}
+	s := etcdCosmosName + "/%s" + etcdNodeName + "/%s" + etcdVerName + "/%d"
+	return fmt.Sprintf(s, cosmosName, nodeName, version)
 }
 
-// etcdGetClusterTLSConfig
+//// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version
+//// Use to set or unset a current version of a node
+//func etcdGetCosmosNodeCurrentVersionURI(cosmosName, nodeName string) string {
+//	// Resolved to /cosmos/{cosmosName}/node/{nodeName}/version
+//	s := etcdCosmosName + "/%s" + etcdNodeName + "/%s" + etcdVerName
+//	return fmt.Sprintf(s, cosmosName, nodeName)
+//}
+
+// getClusterTLSConfig
 // 获取集群的TLS配置
-func (p *CosmosProcess) etcdGetClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
+func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
 	// Server-side
-	serverCertPem, err := etcdGet(cli, etcdClusterServerCertKey)
+	serverCertPem, _, err := etcdGet(cli, etcdClusterServerCertKey)
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
-	serverKeyPem, err := etcdGet(cli, etcdClusterServerKeyKey)
+	serverKeyPem, _, err := etcdGet(cli, etcdClusterServerKeyKey)
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
@@ -84,11 +88,11 @@ func (p *CosmosProcess) etcdGetClusterTLSConfig(cli *clientv3.Client) (bool, *gr
 	}
 
 	// Client-side
-	clientCertPem, err := etcdGet(cli, etcdClusterClientCertKey)
+	clientCertPem, _, err := etcdGet(cli, etcdClusterClientCertKey)
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
-	clientKeyPem, err := etcdGet(cli, etcdClusterClientKeyKey)
+	clientKeyPem, _, err := etcdGet(cli, etcdClusterClientKeyKey)
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
@@ -144,80 +148,114 @@ func (p *CosmosProcess) etcdGetClusterTLSConfig(cli *clientv3.Client) (bool, *gr
 	}
 }
 
-// etcdKeepClusterAlive
-// 保持当前节点的活跃
-func (p *CosmosProcess) etcdKeepClusterAlive(cli *clientv3.Client, nodeName, listenAddress string, version int64) *Error {
-	// Register a service
-	info := &CosmosProcessInfo{
-		Node:    nodeName,
-		Address: listenAddress,
+// trySetClusterToCurrentAndKeepalive
+// 尝试设置当前节点为活跃， 并保持当前节点的活跃。如果节点挂了，etcd会在失效后删除节点；如果节点正常退出，会在退出前删除节点。
+// Try to set the current node to active and keep the current node active. If the node hangs, etcd will delete the node after it fails;
+// if the node exits normally, it will delete the node before exiting.
+func (p *CosmosProcess) trySetClusterToCurrentAndKeepalive() *Error {
+	if !p.cluster.enable {
+		return nil
 	}
-	infoBuf, er := json.Marshal(info)
-	if er != nil {
-		return NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to marshal process info. err=(%s)", er).AddStack(nil)
-	}
-	key := etcdGetCosmosNodeVersionURI(p.local.runnable.config.Cosmos, nodeName, version)
 
-	// Keep alive
-	lease, err := etcdKeepalive(cli, key, infoBuf, etcdKeepaliveTime)
+	// If there is, notify the remote node to exit.
+	// 如果有，通知远程节点退出。
+	p.cluster.remoteMutex.Lock()
+	cosmosRemote, has := p.cluster.remoteCosmos[p.local.runnable.config.Node]
+	p.cluster.remoteMutex.Unlock()
+	if has {
+		// 如果节点已经是活跃的，直接退出并等待响应。
+		// If the node is already active, exit directly and wait response.
+		if err := cosmosRemote.tryKillingRemote(); err != nil {
+			return err.AddStack(nil)
+		}
+	}
+
+	key, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
+		Node:     p.local.runnable.config.Node,
+		Address:  p.cluster.grpcAddress,
+		Id:       p.local.GetIDInfo(),
+		State:    ClusterNodeState_Started,
+		Elements: p.local.getClusterElementsInfo(),
+	})
 	if err != nil {
 		return err.AddStack(nil)
 	}
 
-	// start a separate goroutine to keep the service registration alive
+	// Keep the cosmos remote alive.
+	lease, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+
+	// start a separate goroutine to keep the service registration alive, and to handle the case where the service is not able to renew the lease
 	go func(firstLease *clientv3.LeaseGrantResponse) {
 		var err *Error
 		var lease = firstLease
+		id := p.local.info
 		for {
 			select {
+			// 保持活跃
+			// Keepalive
 			case <-time.After(etcdKeepaliveTime * time.Second / 3):
+				p.logging.PushLogging(id, LogLevel_Debug, "etcd: Watcher keepalive.")
 				p.mutex.Lock()
 				state := p.state
 				p.mutex.Unlock()
 				if state != CosmosProcessStateRunning {
+					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher keepalive stopped.")
 					return
 				}
-				_, er := cli.KeepAliveOnce(context.Background(), lease.ID)
+				_, er := p.cluster.etcdClient.KeepAliveOnce(context.Background(), lease.ID)
 				if er != nil {
-					// TODO: Logging
+					p.logging.PushLogging(id, LogLevel_Err, fmt.Sprintf("etcd: Watcher keepalive failed. err=(%s)", er))
 					if er == rpctypes.ErrLeaseNotFound {
-						lease, err = etcdKeepalive(cli, key, infoBuf, etcdKeepaliveTime)
+						lease, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
 						if err != nil {
-							p.etcdErrorHandler(err)
-							// TODO: Logging
+							p.etcdErrorHandler(err.AddStack(nil))
 						}
 					}
 				}
+			// 更新节点信息
+			// Update node information
 			case infoBuf, more := <-p.cluster.etcdInfoCh:
+				p.logging.PushLogging(id, LogLevel_Debug, fmt.Sprintf("etcd: Watcher updates process info. info=(%s),more=(%v)", infoBuf, more))
 				if !more {
-					// TODO: Logging
-					_, er = cli.Delete(context.Background(), key)
+					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher will stop.")
+					_, er := p.cluster.etcdClient.Delete(context.Background(), key)
 					if er != nil {
-						// TODO: Logging
-						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to delete process info. err=(%s)", er).AddStack(nil))
+						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
+					}
+					if cancel := p.cluster.etcdCancelWatch; cancel != nil {
+						cancel()
 					}
 					return
 				}
-				_, er = cli.Put(context.Background(), key, string(infoBuf), clientv3.WithLease(lease.ID))
+				_, er := p.cluster.etcdClient.Put(context.Background(), key, string(infoBuf), clientv3.WithLease(lease.ID))
 				if er != nil {
-					// TODO: Logging
-					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to update process info. err=(%s)", er).AddStack(nil))
+					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to update cluster version info. err=(%s)", er).AddStack(nil))
 				}
 			}
 		}
 	}(lease)
 
+	// 设置当前节点为活跃
+	// Set the current node to active
+	if err := p.etcdStartedVersionNodeLock(); err != nil {
+		return err.AddStack(p.local)
+	}
+
 	return nil
 }
 
-// etcdKeepalive
+// watchCluster
 // 保持当前节点的活跃
-func (p *CosmosProcess) etcdWatchCluster(cli *clientv3.Client) *Error {
-	keyPrefix := etcdGetCosmosNodeWatchURI(p.local.runnable.config.Cosmos)
+func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
+	keyPrefix := etcdCosmosNodeWatchAllURI(p.local.runnable.config.Cosmos)
 	keyPrefixBytes := []byte(keyPrefix)
 
-	// Fetch the required value
-	getResp, er := cli.Get(context.Background(), keyPrefix)
+	// 会先把当前的节点信息全部获取一次先。
+	// First, get all the node information.
+	getResp, er := cli.Get(context.Background(), keyPrefix, clientv3.WithPrefix())
 	if er != nil {
 		return NewErrorf(ErrCosmosEtcdGetFailed, "etcd: Failed to fetch cluster info. err=(%s)", er).AddStack(nil)
 	}
@@ -226,20 +264,23 @@ func (p *CosmosProcess) etcdWatchCluster(cli *clientv3.Client) *Error {
 			p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(ev.Key)).AddStack(nil))
 			continue
 		}
-		key := strings.TrimLeft(string(ev.Key), keyPrefix)
+		key := strings.TrimPrefix(string(ev.Key), keyPrefix)
 		p.handleKey(key, ev.Value, true)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
-		watchCh := cli.Watch(context.Background(), keyPrefix, clientv3.WithPrefix())
+		watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
 		for watchResp := range watchCh {
 			for _, event := range watchResp.Events {
+				//p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
 				if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
 					continue
 				}
-				key := strings.TrimLeft(string(event.Kv.Key), keyPrefix)
+				key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
 				switch event.Type {
 				case mvccpb.PUT:
 					p.handleKey(key, event.Kv.Value, true)
@@ -253,101 +294,76 @@ func (p *CosmosProcess) etcdWatchCluster(cli *clientv3.Client) *Error {
 	return nil
 }
 
-// handleKey
-// 处理etcd的key
-func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool) {
-	keys := strings.Split(key, "/")
-	if len(keys) != 3 {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", key).AddStack(nil))
-		return
+// tryUnsetCurrentAndUpdateNodeInfo
+// 尝试取消当前节点的活跃状态并更新节点信息
+// Try to cancel the active status of the current node and update the node information
+func (p *CosmosProcess) tryUnsetCurrentAndUpdateNodeInfo() *Error {
+	if !p.cluster.enable {
+		return nil
 	}
-	if keys[1] != "version" {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", key).AddStack(nil))
-		return
+	// 取消当前节点的活跃状态
+	// Cancel the active status of the current node
+	if err := p.etcdStoppingNodeVersionUnlock(); err != nil {
+		p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("etcd: Failed to unset cluster current. err=(%v)", err))
 	}
-	nodeName := keys[0]
-	version := keys[2]
-	if version == etcdURICosmosNodeCurrentSuffix {
-		if updateOrDelete {
-			p.etcdUpdateClusterCosmosNodeCurrent(nodeName, value)
-		} else {
-			p.etcdDeleteClusterCosmosNodeCurrent(nodeName)
-		}
-	} else {
-		if updateOrDelete {
-			p.etcdUpdateClusterCosmosNode(nodeName, version, value)
-		} else {
-			p.etcdDeleteClusterCosmosNode(nodeName, version, value)
-		}
-	}
-}
-
-// etcdSetClusterCosmosNodeInfo
-// 设定当前节点的信息
-func (p *CosmosProcess) etcdSetClusterCosmosNodeInfo() *Error {
-	info := &CosmosProcessInfo{
+	// 更新节点信息
+	// Update node information
+	_, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
 		Node:     p.local.runnable.config.Node,
 		Address:  p.cluster.grpcAddress,
 		Id:       p.local.GetIDInfo(),
+		State:    ClusterNodeState_Stopping,
 		Elements: p.local.getClusterElementsInfo(),
-	}
-	infoBuf, er := json.Marshal(info)
-	if er != nil {
-		return NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Failed to marshal process info. err=(%s)", er).AddStack(nil)
+	})
+	if err != nil {
+		return err.AddStack(nil)
 	}
 	p.cluster.etcdInfoCh <- infoBuf
 	return nil
 }
 
-// etcdUnsetClusterCosmosNodeInfo
-// 取消当前节点的信息
-func (p *CosmosProcess) etcdUnsetClusterCosmosNodeInfo() *Error {
-	if p.cluster.etcdInfoCh != nil {
-		close(p.cluster.etcdInfoCh)
-		p.cluster.etcdInfoCh = nil
-	}
-	return nil
-}
-
-// etcdClusterSetCurrent
-// 设定当前节点的版本
-func (p *CosmosProcess) etcdClusterSetCurrent(cli *clientv3.Client, nodeName string, version int64) *Error {
-	key := etcdGetCosmosNodeCurrentVersionURI(p.local.runnable.config.Cosmos, nodeName)
-	versionStr := strconv.FormatInt(version, 10)
-	if err := etcdPut(cli, key, []byte(versionStr)); err != nil {
-		return err.AddStack(nil)
-	}
-	return nil
-}
-
-// etcdClusterUnsetCurrent
-// 取消当前节点的版本
-func (p *CosmosProcess) etcdClusterUnsetCurrent(cli *clientv3.Client, nodeName string) *Error {
-	key := etcdGetCosmosNodeCurrentVersionURI(p.local.runnable.config.Cosmos, nodeName)
-	if err := etcdDelete(cli, key); err != nil {
-		return err.AddStack(nil)
-	}
-	return nil
-}
-
-// etcdUpdateClusterCosmosNodeCurrent - watcher
-// 设定当前节点的版本
-func (p *CosmosProcess) etcdUpdateClusterCosmosNodeCurrent(nodeName string, value []byte) {
-	p.cluster.remoteMutex.Lock()
-	defer p.cluster.remoteMutex.Unlock()
-
-	version := string(value)
-	remote, has := p.cluster.remoteCosmos[nodeName]
-	if !has {
-		// TODO: error
+// handleKey
+// 处理etcd的key
+func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool) {
+	// key: {nodeName}/version/{version}
+	keys := strings.Split(key, "/")
+	if len(keys) != 3 {
+		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key format. key=(%s)", key).AddStack(nil))
 		return
 	}
-	remote.setCurrent(version)
+	if keys[1] != "version" {
+		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key version. key=(%s)", key).AddStack(nil))
+		return
+	}
+
+	nodeName := keys[0]
+	version := keys[2]
+	if version == "" {
+		if updateOrDelete {
+			p.etcdUpdateClusterVersionLockInfo(nodeName, value)
+		} else {
+			p.etcdDeleteClusterVersionLockInfo(nodeName)
+		}
+	} else {
+		if updateOrDelete {
+			p.etcdUpdateClusterVersionNodeInfo(nodeName, version, value)
+		} else {
+			p.etcdDeleteClusterVersionNodeInfo(nodeName, version, value)
+		}
+	}
 }
 
-// etcdDeleteClusterCosmosNodeCurrent - watcher
-// 取消当前节点的版本
-func (p *CosmosProcess) etcdDeleteClusterCosmosNodeCurrent(nodeName string) {
+// etcdUpdateClusterVersionLockInfo - watcher
+// 设定当前节点的版本
+func (p *CosmosProcess) etcdUpdateClusterVersionLockInfo(nodeName string, buf []byte) {
+	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Update current version lock. node=(%s),lock=(%s)", nodeName, string(buf)))
+	// Unmarshal the lock info
+	lockInfo := &CosmosNodeVersionInfo{}
+	if er := json.Unmarshal(buf, lockInfo); er != nil {
+		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update current version lock, got invalid value. node=(%s),err=(%s)", nodeName, er).AddStack(nil))
+		return
+	}
+
 	p.cluster.remoteMutex.Lock()
 	defer p.cluster.remoteMutex.Unlock()
 
@@ -356,19 +372,36 @@ func (p *CosmosProcess) etcdDeleteClusterCosmosNodeCurrent(nodeName string) {
 		// TODO: error
 		return
 	}
-	remote.unsetCurrent()
+	remote.etcdUpdateLock(lockInfo)
 }
 
-// etcdUpdateClusterCosmosNode - watcher
+// etcdDeleteClusterVersionLockInfo - watcher
+// 取消当前节点的版本
+func (p *CosmosProcess) etcdDeleteClusterVersionLockInfo(nodeName string) {
+	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Delete current version lock. node=(%s)", nodeName))
+	p.cluster.remoteMutex.Lock()
+	defer p.cluster.remoteMutex.Unlock()
+
+	remote, has := p.cluster.remoteCosmos[nodeName]
+	if !has {
+		// TODO: error
+		return
+	}
+	remote.etcdDeleteLock()
+}
+
+// etcdUpdateClusterVersionNodeInfo - watcher
 // 设定节点的版本
-func (p *CosmosProcess) etcdUpdateClusterCosmosNode(nodeName string, versionKey string, value []byte) {
-	info := &CosmosProcessInfo{}
+func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versionKey string, value []byte) {
+	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Update cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
+	info := &CosmosNodeVersionInfo{}
 	if er := json.Unmarshal(value, info); er != nil {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Invalid value. value=(%s)", string(value)).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update cluster version info, got invalid cluster info value. node=(%s),version=(%s),err=(%v)", nodeName, versionKey, er).AddStack(nil))
 		return
 	}
 
-	hasOld, remote := func(versionKey string, info *CosmosProcessInfo) (hasOld bool, r *CosmosRemote) {
+	// Update the remote
+	hasOld, remote := func(versionKey string, info *CosmosNodeVersionInfo) (hasOld bool, r *CosmosRemote) {
 		p.cluster.remoteMutex.Lock()
 		defer p.cluster.remoteMutex.Unlock()
 
@@ -377,34 +410,43 @@ func (p *CosmosProcess) etcdUpdateClusterCosmosNode(nodeName string, versionKey 
 			remote = newCosmosRemote(p, info, versionKey)
 			p.cluster.remoteCosmos[nodeName] = remote
 		}
+
 		return has, remote
 	}(versionKey, info)
 
 	if hasOld {
-		remote.updateVersion(info, versionKey)
+		remote.etcdUpdateVersion(info, versionKey)
+	} else {
+		remote.etcdCreateVersion(info, versionKey)
 	}
 }
 
-// etcdDeleteClusterCosmosNode - watcher
+// etcdDeleteClusterVersionNodeInfo - watcher
 // 取消节点的版本
-func (p *CosmosProcess) etcdDeleteClusterCosmosNode(nodeName string, versionKey string, value []byte) {
+func (p *CosmosProcess) etcdDeleteClusterVersionNodeInfo(nodeName string, versionKey string, value []byte) {
+	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Delete cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
 	p.cluster.remoteMutex.Lock()
 	defer p.cluster.remoteMutex.Unlock()
 
 	remote, has := p.cluster.remoteCosmos[nodeName]
 	if has {
-		remote.setDeleted()
+		remote.etcdDeleteVersion()
 	}
 }
 
-//// etcdCheckLinkCurrent - watcher
-//// 检查当前节点的版本
-//func (p *CosmosProcess) etcdCheckLinkCurrent() {
-//}
+// etcdNodeVersion etcd节点版本信息
+func (p *CosmosProcess) etcdNodeVersion(nodeName string, version int64, info *CosmosNodeVersionInfo) (string, string, *Error) {
+	key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, nodeName, version)
+	infoBuf, er := json.Marshal(info)
+	if er != nil {
+		return "", "", NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to marshal cluster version info. err=(%s)", er).AddStack(nil)
+	}
+	return key, string(infoBuf), nil
+}
 
 // etcdErrorHandler
 // etcd的错误处理
 func (p *CosmosProcess) etcdErrorHandler(err *Error) {
 	p.local.Log().Fatal("etcd critical error: %s", err)
-	// TODO
+	p.logging.PushLogging(p.local.info, LogLevel_Fatal, fmt.Sprintf("etcd critical error: %s", err))
 }

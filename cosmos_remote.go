@@ -11,7 +11,7 @@ import (
 
 type CosmosRemote struct {
 	process *CosmosProcess
-	info    *CosmosProcessInfo
+	info    *CosmosNodeVersionInfo
 
 	mutex   sync.RWMutex
 	enable  bool
@@ -22,7 +22,7 @@ type CosmosRemote struct {
 	*idTrackerManager
 }
 
-func newCosmosRemote(process *CosmosProcess, info *CosmosProcessInfo, version string) *CosmosRemote {
+func newCosmosRemote(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *CosmosRemote {
 	c := &CosmosRemote{
 		process:  process,
 		info:     info,
@@ -32,52 +32,73 @@ func newCosmosRemote(process *CosmosProcess, info *CosmosProcessInfo, version st
 		version:  map[string]*cosmosRemoteVersion{},
 		elements: map[string]*ElementRemote{},
 	}
-	c.version[version] = newCosmosRemoteVersion(process, info)
-
-	if info.Elements != nil {
-		for elemName, idInfo := range info.Elements {
-			e, has := process.local.runnable.interfaces[elemName]
-			if !has {
-				process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
-			}
-			c.elements[elemName] = newElementRemote(c, idInfo, e)
-		}
-	}
-
 	return c
 }
 
-func (c *CosmosRemote) setCurrent(version string) {
+func (c *CosmosRemote) etcdUpdateLock(version *CosmosNodeVersionInfo) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	v, has := c.version[version]
-	if !has {
-		// TODO: error
-		return
-	}
-	c.current = v
+	//v, has := c.version[version]
+	//if !has {
+	//	// TODO: error
+	//	return
+	//}
+	//c.current = v
 }
 
-func (c *CosmosRemote) unsetCurrent() {
+func (c *CosmosRemote) etcdDeleteLock() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	c.current = nil
 }
 
-func (c *CosmosRemote) updateVersion(info *CosmosProcessInfo, version string) {
+func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.enable = true
+	c.process.local.Log().Debug("CosmosRemote: Connect info version created. version=(%s)", version)
+	c.version[version] = newCosmosRemoteVersion(c.process, info)
+	if info.Elements != nil {
+		for elemName, idInfo := range info.Elements {
+			e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+			if !has {
+				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+			}
+			c.elements[elemName] = newElementRemote(c, idInfo, e)
+		}
+	}
+}
 
-	// 目前不支持同一个version的更新
-	if _, has := c.version[version]; has {
+func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	oldVersion, has := c.version[version]
+	if !has {
+		c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
+		c.version[version] = newCosmosRemoteVersion(c.process, info)
+		if info.Elements != nil {
+			for elemName, idInfo := range info.Elements {
+				e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+				if !has {
+					c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				}
+				c.elements[elemName] = newElementRemote(c, idInfo, e)
+			}
+		}
+		return
+	}
+	if proto.Equal(info, oldVersion.info) {
 		return
 	}
 
-	c.version[version] = newCosmosRemoteVersion(c.process, info)
+	if info.Address != oldVersion.info.Address {
+		oldVersion.setDisable()
+		c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
+		c.version[version] = newCosmosRemoteVersion(c.process, info)
+	}
 
 	// Compare old element and new element to know which element is added or removed.
 	// If the element is removed, it will be disabled in the element list.
@@ -98,7 +119,7 @@ func (c *CosmosRemote) updateVersion(info *CosmosProcessInfo, version string) {
 	}
 }
 
-func (c *CosmosRemote) setDeleted() {
+func (c *CosmosRemote) etcdDeleteVersion() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -291,7 +312,7 @@ func (c *CosmosRemote) getGoID() uint64 {
 // Implementation of CosmosNode
 
 func (c *CosmosRemote) GetNodeName() string {
-	return c.GetIDInfo().Cosmos
+	return c.GetIDInfo().Node
 }
 
 func (c *CosmosRemote) CosmosIsLocal() bool {
@@ -355,12 +376,12 @@ func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, co
 
 type cosmosRemoteVersion struct {
 	process *CosmosProcess
-	info    *CosmosProcessInfo
+	info    *CosmosNodeVersionInfo
 	avail   bool
 	client  *grpc.ClientConn
 }
 
-func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosProcessInfo) *cosmosRemoteVersion {
+func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo) *cosmosRemoteVersion {
 	c := &cosmosRemoteVersion{
 		process: process,
 		info:    info,
@@ -376,10 +397,10 @@ func (c *cosmosRemoteVersion) check() bool {
 		return true
 	}
 	var er error
-	if c.process.cluster.dialOption == nil {
+	if c.process.cluster.grpcDialOption == nil {
 		c.client, er = grpc.Dial(c.info.Address, grpc.WithInsecure())
 	} else {
-		c.client, er = grpc.Dial(c.info.Address, *c.process.cluster.dialOption)
+		c.client, er = grpc.Dial(c.info.Address, *c.process.cluster.grpcDialOption)
 	}
 	if er != nil {
 		c.process.local.Log().Fatal("CosmosRemote: Dial failed. err=(%v)", er)
@@ -387,6 +408,48 @@ func (c *cosmosRemoteVersion) check() bool {
 	}
 	c.avail = true
 	return true
+}
+
+func (c *cosmosRemoteVersion) setDisable() {
+	if c.client != nil {
+		c.client.Close()
+	}
+}
+
+func (c *CosmosRemote) tryKillingRemote() (err *Error) {
+	var targetVersion *cosmosRemoteVersion
+	c.mutex.RLock()
+	switch len(c.version) {
+	case 0:
+	case 1:
+		for s := range c.version {
+			targetVersion = c.version[s]
+		}
+	default:
+		err = NewError(ErrCosmosEtcdClusterVersionsCheckFailed, "CosmosRemote: Version invalid.").AddStack(nil)
+	}
+	c.mutex.RUnlock()
+
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	if targetVersion == nil {
+		return nil
+	}
+	cli := targetVersion.client
+	if cli == nil {
+		return NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: Client not found.").AddStack(nil)
+	}
+
+	client := NewAtomosRemoteServiceClient(cli)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, er := client.TryKilling(ctx, &CosmosRemoteTryKillingReq{})
+
+	if er != nil {
+		return NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: Try killing error. err=(%v)", er).AddStack(nil)
+	}
+	return nil
 }
 
 // remoteCosmosFakeSelfID is a fake self id for remote cosmos.

@@ -47,7 +47,7 @@ func init() {
 
 type hellMainScript struct{}
 
-func (h *hellMainScript) OnStartup(c *atomos.CosmosLocal) *atomos.Error {
+func (h *hellMainScript) OnLocalReady(c *atomos.CosmosLocal) *atomos.Error {
 	self := atomos.SharedCosmosProcess().Self()
 	// Get Element
 	helloElementID, err := api.GetHelloElementID(self.Cosmos())

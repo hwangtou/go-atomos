@@ -35,7 +35,11 @@ func benchmarkMailBox(b *testing.B, waiters int) {
 	h := benchmarkMailHandler{
 		done: make(chan bool),
 	}
-	mb := newMailBox("benchmarkMailbox", &h)
+	mb := newMailBox("benchmarkMailbox", &h, func(s string) {
+		b.Log(s)
+	}, func(s string) {
+		b.Error(s)
+	})
 	if err := mb.start(nil); err != nil {
 		b.Errorf("Benchmark: Start failed. err=(%v)", err.AddStack(nil))
 		return

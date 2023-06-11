@@ -114,7 +114,7 @@ type BaseAtomos struct {
 	log atomosLoggingManager
 }
 
-func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos) *BaseAtomos {
+func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, logging *loggingAtomos) *BaseAtomos {
 	a := &BaseAtomos{
 		id:       id,
 		state:    AtomosHalt,
@@ -124,8 +124,8 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos) *B
 		task:     atomosTaskManager{},
 		log:      atomosLoggingManager{},
 	}
-	a.mailbox = newMailBox(id.Info(), a)
-	initAtomosLog(&a.log, a, lv)
+	a.mailbox = newMailBox(id.Info(), a, logging.accessLog, logging.errorLog)
+	initAtomosLog(&a.log, a.id, lv, logging)
 	initAtomosTasksManager(&a.task, a)
 	return a
 }

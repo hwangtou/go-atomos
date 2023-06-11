@@ -52,7 +52,8 @@ type ElementLocal struct {
 func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementImplementation) *ElementLocal {
 	id := &IDInfo{
 		Type:    IDType_Element,
-		Cosmos:  runnable.config.Node,
+		Cosmos:  runnable.config.Cosmos,
+		Node:    runnable.config.Node,
 		Element: impl.Interface.Config.Name,
 		Atom:    "",
 	}
@@ -67,7 +68,7 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		idTrackerManager:      &idTrackerManager{},
 		messageTrackerManager: &messageTrackerManager{},
 	}
-	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor())
+	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor(), main.process.logging)
 	e.idTrackerManager.init(e)
 	e.messageTrackerManager.init(e.atomos, len(impl.ElementHandlers))
 
@@ -734,7 +735,7 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal, tracker *IDTracker) {
 
 	// assert
 	if atom.atomos.mailbox.isRunning() {
-		sharedLogging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", name)
+		e.main.process.logging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", name)
 	}
 }
 
@@ -756,7 +757,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 
 	// assert
 	if atom.atomos.mailbox.isRunning() {
-		sharedLogging.pushFrameworkErrorLog("Atom: Try stopping a mailbox which is still running. name=(%s)", name)
+		e.main.process.logging.pushFrameworkErrorLog("Atom: Try stopping a mailbox which is still running. name=(%s)", name)
 	}
 }
 
