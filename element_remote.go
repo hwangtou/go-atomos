@@ -351,7 +351,7 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	rsp, er := client.ScaleGetAtomID(ctx, &CosmosRemoteScaleGetAtomIDReq{
 		CallerId:               callerID.GetIDInfo(),
 		CallerCurFirstSyncCall: firstSyncCall,
-		To:                     e.cosmos.info.Id,
+		To:                     e.cosmos.id,
 		Timeout:                int64(timeout),
 		Message:                name,
 		Args:                   arg,

@@ -159,29 +159,57 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
-	elem, err := a.process.local.getLocalElement(req.To.Element)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
-		return rsp, nil
-	}
-	in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
-	if er != nil {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er)
-		return rsp, nil
-	}
+	switch req.To.Type {
+	case IDType_Atom, IDType_Element:
+		// Caller id.
+		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
 
-	if elem.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall)
+		// Unmarshal args.
+		in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+		if er != nil {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er)
+			return rsp, nil
+		}
+
+		var id SelfID
+		// Get element.
+		elem, err := a.process.local.getLocalElement(req.To.Element)
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
+		}
+		if req.To.Type == IDType_Atom {
+			atom := elem.getAtom(req.To.Atom)
+			if atom != nil {
+				id = atom
+			}
+		} else {
+			id = elem
+		}
+		if id == nil {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To)
+			return rsp, nil
+		}
+
+		// Check caller cur first sync call.
+		if id.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall)
+			return rsp, nil
+		}
+
+		// Sync messaging.
+		out, err := id.SyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in)
+		if out != nil {
+			rsp.Reply, _ = anypb.New(out)
+		}
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+		}
+		return rsp, nil
+	default:
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid ToID type. to=(%v)", req.To)
 		return rsp, nil
 	}
-	callerID := a.getFromCaller(req.To, req.CallerCurFirstSyncCall)
-
-	out, err := elem.SyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in)
-	rsp.Reply, _ = anypb.New(out)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
-	}
-	return rsp, nil
 }
 
 func (a *atomosRemoteService) ReleaseID(ctx context.Context, req *CosmosRemoteReleaseIDReq) (*CosmosRemoteReleaseIDRsp, error) {

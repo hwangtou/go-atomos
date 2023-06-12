@@ -42,7 +42,8 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 		}
 		if !resp.Succeeded {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
+			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 		}
 		return nil
 	} else {
@@ -77,7 +78,8 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 		}
 		if !resp.Succeeded {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
+			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 		}
 		return nil
 	}
@@ -133,7 +135,8 @@ func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
 		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
+		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }
@@ -191,7 +194,8 @@ func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
+		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }
@@ -246,7 +250,8 @@ func (p *CosmosProcess) etcdStoppingNodeVersionUnlock() *Error {
 		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
+		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }

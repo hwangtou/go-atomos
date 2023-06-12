@@ -148,11 +148,11 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	}
 }
 
-// trySetClusterToCurrentAndKeepalive
+// trySettingClusterToCurrentAndKeepalive
 // 尝试设置当前节点为活跃， 并保持当前节点的活跃。如果节点挂了，etcd会在失效后删除节点；如果节点正常退出，会在退出前删除节点。
 // Try to set the current node to active and keep the current node active. If the node hangs, etcd will delete the node after it fails;
 // if the node exits normally, it will delete the node before exiting.
-func (p *CosmosProcess) trySetClusterToCurrentAndKeepalive() *Error {
+func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	if !p.cluster.enable {
 		return nil
 	}
@@ -228,6 +228,9 @@ func (p *CosmosProcess) trySetClusterToCurrentAndKeepalive() *Error {
 					if cancel := p.cluster.etcdCancelWatch; cancel != nil {
 						cancel()
 					}
+					if p.cluster.etcdExitCh != nil {
+						p.cluster.etcdExitCh <- struct{}{}
+					}
 					return
 				}
 				_, er := p.cluster.etcdClient.Put(context.Background(), key, string(infoBuf), clientv3.WithLease(lease.ID))
@@ -294,10 +297,10 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	return nil
 }
 
-// tryUnsetCurrentAndUpdateNodeInfo
+// tryUnsettingCurrentAndUpdateNodeInfo
 // 尝试取消当前节点的活跃状态并更新节点信息
 // Try to cancel the active status of the current node and update the node information
-func (p *CosmosProcess) tryUnsetCurrentAndUpdateNodeInfo() *Error {
+func (p *CosmosProcess) tryUnsettingCurrentAndUpdateNodeInfo() *Error {
 	if !p.cluster.enable {
 		return nil
 	}
@@ -348,7 +351,7 @@ func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool)
 		if updateOrDelete {
 			p.etcdUpdateClusterVersionNodeInfo(nodeName, version, value)
 		} else {
-			p.etcdDeleteClusterVersionNodeInfo(nodeName, version, value)
+			p.etcdDeleteClusterVersionNodeInfo(nodeName, version)
 		}
 	}
 }
@@ -358,21 +361,31 @@ func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool)
 func (p *CosmosProcess) etcdUpdateClusterVersionLockInfo(nodeName string, buf []byte) {
 	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Update current version lock. node=(%s),lock=(%s)", nodeName, string(buf)))
 	// Unmarshal the lock info
-	lockInfo := &CosmosNodeVersionInfo{}
+	lockInfo := &CosmosNodeVersionLock{}
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
 		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update current version lock, got invalid value. node=(%s),err=(%s)", nodeName, er).AddStack(nil))
 		return
 	}
 
-	p.cluster.remoteMutex.Lock()
-	defer p.cluster.remoteMutex.Unlock()
+	// Update the remote
+	hasOld, remote := func(nodeName string, info *CosmosNodeVersionLock) (hasOld bool, r *CosmosRemote) {
+		p.cluster.remoteMutex.Lock()
+		defer p.cluster.remoteMutex.Unlock()
 
-	remote, has := p.cluster.remoteCosmos[nodeName]
-	if !has {
-		// TODO: error
-		return
+		remote, has := p.cluster.remoteCosmos[nodeName]
+		if !has {
+			remote = newCosmosRemoteFromLockInfo(p, info)
+			p.cluster.remoteCosmos[nodeName] = remote
+		}
+
+		return has, remote
+	}(nodeName, lockInfo)
+
+	if hasOld {
+		remote.etcdUpdateLock(lockInfo)
+	} else {
+		remote.etcdUpdateLock(lockInfo)
 	}
-	remote.etcdUpdateLock(lockInfo)
 }
 
 // etcdDeleteClusterVersionLockInfo - watcher
@@ -384,7 +397,7 @@ func (p *CosmosProcess) etcdDeleteClusterVersionLockInfo(nodeName string) {
 
 	remote, has := p.cluster.remoteCosmos[nodeName]
 	if !has {
-		// TODO: error
+		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Delete current version lock, got invalid node. node=(%s)", nodeName).AddStack(nil))
 		return
 	}
 	remote.etcdDeleteLock()
@@ -401,18 +414,18 @@ func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versio
 	}
 
 	// Update the remote
-	hasOld, remote := func(versionKey string, info *CosmosNodeVersionInfo) (hasOld bool, r *CosmosRemote) {
+	hasOld, remote := func(info *CosmosNodeVersionInfo) (hasOld bool, r *CosmosRemote) {
 		p.cluster.remoteMutex.Lock()
 		defer p.cluster.remoteMutex.Unlock()
 
 		remote, has := p.cluster.remoteCosmos[nodeName]
 		if !has {
-			remote = newCosmosRemote(p, info, versionKey)
+			remote = newCosmosRemoteFromNodeInfo(p, info)
 			p.cluster.remoteCosmos[nodeName] = remote
 		}
 
 		return has, remote
-	}(versionKey, info)
+	}(info)
 
 	if hasOld {
 		remote.etcdUpdateVersion(info, versionKey)
@@ -423,14 +436,14 @@ func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versio
 
 // etcdDeleteClusterVersionNodeInfo - watcher
 // 取消节点的版本
-func (p *CosmosProcess) etcdDeleteClusterVersionNodeInfo(nodeName string, versionKey string, value []byte) {
+func (p *CosmosProcess) etcdDeleteClusterVersionNodeInfo(nodeName, versionKey string) {
 	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Delete cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
 	p.cluster.remoteMutex.Lock()
 	defer p.cluster.remoteMutex.Unlock()
 
 	remote, has := p.cluster.remoteCosmos[nodeName]
 	if has {
-		remote.etcdDeleteVersion()
+		remote.etcdDeleteVersion(versionKey)
 	}
 }
 

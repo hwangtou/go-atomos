@@ -34,6 +34,7 @@ type CosmosProcess struct {
 		etcdClient      *clientv3.Client
 		etcdVersion     int64
 		etcdInfoCh      chan string
+		etcdExitCh      chan struct{}
 		etcdCancelWatch context.CancelFunc
 		// GRPC
 		grpcServerOption *grpc.ServerOption
@@ -175,7 +176,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		// 尝试将自己设置为current并保持心跳。首先，如果有其它节点的话，将其退出，退出失败也会导致本程序退出。然后把当前进程信息设置到etcd中，并keepalive 。
 		// Try to set yourself as current and keepalive. First, if there are other nodes, exit them, and if the exit fails, the program will exit.
 		// Then set the current process information to etcd and keepalive.
-		if err := p.trySetClusterToCurrentAndKeepalive(); err != nil {
+		if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
 			p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("CosmosProcess: Set cluster to current and keepalive failed. err=(%+v)", err))
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
@@ -241,7 +242,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 			}
 		}()
 
-		if err := p.tryUnsetCurrentAndUpdateNodeInfo(); err != nil {
+		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
 			p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("CosmosProcess: Update cluster info failed. err=(%+v)", err))
 		}
 
@@ -252,11 +253,6 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		return nil
 	}()
 
-	p.mutex.Lock()
-	p.state = CosmosProcessStateOff
-	p.mutex.Unlock()
-
-	p.logging.stop()
 	return err
 }
 
@@ -309,7 +305,7 @@ func (p *CosmosProcess) Stop() *Error {
 			}
 		}()
 
-		if err := p.tryUnsetCurrentAndUpdateNodeInfo(); err != nil {
+		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
 			p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("CosmosProcess: Update cluster info failed. err=(%+v)", err))
 		}
 
@@ -391,6 +387,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	}
 	p.cluster.etcdClient = cli
 	p.cluster.etcdInfoCh = make(chan string)
+	p.cluster.etcdExitCh = make(chan struct{})
 
 	// 检查etcd中同一个cosmos的node有多少个version。因为version是用于热更的设计，而不是为了支持多个版本，所以集群同时只应该有不超过两个version。
 	// 当检查到当前cosmos的node已经有两个version，且两个version都不是自己时，应该主动退出。
@@ -470,6 +467,10 @@ func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 	// 删除etcd中的watcher。
 	if p.cluster.etcdInfoCh != nil {
 		close(p.cluster.etcdInfoCh)
+		if p.cluster.etcdExitCh != nil {
+			<-p.cluster.etcdExitCh
+			p.cluster.etcdExitCh = nil
+		}
 		p.cluster.etcdInfoCh = nil
 	}
 
@@ -521,15 +522,19 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 	// 删除etcd中的watcher。
 	if p.cluster.etcdInfoCh != nil {
 		close(p.cluster.etcdInfoCh)
+		if p.cluster.etcdExitCh != nil {
+			<-p.cluster.etcdExitCh
+			p.cluster.etcdExitCh = nil
+		}
 		p.cluster.etcdInfoCh = nil
 	}
 
 	// 删除etcd中的key，刪除version锁和node信息。
 	if p.cluster.etcdClient != nil {
-		// 删除version锁。
-		if err := p.etcdStoppingNodeVersionUnlock(); err != nil {
-			p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("CosmosProcess: Failed to unlock version while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
-		}
+		//// 删除version锁。
+		//if err := p.etcdStoppingNodeVersionUnlock(); err != nil {
+		//	p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("CosmosProcess: Failed to unlock version while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+		//}
 
 		// 删除node信息。
 		key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node, p.cluster.etcdVersion)

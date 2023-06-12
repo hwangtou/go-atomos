@@ -5,13 +5,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"strconv"
 	"sync"
 	"time"
 )
 
 type CosmosRemote struct {
 	process *CosmosProcess
-	info    *CosmosNodeVersionInfo
+	id      *IDInfo
+	lock    *CosmosNodeVersionLock
 
 	mutex   sync.RWMutex
 	enable  bool
@@ -22,12 +24,12 @@ type CosmosRemote struct {
 	*idTrackerManager
 }
 
-func newCosmosRemote(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *CosmosRemote {
+func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersionInfo) *CosmosRemote {
 	c := &CosmosRemote{
 		process:  process,
-		info:     info,
+		id:       info.Id,
 		mutex:    sync.RWMutex{},
-		enable:   true,
+		enable:   false,
 		current:  nil,
 		version:  map[string]*cosmosRemoteVersion{},
 		elements: map[string]*ElementRemote{},
@@ -35,31 +37,61 @@ func newCosmosRemote(process *CosmosProcess, info *CosmosNodeVersionInfo, versio
 	return c
 }
 
-func (c *CosmosRemote) etcdUpdateLock(version *CosmosNodeVersionInfo) {
+func newCosmosRemoteFromLockInfo(process *CosmosProcess, lock *CosmosNodeVersionLock) *CosmosRemote {
+	c := &CosmosRemote{
+		process:  process,
+		id:       nil,
+		mutex:    sync.RWMutex{},
+		enable:   false,
+		current:  nil,
+		version:  map[string]*cosmosRemoteVersion{},
+		elements: map[string]*ElementRemote{},
+	}
+	return c
+}
+
+// Use with mutex protect
+func (c *CosmosRemote) refresh() {
+	if c.lock == nil {
+		c.enable = false
+		return
+	}
+	if c.lock.Current == 0 {
+		c.enable = false
+		return
+	}
+	version, has := c.version[strconv.FormatInt(c.lock.Current, 10)]
+	if !has {
+		c.enable = false
+		return
+	}
+	c.current = version
+	c.enable = true
+}
+
+func (c *CosmosRemote) etcdUpdateLock(lock *CosmosNodeVersionLock) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	//v, has := c.version[version]
-	//if !has {
-	//	// TODO: error
-	//	return
-	//}
-	//c.current = v
+	c.lock = lock
+	c.refresh()
 }
 
 func (c *CosmosRemote) etcdDeleteLock() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.current = nil
+	c.lock = nil
+	c.refresh()
 }
 
 func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
+	c.process.local.Log().Debug("CosmosRemote: Connect info version created. version=(%s)", version)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.process.local.Log().Debug("CosmosRemote: Connect info version created. version=(%s)", version)
-	c.version[version] = newCosmosRemoteVersion(c.process, info)
+	c.id = info.Id
+	c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	if info.Elements != nil {
 		for elemName, idInfo := range info.Elements {
 			e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
@@ -69,16 +101,18 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 			c.elements[elemName] = newElementRemote(c, idInfo, e)
 		}
 	}
+	c.refresh()
 }
 
 func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
+	c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	oldVersion, has := c.version[version]
 	if !has {
-		c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
-		c.version[version] = newCosmosRemoteVersion(c.process, info)
+		c.id = info.Id
+		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 		if info.Elements != nil {
 			for elemName, idInfo := range info.Elements {
 				e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
@@ -88,16 +122,18 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 				c.elements[elemName] = newElementRemote(c, idInfo, e)
 			}
 		}
+		c.refresh()
 		return
 	}
 	if proto.Equal(info, oldVersion.info) {
 		return
 	}
 
+	c.id = info.Id
 	if info.Address != oldVersion.info.Address {
 		oldVersion.setDisable()
 		c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
-		c.version[version] = newCosmosRemoteVersion(c.process, info)
+		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	}
 
 	// Compare old element and new element to know which element is added or removed.
@@ -117,17 +153,24 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			}
 		}
 	}
+	c.refresh()
 }
 
-func (c *CosmosRemote) etcdDeleteVersion() {
+func (c *CosmosRemote) etcdDeleteVersion(version string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	for _, elem := range c.elements {
-		elem.setDisable()
+	v, has := c.version[version]
+	if has {
+		delete(c.version, version)
+		if c.current != nil && c.current.version == v.version {
+			c.current = nil
+			//for _, elem := range c.elements {
+			//	elem.setDisable()
+			//}
+		}
 	}
-	c.enable = false
-	c.current = nil
+	c.refresh()
 }
 
 func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
@@ -160,11 +203,11 @@ func (c *CosmosRemote) GetIDInfo() *IDInfo {
 	if c == nil {
 		return nil
 	}
-	return c.info.Id
+	return c.id
 }
 
 func (c *CosmosRemote) String() string {
-	return c.info.Id.Info()
+	return c.id.Info()
 }
 
 func (c *CosmosRemote) Cosmos() CosmosNode {
@@ -181,7 +224,7 @@ func (c *CosmosRemote) State() AtomosState {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rsp, er := client.GetIDState(ctx, &CosmosRemoteGetIDStateReq{
-		Id: c.info.Id,
+		Id: c.id,
 	})
 	if er != nil {
 		c.process.local.Log().Error("CosmosRemote: GetIDState failed. err=(%v)", er)
@@ -201,7 +244,7 @@ func (c *CosmosRemote) IdleTime() time.Duration {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rsp, er := client.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{
-		Id: c.info.Id,
+		Id: c.id,
 	})
 	if er != nil {
 		c.process.local.Log().Error("CosmosRemote: GetIDIdleTime failed. err=(%v)", er)
@@ -228,16 +271,20 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:               callerID.GetIDInfo(),
 		CallerCurFirstSyncCall: callerID.getCurFirstSyncCall(),
-		To:                     c.info.Id,
+		To:                     c.id,
 		Timeout:                int64(timeout),
 		Message:                name,
 		Args:                   arg,
 	})
-	out, er = rsp.Reply.UnmarshalNew()
 	if er != nil {
-		return nil, NewError(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error.").AddStack(nil)
+		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
 	}
-
+	if rsp.Reply != nil {
+		out, er = rsp.Reply.UnmarshalNew()
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+		}
+	}
 	if rsp.Error != nil {
 		err = rsp.Error.AddStack(nil)
 	}
@@ -271,7 +318,7 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 				CallerId:               callerIDInfo,
 				CallerCurFirstSyncCall: firstSyncCall,
-				To:                     c.info.Id,
+				To:                     c.id,
 				Timeout:                int64(timeout),
 				Message:                name,
 				Args:                   arg,
@@ -306,7 +353,7 @@ func (c *CosmosRemote) getIDTrackerManager() *idTrackerManager {
 }
 
 func (c *CosmosRemote) getGoID() uint64 {
-	return c.info.Id.GoId
+	return c.id.GoId
 }
 
 // Implementation of CosmosNode
@@ -379,9 +426,10 @@ type cosmosRemoteVersion struct {
 	info    *CosmosNodeVersionInfo
 	avail   bool
 	client  *grpc.ClientConn
+	version string
 }
 
-func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo) *cosmosRemoteVersion {
+func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *cosmosRemoteVersion {
 	c := &cosmosRemoteVersion{
 		process: process,
 		info:    info,

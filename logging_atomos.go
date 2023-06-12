@@ -23,7 +23,12 @@ type loggingAtomos struct {
 
 type loggingFn func(string)
 
-func SharedLogging() *loggingAtomos {
+type LoggingRaw interface {
+	PushLogging(id *IDInfo, level LogLevel, msg string)
+	pushFrameworkErrorLog(format string, args ...interface{})
+}
+
+func SharedLogging() LoggingRaw {
 	return sharedCosmosProcess.logging
 }
 
@@ -76,16 +81,6 @@ func (c *loggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}
 		GoId:    0,
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
-
-//func (c *loggingAtomos) PushProcessLog(level LogLevel, format string, args ...interface{}) {
-//	c.PushLogging(&IDInfo{
-//		Type:    processIDType,
-//		Node:    "",
-//		Element: "",
-//		Atom:    "",
-//		GoId:    0,
-//	}, level, fmt.Sprintf(format, args...))
-//}
 
 // Logging Atomos的实现。
 // Implementation of Logging Atomos.
