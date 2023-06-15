@@ -37,7 +37,7 @@ type idFirstSyncCall interface {
 type idFirstSyncCallLocal struct {
 	info *IDInfo
 
-	sync.Mutex
+	mutex sync.Mutex
 	// 当前调用链的首个同步调用名。
 	curFirstSyncCall string
 	// 用于调用链的firstSyncCall生成的计数器。
@@ -51,9 +51,9 @@ func (f *idFirstSyncCallLocal) init(id *IDInfo) {
 // Implementation of idFirstSyncCall
 
 func (f *idFirstSyncCallLocal) getCurFirstSyncCall() string {
-	f.Lock()
+	f.mutex.Lock()
 	c := f.curFirstSyncCall
-	f.Unlock()
+	f.mutex.Unlock()
 	return c
 }
 
@@ -61,27 +61,27 @@ func (f *idFirstSyncCallLocal) setSyncMessageAndFirstCall(firstSyncCall string) 
 	if firstSyncCall == "" {
 		return NewError(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Inputting firstSyncCall should not be empty.").AddStack(nil)
 	}
-	f.Lock()
+	f.mutex.Lock()
 	if f.curFirstSyncCall != "" {
-		f.Unlock()
+		f.mutex.Unlock()
 		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty.").AddStack(nil)
 	}
 	f.curFirstSyncCall = firstSyncCall
-	f.Unlock()
+	f.mutex.Unlock()
 	return nil
 }
 
 func (f *idFirstSyncCallLocal) unsetSyncMessageAndFirstCall() {
-	f.Lock()
+	f.mutex.Lock()
 	f.curFirstSyncCall = ""
-	f.Unlock()
+	f.mutex.Unlock()
 }
 
 func (f *idFirstSyncCallLocal) nextFirstSyncCall() string {
-	f.Lock()
+	f.mutex.Lock()
 	f.curCallCounter += 1
 	callID := f.curCallCounter
-	f.Unlock()
+	f.mutex.Unlock()
 	return fmt.Sprintf("%s-%d", f.info.Info(), callID)
 }
 

@@ -48,7 +48,7 @@ func newTestFakeRunnable(t *testing.T, autoData bool) *CosmosRunnable {
 	runnable.
 		SetConfig(newTestFakeCosmosMainConfig()).
 		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, autoData))
+		AddElementImplementation(newTestFakeElement(t, nil, autoData))
 	return runnable
 }
 
@@ -84,7 +84,7 @@ func newTestAppLogging(t *testing.T) *appLogging {
 	return logging
 }
 
-func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
+func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *ElementImplementation {
 	var dev ElementDeveloper
 	if autoData {
 		dev = &testElementAutoDataDev{}
@@ -214,6 +214,9 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 				t.Logf("AtomHandlers: testMessage. from=(%v),to=(%v),in=(%v)", from, to, in)
 				return &String{S: "OK"}, nil
 			},
+			"testSpawnAtoms": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+				return &String{S: "OK"}, nil
+			},
 			"testMessageTimeout": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				t.Logf("AtomHandlers: testMessageTimeout. from=(%v),to=(%v),in=(%v)", from, to, in)
 				time.Sleep(2 * time.Millisecond)
@@ -282,6 +285,9 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 			"testPanic": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				panic("test panic")
 			},
+			"Broadcast": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+				return nil, nil
+			},
 			"testKillSelf": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				sharedTestAtom1.KillSelf()
 				return &String{S: "OK"}, nil
@@ -289,7 +295,8 @@ func newTestFakeElement(t *testing.T, autoData bool) *ElementImplementation {
 		},
 		ScaleHandlers: map[string]ScaleHandler{
 			"ScaleTestMessage": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
-				return sharedTestAtom1, nil
+				elem := process.local.elements["testElement"]
+				return elem.atoms["testAtom"], nil
 			},
 			"ScaleTestMessageError": func(from ID, to Atomos, message string, in proto.Message) (id ID, err *Error) {
 				return sharedTestAtom1, NewError(ErrFrameworkRecoverFromPanic, "Scale ID failed")
@@ -340,7 +347,7 @@ func (t testElementAutoDataDev) ElementConstructor() Atomos {
 	return &testElement{}
 }
 
-func (t *testElementAutoDataDev) AtomAutoDataPersistence() AtomAutoData {
+func (t *testElementAutoDataDev) AtomAutoData() AtomAutoData {
 	return t
 }
 
@@ -367,7 +374,7 @@ func (t *testElementAutoDataDev) SetAtomData(name string, data proto.Message) *E
 	return nil
 }
 
-func (t *testElementAutoDataDev) ElementAutoDataPersistence() ElementAutoData {
+func (t *testElementAutoDataDev) ElementAutoData() ElementAutoData {
 	return t
 }
 

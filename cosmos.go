@@ -56,8 +56,6 @@ type CosmosRunnable struct {
 	implementOrder []*ElementImplementation
 	mainScript     CosmosMainScript
 	mainRouter     CosmosMainGlobalRouter
-
-	isCurrentVersion bool
 }
 
 // Check 检查CosmosRunnable是否正确构造。
@@ -74,14 +72,14 @@ func (r *CosmosRunnable) Check() *Error {
 	if r.interfaces == nil {
 		r.interfaces = map[string]*ElementInterface{}
 	}
-	if len(r.interfaceOrder) != len(r.interfaces) {
+	if len(r.interfaces) != len(r.interfaceOrder) {
 		return NewError(ErrRunnableInterfaceInvalid, "Runnable: Interface order not match.").AddStack(nil)
 	}
 	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
 	}
-	if len(r.implements) != len(r.interfaces) {
+	if len(r.implements) != len(r.implementOrder) {
 		return NewError(ErrRunnableImplementInvalid, "Runnable: Implement not match.").AddStack(nil)
 	}
 	// MainScript
@@ -135,9 +133,4 @@ func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable 
 func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnable {
 	r.mainRouter = router
 	return r
-}
-
-func (r *CosmosRunnable) SetIsCurrentVersion() *Config {
-	r.isCurrentVersion = true
-	return r.config
 }

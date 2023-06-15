@@ -10,14 +10,17 @@ import (
 type AtomRemote struct {
 	element *ElementRemote
 	info    *IDInfo
+	version string
 
+	callerCounter int
 	*idFirstSyncCallLocal
 }
 
-func newAtomRemote(e *ElementRemote, info *IDInfo) *AtomRemote {
+func newAtomRemote(e *ElementRemote, info *IDInfo, version string) *AtomRemote {
 	a := &AtomRemote{
 		element:              e,
 		info:                 info,
+		version:              version,
 		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
 	}
 	return a
@@ -112,11 +115,15 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		Message:                name,
 		Args:                   arg,
 	})
-	out, er = rsp.Reply.UnmarshalNew()
 	if er != nil {
-		return nil, NewError(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply error.").AddStack(nil)
+		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 	}
-
+	if rsp.Reply != nil {
+		out, er = rsp.Reply.UnmarshalNew()
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+		}
+	}
 	if rsp.Error != nil {
 		err = rsp.Error.AddStack(nil)
 	}
@@ -158,9 +165,11 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 			}
-			out, er = rsp.Reply.UnmarshalNew()
-			if er != nil {
-				return nil, NewError(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply error.").AddStack(nil)
+			if rsp.Reply != nil {
+				out, er = rsp.Reply.UnmarshalNew()
+				if er != nil {
+					return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+				}
 			}
 			if rsp.Error != nil {
 				err = rsp.Error.AddStack(nil)
@@ -183,7 +192,42 @@ func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder)
 }
 
 func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
-	return NewError(ErrMainCannotKill, "AtomRemote: Cannot kill remote atom.")
+	cli := a.element.cosmos.getCurrentClient()
+	if cli == nil {
+		return NewError(ErrCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
+	}
+
+	firstSyncCall := ""
+	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
+		// 要从调用者开始算起，所以要从调用者的ID中获取。
+		firstSyncCall = callerID.nextFirstSyncCall()
+		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			return err.AddStack(nil)
+		}
+		defer callerID.unsetSyncMessageAndFirstCall()
+	} else {
+		firstSyncCall = callerFirst
+	}
+
+	client := NewAtomosRemoteServiceClient(cli)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+time.Second)
+	defer cancel()
+
+	rsp, er := client.KillAtom(ctx, &CosmosRemoteKillAtomReq{
+		CallerId:               callerID.GetIDInfo(),
+		CallerCurFirstSyncCall: firstSyncCall,
+		Id:                     a.info,
+		FromTracker:            NewIDTrackerInfoFromLocalGoroutine(1),
+		Timeout:                int64(timeout),
+	})
+	if er != nil {
+		return NewError(ErrCosmosRemoteResponseInvalid, "AtomRemote: KillAtom response error.").AddStack(nil)
+	}
+
+	if rsp.Error != nil {
+		return rsp.Error.AddStack(nil)
+	}
+	return nil
 }
 
 func (a *AtomRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
@@ -211,14 +255,23 @@ func (e *ElementRemote) newRemoteAtomFromCaller(id *IDInfo, call string) *remote
 	e.lock.Lock()
 	a, has := e.atoms[id.Atom]
 	if !has {
-		a = newAtomRemote(e, id)
+		a = newAtomRemote(e, id, e.version)
 		e.atoms[id.Atom] = a
 	}
+	a.callerCounter += 1
 	e.lock.Unlock()
 	return &remoteAtomFakeSelfID{
 		AtomRemote:    a,
 		firstSyncCall: call,
 	}
+}
+
+func (a *remoteAtomFakeSelfID) callerCounterDecr() {
+	a.element.lock.Lock()
+	if a.callerCounter > 0 {
+		a.callerCounter -= 1
+	}
+	a.element.lock.Unlock()
 }
 
 func (a *remoteAtomFakeSelfID) Log() Logging {

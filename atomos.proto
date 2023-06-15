@@ -242,6 +242,7 @@ service AtomosRemoteService {
   rpc SpawnAtom(CosmosRemoteSpawnAtomReq) returns (CosmosRemoteSpawnAtomRsp) {}
   rpc SyncMessagingByName(CosmosRemoteSyncMessagingByNameReq) returns (CosmosRemoteSyncMessagingByNameRsp) {}
   rpc ReleaseID(CosmosRemoteReleaseIDReq) returns (CosmosRemoteReleaseIDRsp) {}
+  rpc KillAtom(CosmosRemoteKillAtomReq) returns (CosmosRemoteKillAtomRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
 }
@@ -339,6 +340,18 @@ message CosmosRemoteReleaseIDReq {
   uint64 tracker_id = 1;
 }
 message CosmosRemoteReleaseIDRsp {
+  Error error = 1;
+}
+
+// Kill Atom
+message CosmosRemoteKillAtomReq {
+  IDInfo caller_id = 1;
+  string caller_cur_first_sync_call = 2;
+  IDInfo id = 3;
+  IDTrackerInfo from_tracker = 4;
+  int64 timeout = 5;
+}
+message CosmosRemoteKillAtomRsp {
   Error error = 1;
 }
 

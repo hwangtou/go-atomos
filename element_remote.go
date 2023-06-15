@@ -16,17 +16,20 @@ type ElementRemote struct {
 	atoms map[string]*AtomRemote
 	lock  sync.RWMutex
 
+	version string
+
 	*idFirstSyncCallLocal
 	enable bool
 }
 
-func newElementRemote(c *CosmosRemote, info *IDInfo, i *ElementInterface) *ElementRemote {
+func newElementRemote(c *CosmosRemote, info *IDInfo, i *ElementInterface, version string) *ElementRemote {
 	e := &ElementRemote{
 		cosmos:               c,
 		info:                 info,
 		current:              i,
 		atoms:                map[string]*AtomRemote{},
 		lock:                 sync.RWMutex{},
+		version:              version,
 		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
 		enable:               false,
 	}
@@ -124,11 +127,12 @@ func (e *ElementRemote) SyncMessagingByName(callerID SelfID, name string, timeou
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 	}
-	out, er = rsp.Reply.UnmarshalNew()
-	if er != nil {
-		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName reply error. err=(%v)", er).AddStack(nil)
+	if rsp.Reply != nil {
+		out, er = rsp.Reply.UnmarshalNew()
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+		}
 	}
-
 	if rsp.Error != nil {
 		err = rsp.Error.AddStack(nil)
 	}
@@ -170,9 +174,11 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 			}
-			out, er = rsp.Reply.UnmarshalNew()
-			if er != nil {
-				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: AsyncMessagingByName reply error. err=(%v)", er).AddStack(nil)
+			if rsp.Reply != nil {
+				out, er = rsp.Reply.UnmarshalNew()
+				if er != nil {
+					return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+				}
 			}
 			if rsp.Error != nil {
 				err = rsp.Error.AddStack(nil)
@@ -236,7 +242,7 @@ func (e *ElementRemote) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDT
 	e.lock.Lock()
 	a, has := e.atoms[name]
 	if !has {
-		a = newAtomRemote(e, rsp.Id)
+		a = newAtomRemote(e, rsp.Id, e.version)
 		e.atoms[name] = a
 	}
 	e.lock.Unlock()
@@ -301,9 +307,10 @@ func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTra
 		return nil, nil, NewError(ErrCosmosRemoteRequestInvalid, "ElementRemote: SpawnAtom arg error.").AddStack(nil)
 	}
 	rsp, er := client.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
-		Element: e.info.Element,
-		Atom:    name,
-		Args:    anyArg,
+		Element:     e.info.Element,
+		Atom:        name,
+		FromTracker: tracker,
+		Args:        anyArg,
 	})
 	if er != nil {
 		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
@@ -315,7 +322,7 @@ func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTra
 	e.lock.Lock()
 	a, has := e.atoms[name]
 	if !has {
-		a = newAtomRemote(e, rsp.Id)
+		a = newAtomRemote(e, rsp.Id, e.version)
 		e.atoms[name] = a
 	}
 	e.lock.Unlock()
@@ -351,10 +358,19 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	rsp, er := client.ScaleGetAtomID(ctx, &CosmosRemoteScaleGetAtomIDReq{
 		CallerId:               callerID.GetIDInfo(),
 		CallerCurFirstSyncCall: firstSyncCall,
-		To:                     e.cosmos.id,
-		Timeout:                int64(timeout),
-		Message:                name,
-		Args:                   arg,
+		FromTracker:            tracker,
+		To: &IDInfo{
+			Type:    IDType_Atom,
+			Cosmos:  e.info.Cosmos,
+			Node:    e.info.Node,
+			Element: e.info.Element,
+			Atom:    name,
+			Version: 0,
+			GoId:    0,
+		},
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	})
 	if er != nil {
 		return nil, nil, NewError(ErrCosmosRemoteResponseInvalid, "ElementRemote: ScaleGetAtomID reply error.").AddStack(nil)
@@ -366,7 +382,7 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	e.lock.Lock()
 	a, has := e.atoms[name]
 	if !has {
-		a = newAtomRemote(e, rsp.Id)
+		a = newAtomRemote(e, rsp.Id, e.version)
 		e.atoms[name] = a
 	}
 	e.lock.Unlock()
@@ -409,6 +425,7 @@ func (e *ElementRemote) setDisable() {
 type remoteElementFakeSelfID struct {
 	*ElementRemote
 	firstSyncCall string
+	callerCounter int
 }
 
 func (e *ElementRemote) newRemoteElementFromCaller(id *IDInfo, call string) *remoteElementFakeSelfID {
@@ -416,6 +433,9 @@ func (e *ElementRemote) newRemoteElementFromCaller(id *IDInfo, call string) *rem
 		ElementRemote: e,
 		firstSyncCall: call,
 	}
+}
+
+func (r *remoteElementFakeSelfID) callerCounterDecr() {
 }
 
 func (r *remoteElementFakeSelfID) Log() Logging {

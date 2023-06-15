@@ -189,9 +189,31 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 
 	// start a separate goroutine to keep the service registration alive, and to handle the case where the service is not able to renew the lease
 	go func(firstLease *clientv3.LeaseGrantResponse) {
+		defer func() {
+			if r := recover(); r != nil {
+				p.etcdErrorHandler(NewErrorf(ErrFrameworkInternalError, "etcd: Watcher keepalive stopped.").AddStack(nil))
+			}
+		}()
+
 		var err *Error
 		var lease = firstLease
 		id := p.local.info
+
+		defer func() {
+			p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher will stop.")
+			_, er := p.cluster.etcdClient.Delete(context.Background(), key)
+			if er != nil {
+				p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
+			}
+			if cancel := p.cluster.etcdCancelWatch; cancel != nil {
+				cancel()
+			}
+			if p.cluster.etcdExitCh != nil {
+				p.cluster.etcdExitCh <- struct{}{}
+			}
+		}()
+
+		p.cluster.etcdExitCh = make(chan struct{})
 		for {
 			select {
 			// 保持活跃
@@ -220,17 +242,6 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			case infoBuf, more := <-p.cluster.etcdInfoCh:
 				p.logging.PushLogging(id, LogLevel_Debug, fmt.Sprintf("etcd: Watcher updates process info. info=(%s),more=(%v)", infoBuf, more))
 				if !more {
-					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher will stop.")
-					_, er := p.cluster.etcdClient.Delete(context.Background(), key)
-					if er != nil {
-						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
-					}
-					if cancel := p.cluster.etcdCancelWatch; cancel != nil {
-						cancel()
-					}
-					if p.cluster.etcdExitCh != nil {
-						p.cluster.etcdExitCh <- struct{}{}
-					}
 					return
 				}
 				_, er := p.cluster.etcdClient.Put(context.Background(), key, string(infoBuf), clientv3.WithLease(lease.ID))

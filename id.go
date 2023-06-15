@@ -106,11 +106,12 @@ type AtomSelfID interface {
 // ElementSelfID 是Element的SelfID。
 // ElementSelfID is SelfID of Element.
 type ElementSelfID interface {
+	Element
 	SelfID
 
 	// Persistence 如果有实现AutoDataPersistence接口，那么可以通过该方法获取AutoDataPersistence。
-	// If AutoDataPersistence interface is implemented, AutoDataPersistence can be obtained through this method.
-	Persistence() AutoDataPersistence
+	// If AutoData interface is implemented, AutoData can be obtained through this method.
+	Persistence() AutoData
 
 	// GetAtoms 获取当前Element中的所有的Atom。
 	// Get all Atoms in current Element.
@@ -118,4 +119,9 @@ type ElementSelfID interface {
 	// GetAtomsInPattern 获取当前Element中所有符合pattern的Atom。
 	// Get all Atoms that match pattern in current Element.
 	GetAtomsInPattern(pattern string) []*AtomLocal
+}
+
+type remoteFakeSelfID interface {
+	SelfID
+	callerCounterDecr()
 }

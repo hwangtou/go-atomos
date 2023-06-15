@@ -108,7 +108,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p.logging)
 	p.local.idFirstSyncCallLocal.init(id)
 	p.local.idTrackerManager.init(p.local)
-	p.local.messageTrackerManager.init(p.local.atomos, len(p.local.elements))
+	p.local.messageTrackerManager.init(p.logging, p.local.atomos, len(p.local.elements))
 	if err := p.local.atomos.start(nil); err != nil {
 		return err.AddStack(nil)
 	}
@@ -387,7 +387,6 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	}
 	p.cluster.etcdClient = cli
 	p.cluster.etcdInfoCh = make(chan string)
-	p.cluster.etcdExitCh = make(chan struct{})
 
 	// 检查etcd中同一个cosmos的node有多少个version。因为version是用于热更的设计，而不是为了支持多个版本，所以集群同时只应该有不超过两个version。
 	// 当检查到当前cosmos的node已经有两个version，且两个version都不是自己时，应该主动退出。

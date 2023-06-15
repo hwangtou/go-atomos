@@ -307,7 +307,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 			", ext ...interface{}) (id *", atomIDName,
 			", err *", atomosPackage.Ident("Error"), ")", " {")
 		g.P("/* CODE JUMPER 代码跳转 */ _ = func() { _ = " + elementValueName + "." + methodName + " }")
-		g.P("i, tracker, err := ", elementMessengerValueName, ".ScaleBonjour().GetScaleID(c, callerID, ", service.GoName, "Name, in, ext...)")
+		g.P("i, tracker, err := ", elementMessengerValueName, ".", methodName, "().GetScaleID(c, callerID, ", service.GoName, "Name, in, ext...)")
 		g.P("if err != nil {")
 		g.P("return nil, err.AddStack(nil)")
 		g.P("}")

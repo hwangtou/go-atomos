@@ -77,7 +77,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	a.atomos = NewBaseAtomos(id, lv, a, instance, e.main.process.logging)
 	a.idFirstSyncCallLocal.init(e.atomos.id)
 	a.idTrackerManager.init(a)
-	a.messageTrackerManager.init(e.atomos, len(e.current.AtomHandlers))
+	a.messageTrackerManager.init(e.main.process.logging, e.atomos, len(e.current.AtomHandlers))
 
 	return a, nil
 }
@@ -318,11 +318,11 @@ func (a *AtomLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in pro
 // Implementation of AtomSelfID
 
 func (a *AtomLocal) Persistence() AtomAutoData {
-	p, ok := a.element.atomos.instance.(AutoDataPersistence)
+	p, ok := a.element.atomos.instance.(AutoData)
 	if ok || p == nil {
 		return nil
 	}
-	return p.AtomAutoDataPersistence()
+	return p.AtomAutoData()
 }
 
 // 邮箱控制器相关
@@ -419,12 +419,12 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
-	persistence, ok := impl.Developer.(AutoDataPersistence)
+	persistence, ok := impl.Developer.(AutoData)
 	if !ok || persistence == nil {
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
 	}
-	atomPersistence := persistence.AtomAutoDataPersistence()
+	atomPersistence := persistence.AtomAutoData()
 	if atomPersistence == nil {
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
@@ -438,7 +438,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoDataPersistence, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
@@ -461,7 +461,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	if persistence != nil {
-		atomPersistence := persistence.AtomAutoDataPersistence()
+		atomPersistence := persistence.AtomAutoData()
 		if atomPersistence != nil {
 			name := a.atomos.id.Atom
 			data, err = atomPersistence.GetAtomData(name)

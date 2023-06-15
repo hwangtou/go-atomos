@@ -39,22 +39,22 @@ type ElementDeveloper interface {
 // 按需实现的接口：自动数据持久化
 // Interfaces that developer implements as needed: Auto Data Persistence.
 
-// AutoDataPersistence
+// AutoData
 // 自动数据持久化的构造器，将具体的Atom自动数据持久化对象和Element自动数据持久化对象构造出来。
 // Auto Data Persistence Constructor, it will construct Atom Auto Data Persistence object and Element Auto Data Persistence object.
-type AutoDataPersistence interface {
-	// AtomAutoDataPersistence
+type AutoData interface {
+	// AtomAutoData
 	// 数据持久化助手
 	// Data Persistence Helper
 	// If returns nil, that means the element is not under control of helper.
-	AtomAutoDataPersistence() AtomAutoData
-	ElementAutoDataPersistence() ElementAutoData
+	AtomAutoData() AtomAutoData
+	ElementAutoData() ElementAutoData
 }
 
-// AutoDataPersistenceLoading
+// AutoDataLoader
 // 自动数据持久化的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
 // Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
-type AutoDataPersistenceLoading interface {
+type AutoDataLoader interface {
 	Load(self ElementSelfID, config map[string][]byte) *Error
 	Unload() *Error
 }

@@ -28,10 +28,6 @@ type LoggingRaw interface {
 	pushFrameworkErrorLog(format string, args ...interface{})
 }
 
-func SharedLogging() LoggingRaw {
-	return sharedCosmosProcess.logging
-}
-
 func (c *loggingAtomos) init(accessLog, errLog loggingFn) *Error {
 	c.accessLog = accessLog
 	c.errorLog = errLog

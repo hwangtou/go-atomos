@@ -10,6 +10,7 @@ import (
 // messageTrackerManager
 
 type messageTrackerManager struct {
+	log     *loggingAtomos
 	atomos  *BaseAtomos
 	counter int64
 
@@ -21,7 +22,8 @@ type messageTrackerManager struct {
 
 // Warn: Remember to lock with atomos mutex.
 
-func (t *messageTrackerManager) init(atomos *BaseAtomos, num int) {
+func (t *messageTrackerManager) init(log *loggingAtomos, atomos *BaseAtomos, num int) {
+	t.log = log
 	t.atomos = atomos
 	t.spawningAt = time.Now()
 	t.messages = make(map[string]MessageTrackInfo, num)
@@ -75,7 +77,7 @@ func (t *messageTrackerManager) Set(message string) {
 	if MessageTimeoutTracer {
 		time.AfterFunc(DefaultTimeout, func() {
 			if atomic.LoadInt64(&t.counter) == counter {
-				SharedLogging().PushLogging(t.atomos.id, LogLevel_Warn,
+				t.log.PushLogging(t.atomos.id, LogLevel_Warn,
 					fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", t.atomos.id, message))
 			}
 		})

@@ -126,7 +126,7 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, lo
 	}
 	a.mailbox = newMailBox(id.Info(), a, logging.accessLog, logging.errorLog)
 	initAtomosLog(&a.log, a.id, lv, logging)
-	initAtomosTasksManager(&a.task, a)
+	initAtomosTasksManager(a.log.logging, &a.task, a)
 	return a
 }
 
@@ -323,7 +323,7 @@ func (a *BaseAtomos) mailboxOnStartUp(fn func() *Error) *Error {
 func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	am := mail.mail
 	if !a.IsInState(AtomosWaiting) {
-		SharedLogging().pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
+		a.log.logging.pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
 			a, a.GetState(), mail)
 	}
 	switch am.mailType {
@@ -389,12 +389,12 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 	state := a.GetState()
 	if state == AtomosHalt {
 		if a.mailbox.running {
-			SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets halted but mailbox running status. atomos=(%v)", a)
+			a.log.logging.pushFrameworkErrorLog("Atomos: onStop meets halted but mailbox running status. atomos=(%v)", a)
 		}
 		return
 	}
 	if state != AtomosWaiting {
-		SharedLogging().pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. atomos=(%v)", a)
+		a.log.logging.pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. atomos=(%v)", a)
 	}
 
 	a.setStopping()

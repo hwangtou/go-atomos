@@ -4,6 +4,7 @@ import (
 	"context"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"reflect"
 	"time"
 )
 
@@ -24,49 +25,69 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 	return rsp, nil
 }
 
+// ScaleGetAtomID is the remote service of ScaleGetAtomID.
+// It is used to communicate with the remote Atomos.
 func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRemoteScaleGetAtomIDReq) (*CosmosRemoteScaleGetAtomIDRsp, error) {
 	rsp := &CosmosRemoteScaleGetAtomIDRsp{}
-	elem, err := a.process.local.getLocalElement(req.To.Element)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
-		return rsp, nil
-	}
+	switch req.To.Type {
+	case IDType_Atom:
+		// Caller id.
+		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+		if callerID != nil {
+			defer callerID.callerCounterDecr()
+		}
 
-	if elem.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall)
-		return rsp, nil
-	}
-	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
-	if callerID == nil {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller id. caller_id=(%v)", req.CallerId)
-		return rsp, nil
-	}
+		// Unmarshal args.
+		in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+		if er != nil {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID unmarshal args failed. err=(%v)", er).AddStack(nil)
+			return rsp, nil
+		}
 
-	in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
-	if er != nil {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID unmarshal args failed. err=(%v)", er)
+		// Get element.
+		elem, err := a.process.local.getLocalElement(req.To.Element)
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
+		}
+
+		// Check caller cur first sync call.
+		if elem.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
+			return rsp, nil
+		}
+
+		// Get atom.
+		atom, tracker, err := elem.ScaleGetAtomID(callerID, req.Message, time.Duration(req.Timeout), in, req.FromTracker)
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
+		}
+		if reflect.ValueOf(atom).IsNil() {
+			rsp.Error = NewErrorf(ErrAtomNotExists, "CosmosRemote: ScaleGetAtomID invalid atom. atom=(%v)", atom).AddStack(nil)
+			return rsp, nil
+		}
+
+		a.process.setRemoteTracker(tracker)
+
+		rsp.Id = atom.GetIDInfo()
+		rsp.TrackerId = tracker.id
+		return rsp, nil
+	default:
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID invalid ToID type. to=(%v)", req.To).AddStack(nil)
 		return rsp, nil
 	}
-	atom, tracker, err := elem.ScaleGetAtomID(callerID, req.Message, time.Duration(req.Timeout), in, req.FromTracker)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
-		return rsp, nil
-	}
-
-	a.process.setRemoteTracker(tracker)
-
-	rsp.Id = atom.GetIDInfo()
-	rsp.TrackerId = tracker.id
-	return rsp, nil
 }
 
 func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
 	rsp := &CosmosRemoteGetAtomIDRsp{}
+	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Element)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
+	// Get atom.
 	atom, tracker, err := elem.GetAtomID(req.Atom, req.FromTracker)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
@@ -98,7 +119,7 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 	case IDType_Element:
 		rsp.State = int32(elem.State())
 	default:
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDState invalid id type. id=(%v)", req.Id)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDState invalid id type. id=(%v)", req.Id).AddStack(nil)
 	}
 	return rsp, nil
 }
@@ -121,7 +142,7 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	case IDType_Element:
 		rsp.IdleTime = int64(elem.IdleTime())
 	default:
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDIdleTime invalid id type. id=(%v)", req.Id)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDIdleTime invalid id type. id=(%v)", req.Id).AddStack(nil)
 	}
 	return rsp, nil
 }
@@ -144,7 +165,15 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
-	atom, tracker, err := elem.SpawnAtom(req.Atom, req.Args, req.FromTracker)
+
+	// Unmarshal args.
+	in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+	if er != nil {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
+		return rsp, nil
+	}
+
+	atom, tracker, err := elem.SpawnAtom(req.Atom, in, req.FromTracker)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
@@ -157,17 +186,27 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 	return rsp, nil
 }
 
+// SyncMessagingByName sync messaging by name.
+// CallerId is the caller id.
+// CallerCurFirstSyncCall is the caller current first sync call.
+// To is the target id.
+// Args is the args.
+// Rsp is the rsp.
+// Error is the error.
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
 	switch req.To.Type {
 	case IDType_Atom, IDType_Element:
 		// Caller id.
 		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+		if callerID != nil {
+			defer callerID.callerCounterDecr()
+		}
 
 		// Unmarshal args.
 		in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
 		if er != nil {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er)
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
 			return rsp, nil
 		}
 
@@ -182,18 +221,21 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			atom := elem.getAtom(req.To.Atom)
 			if atom != nil {
 				id = atom
+			} else {
+				rsp.Error = NewErrorf(ErrAtomNotExists, "CosmosRemote: SyncMessagingByName invalid atom. atom=(%v)", req.To.Atom).AddStack(nil)
+				return rsp, nil
 			}
 		} else {
 			id = elem
 		}
 		if id == nil {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To)
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
 			return rsp, nil
 		}
 
 		// Check caller cur first sync call.
 		if id.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall)
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
 			return rsp, nil
 		}
 
@@ -207,7 +249,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		}
 		return rsp, nil
 	default:
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid ToID type. to=(%v)", req.To)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid ToID type. to=(%v)", req.To).AddStack(nil)
 		return rsp, nil
 	}
 }
@@ -226,10 +268,41 @@ func (a *atomosRemoteService) ReleaseID(ctx context.Context, req *CosmosRemoteRe
 	return rsp, nil
 }
 
+func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
+	rsp := &CosmosRemoteKillAtomRsp{}
+	// Get element.
+	elem, err := a.process.local.getLocalElement(req.Id.Element)
+	if err != nil {
+		rsp.Error = err.AddStack(a.process.local)
+		return rsp, nil
+	}
+	// Caller id.
+	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+	if callerID != nil {
+		defer callerID.callerCounterDecr()
+	}
+	// Get atom.
+	atom, tracker, err := elem.GetAtomID(req.Id.Atom, req.FromTracker)
+	if err != nil {
+		rsp.Error = err.AddStack(a.process.local)
+		return rsp, nil
+	}
+	defer tracker.Release()
+	// Kill atom.
+	err = atom.Kill(callerID, time.Duration(req.Timeout))
+	if err != nil {
+		rsp.Error = err.AddStack(a.process.local)
+	}
+	return rsp, nil
+}
+
 func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
 	rsp := &CosmosRemoteElementBroadcastRsp{}
 
 	callerID := a.getFromCaller(req.CallerId, "")
+	if callerID != nil {
+		defer callerID.callerCounterDecr()
+	}
 	err := a.process.local.ElementBroadcast(callerID, req.Key, req.ContentType, req.ContentBuffer)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
@@ -239,7 +312,7 @@ func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosR
 
 func (a *atomosRemoteService) mustEmbedUnimplementedAtomosRemoteServiceServer() {}
 
-func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall string) SelfID {
+func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall string) remoteFakeSelfID {
 	if callerIDInfo == nil {
 		return nil
 	}

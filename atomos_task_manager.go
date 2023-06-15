@@ -15,9 +15,9 @@ import (
 type TaskFn func(taskID uint64)
 
 type Task interface {
-	Add(fn TaskFn) (id uint64, err *Error)
-	AddAfter(d time.Duration, fn TaskFn) (id uint64, err *Error)
-	AddCrontab(spec string, fn TaskFn) (entryID uint64, err *Error)
+	Add(fn TaskFn, ext ...interface{}) (id uint64, err *Error)
+	AddAfter(d time.Duration, fn TaskFn, ext ...interface{}) (id uint64, err *Error)
+	AddCrontab(spec string, fn TaskFn, ext ...interface{}) (entryID uint64, err *Error)
 
 	Cancel(id uint64) *Error
 	CancelCrontab(entryID uint64) (err *Error)
@@ -108,6 +108,8 @@ type atomosTask struct {
 // Atomos Task Manager
 // In charge of the management of the increase task id and the task holder.
 type atomosTaskManager struct {
+	log *loggingAtomos
+
 	// AtomosCore实例的引用。
 	// Reference to Atomos instance.
 	atomos *BaseAtomos
@@ -135,7 +137,8 @@ type atomosTaskManager struct {
 //
 // Initialization of atomosTaskManager.
 // No New and Delete function because atomosTaskManager is struct inner BaseAtomos.
-func initAtomosTasksManager(at *atomosTaskManager, a *BaseAtomos) {
+func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAtomos) {
+	at.log = log
 	at.atomos = a
 	at.curID = 0
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
@@ -156,7 +159,7 @@ func (at *atomosTaskManager) stopUnlock() {
 // Add
 // 添加任务，并返回可以用于取消的任务id。
 // Append task, and return a cancellable task id.
-func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error) {
+func (at *atomosTaskManager) Add(taskClosure TaskFn, ext ...interface{}) (taskID uint64, err *Error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -188,7 +191,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error)
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return a cancellable task id.
-func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (id uint64, err *Error) {
+func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn, ext ...interface{}) (id uint64, err *Error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -239,7 +242,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 				// FRAMEWORK LEVEL ERROR
 				// Because it should not happen, once a TimerTask has been cancelled,
 				// it will be removed, thread-safely, immediately.
-				SharedLogging().pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer cancel")
+				at.log.pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer cancel")
 			}
 			return
 
@@ -258,13 +261,13 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 		// Because it should not happen, once a TimerTask has been executed,
 		// it will be removed, thread-safely, immediately.
 		default:
-			SharedLogging().pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
+			at.log.pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
 		}
 	})
 	return curID, nil
 }
 
-func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err *Error) {
+func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn, ext ...interface{}) (entryID uint64, err *Error) {
 	c := func() *cron.Cron {
 		at.mutex.Lock()
 		defer at.mutex.Unlock()
@@ -353,7 +356,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
 			err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Delete a not exists task timer. task=(%+v)", t).AddStack(nil)
-			SharedLogging().pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
+			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
 			return err
 
 		// 排程的任务准备执行。
@@ -385,7 +388,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 		default:
 			// FRAMEWORK LEVEL ERROR
 			err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Unknown timer state, task=(%+v)", t).AddStack(nil)
-			SharedLogging().pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
+			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
 			return err
 		}
 	}

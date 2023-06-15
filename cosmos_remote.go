@@ -98,7 +98,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 			if !has {
 				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			}
-			c.elements[elemName] = newElementRemote(c, idInfo, e)
+			c.elements[elemName] = newElementRemote(c, idInfo, e, version)
 		}
 	}
 	c.refresh()
@@ -119,7 +119,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 				if !has {
 					c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 				}
-				c.elements[elemName] = newElementRemote(c, idInfo, e)
+				c.elements[elemName] = newElementRemote(c, idInfo, e, version)
 			}
 		}
 		c.refresh()
@@ -149,7 +149,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			if oldElem, has := c.elements[elemName]; has {
 				oldElem.setDisable()
 			} else {
-				c.elements[elemName] = newElementRemote(c, newInfo, e)
+				c.elements[elemName] = newElementRemote(c, newInfo, e, version)
 			}
 		}
 	}
@@ -323,7 +323,12 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 				Message:                name,
 				Args:                   arg,
 			})
-			out, er = rsp.Reply.UnmarshalNew()
+			if rsp.Reply != nil {
+				out, er = rsp.Reply.UnmarshalNew()
+				if er != nil {
+					return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+				}
+			}
 			if er != nil {
 				return nil, NewError(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error.").AddStack(nil)
 			}
@@ -512,6 +517,9 @@ func (c *CosmosRemote) newFakeCosmosSelfID(call string) *remoteCosmosFakeSelfID 
 		CosmosRemote:  c,
 		firstSyncCall: call,
 	}
+}
+
+func (r *remoteCosmosFakeSelfID) callerCounterDecr() {
 }
 
 func (r *remoteCosmosFakeSelfID) Log() Logging {
