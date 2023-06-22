@@ -89,13 +89,14 @@ func (c *loggingAtomos) mailboxOnReceive(mail *mail) {
 	c.logging(mail.log)
 }
 
-func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) {
+func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
 		c.logging(curMail.log)
 	}
 	if c.exitCh != nil {
 		c.exitCh <- struct{}{}
 	}
+	return nil
 }
 
 func (c *loggingAtomos) logging(lm *LogMail) {

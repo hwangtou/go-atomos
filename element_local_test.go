@@ -140,7 +140,7 @@ func TestElementLocalBase(t *testing.T) {
 	}
 	// Message Tracker.
 	messageCount := 0
-	for _, info := range testElem.messageTrackerManager.messages {
+	for _, info := range testElem.atomos.mt.messages {
 		messageCount += info.Count
 	}
 	if messages != messageCount {
@@ -149,10 +149,10 @@ func TestElementLocalBase(t *testing.T) {
 	}
 	// TODO: 重新Spawn之后的Spawn统计时间不准确。
 	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
-		atom.messageTrackerManager.spawnAt.Sub(atom.messageTrackerManager.spawningAt),
-		atom.messageTrackerManager.stoppingAt.Sub(atom.messageTrackerManager.spawnAt),
-		atom.messageTrackerManager.stoppedAt.Sub(atom.messageTrackerManager.stoppingAt),
-		atom.messageTrackerManager.dump())
+		atom.atomos.mt.spawnAt.Sub(atom.atomos.mt.spawningAt),
+		atom.atomos.mt.stoppingAt.Sub(atom.atomos.mt.spawnAt),
+		atom.atomos.mt.stoppedAt.Sub(atom.atomos.mt.stoppingAt),
+		atom.atomos.mt.dump())
 	//t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
 
 	if err = process.Stop(); err != nil {

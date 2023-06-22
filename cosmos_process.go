@@ -96,19 +96,17 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 
 	// Init CosmosLocal.
 	p.local = &CosmosLocal{
-		process:               p,
-		runnable:              nil,
-		atomos:                nil,
-		mutex:                 sync.RWMutex{},
-		elements:              map[string]*ElementLocal{},
-		idFirstSyncCallLocal:  &idFirstSyncCallLocal{},
-		idTrackerManager:      &idTrackerManager{},
-		messageTrackerManager: &messageTrackerManager{},
+		process:              p,
+		runnable:             nil,
+		atomos:               nil,
+		mutex:                sync.RWMutex{},
+		elements:             map[string]*ElementLocal{},
+		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
+		idTrackerManager:     &idTrackerManager{},
 	}
-	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p.logging)
+	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p)
 	p.local.idFirstSyncCallLocal.init(id)
 	p.local.idTrackerManager.init(p.local)
-	p.local.messageTrackerManager.init(p.logging, p.local.atomos, len(p.local.elements))
 	if err := p.local.atomos.start(nil); err != nil {
 		return err.AddStack(nil)
 	}
@@ -324,6 +322,7 @@ func (p *CosmosProcess) Stop() *Error {
 	p.state = CosmosProcessStateOff
 	p.mutex.Unlock()
 
+	<-time.After(100 * time.Millisecond)
 	p.logging.stop()
 	return err
 }
@@ -577,4 +576,25 @@ func (p *CosmosProcess) unsetRemoteTracker(id uint64) {
 	p.cluster.remoteMutex.Lock()
 	delete(p.cluster.remoteTrackIDMap, id)
 	p.cluster.remoteMutex.Unlock()
+}
+
+func (p *CosmosProcess) onIDSpawning(id *IDInfo) {
+	p.logging.PushLogging(id, LogLevel_Info, fmt.Sprintf("MessageTracker: Spawning. id=(%v)", id))
+}
+
+func (p *CosmosProcess) onIDSpawn(id *IDInfo) {
+
+}
+
+func (p *CosmosProcess) onIDStopping(id *IDInfo) {
+
+}
+
+func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt messageTrackerManager) {
+	p.logging.PushLogging(id, LogLevel_Info, fmt.Sprintf("MessageTracker: Halted. id=(%v),err=(%v),tracker=(%s)", id, err, mt.dump()))
+}
+
+func (p *CosmosProcess) onIDMessageTimeout(info *IDInfo, message string) {
+	p.logging.PushLogging(info, LogLevel_Warn,
+		fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", info, message))
 }

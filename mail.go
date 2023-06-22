@@ -29,7 +29,7 @@ const (
 type MailboxHandler interface {
 	mailboxOnStartUp(fn func() *Error) *Error
 	mailboxOnReceive(mail *mail)
-	mailboxOnStop(stopMail, remainMails *mail, num uint32)
+	mailboxOnStop(stopMail, remainMails *mail, num uint32) *Error
 }
 
 type mailBox struct {

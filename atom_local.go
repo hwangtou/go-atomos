@@ -34,7 +34,6 @@ type AtomLocal struct {
 
 	*idFirstSyncCallLocal
 	*idTrackerManager
-	*messageTrackerManager
 }
 
 // 生命周期相关
@@ -50,13 +49,12 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		GoId:    0,
 	}
 	a := &AtomLocal{
-		element:               e,
-		atomos:                nil,
-		nameElement:           nil,
-		current:               current,
-		idFirstSyncCallLocal:  &idFirstSyncCallLocal{},
-		idTrackerManager:      &idTrackerManager{},
-		messageTrackerManager: &messageTrackerManager{},
+		element:              e,
+		atomos:               nil,
+		nameElement:          nil,
+		current:              current,
+		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
+		idTrackerManager:     &idTrackerManager{},
 	}
 	instance, err := func() (at Atomos, err *Error) {
 		defer func() {
@@ -74,10 +72,9 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
-	a.atomos = NewBaseAtomos(id, lv, a, instance, e.main.process.logging)
-	a.idFirstSyncCallLocal.init(e.atomos.id)
+	a.atomos = NewBaseAtomos(id, lv, a, instance, e.main.process)
+	a.idFirstSyncCallLocal.init(a.atomos.id)
 	a.idTrackerManager.init(a)
-	a.messageTrackerManager.init(e.main.process.logging, e.atomos, len(e.current.AtomHandlers))
 
 	return a, nil
 }
@@ -106,6 +103,10 @@ func (a *AtomLocal) Cosmos() CosmosNode {
 
 func (a *AtomLocal) State() AtomosState {
 	return a.atomos.GetState()
+}
+
+func (a *AtomLocal) IdleTime() time.Duration {
+	return a.atomos.idleTime()
 }
 
 // SyncMessagingByName
@@ -365,7 +366,7 @@ func (a *AtomLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.
 	return
 }
 
-func (a *AtomLocal) OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (a *AtomLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err)
 }
 
@@ -385,10 +386,6 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 // Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
 func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
-	// Atoms
-	a.element.main.hookStopping(a.atomos.id)
-	defer a.element.main.hookHalt(a.element.atomos.id, err, a.element.idTrackerManager, a.element.messageTrackerManager)
-
 	var save bool
 	var data proto.Message
 	defer func() {

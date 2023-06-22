@@ -2,16 +2,16 @@ package go_atomos
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
 // messageTrackerManager
+// 消息跟踪管理器
 
 type messageTrackerManager struct {
-	log     *loggingAtomos
-	atomos  *BaseAtomos
 	counter int64
 
 	spawningAt, spawnAt   time.Time
@@ -20,50 +20,45 @@ type messageTrackerManager struct {
 	messages map[string]MessageTrackInfo
 }
 
-// Warn: Remember to lock with atomos mutex.
-
-func (t *messageTrackerManager) init(log *loggingAtomos, atomos *BaseAtomos, num int) {
-	t.log = log
-	t.atomos = atomos
-	t.spawningAt = time.Now()
-	t.messages = make(map[string]MessageTrackInfo, num)
+func initAtomosMessageTracker(mt *messageTrackerManager) {
+	mt.messages = make(map[string]MessageTrackInfo)
 }
 
 // Internal
 
-func (t *messageTrackerManager) GetMessagingInfo() string {
-	t.atomos.mailbox.mutex.Lock()
-	defer t.atomos.mailbox.mutex.Unlock()
-	return t.dump()
-}
-
-func (t *messageTrackerManager) IdleTime() time.Duration {
-	t.atomos.mailbox.mutex.Lock()
-	defer t.atomos.mailbox.mutex.Unlock()
-	return t.idleTime()
-}
-
+// idleTime returns the idle time of the Atomos.
+// 返回Atomos的空闲时间。
 func (t *messageTrackerManager) idleTime() time.Duration {
+	// If no messages after spawning, return the time since spawning.
 	if len(t.messages) == 0 {
 		return time.Now().Sub(t.spawnAt)
 	}
+	// Find the last end time.
 	var lastEnd time.Time
 	for _, info := range t.messages {
 		if info.LastEnd.After(lastEnd) {
 			lastEnd = info.LastEnd
 		}
 	}
+	// If no end time, return the time since spawn.
 	if lastEnd.IsZero() {
 		return time.Now().Sub(t.spawnAt)
 	}
+	// Return the time since last end.
 	return time.Now().Sub(lastEnd)
 }
 
-func (t *messageTrackerManager) Spawn() {
+func (t *messageTrackerManager) spawning() {
+	t.spawningAt = time.Now()
+}
+
+// spawn sets the spawn time, after spawning.
+func (t *messageTrackerManager) spawn() {
 	t.spawnAt = time.Now()
 }
 
-func (t *messageTrackerManager) Set(message string) {
+// set sets the message handling info and start time.
+func (t *messageTrackerManager) set(message string, info *IDInfo, process *CosmosProcess) {
 	m, has := t.messages[message]
 	if !has {
 		m = MessageTrackInfo{}
@@ -74,17 +69,23 @@ func (t *messageTrackerManager) Set(message string) {
 	t.messages[message] = m
 
 	counter := atomic.AddInt64(&t.counter, 1)
-	if MessageTimeoutTracer {
-		time.AfterFunc(DefaultTimeout, func() {
+	if messageTimeoutTracer {
+		time.AfterFunc(messageTimeoutDefault, func() {
 			if atomic.LoadInt64(&t.counter) == counter {
-				t.log.PushLogging(t.atomos.id, LogLevel_Warn,
-					fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", t.atomos.id, message))
+				defer func() {
+					if r := recover(); r != nil {
+						process.logging.PushLogging(info, LogLevel_Fatal, fmt.Sprintf("MessageTracker: Recover from panic. reason=(%v),stack=(%s)",
+							r, string(debug.Stack())))
+					}
+				}()
+				process.onIDMessageTimeout(info, message)
 			}
 		})
 	}
 }
 
-func (t *messageTrackerManager) Unset(message string) {
+// unset sets the message handling info and end time.
+func (t *messageTrackerManager) unset(message string) {
 	m := t.messages[message]
 	m.LastEnd = time.Now()
 	d := m.LastEnd.Sub(m.LastBegin)
@@ -103,14 +104,17 @@ func (t *messageTrackerManager) Unset(message string) {
 	atomic.AddInt64(&t.counter, 1)
 }
 
-func (t *messageTrackerManager) Stopping() {
+// stopping sets the stopping time.
+func (t *messageTrackerManager) stopping() {
 	t.stoppingAt = time.Now()
 }
 
-func (t *messageTrackerManager) Halted() {
+// halted sets the halted time.
+func (t *messageTrackerManager) halted() {
 	t.stoppedAt = time.Now()
 }
 
+// dump returns the message tracking info.
 func (t *messageTrackerManager) dump() string {
 	if len(t.messages) == 0 {
 		return "No MessageTracker"
@@ -126,6 +130,9 @@ func (t *messageTrackerManager) dump() string {
 	return b.String()
 }
 
+// MessageTrackInfo is the message tracking info.
+// MessageTrackInfo是消息跟踪信息。
+
 type MessageTrackInfo struct {
 	Handling bool
 
@@ -135,6 +142,7 @@ type MessageTrackInfo struct {
 	Count           int
 }
 
+// String returns the string of the MessageTrackInfo.
 func (m MessageTrackInfo) String() string {
 	return fmt.Sprintf("count=(%d),min=(%v),max=(%v),total=(%v)", m.Count, m.Min, m.Max, m.Total)
 }

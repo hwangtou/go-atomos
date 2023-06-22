@@ -220,7 +220,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Message Tracker.
 	messageCount := 0
-	for _, info := range atom.messageTrackerManager.messages {
+	for _, info := range atom.atomos.mt.messages {
 		messageCount += info.Count
 	}
 	if messages != messageCount {
@@ -318,7 +318,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 	// Message Tracker.
 	messageCount = 0
-	for _, info := range atom.messageTrackerManager.messages {
+	for _, info := range atom.atomos.mt.messages {
 		messageCount += info.Count
 	}
 	if messages != messageCount {
@@ -326,10 +326,10 @@ func TestAtomLocalBase(t *testing.T) {
 		return
 	}
 	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
-		atom.messageTrackerManager.spawnAt.Sub(atom.messageTrackerManager.spawningAt),
-		atom.messageTrackerManager.stoppingAt.Sub(atom.messageTrackerManager.spawnAt),
-		atom.messageTrackerManager.stoppedAt.Sub(atom.messageTrackerManager.stoppingAt),
-		atom.messageTrackerManager.dump())
+		atom.atomos.mt.spawnAt.Sub(atom.atomos.mt.spawningAt),
+		atom.atomos.mt.stoppingAt.Sub(atom.atomos.mt.spawnAt),
+		atom.atomos.mt.stoppedAt.Sub(atom.atomos.mt.stoppingAt),
+		atom.atomos.mt.dump())
 	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
 
 	// Spawn panic.

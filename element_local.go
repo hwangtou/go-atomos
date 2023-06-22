@@ -42,7 +42,6 @@ type ElementLocal struct {
 
 	*idFirstSyncCallLocal
 	*idTrackerManager
-	*messageTrackerManager
 }
 
 // 生命周期相关
@@ -59,19 +58,17 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		Atom:    "",
 	}
 	e := &ElementLocal{
-		main:                  main,
-		atomos:                nil,
-		atoms:                 nil,
-		names:                 list.New(),
-		lock:                  sync.RWMutex{},
-		current:               impl,
-		idFirstSyncCallLocal:  &idFirstSyncCallLocal{},
-		idTrackerManager:      &idTrackerManager{},
-		messageTrackerManager: &messageTrackerManager{},
+		main:                 main,
+		atomos:               nil,
+		atoms:                nil,
+		names:                list.New(),
+		lock:                 sync.RWMutex{},
+		current:              impl,
+		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
+		idTrackerManager:     &idTrackerManager{},
 	}
-	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor(), main.process.logging)
+	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor(), main.process)
 	e.idTrackerManager.init(e)
-	e.messageTrackerManager.init(e.main.process.logging, e.atomos, len(impl.ElementHandlers))
 
 	// 如果实现了ElementCustomizeAtomInitNum接口，那么就使用接口中定义的数量。
 	if atomsInitNum, ok := impl.Developer.(ElementAtomInitNum); ok {
@@ -107,6 +104,10 @@ func (e *ElementLocal) Cosmos() CosmosNode {
 
 func (e *ElementLocal) State() AtomosState {
 	return e.atomos.GetState()
+}
+
+func (e *ElementLocal) IdleTime() time.Duration {
+	return e.atomos.idleTime()
 }
 
 // SyncMessagingByName
@@ -489,7 +490,7 @@ func (e *ElementLocal) OnMessaging(fromID ID, firstSyncCall, name string, in pro
 	return
 }
 
-func (e *ElementLocal) OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (e *ElementLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err)
 }
 
@@ -555,9 +556,6 @@ func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 }
 
 func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
-	e.main.hookStopping(e.atomos.id)
-	defer e.main.hookHalt(e.atomos.id, err, e.idTrackerManager, e.messageTrackerManager)
-
 	// Send Kill to all atoms.
 	var stopTimeout, stopGap time.Duration
 	elemExit, ok := e.current.Developer.(ElementAtomExit)
@@ -700,13 +698,10 @@ func (e *ElementLocal) elementAtomSpawn(name string, arg proto.Message, current 
 	}
 
 	// Atom的Spawn逻辑。
-	if err := atom.atomos.start(func() *Error {
-		e.main.hookSpawning(atom.atomos.id)
+	if err = atom.atomos.start(func() *Error {
 		if err := atom.elementAtomSpawn(current, persistence, arg); err != nil {
-			e.main.hookSpawn(atom.atomos.id, err)
 			return err.AddStack(nil)
 		}
-		e.main.hookSpawn(atom.atomos.id, nil)
 		return nil
 	}); err != nil {
 		e.elementAtomRelease(atom, nil)

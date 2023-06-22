@@ -3,8 +3,15 @@ package go_atomos
 import "time"
 
 var (
-	MessageTimeoutTracer = true
-	StoppingPrintStatic  = true
+	// messageTimeoutTracer is the switch of message timeout tracer.
+	messageTimeoutTracer = true
+	// messageTimeoutDefault is the default timeout duration.
+	messageTimeoutDefault = 2 * time.Second
 
-	DefaultTimeout = 2 * time.Second
+	StoppingPrintStatic = true
 )
+
+func SetMessageTimeoutTracer(v bool, timeout time.Duration) {
+	messageTimeoutTracer = v
+	messageTimeoutDefault = timeout
+}

@@ -25,10 +25,11 @@ func (h *benchmarkMailHandler) mailboxOnReceive(mail *mail) {
 	}
 }
 
-func (h *benchmarkMailHandler) mailboxOnStop(killMail, remainMails *mail, num uint32) {
+func (h *benchmarkMailHandler) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
 	//log.Println("Benchmark mailbox has received stop-mail.")
 	//for ; remainMails != nil; remainMails = remainMails.next {
 	//}
+	return nil
 }
 
 func benchmarkMailBox(b *testing.B, waiters int) {

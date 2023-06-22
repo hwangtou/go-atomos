@@ -11,7 +11,9 @@ type AtomosHolder interface {
 	// OnMessaging
 	// 收到消息
 	OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error)
-	OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
+	// OnAsyncMessagingCallback
+	// 收到异步消息回调
+	OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
 
 	// OnScaling
 	// 负载均衡决策
@@ -24,13 +26,6 @@ type AtomosHolder interface {
 	// OnStopping
 	// 停止中
 	OnStopping(from ID, cancelled []uint64) *Error
-
-	// Spawn & Set & Unset & Stopping & Halt
-	Spawn()
-	Set(message string)
-	Unset(message string)
-	Stopping()
-	Halted()
 }
 
 // Atom状态
@@ -89,6 +84,8 @@ type AtomosWormhole interface{}
 // BaseAtomos 基础Atomos
 // Base Atomos
 type BaseAtomos struct {
+	// 进程
+	process *CosmosProcess
 	// 句柄信息
 	id *IDInfo
 
@@ -112,10 +109,15 @@ type BaseAtomos struct {
 	// 日志管理器，用于处理来自Atom内部的日志。
 	// Logs Manager, uses to handle Log from inner Atom.
 	log atomosLoggingManager
+
+	// 消息追踪管理器，用于处理来自Atom内部的消息追踪。
+	// Message Tracker Manager, uses to handle Message Tracker from inner Atom.
+	mt messageTrackerManager
 }
 
-func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, logging *loggingAtomos) *BaseAtomos {
+func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, process *CosmosProcess) *BaseAtomos {
 	a := &BaseAtomos{
+		process:  process,
 		id:       id,
 		state:    AtomosHalt,
 		mailbox:  nil,
@@ -123,10 +125,12 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, lo
 		instance: inst,
 		task:     atomosTaskManager{},
 		log:      atomosLoggingManager{},
+		mt:       messageTrackerManager{},
 	}
-	a.mailbox = newMailBox(id.Info(), a, logging.accessLog, logging.errorLog)
-	initAtomosLog(&a.log, a.id, lv, logging)
+	a.mailbox = newMailBox(id.Info(), a, process.logging.accessLog, process.logging.errorLog)
+	initAtomosLog(&a.log, a.id, lv, process.logging)
 	initAtomosTasksManager(a.log.logging, &a.task, a)
+	initAtomosMessageTracker(&a.mt)
 	return a
 }
 
@@ -235,6 +239,12 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, firstSyncCall string,
 // 各种状态
 // State of Atom
 
+func (a *BaseAtomos) idleTime() time.Duration {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
+	return a.mt.idleTime()
+}
+
 func (a *BaseAtomos) isNotHalt() bool {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
@@ -262,41 +272,46 @@ func (a *BaseAtomos) setSpawning() {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosSpawning
+	a.mt.spawning()
+	a.process.onIDSpawning(a.id)
 }
 
 func (a *BaseAtomos) setSpawn() {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosWaiting
-	a.holder.Spawn()
+	a.mt.spawn()
+	a.process.onIDSpawn(a.id)
 }
 
 func (a *BaseAtomos) setBusy(message string) {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosBusy
-	a.holder.Set(message)
+	a.mt.set(message, a.id, a.process)
 }
 
 func (a *BaseAtomos) setWaiting(message string) {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosWaiting
-	a.holder.Unset(message)
+	a.mt.unset(message)
 }
 
 func (a *BaseAtomos) setStopping() {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosStopping
-	a.holder.Stopping()
+	a.mt.stopping()
+	a.process.onIDStopping(a.id)
 }
 
-func (a *BaseAtomos) setHalt() {
+func (a *BaseAtomos) setHalted(err *Error) {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosHalt
-	a.holder.Halted()
+	a.mt.halted()
+	a.process.onIDHalted(a.id, err, a.mt)
 }
 
 // Mailbox
@@ -310,8 +325,8 @@ func (a *BaseAtomos) mailboxOnStartUp(fn func() *Error) *Error {
 	a.setSpawning()
 	if fn != nil {
 		if err := fn(); err != nil {
-			a.setHalt()
-			return err.AddStack(nil)
+			a.setHalted(err.AddStack(nil))
+			return err
 		}
 	}
 	a.setSpawn()
@@ -345,7 +360,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name)
 			defer a.setWaiting(name)
 
-			a.holder.OnSyncMessagingCallback(am.arg, am.err, am.asyncMessageCallbackClosure)
+			a.holder.OnAsyncMessagingCallback(am.arg, am.err, am.asyncMessageCallbackClosure)
 		}
 	case MailTask:
 		{
@@ -382,7 +397,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 
 // 处理邮箱退出。
 // Handle mailbox stops.
-func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
+func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err *Error) {
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
@@ -398,11 +413,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 	}
 
 	a.setStopping()
-	defer a.setHalt()
+	defer a.setHalted(err)
 
 	defer func() {
 		if r := recover(); r != nil {
-			err := NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
+			err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
 			if ar, ok := a.instance.(AtomosRecover); ok {
 				defer func() {
 					recover()
@@ -415,7 +430,6 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 		}
 	}()
 
-	//defer deallocAtomosMail(killAtomMail)
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
 		func(remainMail *mail) {
@@ -449,6 +463,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) {
 	}
 
 	// Handle Kill and Reply Kill.
-	err := a.holder.OnStopping(killMail.mail.from, cancels)
+	err = a.holder.OnStopping(killMail.mail.from, cancels)
+	if err != nil {
+		err = err.AddStack(nil)
+	}
 	killMail.mail.sendReply(nil, err)
+
+	return err
 }

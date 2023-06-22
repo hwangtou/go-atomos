@@ -18,7 +18,6 @@ type CosmosLocal struct {
 
 	*idFirstSyncCallLocal
 	*idTrackerManager
-	*messageTrackerManager
 }
 
 // Implementation of ID
@@ -42,14 +41,16 @@ func (c *CosmosLocal) State() AtomosState {
 	return c.atomos.GetState()
 }
 
+func (c *CosmosLocal) IdleTime() time.Duration {
+	return c.atomos.idleTime()
+}
+
 func (c *CosmosLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	//TODO implement me
-	panic("implement me")
+	panic("not supported")
 }
 
 func (c *CosmosLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
-	//TODO implement me
-	panic("implement me")
+	panic("not supported")
 }
 
 func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -210,7 +211,7 @@ func (c *CosmosLocal) OnMessaging(fromID ID, firstSyncCall, name string, in prot
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.")
 }
 
-func (c *CosmosLocal) OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err)
 }
 
@@ -230,9 +231,6 @@ func (c *CosmosLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 
 func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
-
-	c.hookStopping(c.atomos.id)
-	defer c.hookHalt(c.atomos.id, err, c.idTrackerManager, c.messageTrackerManager)
 
 	// Unload local elements and its atomos.
 	for i := len(c.runnable.implementOrder) - 1; i >= 0; i -= 1 {
@@ -375,12 +373,9 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 
 	// Element的Spawn逻辑。
 	if err = elem.atomos.start(func() *Error {
-		c.hookSpawning(elem.atomos.id)
 		if err := elem.cosmosElementSpawn(r, i); err != nil {
-			c.hookSpawn(elem.atomos.id, err)
 			return err.AddStack(elem)
 		}
-		c.hookSpawn(elem.atomos.id, nil)
 		return nil
 	}); err != nil {
 		c.mutex.Lock()
@@ -390,48 +385,6 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 	}
 	return elem, nil
 }
-
-//// Runnable Loading Helper
-//
-//type runnableLoadingHelper struct {
-//	newRunnable *CosmosRunnable
-//
-//	spawnElement, reloadElement, delElement []*ElementImplementation
-//}
-
-//func (c *CosmosLocal) newRunnableLoadingHelper(oldRunnable, newRunnable *CosmosRunnable) (*runnableLoadingHelper, *Error) {
-//	helper := &runnableLoadingHelper{
-//		newRunnable:   newRunnable,
-//		spawnElement:  nil,
-//		reloadElement: nil,
-//		delElement:    nil,
-//	}
-//
-//	// Element
-//	if oldRunnable == nil {
-//		// All are cosmosElementSpawn elements.
-//		for _, impl := range newRunnable.implementOrder {
-//			helper.spawnElement = append(helper.spawnElement, impl)
-//		}
-//	} else {
-//		for _, newImpl := range newRunnable.implementOrder {
-//			_, has := oldRunnable.implements[newImpl.Interface.Config.Name]
-//			if has {
-//				helper.reloadElement = append(helper.reloadElement, newImpl)
-//			} else {
-//				helper.spawnElement = append(helper.spawnElement, newImpl)
-//			}
-//		}
-//		for _, oldImpl := range oldRunnable.implementOrder {
-//			_, has := newRunnable.implements[oldImpl.Interface.Config.Name]
-//			if !has {
-//				helper.delElement = append(helper.delElement, oldImpl)
-//			}
-//		}
-//	}
-//
-//	return helper, nil
-//}
 
 func (c *CosmosLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Duration) *Error {
 	firstSyncCall := ""
@@ -472,23 +425,4 @@ func (c *CosmosLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Dura
 		}
 	}
 	return c.atomos.PushKillMailAndWaitReply(callerID, firstSyncCall, wait, true, timeout)
-}
-
-func (c *CosmosLocal) hookSpawning(*IDInfo) {
-	defer recover()
-}
-
-func (c *CosmosLocal) hookSpawn(*IDInfo, *Error) {
-	defer recover()
-}
-
-func (c *CosmosLocal) hookStopping(*IDInfo) {
-	defer recover()
-}
-
-func (c *CosmosLocal) hookHalt(id *IDInfo, err *Error, i *idTrackerManager, m *messageTrackerManager) {
-	defer recover()
-
-	//c.Log().Info("Static >> AtomStopping IDTracker=(%v)", i)
-	//c.Log().Info("Static >> AtomStopping MessageTracker=(%v)", m.GetMessagingInfo())
 }

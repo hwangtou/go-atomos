@@ -27,7 +27,7 @@ type TestAtomosHolder struct {
 	T *testing.T
 }
 
-func (t *TestAtomosHolder) OnSyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (t *TestAtomosHolder) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	//TODO implement me
 	panic("implement me")
 }
