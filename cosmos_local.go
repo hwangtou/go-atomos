@@ -17,7 +17,6 @@ type CosmosLocal struct {
 	elements map[string]*ElementLocal
 
 	*idFirstSyncCallLocal
-	*idTrackerManager
 }
 
 // Implementation of ID
@@ -63,10 +62,6 @@ func (c *CosmosLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 
 func (c *CosmosLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
 	return NewError(ErrMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
-}
-
-func (c *CosmosLocal) getIDTrackerManager() *idTrackerManager {
-	return c.idTrackerManager
 }
 
 func (c *CosmosLocal) getGoID() uint64 {
@@ -153,7 +148,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *ID
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3))
+	return e.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3), true)
 }
 
 func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
@@ -161,7 +156,7 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3))
+	return e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3), true)
 }
 
 func (c *CosmosLocal) CosmosSpawnAtom(elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
@@ -169,7 +164,7 @@ func (c *CosmosLocal) CosmosSpawnAtom(elemName, name string, arg proto.Message) 
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.SpawnAtom(name, arg, NewIDTrackerInfoFromLocalGoroutine(3))
+	return e.SpawnAtom(name, arg, NewIDTrackerInfoFromLocalGoroutine(3), true)
 }
 
 func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
@@ -178,10 +173,10 @@ func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, con
 		return err.AddStack(c)
 	}
 	for _, elem := range elems {
-		if elem.current == nil {
+		if elem.elemImpl == nil {
 			continue
 		}
-		if _, has := elem.current.ElementHandlers[ElementBroadcastName]; !has {
+		if _, has := elem.elemImpl.ElementHandlers[ElementBroadcastName]; !has {
 			continue
 		}
 		elem.AsyncMessagingByName(c, ElementBroadcastName, 0, &ElementBroadcastI{
@@ -215,7 +210,7 @@ func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, cal
 	callback(in, err)
 }
 
-func (c *CosmosLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
+func (c *CosmosLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrMainCannotScale, "Cosmos: Cannot scale.").AddStack(c)
 }
 
@@ -249,6 +244,9 @@ func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	//c.process = nil
 
 	return nil
+}
+
+func (c *CosmosLocal) OnIDsReleased() {
 }
 
 // 内部实现

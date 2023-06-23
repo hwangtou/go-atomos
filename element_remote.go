@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// ElementRemote
+// 远程的Element实现。
+// Implement of remote Element.
+
 type ElementRemote struct {
 	cosmos  *CosmosRemote
 	info    *IDInfo
@@ -208,7 +212,7 @@ func (e *ElementRemote) SendWormhole(callerID SelfID, timeout time.Duration, wor
 	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
 }
 
-func (e *ElementRemote) getIDTrackerManager() *idTrackerManager {
+func (e *ElementRemote) getIDTrackerManager() *atomosIDTracker {
 	panic("ElementRemote: getIDTrackerManager should not be called.")
 }
 
@@ -218,7 +222,7 @@ func (e *ElementRemote) getGoID() uint64 {
 
 // Implementation of Element
 
-func (e *ElementRemote) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, _ bool) (ID, *IDTracker, *Error) {
 	cli := e.cosmos.getCurrentClient()
 	if cli == nil {
 		return nil, nil, NewError(ErrCosmosRemoteConnectFailed, "ElementRemote: GetAtomID client error.").AddStack(nil)
@@ -228,9 +232,8 @@ func (e *ElementRemote) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDT
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rsp, er := client.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
-		FromTracker: tracker,
-		Element:     e.info.Element,
-		Atom:        name,
+		Element: e.info.Element,
+		Atom:    name,
 	})
 	if er != nil {
 		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: GetAtomID response error. err=(%v)", er).AddStack(nil)
@@ -247,7 +250,7 @@ func (e *ElementRemote) GetAtomID(name string, tracker *IDTrackerInfo) (ID, *IDT
 	}
 	e.lock.Unlock()
 
-	return a, tracker.newIDTrackerFromRemoteTrackerID(e, rsp.TrackerId), nil
+	return a, nil, nil
 }
 
 func (e *ElementRemote) GetAtomsNum() int {
@@ -293,7 +296,7 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return map[string]string{}
 }
 
-func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, _ *IDTrackerInfo, _ bool) (ID, *IDTracker, *Error) {
 	cli := e.cosmos.getCurrentClient()
 	if cli == nil {
 		return nil, nil, NewError(ErrCosmosRemoteConnectFailed, "ElementRemote: SpawnAtom client error.").AddStack(nil)
@@ -307,10 +310,9 @@ func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTra
 		return nil, nil, NewError(ErrCosmosRemoteRequestInvalid, "ElementRemote: SpawnAtom arg error.").AddStack(nil)
 	}
 	rsp, er := client.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
-		Element:     e.info.Element,
-		Atom:        name,
-		FromTracker: tracker,
-		Args:        anyArg,
+		Element: e.info.Element,
+		Atom:    name,
+		Args:    anyArg,
 	})
 	if er != nil {
 		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
@@ -327,10 +329,10 @@ func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, tracker *IDTra
 	}
 	e.lock.Unlock()
 
-	return a, tracker.newIDTrackerFromRemoteTrackerID(e, rsp.TrackerId), nil
+	return a, nil, nil
 }
 
-func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout time.Duration, in proto.Message, tracker *IDTrackerInfo) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout time.Duration, in proto.Message, _ *IDTrackerInfo, _ bool) (ID, *IDTracker, *Error) {
 	cli := e.cosmos.getCurrentClient()
 	if cli == nil {
 		return nil, nil, NewError(ErrCosmosRemoteConnectFailed, "ElementRemote: ScaleGetAtomID client error.").AddStack(nil)
@@ -358,7 +360,6 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	rsp, er := client.ScaleGetAtomID(ctx, &CosmosRemoteScaleGetAtomIDReq{
 		CallerId:               callerID.GetIDInfo(),
 		CallerCurFirstSyncCall: firstSyncCall,
-		FromTracker:            tracker,
 		To: &IDInfo{
 			Type:    IDType_Atom,
 			Cosmos:  e.info.Cosmos,
@@ -387,34 +388,11 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	}
 	e.lock.Unlock()
 
-	return a, tracker.newIDTrackerFromRemoteTrackerID(e, rsp.TrackerId), nil
+	return a, nil, nil
 }
 
 // 内部实现
 // INTERNAL
-
-func (e *ElementRemote) elementAtomRelease(tracker *IDTracker) {
-	cli := e.cosmos.getCurrentClient()
-	if cli == nil {
-		// TODO: log
-		return
-	}
-	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	rsp, er := client.ReleaseID(ctx, &CosmosRemoteReleaseIDReq{
-		TrackerId: tracker.id,
-	})
-	if er != nil {
-		// TODO: log
-		return
-	}
-	if rsp.Error != nil {
-		// TODO: log
-		return
-	}
-}
 
 func (e *ElementRemote) setDisable() {
 	e.enable = false

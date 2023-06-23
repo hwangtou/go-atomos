@@ -11,7 +11,7 @@ func TestElementLocalBase(t *testing.T) {
 	var messages int
 
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, false)); err != nil {
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}
@@ -67,7 +67,7 @@ func TestElementLocalBase(t *testing.T) {
 
 	// Push Deadlock Message.
 	testAtomName := "testAtom"
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -84,7 +84,8 @@ func TestElementLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Kill failed. err=(%v)", err)
 		return
 	}
-	atom.Release(tracker)
+	//atom.Release(tracker)
+	tracker.Release()
 	if err = checkAtomLocalInElement(t, testElem, testAtomName, true, AtomosHalt, 0); err != nil {
 		t.Errorf("TestElementLocalBase: Push Message Deadlock state invalid. err=(%v)", err)
 		return
@@ -164,7 +165,7 @@ func TestElementLocalBase(t *testing.T) {
 
 func TestElementLocalScaleID(t *testing.T) {
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, false)); err != nil {
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}
@@ -179,7 +180,7 @@ func TestElementLocalScaleID(t *testing.T) {
 		return
 	}
 
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -191,7 +192,7 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 	sharedTestAtom1 = atom
 
-	scaleID, scaleTracker, err := testElem.ScaleGetAtomID(process.local, "ScaleTestMessage", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	scaleID, scaleTracker, err := testElem.ScaleGetAtomID(process.local, "ScaleTestMessage", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
@@ -215,23 +216,23 @@ func TestElementLocalScaleID(t *testing.T) {
 	}
 
 	// Test Return Error.
-	scaleID, scaleTracker, err = testElem.ScaleGetAtomID(process.local, "ScaleTestMessageError", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	scaleID, scaleTracker, err = testElem.ScaleGetAtomID(process.local, "ScaleTestMessageError", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack != "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
-	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 2); err != nil {
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
 
 	// Test Return Panic.
-	scaleID, scaleTracker, err = testElem.ScaleGetAtomID(process.local, "ScaleTestMessagePanic", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	scaleID, scaleTracker, err = testElem.ScaleGetAtomID(process.local, "ScaleTestMessagePanic", 0, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}
-	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 2); err != nil {
+	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosWaiting, 1); err != nil {
 		t.Errorf("TestAtomLocalBase: Get ScaleID failed. err=(%v)", err)
 		return
 	}

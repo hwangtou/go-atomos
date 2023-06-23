@@ -58,7 +58,7 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 		}
 
 		// Get atom.
-		atom, tracker, err := elem.ScaleGetAtomID(callerID, req.Message, time.Duration(req.Timeout), in, req.FromTracker)
+		atom, _, err := elem.ScaleGetAtomID(callerID, req.Message, time.Duration(req.Timeout), in, nil, false)
 		if err != nil {
 			rsp.Error = err.AddStack(a.process.local)
 			return rsp, nil
@@ -68,10 +68,7 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 			return rsp, nil
 		}
 
-		a.process.setRemoteTracker(tracker)
-
 		rsp.Id = atom.GetIDInfo()
-		rsp.TrackerId = tracker.id
 		return rsp, nil
 	default:
 		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID invalid ToID type. to=(%v)", req.To).AddStack(nil)
@@ -88,16 +85,13 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 		return rsp, nil
 	}
 	// Get atom.
-	atom, tracker, err := elem.GetAtomID(req.Atom, req.FromTracker)
+	atom, _, err := elem.GetAtomID(req.Atom, nil, false)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
 
-	a.process.setRemoteTracker(tracker)
-
 	rsp.Id = atom.GetIDInfo()
-	rsp.TrackerId = tracker.id
 	return rsp, nil
 }
 
@@ -173,16 +167,13 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		return rsp, nil
 	}
 
-	atom, tracker, err := elem.SpawnAtom(req.Atom, in, req.FromTracker)
+	atom, _, err := elem.SpawnAtom(req.Atom, in, nil, false)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
 
-	a.process.setRemoteTracker(tracker)
-
 	rsp.Id = atom.GetIDInfo()
-	rsp.TrackerId = tracker.id
 	return rsp, nil
 }
 
@@ -254,20 +245,6 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 	}
 }
 
-func (a *atomosRemoteService) ReleaseID(ctx context.Context, req *CosmosRemoteReleaseIDReq) (*CosmosRemoteReleaseIDRsp, error) {
-	rsp := &CosmosRemoteReleaseIDRsp{}
-
-	a.process.cluster.remoteMutex.Lock()
-	tracker, has := a.process.cluster.remoteTrackIDMap[req.TrackerId]
-	if has {
-		delete(a.process.cluster.remoteTrackIDMap, req.TrackerId)
-	}
-	a.process.cluster.remoteMutex.Unlock()
-	tracker.Release()
-
-	return rsp, nil
-}
-
 func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	rsp := &CosmosRemoteKillAtomRsp{}
 	// Get element.
@@ -282,12 +259,11 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 		defer callerID.callerCounterDecr()
 	}
 	// Get atom.
-	atom, tracker, err := elem.GetAtomID(req.Id.Atom, req.FromTracker)
+	atom, _, err := elem.GetAtomID(req.Id.Atom, nil, false)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
-	defer tracker.Release()
 	// Kill atom.
 	err = atom.Kill(callerID, time.Duration(req.Timeout))
 	if err != nil {

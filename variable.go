@@ -7,8 +7,6 @@ var (
 	messageTimeoutTracer = true
 	// messageTimeoutDefault is the default timeout duration.
 	messageTimeoutDefault = 2 * time.Second
-
-	StoppingPrintStatic = true
 )
 
 func SetMessageTimeoutTracer(v bool, timeout time.Duration) {

@@ -21,7 +21,7 @@ type CosmosRemote struct {
 	version map[string]*cosmosRemoteVersion
 
 	elements map[string]*ElementRemote
-	*idTrackerManager
+	//*idTrackerManager
 }
 
 func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersionInfo) *CosmosRemote {
@@ -353,9 +353,9 @@ func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, worm
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) getIDTrackerManager() *idTrackerManager {
-	return c.idTrackerManager
-}
+//func (c *CosmosRemote) getIDTrackerManager() *idTrackerManager {
+//	return c.idTrackerManager
+//}
 
 func (c *CosmosRemote) getGoID() uint64 {
 	return c.id.GoId
@@ -380,7 +380,7 @@ func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Erro
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	return element.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3))
+	return element.GetAtomID(name, nil, false)
 }
 
 func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
@@ -388,7 +388,7 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	return element.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3))
+	return element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
 }
 
 func (c *CosmosRemote) CosmosSpawnAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
@@ -396,7 +396,7 @@ func (c *CosmosRemote) CosmosSpawnAtom(elem, name string, arg proto.Message) (ID
 	if err != nil {
 		return nil, nil, err
 	}
-	return element.SpawnAtom(name, arg, NewIDTrackerInfoFromLocalGoroutine(3))
+	return element.SpawnAtom(name, arg, nil, false)
 }
 
 func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {

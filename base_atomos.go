@@ -17,7 +17,7 @@ type AtomosHolder interface {
 
 	// OnScaling
 	// 负载均衡决策
-	OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error)
+	OnScaling(from ID, firstSyncCall, name string, args proto.Message) (id ID, err *Error)
 
 	// OnWormhole
 	// 收到Wormhole
@@ -26,6 +26,10 @@ type AtomosHolder interface {
 	// OnStopping
 	// 停止中
 	OnStopping(from ID, cancelled []uint64) *Error
+
+	// OnIDsReleased
+	// 释放了所有ID
+	OnIDsReleased()
 }
 
 // Atom状态
@@ -102,17 +106,21 @@ type BaseAtomos struct {
 	// 实际上运行的对象
 	instance Atomos
 
+	// 日志管理器，用于处理来自Atom内部的日志。
+	// Logs Manager, uses to handle Log from inner Atom.
+	log atomosLogging
+
 	// 任务管理器，用于处理来自Atom内部的任务调派。
 	// Task Manager, uses to handle Task from inner Atom.
 	task atomosTaskManager
 
-	// 日志管理器，用于处理来自Atom内部的日志。
-	// Logs Manager, uses to handle Log from inner Atom.
-	log atomosLoggingManager
+	// 消息追踪，用于处理来自Atom内部的消息追踪。
+	// Message Tracker, uses to handle Message Tracker from inner Atom.
+	mt atomosMessageTracker
 
-	// 消息追踪管理器，用于处理来自Atom内部的消息追踪。
-	// Message Tracker Manager, uses to handle Message Tracker from inner Atom.
-	mt messageTrackerManager
+	// ID追踪管理器
+	// ID Tracker Manager
+	it *atomosIDTracker
 }
 
 func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, process *CosmosProcess) *BaseAtomos {
@@ -123,14 +131,16 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, pr
 		mailbox:  nil,
 		holder:   holder,
 		instance: inst,
+		log:      atomosLogging{},
 		task:     atomosTaskManager{},
-		log:      atomosLoggingManager{},
-		mt:       messageTrackerManager{},
+		mt:       atomosMessageTracker{},
+		it:       &atomosIDTracker{},
 	}
 	a.mailbox = newMailBox(id.Info(), a, process.logging.accessLog, process.logging.errorLog)
 	initAtomosLog(&a.log, a.id, lv, process.logging)
 	initAtomosTasksManager(a.log.logging, &a.task, a)
 	initAtomosMessageTracker(&a.mt)
+	initAtomosIDTracker(a.it, a)
 	return a
 }
 
@@ -191,9 +201,9 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(name string, args 
 	deallocAtomosMail(am)
 }
 
-func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, firstSyncCall, name string, timeout time.Duration, in proto.Message, tracker *IDTracker) (ID, *Error) {
+func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, firstSyncCall, name string, timeout time.Duration, in proto.Message) (ID, *Error) {
 	am := allocAtomosMail()
-	initScaleMail(am, from, firstSyncCall, name, in, tracker)
+	initScaleMail(am, from, firstSyncCall, name, in)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
@@ -314,6 +324,12 @@ func (a *BaseAtomos) setHalted(err *Error) {
 	a.process.onIDHalted(a.id, err, a.mt)
 }
 
+// IDTracker
+
+func (a *BaseAtomos) onIDReleased() {
+	a.holder.OnIDsReleased()
+}
+
 // Mailbox
 
 func (a *BaseAtomos) start(fn func() *Error) *Error {
@@ -386,7 +402,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name)
 			defer a.setWaiting(name)
 
-			id, err := a.holder.OnScaling(am.from, am.firstSyncCall, am.name, am.arg, am.tracker)
+			id, err := a.holder.OnScaling(am.from, am.firstSyncCall, am.name, am.arg)
 			am.sendReplyID(id, err)
 			// Mail dealloc in AtomCore.pushScaleMail.
 		}

@@ -13,7 +13,7 @@ func TestAtomLocalBase(t *testing.T) {
 	var spawn, run, stop time.Duration
 
 	initTestFakeCosmosProcess(t)
-	runnable := newTestFakeRunnable(t, false)
+	runnable := newTestFakeRunnable(t, sharedCosmosProcess, false)
 	//runnable.hookAtomSpawning = func(elem string, name string) {
 	//	hasSpawning = true
 	//}
@@ -42,7 +42,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Spawn an atom.
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -58,7 +58,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Get an atom.
-	checkAtom, checkTracker, err := testElem.GetAtomID(testAtomName, NewIDTrackerInfoFromLocalGoroutine(1))
+	checkAtom, checkTracker, err := testElem.GetAtomID(testAtomName, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Get atom failed. err=(%v)", err)
 		return
@@ -67,10 +67,12 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Get atom failed. err=(%v)", err)
 		return
 	}
-	checkAtom.(*AtomLocal).Release(checkTracker)
+	//checkAtom.(*AtomLocal).Release(checkTracker)
+	_ = checkAtom
+	checkTracker.Release()
 
 	// Spawn an atom.
-	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(testDeadlockAtomName, &String{S: testDeadlockAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(testDeadlockAtomName, &String{S: testDeadlockAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn deadlock atom failed. err=(%v)", err)
 		return
@@ -190,7 +192,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Try Spawning twice.
-	atomTwice, trackerTwice, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+	atomTwice, trackerTwice, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || err.Code != ErrAtomIsRunning {
 		t.Errorf("TestAtomLocalBase: Spawn twice state invalid. err=(%v)", err)
 		return
@@ -232,7 +234,7 @@ func TestAtomLocalBase(t *testing.T) {
 	start := time.Now()
 	for {
 		// Because the atom may be stopping, so we have to retry.
-		atomTwice, trackerTwice, err = testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1))
+		atomTwice, trackerTwice, err = testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 		if err != nil {
 			if err.Code == ErrAtomIsStopping {
 				time.Sleep(1 * time.Millisecond)
@@ -306,13 +308,14 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Reference count push message state invalid. err=(%v)", err)
 		return
 	}
-	atom.Release(tracker)
+	tracker.Release()
+	//atom.Release(tracker)
 	if err = checkAtomLocalInElement(t, testElem, testAtomName, true, AtomosHalt, 0); err != nil {
 		t.Errorf("TestAtomLocalBase: Reference count state invalid. err=(%v)", err)
 		return
 	}
 	// Check ID Tracker.
-	if atom.idTrackerManager.refCount() != 0 {
+	if atom.atomos.it.refCount() != 0 {
 		t.Errorf("TestAtomLocalBase: ID Tracker state invalid.")
 		return
 	}
@@ -334,7 +337,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Spawn panic.
 	spawnPanicAtomName := "spawn_panic"
-	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(spawnPanicAtomName, &String{S: "panic"}, NewIDTrackerInfoFromLocalGoroutine(1))
+	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(spawnPanicAtomName, &String{S: "panic"}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Spawn panic atom state invalid.")
 		return
@@ -350,7 +353,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Stopping panic.
 	stoppingPanicAtomName := "stopping_panic"
-	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(stoppingPanicAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(stoppingPanicAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Stopping panic atom failed. err=(%v)", err)
 		return
@@ -375,7 +378,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Error.
 	dataAtomName := "get_data_error"
-	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -391,7 +394,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Panic.
 	dataAtomName = "get_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -407,7 +410,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns OK.
 	dataAtomName = "data_ok"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -436,7 +439,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns Error.
 	dataAtomName = "set_data_error"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -454,7 +457,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns panic.
 	dataAtomName = "set_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1))
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -511,7 +514,7 @@ func checkAtomLocalInElement(t *testing.T, elem *ElementLocal, name string, isNo
 			return NewError(ErrFrameworkRecoverFromPanic, "Atom should be stopping").AddStack(nil)
 		}
 	}
-	if curCount := atom.idTrackerManager.refCount(); curCount != refCount {
+	if curCount := atom.atomos.it.refCount(); curCount != refCount {
 		return NewErrorf(ErrFrameworkRecoverFromPanic, "Atom ref count not match, has=(%d),should=(%d)", curCount, refCount).AddStack(nil)
 	}
 	return nil

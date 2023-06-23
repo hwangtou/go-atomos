@@ -146,7 +146,7 @@ func initAsyncMessageCallbackMail(am *atomosMail, name string, async func(proto.
 
 // Scale邮件
 // Scale Mail
-func initScaleMail(am *atomosMail, from ID, firstSyncCall, name string, arg proto.Message, tracker *IDTracker) {
+func initScaleMail(am *atomosMail, from ID, firstSyncCall, name string, arg proto.Message) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailScale
@@ -159,7 +159,7 @@ func initScaleMail(am *atomosMail, from ID, firstSyncCall, name string, arg prot
 	} else {
 		am.arg = nil
 	}
-	am.tracker = tracker
+	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.executeStop = false

@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// messageTrackerManager
+// atomosMessageTracker
 // 消息跟踪管理器
 
-type messageTrackerManager struct {
+type atomosMessageTracker struct {
 	counter int64
 
 	spawningAt, spawnAt   time.Time
@@ -20,7 +20,7 @@ type messageTrackerManager struct {
 	messages map[string]MessageTrackInfo
 }
 
-func initAtomosMessageTracker(mt *messageTrackerManager) {
+func initAtomosMessageTracker(mt *atomosMessageTracker) {
 	mt.messages = make(map[string]MessageTrackInfo)
 }
 
@@ -28,7 +28,7 @@ func initAtomosMessageTracker(mt *messageTrackerManager) {
 
 // idleTime returns the idle time of the Atomos.
 // 返回Atomos的空闲时间。
-func (t *messageTrackerManager) idleTime() time.Duration {
+func (t *atomosMessageTracker) idleTime() time.Duration {
 	// If no messages after spawning, return the time since spawning.
 	if len(t.messages) == 0 {
 		return time.Now().Sub(t.spawnAt)
@@ -48,17 +48,17 @@ func (t *messageTrackerManager) idleTime() time.Duration {
 	return time.Now().Sub(lastEnd)
 }
 
-func (t *messageTrackerManager) spawning() {
+func (t *atomosMessageTracker) spawning() {
 	t.spawningAt = time.Now()
 }
 
 // spawn sets the spawn time, after spawning.
-func (t *messageTrackerManager) spawn() {
+func (t *atomosMessageTracker) spawn() {
 	t.spawnAt = time.Now()
 }
 
 // set sets the message handling info and start time.
-func (t *messageTrackerManager) set(message string, info *IDInfo, process *CosmosProcess) {
+func (t *atomosMessageTracker) set(message string, info *IDInfo, process *CosmosProcess) {
 	m, has := t.messages[message]
 	if !has {
 		m = MessageTrackInfo{}
@@ -85,7 +85,7 @@ func (t *messageTrackerManager) set(message string, info *IDInfo, process *Cosmo
 }
 
 // unset sets the message handling info and end time.
-func (t *messageTrackerManager) unset(message string) {
+func (t *atomosMessageTracker) unset(message string) {
 	m := t.messages[message]
 	m.LastEnd = time.Now()
 	d := m.LastEnd.Sub(m.LastBegin)
@@ -105,17 +105,17 @@ func (t *messageTrackerManager) unset(message string) {
 }
 
 // stopping sets the stopping time.
-func (t *messageTrackerManager) stopping() {
+func (t *atomosMessageTracker) stopping() {
 	t.stoppingAt = time.Now()
 }
 
 // halted sets the halted time.
-func (t *messageTrackerManager) halted() {
+func (t *atomosMessageTracker) halted() {
 	t.stoppedAt = time.Now()
 }
 
 // dump returns the message tracking info.
-func (t *messageTrackerManager) dump() string {
+func (t *atomosMessageTracker) dump() string {
 	if len(t.messages) == 0 {
 		return "No MessageTracker"
 	}

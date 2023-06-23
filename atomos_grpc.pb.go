@@ -27,7 +27,6 @@ const (
 	AtomosRemoteService_GetElementInfo_FullMethodName      = "/atomos.AtomosRemoteService/GetElementInfo"
 	AtomosRemoteService_SpawnAtom_FullMethodName           = "/atomos.AtomosRemoteService/SpawnAtom"
 	AtomosRemoteService_SyncMessagingByName_FullMethodName = "/atomos.AtomosRemoteService/SyncMessagingByName"
-	AtomosRemoteService_ReleaseID_FullMethodName           = "/atomos.AtomosRemoteService/ReleaseID"
 	AtomosRemoteService_KillAtom_FullMethodName            = "/atomos.AtomosRemoteService/KillAtom"
 	AtomosRemoteService_ElementBroadcast_FullMethodName    = "/atomos.AtomosRemoteService/ElementBroadcast"
 )
@@ -44,7 +43,6 @@ type AtomosRemoteServiceClient interface {
 	GetElementInfo(ctx context.Context, in *CosmosRemoteGetElementInfoReq, opts ...grpc.CallOption) (*CosmosRemoteGetElementInfoRsp, error)
 	SpawnAtom(ctx context.Context, in *CosmosRemoteSpawnAtomReq, opts ...grpc.CallOption) (*CosmosRemoteSpawnAtomRsp, error)
 	SyncMessagingByName(ctx context.Context, in *CosmosRemoteSyncMessagingByNameReq, opts ...grpc.CallOption) (*CosmosRemoteSyncMessagingByNameRsp, error)
-	ReleaseID(ctx context.Context, in *CosmosRemoteReleaseIDReq, opts ...grpc.CallOption) (*CosmosRemoteReleaseIDRsp, error)
 	KillAtom(ctx context.Context, in *CosmosRemoteKillAtomReq, opts ...grpc.CallOption) (*CosmosRemoteKillAtomRsp, error)
 	ElementBroadcast(ctx context.Context, in *CosmosRemoteElementBroadcastReq, opts ...grpc.CallOption) (*CosmosRemoteElementBroadcastRsp, error)
 }
@@ -129,15 +127,6 @@ func (c *atomosRemoteServiceClient) SyncMessagingByName(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *atomosRemoteServiceClient) ReleaseID(ctx context.Context, in *CosmosRemoteReleaseIDReq, opts ...grpc.CallOption) (*CosmosRemoteReleaseIDRsp, error) {
-	out := new(CosmosRemoteReleaseIDRsp)
-	err := c.cc.Invoke(ctx, AtomosRemoteService_ReleaseID_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *atomosRemoteServiceClient) KillAtom(ctx context.Context, in *CosmosRemoteKillAtomReq, opts ...grpc.CallOption) (*CosmosRemoteKillAtomRsp, error) {
 	out := new(CosmosRemoteKillAtomRsp)
 	err := c.cc.Invoke(ctx, AtomosRemoteService_KillAtom_FullMethodName, in, out, opts...)
@@ -168,7 +157,6 @@ type AtomosRemoteServiceServer interface {
 	GetElementInfo(context.Context, *CosmosRemoteGetElementInfoReq) (*CosmosRemoteGetElementInfoRsp, error)
 	SpawnAtom(context.Context, *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error)
 	SyncMessagingByName(context.Context, *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error)
-	ReleaseID(context.Context, *CosmosRemoteReleaseIDReq) (*CosmosRemoteReleaseIDRsp, error)
 	KillAtom(context.Context, *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error)
 	ElementBroadcast(context.Context, *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error)
 	mustEmbedUnimplementedAtomosRemoteServiceServer()
@@ -201,9 +189,6 @@ func (UnimplementedAtomosRemoteServiceServer) SpawnAtom(context.Context, *Cosmos
 }
 func (UnimplementedAtomosRemoteServiceServer) SyncMessagingByName(context.Context, *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncMessagingByName not implemented")
-}
-func (UnimplementedAtomosRemoteServiceServer) ReleaseID(context.Context, *CosmosRemoteReleaseIDReq) (*CosmosRemoteReleaseIDRsp, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReleaseID not implemented")
 }
 func (UnimplementedAtomosRemoteServiceServer) KillAtom(context.Context, *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method KillAtom not implemented")
@@ -368,24 +353,6 @@ func _AtomosRemoteService_SyncMessagingByName_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AtomosRemoteService_ReleaseID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CosmosRemoteReleaseIDReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AtomosRemoteServiceServer).ReleaseID(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AtomosRemoteService_ReleaseID_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AtomosRemoteServiceServer).ReleaseID(ctx, req.(*CosmosRemoteReleaseIDReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AtomosRemoteService_KillAtom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CosmosRemoteKillAtomReq)
 	if err := dec(in); err != nil {
@@ -460,10 +427,6 @@ var AtomosRemoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncMessagingByName",
 			Handler:    _AtomosRemoteService_SyncMessagingByName_Handler,
-		},
-		{
-			MethodName: "ReleaseID",
-			Handler:    _AtomosRemoteService_ReleaseID_Handler,
 		},
 		{
 			MethodName: "KillAtom",

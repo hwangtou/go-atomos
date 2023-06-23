@@ -48,9 +48,6 @@ type CosmosProcess struct {
 		// Cluster Info
 		remoteMutex  sync.RWMutex
 		remoteCosmos map[string]*CosmosRemote
-
-		remoteTrackCurID uint64
-		remoteTrackIDMap map[uint64]*IDTracker
 	}
 }
 
@@ -102,11 +99,9 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 		mutex:                sync.RWMutex{},
 		elements:             map[string]*ElementLocal{},
 		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
-		idTrackerManager:     &idTrackerManager{},
 	}
 	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p)
 	p.local.idFirstSyncCallLocal.init(id)
-	p.local.idTrackerManager.init(p.local)
 	if err := p.local.atomos.start(nil); err != nil {
 		return err.AddStack(nil)
 	}
@@ -114,7 +109,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 	// Init Cluster.
 	// Initialize the basic information to prevent panic.
 	p.cluster.remoteCosmos = map[string]*CosmosRemote{}
-	p.cluster.remoteTrackIDMap = map[uint64]*IDTracker{}
+	//p.cluster.remoteTrackIDMap = map[uint64]*IDTracker{}
 
 	return nil
 }
@@ -562,22 +557,6 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 	}
 }
 
-func (p *CosmosProcess) setRemoteTracker(tracker *IDTracker) {
-	p.cluster.remoteMutex.Lock()
-	p.cluster.remoteTrackCurID += 1
-	curID := p.cluster.remoteTrackCurID
-	p.cluster.remoteTrackIDMap[curID] = tracker
-	p.cluster.remoteMutex.Unlock()
-
-	tracker.id = curID
-}
-
-func (p *CosmosProcess) unsetRemoteTracker(id uint64) {
-	p.cluster.remoteMutex.Lock()
-	delete(p.cluster.remoteTrackIDMap, id)
-	p.cluster.remoteMutex.Unlock()
-}
-
 func (p *CosmosProcess) onIDSpawning(id *IDInfo) {
 	p.logging.PushLogging(id, LogLevel_Info, fmt.Sprintf("MessageTracker: Spawning. id=(%v)", id))
 }
@@ -590,7 +569,7 @@ func (p *CosmosProcess) onIDStopping(id *IDInfo) {
 
 }
 
-func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt messageTrackerManager) {
+func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTracker) {
 	p.logging.PushLogging(id, LogLevel_Info, fmt.Sprintf("MessageTracker: Halted. id=(%v),err=(%v),tracker=(%s)", id, err, mt.dump()))
 }
 

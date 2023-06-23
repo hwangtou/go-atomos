@@ -9,24 +9,25 @@ import (
 
 // IDTracker
 
-type idTrackerManager struct {
+type atomosIDTracker struct {
 	mutex   sync.Mutex
-	release AtomosRelease
+	atomos  *BaseAtomos
 	counter uint64
 	idMap   map[uint64]*IDTracker
 }
 
-type AtomosRelease interface {
-	Release(tracker *IDTracker)
+func initAtomosIDTracker(it *atomosIDTracker, atomos *BaseAtomos) {
+	it.atomos = atomos
+	it.idMap = map[uint64]*IDTracker{}
 }
 
-func (i *idTrackerManager) init(release AtomosRelease) {
-	i.release = release
-	i.idMap = map[uint64]*IDTracker{}
+func (i *atomosIDTracker) fromOld(old *atomosIDTracker) *atomosIDTracker {
+	old.atomos = i.atomos
+	return old
 }
 
 // addIDTracker is used to add IDTracker for local.
-func (i *idTrackerManager) addIDTracker(rt *IDTrackerInfo) *IDTracker {
+func (i *atomosIDTracker) addIDTracker(rt *IDTrackerInfo, localOrRemote bool) *IDTracker {
 	i.mutex.Lock()
 	i.counter += 1
 	tracker := &IDTracker{id: i.counter}
@@ -41,7 +42,7 @@ func (i *idTrackerManager) addIDTracker(rt *IDTrackerInfo) *IDTracker {
 }
 
 // addScaleIDTracker is used to add IDTracker for scale.
-func (i *idTrackerManager) addScaleIDTracker(tracker *IDTracker) {
+func (i *atomosIDTracker) addScaleIDTracker(tracker *IDTracker) *IDTracker {
 	i.mutex.Lock()
 	i.counter += 1
 	tracker.id = i.counter
@@ -49,28 +50,19 @@ func (i *idTrackerManager) addScaleIDTracker(tracker *IDTracker) {
 	i.mutex.Unlock()
 
 	tracker.manager = i
+	return tracker
 }
 
 // refCount is used to get the number of IDTracker.
-func (i *idTrackerManager) refCount() int {
+func (i *atomosIDTracker) refCount() int {
 	i.mutex.Lock()
 	num := len(i.idMap)
 	i.mutex.Unlock()
 	return num
 }
 
-// Release is used to release IDTracker.
-func (i *idTrackerManager) Release(tracker *IDTracker) {
-	if tracker == nil {
-		return
-	}
-	i.mutex.Lock()
-	delete(i.idMap, tracker.id)
-	i.mutex.Unlock()
-}
-
 // String is used to get the string of IDTrackerManager.
-func (i *idTrackerManager) String() string {
+func (i *atomosIDTracker) String() string {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 	if len(i.idMap) == 0 {
@@ -90,8 +82,7 @@ func (i *idTrackerManager) String() string {
 type IDTracker struct {
 	id uint64
 
-	er      *ElementRemote
-	manager *idTrackerManager
+	manager *atomosIDTracker
 
 	file string
 	line int
@@ -109,14 +100,15 @@ func (i *IDTracker) Release() {
 	if i == nil {
 		return
 	}
-	if i.er != nil {
-		i.er.elementAtomRelease(i)
-	}
 	if i.manager != nil {
 		i.manager.mutex.Lock()
 		delete(i.manager.idMap, i.id)
+		num := len(i.manager.idMap)
 		i.manager.mutex.Unlock()
-		i.manager.release.Release(i)
+
+		if num == 0 {
+			i.manager.atomos.onIDReleased()
+		}
 	}
 }
 
@@ -138,18 +130,6 @@ func NewIDTrackerInfoFromLocalGoroutine(skip int) *IDTrackerInfo {
 func (x *IDTrackerInfo) newScaleIDTracker() *IDTracker {
 	return &IDTracker{
 		id:      0,
-		er:      nil,
-		manager: nil,
-		file:    x.File,
-		line:    int(x.Line),
-		name:    x.Name,
-	}
-}
-
-func (x *IDTrackerInfo) newIDTrackerFromRemoteTrackerID(er *ElementRemote, trackerID uint64) *IDTracker {
-	return &IDTracker{
-		id:      trackerID,
-		er:      er,
 		manager: nil,
 		file:    x.File,
 		line:    int(x.Line),

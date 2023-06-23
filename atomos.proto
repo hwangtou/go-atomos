@@ -241,7 +241,6 @@ service AtomosRemoteService {
 
   rpc SpawnAtom(CosmosRemoteSpawnAtomReq) returns (CosmosRemoteSpawnAtomRsp) {}
   rpc SyncMessagingByName(CosmosRemoteSyncMessagingByNameReq) returns (CosmosRemoteSyncMessagingByNameRsp) {}
-  rpc ReleaseID(CosmosRemoteReleaseIDReq) returns (CosmosRemoteReleaseIDRsp) {}
   rpc KillAtom(CosmosRemoteKillAtomReq) returns (CosmosRemoteKillAtomRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
@@ -257,7 +256,6 @@ message CosmosRemoteTryKillingRsp {
 message CosmosRemoteScaleGetAtomIDReq {
   IDInfo caller_id = 1;
   string caller_cur_first_sync_call = 2;
-  IDTrackerInfo from_tracker = 3;
   IDInfo to = 4;
   int64 timeout = 5;
   string message = 6;
@@ -266,19 +264,16 @@ message CosmosRemoteScaleGetAtomIDReq {
 message CosmosRemoteScaleGetAtomIDRsp {
   IDInfo id = 1;
   Error error = 2;
-  uint64 tracker_id = 3;
 }
 
 // Get Atom ID
 message CosmosRemoteGetAtomIDReq {
-  IDTrackerInfo from_tracker = 1;
   string element = 2;
   string atom = 3;
 }
 message CosmosRemoteGetAtomIDRsp {
   IDInfo id = 1;
   Error error = 2;
-  uint64 tracker_id = 3;
 }
 
 // Get ID State
@@ -312,13 +307,11 @@ message CosmosRemoteGetElementInfoRsp {
 message CosmosRemoteSpawnAtomReq {
   string element = 1;
   string atom = 2;
-  IDTrackerInfo from_tracker = 3;
   google.protobuf.Any args = 4;
 }
 message CosmosRemoteSpawnAtomRsp {
   IDInfo id = 1;
   Error error = 2;
-  uint64 tracker_id = 3;
 }
 
 // Sync Messaging
@@ -335,20 +328,11 @@ message CosmosRemoteSyncMessagingByNameRsp {
   Error error = 2;
 }
 
-// Release ID
-message CosmosRemoteReleaseIDReq {
-  uint64 tracker_id = 1;
-}
-message CosmosRemoteReleaseIDRsp {
-  Error error = 1;
-}
-
 // Kill Atom
 message CosmosRemoteKillAtomReq {
   IDInfo caller_id = 1;
   string caller_cur_first_sync_call = 2;
   IDInfo id = 3;
-  IDTrackerInfo from_tracker = 4;
   int64 timeout = 5;
 }
 message CosmosRemoteKillAtomRsp {

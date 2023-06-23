@@ -48,9 +48,6 @@ type ID interface {
 
 	// Internal
 
-	// 当前的ID跟踪管理器
-	// Current ID tracker manager.
-	getIDTrackerManager() *idTrackerManager
 	// 当前ID的邮箱GoID
 	// GoID of the mailbox of current ID.
 	getGoID() uint64

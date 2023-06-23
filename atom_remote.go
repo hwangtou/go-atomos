@@ -217,7 +217,6 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 		CallerId:               callerID.GetIDInfo(),
 		CallerCurFirstSyncCall: firstSyncCall,
 		Id:                     a.info,
-		FromTracker:            NewIDTrackerInfoFromLocalGoroutine(1),
 		Timeout:                int64(timeout),
 	})
 	if er != nil {
@@ -232,10 +231,6 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 
 func (a *AtomRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
 	return NewErrorf(ErrAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.")
-}
-
-func (a *AtomRemote) getIDTrackerManager() *idTrackerManager {
-	panic("AtomRemote: getIDTrackerManager not support")
 }
 
 func (a *AtomRemote) getGoID() uint64 {

@@ -30,10 +30,9 @@ type AtomLocal struct {
 	nameElement *list.Element
 
 	// 当前实现
-	current *ElementImplementation
+	elemImpl *ElementImplementation
 
 	*idFirstSyncCallLocal
-	*idTrackerManager
 }
 
 // 生命周期相关
@@ -52,15 +51,14 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		element:              e,
 		atomos:               nil,
 		nameElement:          nil,
-		current:              current,
+		elemImpl:             current,
 		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
-		idTrackerManager:     &idTrackerManager{},
 	}
 	instance, err := func() (at Atomos, err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = NewError(ErrFrameworkRecoverFromPanic, "Atom: AtomConstructor panic.").AddStack(a)
-				a.element.main.Log().Error("AtomLocal: AtomConstructor panic. err=(%v)", r)
+				a.element.cosmosLocal.Log().Error("AtomLocal: AtomConstructor panic. err=(%v)", r)
 			}
 		}()
 		at = current.Developer.AtomConstructor(name)
@@ -72,9 +70,8 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
-	a.atomos = NewBaseAtomos(id, lv, a, instance, e.main.process)
+	a.atomos = NewBaseAtomos(id, lv, a, instance, e.cosmosLocal.process)
 	a.idFirstSyncCallLocal.init(a.atomos.id)
-	a.idTrackerManager.init(a)
 
 	return a, nil
 }
@@ -98,7 +95,7 @@ func (a *AtomLocal) String() string {
 }
 
 func (a *AtomLocal) Cosmos() CosmosNode {
-	return a.element.main
+	return a.element.cosmosLocal
 }
 
 func (a *AtomLocal) State() AtomosState {
@@ -179,7 +176,7 @@ func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, timeout t
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
-	decoderFn, has := a.current.Interface.AtomDecoders[name]
+	decoderFn, has := a.elemImpl.Interface.AtomDecoders[name]
 	if !has {
 		return nil, nil
 	}
@@ -191,7 +188,7 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
 func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
-	dev := a.element.current.Developer
+	dev := a.element.elemImpl.Developer
 	elemAuth, ok := dev.(ElementAuthorization)
 	if ok && elemAuth != nil {
 		if err := elemAuth.AtomCanKill(callerID); err != nil {
@@ -240,19 +237,15 @@ func (a *AtomLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhol
 	return a.atomos.PushWormholeMailAndWaitReply(callerID, firstSyncCall, timeout, wormhole)
 }
 
-func (a *AtomLocal) getIDTrackerManager() *idTrackerManager {
-	return a.idTrackerManager
-}
-
 func (a *AtomLocal) getGoID() uint64 {
 	return a.atomos.GetGoID()
 }
 
 // Implementations of AtomosRelease
 
-func (a *AtomLocal) Release(tracker *IDTracker) {
-	a.element.elementAtomRelease(a, tracker)
-}
+//func (a *AtomLocal) onIDTrackerRelease(tracker *IDTracker) {
+//	a.element.elementAtomRelease(a, tracker)
+//}
 
 // Implementation of AtomosUtilities
 
@@ -274,7 +267,7 @@ func (a *AtomLocal) Task() Task {
 // It also provides Log and Tasks method to inner Atom.
 
 func (a *AtomLocal) CosmosMain() *CosmosLocal {
-	return a.element.main
+	return a.element.cosmosLocal
 }
 
 // KillSelf
@@ -309,7 +302,7 @@ func (a *AtomLocal) Parallel(fn func()) {
 }
 
 func (a *AtomLocal) Config() map[string][]byte {
-	return a.element.main.runnable.config.Customize
+	return a.element.cosmosLocal.runnable.config.Customize
 }
 
 func (a *AtomLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
@@ -338,7 +331,7 @@ func (a *AtomLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.
 	}
 	defer a.unsetSyncMessageAndFirstCall()
 
-	handler := a.current.AtomHandlers[name]
+	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
 			"Atom: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a)
@@ -370,7 +363,7 @@ func (a *AtomLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callb
 	callback(in, err)
 }
 
-func (a *AtomLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
+func (a *AtomLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrFrameworkInternalError, "Atom: Atom not supported scaling.").AddStack(a)
 }
 
@@ -411,7 +404,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	}
 
 	// Save data.
-	impl := a.element.current
+	impl := a.element.elemImpl
 	if impl == nil {
 		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo(), a.element).AddStack(a)
@@ -474,6 +467,10 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 		return err.AddStack(a)
 	}
 	return nil
+}
+
+func (a *AtomLocal) OnIDsReleased() {
+	a.element.elementAtomRelease(a)
 }
 
 func (a *AtomLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Duration) *Error {

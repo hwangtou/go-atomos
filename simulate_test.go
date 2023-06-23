@@ -43,12 +43,12 @@ func initTestFakeCosmosProcessBenchmark(b *testing.B) {
 	InitCosmosProcess("", "", accessLog, errorLog)
 }
 
-func newTestFakeRunnable(t *testing.T, autoData bool) *CosmosRunnable {
+func newTestFakeRunnable(t *testing.T, process *CosmosProcess, autoData bool) *CosmosRunnable {
 	runnable := &CosmosRunnable{}
 	runnable.
 		SetConfig(newTestFakeCosmosMainConfig()).
 		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, nil, autoData))
+		AddElementImplementation(newTestFakeElement(t, process, autoData))
 	return runnable
 }
 
