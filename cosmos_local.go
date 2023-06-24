@@ -15,8 +15,6 @@ type CosmosLocal struct {
 	// Elements & Remote
 	mutex    sync.RWMutex
 	elements map[string]*ElementLocal
-
-	*idFirstSyncCallLocal
 }
 
 // Implementation of ID
@@ -78,6 +76,24 @@ func (c *CosmosLocal) Task() Task {
 	return c.atomos.Task()
 }
 
+// Implementation of idFirstSyncCall
+
+func (c *CosmosLocal) getCurFirstSyncCall() string {
+	return c.atomos.fsc.getCurFirstSyncCall()
+}
+
+func (c *CosmosLocal) setSyncMessageAndFirstCall(s string) *Error {
+	return c.atomos.fsc.setSyncMessageAndFirstCall(s)
+}
+
+func (c *CosmosLocal) unsetSyncMessageAndFirstCall() {
+	c.atomos.fsc.unsetSyncMessageAndFirstCall()
+}
+
+func (c *CosmosLocal) nextFirstSyncCall() string {
+	return c.atomos.fsc.nextFirstSyncCall()
+}
+
 // Implementation of atomos.SelfID
 //
 // SelfID，是Atom内部可以访问的Atom资源的概念。
@@ -121,8 +137,8 @@ func (c *CosmosLocal) Config() map[string][]byte {
 	return c.runnable.config.Customize
 }
 
-func (c *CosmosLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, in, err, callback)
+func (c *CosmosLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err, callback)
 }
 
 // Implementation of CosmosNode
@@ -159,15 +175,15 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 	return e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3), true)
 }
 
-func (c *CosmosLocal) CosmosSpawnAtom(elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
+func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
 	e, err := c.getLocalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.SpawnAtom(name, arg, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	return e.SpawnAtom(callerID, name, arg, NewIDTrackerInfoFromLocalGoroutine(3), true)
 }
 
-func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
+func (c *CosmosLocal) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {
 	elems, err := c.getLocalAllElements()
 	if err != nil {
 		return err.AddStack(c)
@@ -206,7 +222,7 @@ func (c *CosmosLocal) OnMessaging(fromID ID, firstSyncCall, name string, in prot
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.")
 }
 
-func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (c *CosmosLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err)
 }
 
@@ -214,7 +230,7 @@ func (c *CosmosLocal) OnScaling(from ID, firstSyncCall, name string, args proto.
 	return nil, NewError(ErrMainCannotScale, "Cosmos: Cannot scale.").AddStack(c)
 }
 
-func (c *CosmosLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
+func (c *CosmosLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
@@ -224,7 +240,7 @@ func (c *CosmosLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	return holder.AcceptWormhole(from, wormhole)
 }
 
-func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (c *CosmosLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
 
 	// Unload local elements and its atomos.
@@ -234,7 +250,7 @@ func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		if !has {
 			continue
 		}
-		if err = elem.pushKillMail(c, true, 0); err != nil {
+		if err = elem.atomos.PushKillMailAndWaitReply(c, true, 0); err != nil {
 			c.Log().Error("Cosmos: Exiting kill element error. element=(%s),err=(%v)", name, err.Message)
 		}
 	}
@@ -305,7 +321,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	}
 	if err != nil {
 		for _, elem := range loaded {
-			if e := elem.pushKillMail(c, true, 0); e != nil {
+			if e := elem.atomos.PushKillMailAndWaitReply(c, true, 0); e != nil {
 				c.Log().Fatal("Cosmos: Spawning element failed, kill failed. name=(%s),err=(%v)", elem.atomos.id.Element, e.AddStack(c))
 			}
 		}
@@ -382,45 +398,4 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 		return nil, err.AddStack(elem)
 	}
 	return elem, nil
-}
-
-func (c *CosmosLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Duration) *Error {
-	firstSyncCall := ""
-
-	if callerID != nil && wait {
-		// 获取调用ID的Go ID
-		callerLocalGoID := callerID.getGoID()
-		// 获取调用栈的Go ID
-		curLocalGoID := getGoID()
-
-		// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
-		if callerLocalGoID == curLocalGoID {
-			// 此时需要检查调用方是否有curFirstSyncCall，如果为空，证明是第一个同步调用（如Task中调用的），所以需要创建一个curFirstSyncCall。
-			// 因为是同一个Atom，所以直接设置到当前的ID即可。
-			if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-				// 要从调用者开始算起，所以要从调用者的ID中获取。
-				firstSyncCall = callerID.nextFirstSyncCall()
-				if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-					return err.AddStack(c)
-				}
-				defer callerID.unsetSyncMessageAndFirstCall()
-			} else {
-				// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
-				if eFirst := c.getCurFirstSyncCall(); callerFirst == eFirst {
-					// 如果一样，则是循环调用死锁，返回错误。
-					return NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
-				} else {
-					// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
-					// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
-					// 继续传递调用链。
-					firstSyncCall = callerFirst
-				}
-			}
-		} else {
-			// 例如在Parallel和被其它框架调用的情况，就是这种。
-			// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
-			firstSyncCall = c.nextFirstSyncCall()
-		}
-	}
-	return c.atomos.PushKillMailAndWaitReply(callerID, firstSyncCall, wait, true, timeout)
 }

@@ -373,10 +373,10 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		if methodName == "Spawn" {
 			elementName := service.GoName
 			spawnArgTypeName := g.QualifiedGoIdent(method.Input.GoIdent)
-			g.P("func Spawn", service.GoName, "Atom(c ", atomosPackage.Ident("CosmosNode"),
+			g.P("func Spawn", service.GoName, "Atom(caller ", atomosPackage.Ident("SelfID"), ", c ", atomosPackage.Ident("CosmosNode"),
 				", name string, arg *", spawnArgTypeName, ") (*",
 				atomName, ", *", atomosPackage.Ident("Error"), ") {")
-			g.P("id, tracker, err := c.CosmosSpawnAtom(", elementName, "Name, name, arg)")
+			g.P("id, tracker, err := c.CosmosSpawnAtom(caller,", elementName, "Name, name, arg)")
 			g.P("if id == nil { return nil, err.AddStack(nil) }")
 			g.P("return &", atomName, "{id, tracker, ", "}, err")
 			g.P("}")

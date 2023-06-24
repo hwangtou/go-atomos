@@ -133,10 +133,11 @@ func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, arg pr
 
 // AsyncMessageCallback邮件
 // Async Message Callback Mail
-func initAsyncMessageCallbackMail(am *atomosMail, name string, async func(proto.Message, *Error), arg proto.Message, err *Error) {
+func initAsyncMessageCallbackMail(am *atomosMail, firstSyncCall, name string, async func(proto.Message, *Error), arg proto.Message, err *Error) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailAsyncMessageCallback
+	am.firstSyncCall = firstSyncCall
 	am.name = name
 	am.arg = arg
 	am.err = err
@@ -186,6 +187,7 @@ func initWormholeMail(am *atomosMail, from ID, firstSyncCall string, wormhole At
 	am.mail.action = MailActionRun
 	am.mailType = MailWormhole
 	am.from = from
+	am.firstSyncCall = firstSyncCall
 	am.name = ""
 	am.arg = nil
 	am.tracker = nil
@@ -197,16 +199,17 @@ func initWormholeMail(am *atomosMail, from ID, firstSyncCall string, wormhole At
 
 // 终止邮件
 // Stopping Mail
-func initKillMail(am *atomosMail, from ID, firstSyncCall string, executeStop bool) {
+func initKillMail(am *atomosMail, from ID, firstSyncCall string) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
 	am.from = from
+	am.firstSyncCall = firstSyncCall
 	am.name = ""
 	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
-	am.executeStop = executeStop
+	am.executeStop = true
 	am.waitCh = make(chan *mailReply, 1)
 }
 

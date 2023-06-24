@@ -29,12 +29,17 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 // It is used to communicate with the remote Atomos.
 func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRemoteScaleGetAtomIDReq) (*CosmosRemoteScaleGetAtomIDRsp, error) {
 	rsp := &CosmosRemoteScaleGetAtomIDRsp{}
+	if req.CallerCurFirstSyncCall == "" {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: ScaleGetAtomID invalid caller cur first sync call.").AddStack(nil)
+		return rsp, nil
+	}
+
 	switch req.To.Type {
 	case IDType_Atom:
 		// Caller id.
 		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
 		if callerID != nil {
-			defer callerID.callerCounterDecr()
+			defer callerID.callerCounterRelease()
 		}
 
 		// Unmarshal args.
@@ -154,6 +159,15 @@ func (a *atomosRemoteService) GetElementInfo(ctx context.Context, req *CosmosRem
 
 func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
 	rsp := &CosmosRemoteSpawnAtomRsp{}
+	if req.CallerCurFirstSyncCall == "" {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: SpawnAtom invalid caller cur first sync call.").AddStack(nil)
+		return rsp, nil
+	}
+	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+	if callerID != nil {
+		defer callerID.callerCounterRelease()
+	}
+
 	elem, err := a.process.local.getLocalElement(req.Element)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
@@ -163,11 +177,11 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 	// Unmarshal args.
 	in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
 	if er != nil {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SpawnAtom unmarshal args failed. err=(%v)", er).AddStack(nil)
 		return rsp, nil
 	}
 
-	atom, _, err := elem.SpawnAtom(req.Atom, in, nil, false)
+	atom, _, err := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
@@ -186,12 +200,17 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 // Error is the error.
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
+	if req.CallerCurFirstSyncCall == "" {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call.").AddStack(nil)
+		return rsp, nil
+	}
+
 	switch req.To.Type {
 	case IDType_Atom, IDType_Element:
 		// Caller id.
 		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
 		if callerID != nil {
-			defer callerID.callerCounterDecr()
+			defer callerID.callerCounterRelease()
 		}
 
 		// Unmarshal args.
@@ -247,6 +266,11 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 
 func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	rsp := &CosmosRemoteKillAtomRsp{}
+	if req.CallerCurFirstSyncCall == "" {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: KillAtom invalid caller cur first sync call.").AddStack(nil)
+		return rsp, nil
+	}
+
 	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Id.Element)
 	if err != nil {
@@ -256,7 +280,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 	// Caller id.
 	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
 	if callerID != nil {
-		defer callerID.callerCounterDecr()
+		defer callerID.callerCounterRelease()
 	}
 	// Get atom.
 	atom, _, err := elem.GetAtomID(req.Id.Atom, nil, false)
@@ -275,9 +299,13 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
 	rsp := &CosmosRemoteElementBroadcastRsp{}
 
-	callerID := a.getFromCaller(req.CallerId, "")
+	if req.CallerCurFirstSyncCall == "" {
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: ElementBroadcast invalid caller cur first sync call.").AddStack(nil)
+		return rsp, nil
+	}
+	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
 	if callerID != nil {
-		defer callerID.callerCounterDecr()
+		defer callerID.callerCounterRelease()
 	}
 	err := a.process.local.ElementBroadcast(callerID, req.Key, req.ContentType, req.ContentBuffer)
 	if err != nil {

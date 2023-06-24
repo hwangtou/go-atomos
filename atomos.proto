@@ -305,9 +305,11 @@ message CosmosRemoteGetElementInfoRsp {
 
 // Spawn Atom
 message CosmosRemoteSpawnAtomReq {
-  string element = 1;
-  string atom = 2;
-  google.protobuf.Any args = 4;
+  IDInfo caller_id = 1;
+  string caller_cur_first_sync_call = 2;
+  string element = 3;
+  string atom = 4;
+  google.protobuf.Any args = 5;
 }
 message CosmosRemoteSpawnAtomRsp {
   IDInfo id = 1;
@@ -342,9 +344,10 @@ message CosmosRemoteKillAtomRsp {
 // Element Broadcast
 message CosmosRemoteElementBroadcastReq {
   IDInfo caller_id = 1;
-  string key = 2;
-  string content_type = 3;
-  bytes content_buffer = 4;
+  string caller_cur_first_sync_call = 2;
+  string key = 3;
+  string content_type = 4;
+  bytes content_buffer = 5;
 }
 message CosmosRemoteElementBroadcastRsp {
   Error error = 1;

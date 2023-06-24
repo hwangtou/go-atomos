@@ -13,15 +13,13 @@ type AtomRemote struct {
 	version string
 
 	callerCounter int
-	*idFirstSyncCallLocal
 }
 
 func newAtomRemote(e *ElementRemote, info *IDInfo, version string) *AtomRemote {
 	a := &AtomRemote{
-		element:              e,
-		info:                 info,
-		version:              version,
-		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
+		element: e,
+		info:    info,
+		version: version,
 	}
 	return a
 }
@@ -143,7 +141,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 
 	// 这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
 	callerIDInfo := callerID.GetIDInfo()
-	firstSyncCall := a.nextFirstSyncCall()
+	firstSyncCall := callerID.nextFirstSyncCall()
 
 	a.element.cosmos.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
@@ -176,7 +174,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 			}
 			return out, err
 		}()
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, out, err, callback)
+		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
 	})
 }
 
@@ -261,7 +259,7 @@ func (e *ElementRemote) newRemoteAtomFromCaller(id *IDInfo, call string) *remote
 	}
 }
 
-func (a *remoteAtomFakeSelfID) callerCounterDecr() {
+func (a *remoteAtomFakeSelfID) callerCounterRelease() {
 	a.element.lock.Lock()
 	if a.callerCounter > 0 {
 		a.callerCounter -= 1
@@ -274,6 +272,22 @@ func (a *remoteAtomFakeSelfID) Log() Logging {
 }
 
 func (a *remoteAtomFakeSelfID) Task() Task {
+	panic("not supported, should not be called")
+}
+
+func (a *remoteAtomFakeSelfID) getCurFirstSyncCall() string {
+	return a.firstSyncCall
+}
+
+func (a *remoteAtomFakeSelfID) setSyncMessageAndFirstCall(s string) *Error {
+	panic("not supported, should not be called")
+}
+
+func (a *remoteAtomFakeSelfID) unsetSyncMessageAndFirstCall() {
+	panic("not supported, should not be called")
+}
+
+func (a *remoteAtomFakeSelfID) nextFirstSyncCall() string {
 	panic("not supported, should not be called")
 }
 
@@ -293,6 +307,6 @@ func (a *remoteAtomFakeSelfID) Config() map[string][]byte {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+func (a *remoteAtomFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
 	panic("not supported, should not be called")
 }

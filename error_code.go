@@ -45,6 +45,7 @@ const (
 	ErrCosmosRemoteResponseFailed
 	ErrCosmosRemoteResponseInvalid
 	ErrCosmosRemoteServerInvalidArgs
+	ErrCosmosRemoteServerInvalidFirstSyncCall
 	ErrCosmosRemoteInfoInvalid
 	ErrCosmosRemoteCannotMessage
 	ErrCosmosRemoteCannotScale

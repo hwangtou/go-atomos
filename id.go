@@ -87,7 +87,7 @@ type SelfID interface {
 
 	// Internal
 
-	pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
+	pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
 }
 
 // AtomSelfID 是Atom的SelfID。
@@ -120,5 +120,5 @@ type ElementSelfID interface {
 
 type remoteFakeSelfID interface {
 	SelfID
-	callerCounterDecr()
+	callerCounterRelease()
 }

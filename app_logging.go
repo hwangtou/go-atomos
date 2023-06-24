@@ -88,7 +88,7 @@ func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 
 func (l *appLogging) Close() {
 	am := allocAtomosMail()
-	initKillMail(am, nil, "", true)
+	initKillMail(am, nil, "")
 	sharedCosmosProcess.logging.logBox.pushHead(am.mail)
 	<-am.waitCh
 	_ = l.curAccessLog.Close()

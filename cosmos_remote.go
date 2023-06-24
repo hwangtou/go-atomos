@@ -5,6 +5,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -21,7 +22,6 @@ type CosmosRemote struct {
 	version map[string]*cosmosRemoteVersion
 
 	elements map[string]*ElementRemote
-	//*idTrackerManager
 }
 
 func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersionInfo) *CosmosRemote {
@@ -86,7 +86,8 @@ func (c *CosmosRemote) etcdDeleteLock() {
 }
 
 func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Debug("CosmosRemote: Connect info version created. version=(%s)", version)
+	c.process.local.Log().Info("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
+		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -105,7 +106,8 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 }
 
 func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
+	c.process.local.Log().Info("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
+		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -268,9 +270,21 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
 	}
 
+	firstSyncCall := ""
+	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
+		// 要从调用者开始算起，所以要从调用者的ID中获取。
+		firstSyncCall = callerID.nextFirstSyncCall()
+		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			return out, err.AddStack(nil)
+		}
+		defer callerID.unsetSyncMessageAndFirstCall()
+	} else {
+		firstSyncCall = callerFirst
+	}
+
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:               callerID.GetIDInfo(),
-		CallerCurFirstSyncCall: callerID.getCurFirstSyncCall(),
+		CallerCurFirstSyncCall: firstSyncCall,
 		To:                     c.id,
 		Timeout:                int64(timeout),
 		Message:                name,
@@ -337,7 +351,7 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 			}
 			return out, err
 		}()
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, out, err, callback)
+		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
 	})
 }
 
@@ -352,10 +366,6 @@ func (c *CosmosRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
-
-//func (c *CosmosRemote) getIDTrackerManager() *idTrackerManager {
-//	return c.idTrackerManager
-//}
 
 func (c *CosmosRemote) getGoID() uint64 {
 	return c.id.GoId
@@ -391,28 +401,41 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	return element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
 }
 
-func (c *CosmosRemote) CosmosSpawnAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err
 	}
-	return element.SpawnAtom(name, arg, nil, false)
+	return element.SpawnAtom(callerID, name, arg, nil, false)
 }
 
-func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
+func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {
 	cli := c.getCurrentClient()
 	if cli == nil {
 		return NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: ElementBroadcast client error.").AddStack(nil)
+	}
+
+	firstSyncCall := ""
+	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
+		// 要从调用者开始算起，所以要从调用者的ID中获取。
+		firstSyncCall = callerID.nextFirstSyncCall()
+		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			return err.AddStack(nil)
+		}
+		defer callerID.unsetSyncMessageAndFirstCall()
+	} else {
+		firstSyncCall = callerFirst
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rsp, er := client.ElementBroadcast(ctx, &CosmosRemoteElementBroadcastReq{
-		CallerId:      callerID.GetIDInfo(),
-		Key:           key,
-		ContentType:   contentType,
-		ContentBuffer: contentBuffer,
+		CallerId:               callerID.GetIDInfo(),
+		CallerCurFirstSyncCall: firstSyncCall,
+		Key:                    key,
+		ContentType:            contentType,
+		ContentBuffer:          contentBuffer,
 	})
 
 	if er != nil {
@@ -446,20 +469,30 @@ func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo,
 }
 
 func (c *cosmosRemoteVersion) check() bool {
-	if c.avail {
-		return true
-	}
+	//if c.avail {
+	//	return true
+	//}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
+	defer cancel()
+
 	var er error
 	if c.process.cluster.grpcDialOption == nil {
-		c.client, er = grpc.Dial(c.info.Address, grpc.WithInsecure())
+		c.client, er = grpc.DialContext(ctx, c.info.Address, grpc.WithInsecure(), grpc.WithBlock())
 	} else {
-		c.client, er = grpc.Dial(c.info.Address, *c.process.cluster.grpcDialOption)
+		c.client, er = grpc.DialContext(ctx, c.info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
 	}
 	if er != nil {
-		c.process.local.Log().Fatal("CosmosRemote: Dial failed. err=(%v)", er)
+		conn, connEr := net.DialTimeout("tcp", c.info.Address, time.Second*1)
+		if conn != nil {
+			conn.Close()
+		}
+		c.process.local.Log().Fatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
 		return false
 	}
 	c.avail = true
+	c.process.local.Log().Info("CosmosRemote: Dial. addr=(%s)", c.info.Address)
 	return true
 }
 
@@ -519,8 +552,7 @@ func (c *CosmosRemote) newFakeCosmosSelfID(call string) *remoteCosmosFakeSelfID 
 	}
 }
 
-func (r *remoteCosmosFakeSelfID) callerCounterDecr() {
-}
+func (r *remoteCosmosFakeSelfID) callerCounterRelease() {}
 
 func (r *remoteCosmosFakeSelfID) Log() Logging {
 	panic("not supported, should not be called")
@@ -531,7 +563,7 @@ func (r *remoteCosmosFakeSelfID) Task() Task {
 }
 
 func (r *remoteCosmosFakeSelfID) getCurFirstSyncCall() string {
-	panic("not supported, should not be called")
+	return r.firstSyncCall
 }
 
 func (r *remoteCosmosFakeSelfID) setSyncMessageAndFirstCall(s string) *Error {
@@ -562,6 +594,6 @@ func (r *remoteCosmosFakeSelfID) Config() map[string][]byte {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteCosmosFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+func (r *remoteCosmosFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
 	panic("not supported, should not be called")
 }

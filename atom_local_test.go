@@ -6,6 +6,187 @@ import (
 )
 
 var sharedTestAtom1, sharedTestAtom2 *AtomLocal
+var successCounter int
+
+func TestAtomLocal_FirstSyncCall(t *testing.T) {
+	initTestFakeCosmosProcess(t)
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
+		return
+	}
+	process := SharedCosmosProcess()
+	elemName := "testElement"
+	atomName := "testAtom"
+	atomOtherName := "testAtomOther"
+	testElem := process.local.elements[elemName]
+
+	a, tracker, err := testElem.SpawnAtom(process.local, atomName, &String{S: atomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: Spawn failed. err=(%v)", err)
+		return
+	}
+	tracker.Release()
+
+	a2, tracker2, err := testElem.SpawnAtom(process.local, atomOtherName, &String{S: atomOtherName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: Spawn failed. err=(%v)", err)
+		return
+	}
+	_ = a2
+	tracker2.Release()
+
+	// 测试本地同步调用到自己的情况，传入的from和to都是自己，in是自己的名字。会出现死锁，并返回错误。
+	out, err := a.SyncMessagingByName(process.local, "testingLocalSyncSelfFirstSyncCallDeadlock", 0, &String{S: atomName})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock tested")
+
+	// 测试本地异步调用到自己的情况，传入的from和to都是自己，in是自己的名字。不会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncSelfFirstSyncCall", 0, &String{S: atomName})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	<-time.After(1 * time.Millisecond)
+	if successCounter != 1 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall tested")
+
+	// 测试本地同步和异步调用外部的情况，传入的from是自己，to是外部的名字，in是自己的名字。不会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncAndAsyncOtherFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall out=(%v)", out)
+		return
+	}
+	<-time.After(1 * time.Millisecond)
+	if successCounter != 2 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall tested")
+
+	// 测试本地同步调用外部，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncChainSelfFirstSyncCallDeadlock", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock tested")
+
+	// 测试本地异步调用外部，并回调到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。不会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	<-time.After(1 * time.Millisecond)
+	if successCounter != 3 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall successCounter=(%v)", successCounter)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall tested")
+
+	// 测试本地同步执行任务，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalTaskChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	<-time.After(1 * time.Millisecond)
+	if successCounter != 4 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall tested")
+
+	// 测试本地发送Wormhole，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalWormholeChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall tested")
+
+	// 测试本地同步Scale调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalScaleChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall tested")
+
+	// 测试本地同步Kill调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalKillChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall tested")
+
+	// 测试本地同步KillSelf调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalKillSelfChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall tested")
+
+	// 测试本地同步Spawn调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSpawnSelfChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	if err != nil {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall failed. err=(%v)", err)
+		return
+	}
+	if out.(*String).S != "OK" {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall out=(%v)", out)
+		return
+	}
+	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall tested")
+}
 
 func TestAtomLocalBase(t *testing.T) {
 	var hasSpawning, hasSpawn, hasStopping, hasHalted bool
@@ -42,7 +223,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Spawn an atom.
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	a, tracker, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -72,7 +253,7 @@ func TestAtomLocalBase(t *testing.T) {
 	checkTracker.Release()
 
 	// Spawn an atom.
-	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(testDeadlockAtomName, &String{S: testDeadlockAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	deadlockAtom, deadlockTracker, err := testElem.SpawnAtom(process.local, testDeadlockAtomName, &String{S: testDeadlockAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn deadlock atom failed. err=(%v)", err)
 		return
@@ -192,7 +373,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// Try Spawning twice.
-	atomTwice, trackerTwice, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	atomTwice, trackerTwice, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || err.Code != ErrAtomIsRunning {
 		t.Errorf("TestAtomLocalBase: Spawn twice state invalid. err=(%v)", err)
 		return
@@ -234,7 +415,7 @@ func TestAtomLocalBase(t *testing.T) {
 	start := time.Now()
 	for {
 		// Because the atom may be stopping, so we have to retry.
-		atomTwice, trackerTwice, err = testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+		atomTwice, trackerTwice, err = testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 		if err != nil {
 			if err.Code == ErrAtomIsStopping {
 				time.Sleep(1 * time.Millisecond)
@@ -279,7 +460,7 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Reference count state invalid. err=(%v)", err)
 		return
 	}
-	if err = deadlockAtom.(*AtomLocal).pushKillMail(testElem, true, 0); err != nil {
+	if err = deadlockAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0); err != nil {
 		t.Errorf("TestAtomLocalBase: Push Kill failed. err=(%v)", err)
 		return
 	}
@@ -295,7 +476,7 @@ func TestAtomLocalBase(t *testing.T) {
 		return
 	}
 	run = time.Now().Sub(start) - spawn
-	if err = atom.pushKillMail(testElem, true, 0); err != nil {
+	if err = atom.atomos.PushKillMailAndWaitReply(testElem, true, 0); err != nil {
 		t.Errorf("TestAtomLocalBase: Reference count push kill failed. err=(%v)", err)
 	}
 	stop = time.Now().Sub(start) - spawn - run
@@ -337,7 +518,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Spawn panic.
 	spawnPanicAtomName := "spawn_panic"
-	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(spawnPanicAtomName, &String{S: "panic"}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	spawnPanicAtom, trackerSpawnPanicAtom, err := testElem.SpawnAtom(process.local, spawnPanicAtomName, &String{S: "panic"}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Spawn panic atom state invalid.")
 		return
@@ -353,7 +534,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// Stopping panic.
 	stoppingPanicAtomName := "stopping_panic"
-	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(stoppingPanicAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	stoppingPanicAtom, trackerStoppingPanicAtom, err := testElem.SpawnAtom(process.local, stoppingPanicAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Stopping panic atom failed. err=(%v)", err)
 		return
@@ -362,7 +543,7 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Stopping panic atom state invalid. err=(%v)", err)
 		return
 	}
-	err = stoppingPanicAtom.(*AtomLocal).pushKillMail(testElem, true, 0)
+	err = stoppingPanicAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
 		t.Errorf("TestAtomLocalBase: Stopping panic atom push kill state invalid. err=(%v)", err)
 		return
@@ -378,7 +559,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Error.
 	dataAtomName := "get_data_error"
-	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	dataAtom, trackerDataAtom, err := testElem.SpawnAtom(process.local, dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -394,7 +575,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns Panic.
 	dataAtomName = "get_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(process.local, dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err == nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -410,7 +591,7 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// GetAtomData returns OK.
 	dataAtomName = "data_ok"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(process.local, dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -426,7 +607,7 @@ func TestAtomLocalBase(t *testing.T) {
 	}
 
 	// SetAtomData returns OK.
-	err = dataAtom.(*AtomLocal).pushKillMail(testElem, true, 0)
+	err = dataAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -439,12 +620,12 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns Error.
 	dataAtomName = "set_data_error"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(process.local, dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
 	}
-	err = dataAtom.(*AtomLocal).pushKillMail(testElem, true, 0)
+	err = dataAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack != "" || len(err.CallStacks[1].Args) == 0 {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
@@ -457,12 +638,12 @@ func TestAtomLocalBase(t *testing.T) {
 
 	// SetAtomData returns panic.
 	dataAtomName = "set_data_panic"
-	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	dataAtom, trackerDataAtom, err = testElem.SpawnAtom(process.local, dataAtomName, nil, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return
 	}
-	err = dataAtom.(*AtomLocal).pushKillMail(testElem, true, 0)
+	err = dataAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0)
 	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" || len(err.CallStacks[0].Args) == 0 {
 		t.Errorf("TestAtomLocalBase: Auto data state invalid. err=(%v)", err)
 		return

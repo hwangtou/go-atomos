@@ -25,6 +25,8 @@ func TestAllSingleNode(t *testing.T) {
 	clearTest()
 	TestAtomLocalBase(t)
 
+	clearTest()
+	TestAtomLocal_FirstSyncCall(t)
 }
 
 func TestAllMultiNodes(t *testing.T) {
@@ -39,6 +41,9 @@ func TestAllMultiNodes(t *testing.T) {
 
 	clearTest()
 	TestSimulateTwoCosmosNodeRPC(t)
+
+	clearTest()
+	TestSimulateTwoCosmosNode_FirstSyncCall(t)
 }
 
 func TestAllApp(t *testing.T) {

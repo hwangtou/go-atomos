@@ -22,22 +22,19 @@ type ElementRemote struct {
 
 	version string
 
-	*idFirstSyncCallLocal
 	enable bool
 }
 
 func newElementRemote(c *CosmosRemote, info *IDInfo, i *ElementInterface, version string) *ElementRemote {
 	e := &ElementRemote{
-		cosmos:               c,
-		info:                 info,
-		current:              i,
-		atoms:                map[string]*AtomRemote{},
-		lock:                 sync.RWMutex{},
-		version:              version,
-		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
-		enable:               false,
+		cosmos:  c,
+		info:    info,
+		current: i,
+		atoms:   map[string]*AtomRemote{},
+		lock:    sync.RWMutex{},
+		version: version,
+		enable:  false,
 	}
-	e.idFirstSyncCallLocal.init(info)
 	return e
 }
 
@@ -156,7 +153,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 
 	// 这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
 	callerIDInfo := callerID.GetIDInfo()
-	firstSyncCall := e.nextFirstSyncCall()
+	firstSyncCall := callerID.nextFirstSyncCall()
 
 	e.cosmos.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
@@ -189,7 +186,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 			}
 			return out, err
 		}()
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, out, err, callback)
+		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
 	})
 }
 
@@ -296,10 +293,22 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return map[string]string{}
 }
 
-func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, _ *IDTrackerInfo, _ bool) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) SpawnAtom(callerID SelfID, name string, arg proto.Message, _ *IDTrackerInfo, _ bool) (ID, *IDTracker, *Error) {
 	cli := e.cosmos.getCurrentClient()
 	if cli == nil {
 		return nil, nil, NewError(ErrCosmosRemoteConnectFailed, "ElementRemote: SpawnAtom client error.").AddStack(nil)
+	}
+
+	firstSyncCall := ""
+	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
+		// 要从调用者开始算起，所以要从调用者的ID中获取。
+		firstSyncCall = callerID.nextFirstSyncCall()
+		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			return nil, nil, err.AddStack(nil)
+		}
+		defer callerID.unsetSyncMessageAndFirstCall()
+	} else {
+		firstSyncCall = callerFirst
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
@@ -310,9 +319,11 @@ func (e *ElementRemote) SpawnAtom(name string, arg proto.Message, _ *IDTrackerIn
 		return nil, nil, NewError(ErrCosmosRemoteRequestInvalid, "ElementRemote: SpawnAtom arg error.").AddStack(nil)
 	}
 	rsp, er := client.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
-		Element: e.info.Element,
-		Atom:    name,
-		Args:    anyArg,
+		CallerId:               callerID.GetIDInfo(),
+		CallerCurFirstSyncCall: firstSyncCall,
+		Element:                e.info.Element,
+		Atom:                   name,
+		Args:                   anyArg,
 	})
 	if er != nil {
 		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
@@ -403,7 +414,6 @@ func (e *ElementRemote) setDisable() {
 type remoteElementFakeSelfID struct {
 	*ElementRemote
 	firstSyncCall string
-	callerCounter int
 }
 
 func (e *ElementRemote) newRemoteElementFromCaller(id *IDInfo, call string) *remoteElementFakeSelfID {
@@ -413,7 +423,7 @@ func (e *ElementRemote) newRemoteElementFromCaller(id *IDInfo, call string) *rem
 	}
 }
 
-func (r *remoteElementFakeSelfID) callerCounterDecr() {
+func (r *remoteElementFakeSelfID) callerCounterRelease() {
 }
 
 func (r *remoteElementFakeSelfID) Log() Logging {
@@ -421,6 +431,22 @@ func (r *remoteElementFakeSelfID) Log() Logging {
 }
 
 func (r *remoteElementFakeSelfID) Task() Task {
+	panic("not supported, should not be called")
+}
+
+func (r *remoteElementFakeSelfID) getCurFirstSyncCall() string {
+	return r.firstSyncCall
+}
+
+func (r *remoteElementFakeSelfID) setSyncMessageAndFirstCall(s string) *Error {
+	panic("not supported, should not be called")
+}
+
+func (r *remoteElementFakeSelfID) unsetSyncMessageAndFirstCall() {
+	panic("not supported, should not be called")
+}
+
+func (r *remoteElementFakeSelfID) nextFirstSyncCall() string {
 	panic("not supported, should not be called")
 }
 
@@ -440,6 +466,6 @@ func (r *remoteElementFakeSelfID) Config() map[string][]byte {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteElementFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+func (r *remoteElementFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
 	panic("not supported, should not be called")
 }

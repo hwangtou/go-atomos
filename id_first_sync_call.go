@@ -44,9 +44,13 @@ type idFirstSyncCallLocal struct {
 	curCallCounter uint64
 }
 
-func (f *idFirstSyncCallLocal) init(id *IDInfo) {
-	f.info = id
+func initAtomosFirstSyncCall(fsc *idFirstSyncCallLocal, id *IDInfo) {
+	fsc.info = id
 }
+
+//func (f *idFirstSyncCallLocal) init(id *IDInfo) {
+//	f.info = id
+//}
 
 // Implementation of idFirstSyncCall
 

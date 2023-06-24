@@ -31,8 +31,6 @@ type AtomLocal struct {
 
 	// 当前实现
 	elemImpl *ElementImplementation
-
-	*idFirstSyncCallLocal
 }
 
 // 生命周期相关
@@ -48,11 +46,10 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		GoId:    0,
 	}
 	a := &AtomLocal{
-		element:              e,
-		atomos:               nil,
-		nameElement:          nil,
-		elemImpl:             current,
-		idFirstSyncCallLocal: &idFirstSyncCallLocal{},
+		element:     e,
+		atomos:      nil,
+		nameElement: nil,
+		elemImpl:    current,
 	}
 	instance, err := func() (at Atomos, err *Error) {
 		defer func() {
@@ -71,7 +68,6 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		return nil, err.AddStack(nil)
 	}
 	a.atomos = NewBaseAtomos(id, lv, a, instance, e.cosmosLocal.process)
-	a.idFirstSyncCallLocal.init(a.atomos.id)
 
 	return a, nil
 }
@@ -113,39 +109,12 @@ func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout ti
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atom: SyncMessagingByName without fromID.").AddStack(a)
 	}
 
-	firstSyncCall := ""
-	// 获取调用ID的Go ID
-	callerLocalGoID := callerID.getGoID()
-	// 获取调用栈的Go ID
-	curLocalGoID := getGoID()
-
-	// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
-	if callerLocalGoID == curLocalGoID {
-		// 此时需要检查调用方是否有curFirstSyncCall，如果为空，证明是第一个同步调用（如Task中调用的），所以需要创建一个curFirstSyncCall。
-		// 因为是同一个Atom，所以直接设置到当前的ID即可。
-		if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-			// 要从调用者开始算起，所以要从调用者的ID中获取。
-			firstSyncCall = callerID.nextFirstSyncCall()
-			if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-				return nil, err.AddStack(a)
-			}
-			defer callerID.unsetSyncMessageAndFirstCall()
-		} else {
-			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
-			if eFirst := a.getCurFirstSyncCall(); callerFirst == eFirst {
-				// 如果一样，则是循环调用死锁，返回错误。
-				return nil, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
-			} else {
-				// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
-				// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
-				// 继续传递调用链。
-				firstSyncCall = callerFirst
-			}
-		}
-	} else {
-		// 例如在Parallel和被其它框架调用的情况，就是这种。
-		// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
-		firstSyncCall = a.nextFirstSyncCall()
+	firstSyncCall, toDefer, err := a.atomos.syncGetFirstSyncCallName(callerID)
+	if err != nil {
+		return nil, err.AddStack(a)
+	}
+	if toDefer {
+		defer callerID.unsetSyncMessageAndFirstCall()
 	}
 
 	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
@@ -171,7 +140,7 @@ func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, timeout t
 		if err != nil {
 			err = err.AddStack(a)
 		}
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, out, err, callback)
+		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
 	})
 }
 
@@ -195,57 +164,20 @@ func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 			return err.AddStack(a)
 		}
 	}
-	return a.pushKillMail(callerID, true, timeout)
+
+	if err := a.atomos.PushKillMailAndWaitReply(callerID, true, timeout); err != nil {
+		return err.AddStack(a)
+	}
+	return nil
 }
 
 func (a *AtomLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	firstSyncCall := ""
-	// 获取调用ID的Go ID
-	callerLocalGoID := callerID.getGoID()
-	// 获取调用栈的Go ID
-	curLocalGoID := getGoID()
-
-	// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
-	if callerLocalGoID == curLocalGoID {
-		// 此时需要检查调用方是否有curFirstSyncCall，如果为空，证明是第一个同步调用（如Task中调用的），所以需要创建一个curFirstSyncCall。
-		// 因为是同一个Atom，所以直接设置到当前的ID即可。
-		if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-			// 要从调用者开始算起，所以要从调用者的ID中获取。
-			firstSyncCall = callerID.nextFirstSyncCall()
-			if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-				return err.AddStack(a)
-			}
-			defer callerID.unsetSyncMessageAndFirstCall()
-		} else {
-			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
-			if eFirst := a.getCurFirstSyncCall(); callerFirst == eFirst {
-				// 如果一样，则是循环调用死锁，返回错误。
-				return NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
-			} else {
-				// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
-				// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
-				// 继续传递调用链。
-				firstSyncCall = callerFirst
-			}
-		}
-	} else {
-		// 例如在Parallel和被其它框架调用的情况，就是这种。
-		// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
-		firstSyncCall = a.nextFirstSyncCall()
-	}
-
-	return a.atomos.PushWormholeMailAndWaitReply(callerID, firstSyncCall, timeout, wormhole)
+	return a.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole)
 }
 
 func (a *AtomLocal) getGoID() uint64 {
 	return a.atomos.GetGoID()
 }
-
-// Implementations of AtomosRelease
-
-//func (a *AtomLocal) onIDTrackerRelease(tracker *IDTracker) {
-//	a.element.elementAtomRelease(a, tracker)
-//}
 
 // Implementation of AtomosUtilities
 
@@ -255,6 +187,24 @@ func (a *AtomLocal) Log() Logging {
 
 func (a *AtomLocal) Task() Task {
 	return a.atomos.Task()
+}
+
+// Implementation of idFirstSyncCall
+
+func (a *AtomLocal) getCurFirstSyncCall() string {
+	return a.atomos.fsc.getCurFirstSyncCall()
+}
+
+func (a *AtomLocal) setSyncMessageAndFirstCall(s string) *Error {
+	return a.atomos.fsc.setSyncMessageAndFirstCall(s)
+}
+
+func (a *AtomLocal) unsetSyncMessageAndFirstCall() {
+	a.atomos.fsc.unsetSyncMessageAndFirstCall()
+}
+
+func (a *AtomLocal) nextFirstSyncCall() string {
+	return a.atomos.fsc.nextFirstSyncCall()
 }
 
 // Implementation of SelfID
@@ -273,8 +223,7 @@ func (a *AtomLocal) CosmosMain() *CosmosLocal {
 // KillSelf
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
-	//id, elem := a.id, a.element
-	if err := a.pushKillMail(a, false, 0); err != nil {
+	if err := a.atomos.PushKillMailAndWaitReply(a, false, 0); err != nil {
 		a.Log().Error("Atom: KillSelf failed. err=(%v)", err.AddStack(a))
 		return
 	}
@@ -305,8 +254,8 @@ func (a *AtomLocal) Config() map[string][]byte {
 	return a.element.cosmosLocal.runnable.config.Customize
 }
 
-func (a *AtomLocal) pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	a.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, in, err, callback)
+func (a *AtomLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+	a.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err, callback)
 }
 
 // Implementation of AtomSelfID
@@ -359,7 +308,13 @@ func (a *AtomLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.
 	return
 }
 
-func (a *AtomLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (a *AtomLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if err = a.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		a.Log().Fatal("Atom: OnAsyncMessagingCallback failed. err=(%v)", err.AddStack(a))
+		return
+	}
+	defer a.unsetSyncMessageAndFirstCall()
+
 	callback(in, err)
 }
 
@@ -367,7 +322,12 @@ func (a *AtomLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Me
 	return nil, NewError(ErrFrameworkInternalError, "Atom: Atom not supported scaling.").AddStack(a)
 }
 
-func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
+func (a *AtomLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosWormhole) *Error {
+	if err := a.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		return err.AddStack(a)
+	}
+	defer a.unsetSyncMessageAndFirstCall()
+
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
@@ -378,7 +338,15 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
-func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (a *AtomLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
+	if firstSyncCall != "" {
+		if err := a.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			a.Log().Fatal("Atom: Stopping failed. err=(%v)", err.AddStack(a))
+		} else {
+			defer a.unsetSyncMessageAndFirstCall()
+		}
+	}
+
 	var save bool
 	var data proto.Message
 	defer func() {
@@ -425,10 +393,14 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	return err
 }
 
+func (a *AtomLocal) OnIDsReleased() {
+	a.element.elementAtomRelease(a)
+}
+
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(firstSyncCall string, current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
@@ -445,6 +417,13 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 			}
 		}
 	}()
+
+	if err := a.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		a.Log().Fatal("Atom: Spawning failed. err=(%v)", err.AddStack(a))
+	} else {
+		defer a.unsetSyncMessageAndFirstCall()
+	}
+
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -467,49 +446,4 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 		return err.AddStack(a)
 	}
 	return nil
-}
-
-func (a *AtomLocal) OnIDsReleased() {
-	a.element.elementAtomRelease(a)
-}
-
-func (a *AtomLocal) pushKillMail(callerID SelfID, wait bool, timeout time.Duration) *Error {
-	firstSyncCall := ""
-
-	if callerID != nil && wait {
-		// 获取调用ID的Go ID
-		callerLocalGoID := callerID.getGoID()
-		// 获取调用栈的Go ID
-		curLocalGoID := getGoID()
-
-		// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
-		if callerLocalGoID == curLocalGoID {
-			// 此时需要检查调用方是否有curFirstSyncCall，如果为空，证明是第一个同步调用（如Task中调用的），所以需要创建一个curFirstSyncCall。
-			// 因为是同一个Atom，所以直接设置到当前的ID即可。
-			if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-				// 要从调用者开始算起，所以要从调用者的ID中获取。
-				firstSyncCall = callerID.nextFirstSyncCall()
-				if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-					return err.AddStack(a)
-				}
-				defer callerID.unsetSyncMessageAndFirstCall()
-			} else {
-				// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
-				if eFirst := a.getCurFirstSyncCall(); callerFirst == eFirst {
-					// 如果一样，则是循环调用死锁，返回错误。
-					return NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
-				} else {
-					// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
-					// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
-					// 继续传递调用链。
-					firstSyncCall = callerFirst
-				}
-			}
-		} else {
-			// 例如在Parallel和被其它框架调用的情况，就是这种。
-			// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
-			firstSyncCall = a.nextFirstSyncCall()
-		}
-	}
-	return a.atomos.PushKillMailAndWaitReply(callerID, firstSyncCall, wait, true, timeout)
 }

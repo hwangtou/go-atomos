@@ -13,7 +13,7 @@ type AtomosHolder interface {
 	OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error)
 	// OnAsyncMessagingCallback
 	// 收到异步消息回调
-	OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
+	OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
 
 	// OnScaling
 	// 负载均衡决策
@@ -21,11 +21,11 @@ type AtomosHolder interface {
 
 	// OnWormhole
 	// 收到Wormhole
-	OnWormhole(from ID, wormhole AtomosWormhole) *Error
+	OnWormhole(from ID, firstSyncCall string, wormhole AtomosWormhole) *Error
 
 	// OnStopping
 	// 停止中
-	OnStopping(from ID, cancelled []uint64) *Error
+	OnStopping(from ID, firstSyncCall string, cancelled []uint64) *Error
 
 	// OnIDsReleased
 	// 释放了所有ID
@@ -121,6 +121,10 @@ type BaseAtomos struct {
 	// ID追踪管理器
 	// ID Tracker Manager
 	it *atomosIDTracker
+
+	// 首个同步调用的信息
+	// Info of first sync call
+	fsc idFirstSyncCallLocal
 }
 
 func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, process *CosmosProcess) *BaseAtomos {
@@ -135,12 +139,14 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, pr
 		task:     atomosTaskManager{},
 		mt:       atomosMessageTracker{},
 		it:       &atomosIDTracker{},
+		fsc:      idFirstSyncCallLocal{},
 	}
 	a.mailbox = newMailBox(id.Info(), a, process.logging.accessLog, process.logging.errorLog)
 	initAtomosLog(&a.log, a.id, lv, process.logging)
 	initAtomosTasksManager(a.log.logging, &a.task, a)
 	initAtomosMessageTracker(&a.mt)
 	initAtomosIDTracker(a.it, a)
+	initAtomosFirstSyncCall(&a.fsc, id)
 	return a
 }
 
@@ -190,9 +196,9 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, firstSyncCall, name st
 	return reply, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(name string, args proto.Message, err *Error, async func(proto.Message, *Error)) {
+func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, args proto.Message, err *Error, async func(proto.Message, *Error)) {
 	am := allocAtomosMail()
-	initAsyncMessageCallbackMail(am, name, async, args, err)
+	initAsyncMessageCallbackMail(am, firstSyncCall, name, async, args, err)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		// TODO
@@ -218,9 +224,14 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(from ID, firstSyncCall, name stri
 	return id, err.AddStack(nil)
 }
 
-func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, firstSyncCall string, wait, executeStop bool, timeout time.Duration) (err *Error) {
+func (a *BaseAtomos) PushKillMailAndWaitReply(from SelfID, wait bool, timeout time.Duration) (err *Error) {
+	var firstSyncCall string
+	if !wait {
+		firstSyncCall = a.fsc.nextFirstSyncCall()
+	}
+
 	am := allocAtomosMail()
-	initKillMail(am, from, firstSyncCall, executeStop)
+	initKillMail(am, from, firstSyncCall)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
@@ -232,7 +243,15 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from ID, firstSyncCall string, wai
 	return nil
 }
 
-func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, firstSyncCall string, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
+func (a *BaseAtomos) PushWormholeMailAndWaitReply(from SelfID, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
+	firstSyncCall, toDefer, err := a.syncGetFirstSyncCallName(from)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	if toDefer {
+		defer from.unsetSyncMessageAndFirstCall()
+	}
+
 	am := allocAtomosMail()
 	initWormholeMail(am, from, firstSyncCall, wormhole)
 
@@ -330,6 +349,48 @@ func (a *BaseAtomos) onIDReleased() {
 	a.holder.OnIDsReleased()
 }
 
+// FirstSyncCall
+
+func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *Error) {
+	firstSyncCall := ""
+	// 获取调用ID的Go ID
+	callerLocalGoID := callerID.getGoID()
+	// 获取调用栈的Go ID
+	curLocalGoID := getGoID()
+
+	var toDefer bool
+	// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
+	if callerLocalGoID == curLocalGoID {
+		// 此时需要检查调用方是否有curFirstSyncCall，如果为空，证明是第一个同步调用（如Task中调用的），所以需要创建一个curFirstSyncCall。
+		// 因为是同一个Atom，所以直接设置到当前的ID即可。
+		if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
+			// 要从调用者开始算起，所以要从调用者的ID中获取。
+			firstSyncCall = callerID.nextFirstSyncCall()
+			if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+				return "", false, err.AddStack(nil)
+			}
+			//defer callerID.unsetSyncMessageAndFirstCall()
+			toDefer = true
+		} else {
+			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
+			if eFirst := a.fsc.getCurFirstSyncCall(); callerFirst == eFirst {
+				// 如果一样，则是循环调用死锁，返回错误。
+				return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
+			} else {
+				// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
+				// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
+				// 继续传递调用链。
+				firstSyncCall = callerFirst
+			}
+		}
+	} else {
+		// 例如在Parallel和被其它框架调用的情况，就是这种。
+		// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
+		firstSyncCall = a.fsc.nextFirstSyncCall()
+	}
+	return firstSyncCall, toDefer, nil
+}
+
 // Mailbox
 
 func (a *BaseAtomos) start(fn func() *Error) *Error {
@@ -376,7 +437,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name)
 			defer a.setWaiting(name)
 
-			a.holder.OnAsyncMessagingCallback(am.arg, am.err, am.asyncMessageCallbackClosure)
+			a.holder.OnAsyncMessagingCallback(am.firstSyncCall, am.arg, am.err, am.asyncMessageCallbackClosure)
 		}
 	case MailTask:
 		{
@@ -392,7 +453,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy("AcceptWormhole")
 			defer a.setWaiting("AcceptWormhole")
 
-			err := a.holder.OnWormhole(am.from, am.wormhole)
+			err := a.holder.OnWormhole(am.from, am.firstSyncCall, am.wormhole)
 			am.sendReply(nil, err)
 			// Mail dealloc in AtomCore.pushWormholeMail.
 		}
@@ -479,7 +540,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	}
 
 	// Handle Kill and Reply Kill.
-	err = a.holder.OnStopping(killMail.mail.from, cancels)
+	err = a.holder.OnStopping(killMail.mail.from, killMail.mail.firstSyncCall, cancels)
 	if err != nil {
 		err = err.AddStack(nil)
 	}

@@ -30,7 +30,7 @@ type Element interface {
 	// SpawnAtom
 	// 启动（自旋）一个Atom。
 	// Spawn (spin) an Atom.
-	SpawnAtom(name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error)
+	SpawnAtom(callerID SelfID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error)
 
 	// ScaleGetAtomID
 	// 通过Atom名称获取指定的Atom的ID，这个ID由开发者提供的Element中的"Scale*GetID"方法返回。

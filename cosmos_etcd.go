@@ -197,7 +197,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 
 		var err *Error
 		var lease = firstLease
-		id := p.local.info
+		id := p.local.atomos.id
 
 		defer func() {
 			p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher will stop.")
@@ -218,7 +218,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			select {
 			// 保持活跃
 			// Keepalive
-			case <-time.After(etcdKeepaliveTime * time.Second / 3):
+			case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
 				p.logging.PushLogging(id, LogLevel_Debug, "etcd: Watcher keepalive.")
 				p.mutex.Lock()
 				state := p.state
@@ -286,23 +286,31 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
-		watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
-		for watchResp := range watchCh {
-			for _, event := range watchResp.Events {
-				//p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
-				if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
-					continue
+		for {
+			p.local.Log().Debug(">>>>>>>>>>a")
+			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
+			for watchResp := range watchCh {
+				p.local.Log().Debug(">>>>>>>>>>b")
+				for _, event := range watchResp.Events {
+					p.local.Log().Debug(">>>>>>>>>>c")
+					p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
+					if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
+						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+						continue
+					}
+					key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
+					switch event.Type {
+					case mvccpb.PUT:
+						p.handleKey(key, event.Kv.Value, true)
+					case mvccpb.DELETE:
+						p.handleKey(key, event.Kv.Value, false)
+					}
 				}
-				key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
-				switch event.Type {
-				case mvccpb.PUT:
-					p.handleKey(key, event.Kv.Value, true)
-				case mvccpb.DELETE:
-					p.handleKey(key, event.Kv.Value, false)
-				}
+				p.local.Log().Debug(">>>>>>>>>>d")
 			}
+			p.local.Log().Debug(">>>>>>>>>>e")
 		}
+		p.local.Log().Debug(">>>>>>>>>>f")
 	}()
 
 	return nil
@@ -318,7 +326,7 @@ func (p *CosmosProcess) tryUnsettingCurrentAndUpdateNodeInfo() *Error {
 	// 取消当前节点的活跃状态
 	// Cancel the active status of the current node
 	if err := p.etcdStoppingNodeVersionUnlock(); err != nil {
-		p.logging.PushLogging(p.local.info, LogLevel_Err, fmt.Sprintf("etcd: Failed to unset cluster current. err=(%v)", err))
+		p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, fmt.Sprintf("etcd: Failed to unset cluster current. err=(%v)", err))
 	}
 	// 更新节点信息
 	// Update node information
@@ -370,7 +378,7 @@ func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool)
 // etcdUpdateClusterVersionLockInfo - watcher
 // 设定当前节点的版本
 func (p *CosmosProcess) etcdUpdateClusterVersionLockInfo(nodeName string, buf []byte) {
-	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Update current version lock. node=(%s),lock=(%s)", nodeName, string(buf)))
+	p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Update current version lock. node=(%s),lock=(%s)", nodeName, string(buf)))
 	// Unmarshal the lock info
 	lockInfo := &CosmosNodeVersionLock{}
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
@@ -402,7 +410,7 @@ func (p *CosmosProcess) etcdUpdateClusterVersionLockInfo(nodeName string, buf []
 // etcdDeleteClusterVersionLockInfo - watcher
 // 取消当前节点的版本
 func (p *CosmosProcess) etcdDeleteClusterVersionLockInfo(nodeName string) {
-	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Delete current version lock. node=(%s)", nodeName))
+	p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Delete current version lock. node=(%s)", nodeName))
 	p.cluster.remoteMutex.Lock()
 	defer p.cluster.remoteMutex.Unlock()
 
@@ -417,7 +425,7 @@ func (p *CosmosProcess) etcdDeleteClusterVersionLockInfo(nodeName string) {
 // etcdUpdateClusterVersionNodeInfo - watcher
 // 设定节点的版本
 func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versionKey string, value []byte) {
-	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Update cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
+	p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Update cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
 	info := &CosmosNodeVersionInfo{}
 	if er := json.Unmarshal(value, info); er != nil {
 		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update cluster version info, got invalid cluster info value. node=(%s),version=(%s),err=(%v)", nodeName, versionKey, er).AddStack(nil))
@@ -448,7 +456,7 @@ func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versio
 // etcdDeleteClusterVersionNodeInfo - watcher
 // 取消节点的版本
 func (p *CosmosProcess) etcdDeleteClusterVersionNodeInfo(nodeName, versionKey string) {
-	p.logging.PushLogging(p.local.info, LogLevel_Debug, fmt.Sprintf("etcd: Delete cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
+	p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Delete cluster version info. node=(%s),version=(%s)", nodeName, versionKey))
 	p.cluster.remoteMutex.Lock()
 	defer p.cluster.remoteMutex.Unlock()
 
@@ -472,5 +480,5 @@ func (p *CosmosProcess) etcdNodeVersion(nodeName string, version int64, info *Co
 // etcd的错误处理
 func (p *CosmosProcess) etcdErrorHandler(err *Error) {
 	p.local.Log().Fatal("etcd critical error: %s", err)
-	p.logging.PushLogging(p.local.info, LogLevel_Fatal, fmt.Sprintf("etcd critical error: %s", err))
+	p.logging.PushLogging(p.local.atomos.id, LogLevel_Fatal, fmt.Sprintf("etcd critical error: %s", err))
 }

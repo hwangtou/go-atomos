@@ -296,12 +296,14 @@ func (mb *mailBox) loop() {
 					mails, num := mb.popAll()
 					if m := curMail.mail; m != nil {
 						if m.executeStop {
+							// TODO: Handle error.
 							mb.handler.mailboxOnStop(curMail, mails, num)
 						}
 						// Wait channel.
 						m.sendReply(nil, nil)
 					}
 					if l := curMail.log; l != nil {
+						// TODO: Handle error.
 						mb.handler.mailboxOnStop(curMail, mails, num)
 					}
 					return

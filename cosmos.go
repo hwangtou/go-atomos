@@ -39,11 +39,11 @@ type CosmosNode interface {
 	// CosmosSpawnAtom 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
-	CosmosSpawnAtom(elem, name string, arg proto.Message) (ID, *IDTracker, *Error)
+	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message) (ID, *IDTracker, *Error)
 
 	// ElementBroadcast 对节点下所有的Element进行广播
 	// Broadcast to all Elements under the node
-	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error)
+	ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error)
 }
 
 // CosmosRunnable 是Cosmos的可运行实例，每个Atomos的可执行文件，都需要实现和提供这个对象。

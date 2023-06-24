@@ -67,7 +67,7 @@ func TestElementLocalBase(t *testing.T) {
 
 	// Push Deadlock Message.
 	testAtomName := "testAtom"
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	a, tracker, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return
@@ -80,7 +80,7 @@ func TestElementLocalBase(t *testing.T) {
 		t.Errorf("TestElementLocalBase: Push Message Deadlock failed. err=(%v)", err)
 		return
 	}
-	if err = atom.pushKillMail(testElem, true, 0); err != nil {
+	if err = atom.atomos.PushKillMailAndWaitReply(testElem, true, 0); err != nil {
 		t.Errorf("TestAtomLocalBase: Kill failed. err=(%v)", err)
 		return
 	}
@@ -180,7 +180,7 @@ func TestElementLocalScaleID(t *testing.T) {
 		return
 	}
 
-	a, tracker, err := testElem.SpawnAtom(testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+	a, tracker, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
 		t.Errorf("TestAtomLocalBase: Spawn failed. err=(%v)", err)
 		return

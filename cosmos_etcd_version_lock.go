@@ -169,7 +169,7 @@ func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 		}
 	}
 	if !found {
-		p.logging.PushLogging(p.local.info, LogLevel_Err, "etcd: version is not in the lock info.")
+		p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, "etcd: version is not in the lock info.")
 		return nil
 	}
 	lockInfo.Current = p.cluster.etcdVersion

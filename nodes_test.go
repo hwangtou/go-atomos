@@ -1,10 +1,102 @@
 package go_atomos
 
 import (
+	"google.golang.org/grpc/connectivity"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
+	// 两个节点的模拟
+	// Simulate two nodes
+
+	c1 := simulateCosmosNode(t, "hello", "c1")
+	c2 := simulateCosmosNode(t, "hello", "c2")
+
+	elemName := "testElement"
+	atomName := "testAtom"
+	//atomOtherName := "testAtomOther"
+
+	// 两个节点的停止
+	defer func() {
+		if err := c1.Stop(); err != nil {
+			t.Fatal(err)
+		}
+		if err := c2.Stop(); err != nil {
+			t.Fatal(err)
+		}
+		<-time.After(5 * time.Second)
+	}()
+
+	<-time.After(5 * time.Second)
+	c1.cluster.remoteMutex.RLock()
+	c1cr2, has := c1.cluster.remoteCosmos["c2"]
+	c1.cluster.remoteMutex.RUnlock()
+	if !has {
+		t.Fatal("c1 has no c2")
+		return
+	}
+	c2.cluster.remoteMutex.RLock()
+	c2cr1, has := c2.cluster.remoteCosmos["c1"]
+	c2.cluster.remoteMutex.RUnlock()
+	if !has {
+		t.Fatal("c2 has no c2")
+		return
+	}
+
+	if cli := c1cr2.current.client; cli == nil || cli.GetState() != connectivity.Ready {
+		t.Fatal("c1cr2 client is not ready")
+		return
+	}
+	if cli := c2cr1.current.client; cli == nil || cli.GetState() != connectivity.Ready {
+		t.Fatal("c2cr1 client is not ready")
+		return
+	}
+
+	c1cr2e, err := c1cr2.getElement(elemName)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	c2cr1e, err := c2cr1.getElement(elemName)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+
+	// Spawn id1
+	id1, t1, err := c2cr1e.SpawnAtom(c2.local, atomName, &String{}, nil, false)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	if id1 == nil || t1 != nil {
+		t.Fatal("id1 or t1 is nil")
+		return
+	}
+	if id1.GetIDInfo().Atom != atomName {
+		t.Fatal("id1 atom is not testAtom")
+		return
+	}
+	t.Logf("id1=(%v) t1=(%v)", id1, t1)
+
+	// Spawn id2
+	id2, t2, err := c1cr2e.SpawnAtom(c1.local, atomName, &String{}, nil, false)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	if id2 == nil || t2 != nil {
+		t.Fatal("id2 or t2 is nil")
+		return
+	}
+	if id2.GetIDInfo().Atom != atomName {
+		t.Fatal("id2 atom is not testAtom")
+		return
+	}
+	t.Logf("id2=(%v) t2=(%v)", id2, t2)
+}
 
 // 测试一个节点的生命周期
 // Test the life cycle of a nod
@@ -21,7 +113,7 @@ func TestSimulateCosmosNodeLifeCycle(t *testing.T) {
 		<-time.After(5 * time.Second)
 	}()
 
-	<-time.After(10 * time.Second)
+	<-time.After(1000 * time.Second)
 }
 
 // 测试两个节点
@@ -91,7 +183,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 	}
-	wcr1a1, wcr1aTracker1, err := wcr1e.SpawnAtom("testAtom", &String{}, nil, false)
+	wcr1a1, wcr1aTracker1, err := wcr1e.SpawnAtom(watcher.local, "testAtom", &String{}, nil, false)
 	if err != nil || wcr1a1 == nil || wcr1aTracker1 != nil || wcr1a1.GetIDInfo().Atom != "testAtom" {
 		t.Fatal("SpawnAtom failed", err, wcr1a1, wcr1aTracker1)
 	}
@@ -121,7 +213,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 	}
-	c1OldWa, c1OldWaTracker, err := c1OldWe.SpawnAtom("testAtom", &String{}, nil, false)
+	c1OldWa, c1OldWaTracker, err := c1OldWe.SpawnAtom(c1Old.local, "testAtom", &String{}, nil, false)
 	if err != nil || c1OldWa == nil || c1OldWaTracker != nil || c1OldWa.GetIDInfo().Atom != "testAtom" {
 		t.Fatal("SpawnAtom failed", err, c1OldWa, c1OldWaTracker)
 	}
@@ -186,6 +278,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 		}
 		<-time.After(1 * time.Second)
 	}()
+	<-time.After(10 * time.Millisecond)
 	if c1Old.state != CosmosProcessStateOff {
 		t.Fatal("c1Old.state != CosmosProcessStateOff")
 	}
@@ -210,7 +303,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wcr3a, wcr3aTracker, err := wcr1e.SpawnAtom("testAtom", &String{}, nil, false)
+	wcr3a, wcr3aTracker, err := wcr1e.SpawnAtom(watcher.local, "testAtom", &String{}, nil, false)
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 	}
@@ -303,7 +396,7 @@ func TestSimulateTwoCosmosNodeRPC(t *testing.T) {
 	}
 
 	// Spawn
-	id2, t2, err := c1cr2e.SpawnAtom("testAtom", &String{}, nil, false)
+	id2, t2, err := c1cr2e.SpawnAtom(c1.local, "testAtom", &String{}, nil, false)
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 	}
