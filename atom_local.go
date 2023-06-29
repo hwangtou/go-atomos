@@ -43,7 +43,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		Node:    e.atomos.id.Node,
 		Element: e.atomos.id.Element,
 		Atom:    name,
-		GoId:    0,
+		//GoId:    0,
 	}
 	a := &AtomLocal{
 		element:     e,

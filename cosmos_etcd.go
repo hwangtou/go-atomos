@@ -8,12 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.etcd.io/etcd/api/v3/mvccpb"
-	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"strings"
-	"time"
 )
 
 const (
@@ -182,7 +180,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	}
 
 	// Keep the cosmos remote alive.
-	lease, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
+	lease, keepAliveCh, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
 	if err != nil {
 		return err.AddStack(nil)
 	}
@@ -195,7 +193,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			}
 		}()
 
-		var err *Error
+		//var err *Error
 		var lease = firstLease
 		id := p.local.atomos.id
 
@@ -218,25 +216,30 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			select {
 			// 保持活跃
 			// Keepalive
-			case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
+			//case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
+			case keepAlive := <-keepAliveCh:
 				p.logging.PushLogging(id, LogLevel_Debug, "etcd: Watcher keepalive.")
 				p.mutex.Lock()
 				state := p.state
 				p.mutex.Unlock()
-				if state != CosmosProcessStateRunning {
-					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher keepalive stopped.")
+				if state >= CosmosProcessStateShutdown {
+					p.logging.PushLogging(id, LogLevel_Info, fmt.Sprintf("etcd: Watcher keepalive stopped. state=(%v)", state))
 					return
 				}
-				_, er := p.cluster.etcdClient.KeepAliveOnce(context.Background(), lease.ID)
-				if er != nil {
-					p.logging.PushLogging(id, LogLevel_Err, fmt.Sprintf("etcd: Watcher keepalive failed. err=(%s)", er))
-					if er == rpctypes.ErrLeaseNotFound {
-						lease, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
-						if err != nil {
-							p.etcdErrorHandler(err.AddStack(nil))
-						}
-					}
+				if keepAlive == nil {
+					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher keepalive stopped, lease is not renewed.")
+					return
 				}
+				//_, er := p.cluster.etcdClient.KeepAliveOnce(context.Background(), lease.ID)
+				//if er != nil {
+				//	p.logging.PushLogging(id, LogLevel_Err, fmt.Sprintf("etcd: Watcher keepalive failed. err=(%s)", er))
+				//	if er == rpctypes.ErrLeaseNotFound {
+				//		lease, rspCh, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
+				//		if err != nil {
+				//			p.etcdErrorHandler(err.AddStack(nil))
+				//		}
+				//	}
+				//}
 			// 更新节点信息
 			// Update node information
 			case infoBuf, more := <-p.cluster.etcdInfoCh:
@@ -286,31 +289,24 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
-		for {
-			p.local.Log().Debug(">>>>>>>>>>a")
-			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
-			for watchResp := range watchCh {
-				p.local.Log().Debug(">>>>>>>>>>b")
-				for _, event := range watchResp.Events {
-					p.local.Log().Debug(">>>>>>>>>>c")
-					p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
-					if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
-						continue
-					}
-					key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
-					switch event.Type {
-					case mvccpb.PUT:
-						p.handleKey(key, event.Kv.Value, true)
-					case mvccpb.DELETE:
-						p.handleKey(key, event.Kv.Value, false)
-					}
+		defer p.local.Log().Info("etcd: Watcher stopped.")
+		watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
+		for watchResp := range watchCh {
+			for _, event := range watchResp.Events {
+				p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
+				if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
+					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+					continue
 				}
-				p.local.Log().Debug(">>>>>>>>>>d")
+				key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
+				switch event.Type {
+				case mvccpb.PUT:
+					p.handleKey(key, event.Kv.Value, true)
+				case mvccpb.DELETE:
+					p.handleKey(key, event.Kv.Value, false)
+				}
 			}
-			p.local.Log().Debug(">>>>>>>>>>e")
 		}
-		p.local.Log().Debug(">>>>>>>>>>f")
 	}()
 
 	return nil

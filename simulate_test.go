@@ -22,6 +22,9 @@ var (
 	testRecoverPanic        = false
 )
 
+var localSuccessCounter int
+var remoteSuccessCounter int
+
 const (
 	testLogMaxSize = 1000
 )
@@ -108,16 +111,37 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				//t.Logf("ElementSpawner. data=(%v)", data)
 				return nil
 			},
-			AtomSpawner: func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error {
+			AtomSpawner: func(self AtomSelfID, a Atomos, arg, data proto.Message) *Error {
 				ta := a.(*testAtom)
 				ta.t = t
-				ta.self = s
+				ta.self = self
 				ta.data = data
 				t.Logf("AtomSpawner. arg=(%v),data=(%v)", arg, data)
 				if arg != nil {
-					switch arg.(*String).S {
-					case "panic":
-						panic("Spawn panic")
+					switch ar := arg.(type) {
+					case *String:
+						switch ar.S {
+						case "panic":
+							panic("Spawn panic")
+						}
+					case *Strings:
+						switch ar.Ss[0] {
+						case "deadlock":
+							//selfCosmos := self.(*AtomLocal).element.cosmosLocal.process
+							//selfCosmos.cluster.remoteMutex.RLock()
+							//c2cr1 := selfCosmos.cluster.remoteCosmos["c1"]
+							//selfCosmos.cluster.remoteMutex.RUnlock()
+
+							// SelfID
+							aID, aT, err := self.Cosmos().CosmosGetAtomID(ar.Ss[1], ar.Ss[2])
+							if err != nil {
+								return err.AddStack(nil)
+							}
+							aT.Release()
+							out, err := aID.SyncMessagingByName(self, "testMessage", 0, nil)
+							self.Log().Info("Spawn deadlock=(%v),out=(%v),err=(%v)", aID, out, err)
+							return err
+						}
 					}
 				}
 				return nil
@@ -139,15 +163,17 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 			// 测试本地同步调用到自己的死锁，传入的from和to都是自己，in是自己的名字
 			"testingLocalSyncSelfFirstSyncCallDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				selfName := in.(*String).S
-				selfAtom, selfAtomTracker, err := from.Cosmos().CosmosGetAtomID("testElement", selfName)
+				selfAtom, selfAtomTracker, err := from.Cosmos().(*CosmosLocal).process.local.CosmosGetAtomID("testElement", selfName)
 				if err != nil {
 					return nil, err.AddStack(nil)
 				}
 				selfAtomLocal := selfAtom.(*AtomLocal)
 				defer selfAtomTracker.Release()
 				out, err = selfAtom.SyncMessagingByName(selfAtomLocal, "testMessage", 0, nil)
-				if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
-					return nil, NewError(ErrIDFirstSyncCallDeadlock, "expect first sync call deadlock")
+				if err == nil {
+					return nil, NewError(ErrIDFirstSyncCallDeadlock, "expect first sync call deadlock").AddStack(nil)
+				} else if err.Code != ErrIDFirstSyncCallDeadlock {
+					return nil, err.AddStack(nil)
 				}
 				return &String{S: "OK"}, nil
 			},
@@ -178,7 +204,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 						selfAtomLocal.Log().Error("testingLocalAsyncSelfFirstSyncCall: out=(%v)", out)
 						return
 					}
-					successCounter += 1
+					localSuccessCounter += 1
 				})
 				return &String{S: "OK"}, nil
 			},
@@ -223,8 +249,34 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: out=(%v)", out)
 						return
 					}
-					successCounter += 1
+					localSuccessCounter += 1
 				})
+
+				out, err = otherAtomLocal.SyncMessagingByName(selfAtomLocal, "testMessage", 0, nil)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+
+				selfAtom.AsyncMessagingByName(selfAtomLocal, "testMessage", 0, &String{S: "in"}, func(out proto.Message, err *Error) {
+					if selfAtomLocal.atomos.fsc.curFirstSyncCall == "" {
+						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: curFirstSyncCall is empty")
+						return
+					}
+					if getGoID() != selfAtomLocal.atomos.GetGoID() {
+						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: goID not match")
+						return
+					}
+					if err != nil {
+						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: err=(%v)", err)
+						return
+					}
+					if out.(*String).S != "OK" {
+						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: out=(%v)", out)
+						return
+					}
+					localSuccessCounter += 1
+				})
+
 				return &String{S: "OK"}, nil
 			},
 
@@ -247,8 +299,10 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				defer otherAtomTracker.Release()
 
 				out, err = otherAtomLocal.SyncMessagingByName(selfAtomLocal, "testingUtilLocalSyncChain", 0, in)
-				if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+				if err == nil {
 					return nil, NewError(ErrIDFirstSyncCallDeadlock, "expect first sync call deadlock")
+				} else if err.Code != ErrIDFirstSyncCallDeadlock {
+					return nil, err.AddStack(nil)
 				}
 				return &String{S: "OK"}, nil
 			},
@@ -288,11 +342,12 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 						selfAtomLocal.Log().Error("testingLocalAsyncChainSelfFirstSyncCall: out=(%v)", out)
 						return
 					}
-					successCounter += 1
+					localSuccessCounter += 1
 				})
 				return &String{S: "OK"}, nil
 			},
 
+			// 测试本地同步执行任务，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
 			"testingLocalTaskChainSelfFirstSyncCall": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 				selfName, otherName := in.(*Strings).Ss[0], in.(*Strings).Ss[1]
 
@@ -329,7 +384,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 						selfAtomLocal.Log().Error("testingLocalSyncChainSelfFirstSyncCallDeadlock: err=(%v)", err)
 						return
 					}
-					successCounter += 1
+					localSuccessCounter += 1
 				})
 				if err != nil {
 					return nil, err.AddStack(nil)
@@ -386,6 +441,153 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				defer otherAtomTracker.Release()
 
 				return otherAtomLocal.SyncMessagingByName(selfAtomLocal, "testMessage", 0, nil)
+			},
+
+			// Remote First Sync Call
+
+			// node1的测试任务
+			"testingRemoteTask": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+				selfCosmos := from.(*CosmosLocal).process
+				selfCosmos.cluster.remoteMutex.RLock()
+				c1cr2 := selfCosmos.cluster.remoteCosmos["c2"]
+				selfCosmos.cluster.remoteMutex.RUnlock()
+
+				testElem, testSelf, testTarget := in.(*Strings).Ss[0], in.(*Strings).Ss[1], in.(*Strings).Ss[2]
+
+				// SelfID
+				selfAtomID, selfTrackerID, err := selfCosmos.local.CosmosGetAtomID(testElem, testSelf)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				selfTrackerID.Release()
+				selfID := selfAtomID.(*AtomLocal)
+
+				// Remote Atom ID
+				c1cr2e, err := c1cr2.getElement(in.(*Strings).Ss[0])
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				id2, t2, err := c1cr2e.GetAtomID(testTarget, nil, false)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				if id2 == nil || t2 != nil {
+					return nil, NewError(ErrFrameworkInternalError, "expect id2 != nil && t2 == nil").AddStack(nil)
+				}
+				t2.Release()
+
+				// Test Normal
+				out, err = id2.SyncMessagingByName(selfID, "testMessage", 0, nil)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				if out.(*String).S != "OK" {
+					return nil, NewError(ErrFrameworkInternalError, "expect out == OK").AddStack(nil)
+				}
+
+				// Test Timeout
+				out, err = id2.SyncMessagingByName(selfID, "testMessageTimeout", 1*time.Millisecond, nil)
+				if err == nil || err.Code != ErrAtomosPushTimeoutHandling {
+					return nil, NewError(ErrFrameworkInternalError, "expect err != nil").AddStack(nil)
+				}
+
+				for i := 0; i < 3; i++ {
+					// Test Sync deadlock
+					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 0, &Strings{Ss: []string{testTarget}})
+					if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+						return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
+					}
+				}
+
+				for i := 0; i < 3; i++ {
+					// Test Async and no deadlock
+					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 0, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
+						if err != nil {
+							selfID.Log().Error("testingRemoteSyncFirstSyncCallDeadlock. err=(%v)", err)
+							return
+						}
+						selfID.Log().Info("testingRemoteSyncFirstSyncCallDeadlock. out=(%v)", out)
+						remoteSuccessCounter += 1
+					})
+				}
+
+				for i := 0; i < 3; i++ {
+					// Test Sync deadlock
+					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 0, &Strings{Ss: []string{testTarget, "mark2"}})
+					if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+						return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
+					}
+				}
+
+				for i := 0; i < 3; i++ {
+					// Test Async and no deadlock
+					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 0, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
+						if err != nil {
+							selfID.Log().Error("testingRemoteSyncFirstSyncCallDeadlock. err=(%v)", err)
+							return
+						}
+						selfID.Log().Info("testingRemoteSyncFirstSyncCallDeadlock. out=(%v)", out)
+						remoteSuccessCounter += 1
+					})
+				}
+
+				// Test Spawn deadlock
+				out, err = id2.SyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", 0, in)
+				if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+					return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
+				}
+
+				// Test Spawn deadlock
+				id2.AsyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", 0, &Strings{Ss: []string{testElem, testSelf, testTarget}}, func(out proto.Message, err *Error) {
+					if err != nil {
+						selfID.Log().Error("testingRemoteFirstSyncCallSpawnDeadlock. err=(%v)", err)
+						return
+					}
+					selfID.Log().Info("testingRemoteFirstSyncCallSpawnDeadlock. out=(%v)", out)
+					remoteSuccessCounter += 1
+				})
+
+				return &String{S: "OK"}, nil
+			},
+
+			// node2接收到node1的Sync和Async的调用。
+			"testingRemoteSyncFirstSyncCallDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+				// SelfID
+				selfCosmos := from.(*remoteAtomFakeSelfID).AtomRemote.element.cosmos.process
+				selfAtomID, selfTrackerID, err := selfCosmos.local.CosmosGetAtomID(from.GetIDInfo().Element, in.(*Strings).Ss[0])
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				selfTrackerID.Release()
+				selfID := selfAtomID.(*AtomLocal)
+
+				// Concrete
+				out, err = from.SyncMessagingByName(selfID, "testMessage", 0, nil)
+				return out, err
+			},
+
+			// node2接收到node1的Spawn调用。
+			"testingRemoteFirstSyncCallSpawnDeadlock": func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+				testElem, testSelf, testTarget := in.(*Strings).Ss[0], in.(*Strings).Ss[1], in.(*Strings).Ss[2]
+				// SelfID
+				selfCosmos := from.(*remoteAtomFakeSelfID).AtomRemote.element.cosmos.process
+				selfAtomID, selfTrackerID, err := selfCosmos.local.CosmosGetAtomID(testElem, testTarget)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				selfTrackerID.Release()
+				selfID := selfAtomID.(*AtomLocal)
+
+				// Concrete
+				remoteElem, err := from.Cosmos().CosmosGetElementID(testElem)
+				rID, rT, err := remoteElem.(*ElementRemote).SpawnAtom(selfID, "testDeadlock", &Strings{Ss: []string{"deadlock", testElem, testSelf}}, nil, false)
+				if err != nil {
+					return nil, err.AddStack(nil)
+				}
+				if rID == nil || rT != nil {
+					return nil, NewError(ErrFrameworkInternalError, "expect rID != nil && rT == nil").AddStack(nil)
+				}
+				return out, err
 			},
 
 			// Old test cases

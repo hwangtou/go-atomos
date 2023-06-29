@@ -50,7 +50,7 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		Element: impl.Interface.Config.Name,
 		Atom:    "",
 		Version: main.atomos.id.Version,
-		GoId:    0,
+		//GoId:    0,
 	}
 	e := &ElementLocal{
 		cosmosLocal: main,

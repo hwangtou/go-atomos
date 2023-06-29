@@ -254,6 +254,7 @@ func (mb *mailBox) removeMail(dm *mail) bool {
 
 func (mb *mailBox) loop() {
 	// 获取当前进程Goroutine ID。
+	// TODO: 这种处理基本上认为不会出现getGoID失败而导致的情况，因此也没有做loop在这里退出的后续处理。
 	mb.goID = func() uint64 {
 		defer func() {
 			if r := recover(); r != nil {
@@ -296,15 +297,17 @@ func (mb *mailBox) loop() {
 					mails, num := mb.popAll()
 					if m := curMail.mail; m != nil {
 						if m.executeStop {
-							// TODO: Handle error.
-							mb.handler.mailboxOnStop(curMail, mails, num)
+							if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+								mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop. err=(%v)", err))
+							}
 						}
 						// Wait channel.
 						m.sendReply(nil, nil)
 					}
 					if l := curMail.log; l != nil {
-						// TODO: Handle error.
-						mb.handler.mailboxOnStop(curMail, mails, num)
+						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+							mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop, logMail. err=(%v)", err))
+						}
 					}
 					return
 				}

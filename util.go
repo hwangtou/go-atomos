@@ -22,5 +22,8 @@ func getGoID() uint64 {
 	b = bytes.TrimPrefix(b, []byte("goroutine "))
 	b = b[:bytes.IndexByte(b, ' ')]
 	n, _ := strconv.ParseUint(string(b), 10, 64)
+	if n == 0 {
+		panic("cannot get goroutine id")
+	}
 	return n
 }

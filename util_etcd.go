@@ -10,26 +10,26 @@ import (
 // 保持活跃
 // 1. 注册服务
 // 2. 保持活跃
-func etcdKeepalive(cli *clientv3.Client, key, value string, ttl int64) (*clientv3.LeaseGrantResponse, *Error) {
+func etcdKeepalive(cli *clientv3.Client, key, value string, ttl int64) (*clientv3.LeaseGrantResponse, <-chan *clientv3.LeaseKeepAliveResponse, *Error) {
 	// grant a lease.
-	lease, er := cli.Grant(context.Background(), etcdKeepaliveTime)
+	lease, er := cli.Grant(context.Background(), ttl)
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to grant lease. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to grant lease. err=(%s)", er).AddStack(nil)
 	}
 
 	// register the service with etcd.
 	_, er = cli.Put(context.Background(), key, string(value), clientv3.WithLease(lease.ID))
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to register service. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to register service. err=(%s)", er).AddStack(nil)
 	}
 
 	// keepalive the service so that the lease does not expire.
-	_, er = cli.KeepAlive(context.Background(), lease.ID)
+	keepAliveCh, er := cli.KeepAlive(context.Background(), lease.ID)
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to keepalive. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to keepalive. err=(%s)", er).AddStack(nil)
 	}
 
-	return lease, nil
+	return lease, keepAliveCh, nil
 }
 
 // etcdPut

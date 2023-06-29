@@ -101,9 +101,14 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 	client := NewAtomosRemoteServiceClient(cli)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+time.Second)
 	defer cancel()
-	arg, er := anypb.New(in)
-	if er != nil {
-		return nil, NewError(ErrCosmosRemoteRequestInvalid, "AtomRemote: SyncMessagingByName arg error.").AddStack(nil)
+
+	var er error
+	var arg *anypb.Any
+	if in != nil {
+		arg, er = anypb.New(in)
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "AtomRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
+		}
 	}
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:               callerID.GetIDInfo(),
@@ -148,9 +153,14 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 			client := NewAtomosRemoteServiceClient(cli)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			arg, er := anypb.New(in)
-			if er != nil {
-				return nil, NewError(ErrCosmosRemoteRequestInvalid, "AtomRemote: SyncMessagingByName arg error.").AddStack(nil)
+
+			var er error
+			var arg *anypb.Any
+			if in != nil {
+				arg, er = anypb.New(in)
+				if er != nil {
+					return nil, NewError(ErrCosmosRemoteRequestInvalid, "AtomRemote: SyncMessagingByName arg error.").AddStack(nil)
+				}
 			}
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 				CallerId:               callerIDInfo,
@@ -232,7 +242,8 @@ func (a *AtomRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormho
 }
 
 func (a *AtomRemote) getGoID() uint64 {
-	return a.info.GoId
+	//return a.info.GoId
+	return 0
 }
 
 // remoteAtomFakeSelfID 用于在远程Atom中实现SelfID接口

@@ -74,7 +74,7 @@ func (c *loggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}
 		Node:    "",
 		Element: "",
 		Atom:    "",
-		GoId:    0,
+		//GoId:    0,
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 

@@ -355,9 +355,26 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	firstSyncCall := ""
 	// 获取调用ID的Go ID
 	callerLocalGoID := callerID.getGoID()
+
+	// 远程调用
+	// 如果调用ID的Go ID为0，证明远程调用，直接返回当前的FirstSyncCall即可。
+	if callerLocalGoID == 0 {
+		if firstSyncCall = callerID.getCurFirstSyncCall(); firstSyncCall == "" {
+			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: callerID is invalid. callerID=(%v)", callerID)
+		}
+		if a.fsc.curFirstSyncCall == firstSyncCall {
+			return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call chain deadlock. callerID=(%v)", callerID)
+		}
+		//// TODO: 因为远程调用的Async循环调用会捕捉不到这种死锁，所以这里需要检查一下。后续还是要反思下这里。
+		//if strings.Split(firstSyncCall, "-")[0] == a.id.Info() {
+		//	return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call to self deadlock. callerID=(%v)", callerID)
+		//}
+		return firstSyncCall, false, nil
+	}
+
+	// 本地调用
 	// 获取调用栈的Go ID
 	curLocalGoID := getGoID()
-
 	var toDefer bool
 	// 这种情况，调用方的ID和当前的ID是同一个，证明是同步调用。
 	if callerLocalGoID == curLocalGoID {

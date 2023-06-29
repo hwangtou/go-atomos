@@ -31,7 +31,7 @@ func TestAllSingleNode(t *testing.T) {
 
 func TestAllMultiNodes(t *testing.T) {
 	clearTest()
-	TestSimulateCosmosNodeLifeCycle(t)
+	TestSimulateCosmosNode_LifeCycle(t)
 
 	clearTest()
 	TestSimulateTwoCosmosNodes(t)

@@ -15,7 +15,8 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 	c2 := simulateCosmosNode(t, "hello", "c2")
 
 	elemName := "testElement"
-	atomName := "testAtom"
+	atomName1 := "testAtom1"
+	atomName2 := "testAtom2"
 	//atomOtherName := "testAtomOther"
 
 	// 两个节点的停止
@@ -26,10 +27,10 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 		if err := c2.Stop(); err != nil {
 			t.Fatal(err)
 		}
-		<-time.After(5 * time.Second)
+		<-time.After(3 * time.Second)
 	}()
 
-	<-time.After(5 * time.Second)
+	<-time.After(500 * time.Millisecond)
 	c1.cluster.remoteMutex.RLock()
 	c1cr2, has := c1.cluster.remoteCosmos["c2"]
 	c1.cluster.remoteMutex.RUnlock()
@@ -64,9 +65,15 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 		t.Fatal(err.AddStack(nil))
 		return
 	}
+	_ = c2cr1e
 
-	// Spawn id1
-	id1, t1, err := c2cr1e.SpawnAtom(c2.local, atomName, &String{}, nil, false)
+	// Spawn local c1 id1
+	c1e, err := c1.local.getLocalElement(elemName)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	id1, t1, err := c1e.SpawnAtom(c1.local, atomName1, &String{}, nil, false)
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 		return
@@ -75,14 +82,23 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 		t.Fatal("id1 or t1 is nil")
 		return
 	}
-	if id1.GetIDInfo().Atom != atomName {
+	if i := id1.GetIDInfo(); i.Atom != atomName1 || i.Element != elemName || i.Node != c1.local.GetNodeName() || i.Cosmos != c1.local.GetIDInfo().Cosmos {
 		t.Fatal("id1 atom is not testAtom")
 		return
 	}
+	if c1.local.elements[elemName].atoms[atomName1] == nil {
+		t.Fatal("c1 local atom is nil")
+		return
+	}
+	if c2.local.elements[elemName].atoms[atomName1] != nil {
+		t.Fatal("c2 local atom is not nil")
+		return
+	}
 	t.Logf("id1=(%v) t1=(%v)", id1, t1)
+	t1.Release()
 
-	// Spawn id2
-	id2, t2, err := c1cr2e.SpawnAtom(c1.local, atomName, &String{}, nil, false)
+	// Spawn remote c2 id1
+	id2, t2, err := c1cr2e.SpawnAtom(c1.local, atomName2, &String{}, nil, false)
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 		return
@@ -91,16 +107,54 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 		t.Fatal("id2 or t2 is nil")
 		return
 	}
-	if id2.GetIDInfo().Atom != atomName {
+	if i := id2.GetIDInfo(); i.Atom != atomName2 || i.Element != elemName || i.Node != c2.local.GetNodeName() || i.Cosmos != c2.local.GetIDInfo().Cosmos {
 		t.Fatal("id2 atom is not testAtom")
 		return
 	}
+	if c1.local.elements[elemName].atoms[atomName2] != nil {
+		t.Fatal("c1 local atom is not nil")
+		return
+	}
+	if c2.local.elements[elemName].atoms[atomName2] == nil {
+		t.Fatal("c2 local atom is nil")
+		return
+	}
 	t.Logf("id2=(%v) t2=(%v)", id2, t2)
+	t2.Release()
+
+	// cr1 get cr2 id
+	c1cr2a, c1cr2t, err := c1cr2e.GetAtomID(atomName2, nil, false)
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	if c1cr2a == nil || c1cr2t != nil {
+		t.Fatal("c1cr2a is nil or c1cr2t is not nil")
+		return
+	}
+	c1cr2t.Release()
+
+	// 让id1开始测试任务
+	out, err := id1.SyncMessagingByName(c1.local, "testingRemoteTask", 10*time.Second, &Strings{Ss: []string{elemName, atomName1, atomName2}})
+	if err != nil {
+		t.Fatal(err.AddStack(nil))
+		return
+	}
+	if out == nil || out.(*String).S != "OK" {
+		t.Fatal("out is nil or out is not OK")
+		return
+	}
+
+	<-time.After(100 * time.Millisecond)
+	if remoteSuccessCounter != 7 {
+		t.Fatal("remoteSuccessCounter is not 7")
+		return
+	}
 }
 
 // 测试一个节点的生命周期
 // Test the life cycle of a nod
-func TestSimulateCosmosNodeLifeCycle(t *testing.T) {
+func TestSimulateCosmosNode_LifeCycle(t *testing.T) {
 	// 一个节点的模拟
 
 	c1 := simulateCosmosNode(t, "hello", "c1")
@@ -110,10 +164,10 @@ func TestSimulateCosmosNodeLifeCycle(t *testing.T) {
 		if err := c1.Stop(); err != nil {
 			t.Fatal(err)
 		}
-		<-time.After(5 * time.Second)
+		<-time.After(3 * time.Second)
 	}()
 
-	<-time.After(1000 * time.Second)
+	<-time.After(10 * time.Second)
 }
 
 // 测试两个节点
@@ -133,7 +187,7 @@ func TestSimulateTwoCosmosNodes(t *testing.T) {
 		if err := c2.Stop(); err != nil {
 			t.Fatal(err)
 		}
-		<-time.After(5 * time.Second)
+		<-time.After(3 * time.Second)
 	}()
 
 	<-time.After(10 * time.Second)
@@ -270,7 +324,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 	//}
 	_ = c1OldWa2
 
-	<-time.After(5 * time.Second)
+	<-time.After(3 * time.Second)
 	c1New := simulateCosmosNode(t, "hello", "c1")
 	defer func() {
 		if err := c1New.Stop(); err != nil {
@@ -334,7 +388,7 @@ func TestSimulateTwoCosmosNodeRPC(t *testing.T) {
 		if err := c2.Stop(); err != nil {
 			t.Fatal(err)
 		}
-		<-time.After(5 * time.Second)
+		<-time.After(3 * time.Second)
 	}()
 
 	<-time.After(1 * time.Microsecond)

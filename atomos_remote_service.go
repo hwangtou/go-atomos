@@ -42,11 +42,15 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 			defer callerID.callerCounterRelease()
 		}
 
+		var in proto.Message
+		var er error
 		// Unmarshal args.
-		in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
-		if er != nil {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID unmarshal args failed. err=(%v)", er).AddStack(nil)
-			return rsp, nil
+		if req.Args != nil {
+			in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+			if er != nil {
+				rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID unmarshal args failed. err=(%v)", er).AddStack(nil)
+				return rsp, nil
+			}
 		}
 
 		// Get element.
@@ -174,11 +178,15 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		return rsp, nil
 	}
 
+	var in proto.Message
+	var er error
 	// Unmarshal args.
-	in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
-	if er != nil {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SpawnAtom unmarshal args failed. err=(%v)", er).AddStack(nil)
-		return rsp, nil
+	if req.Args != nil {
+		in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+		if er != nil {
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SpawnAtom unmarshal args failed. err=(%v)", er).AddStack(nil)
+			return rsp, nil
+		}
 	}
 
 	atom, _, err := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
@@ -199,6 +207,10 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 // Rsp is the rsp.
 // Error is the error.
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
+	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
+	//if req.Message == "testingRemoteFirstSyncCallSpawnDeadlock" {
+	//	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
+	//}
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
 	if req.CallerCurFirstSyncCall == "" {
 		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call.").AddStack(nil)
@@ -213,11 +225,15 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			defer callerID.callerCounterRelease()
 		}
 
+		var in proto.Message
+		var er error
 		// Unmarshal args.
-		in, er := anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
-		if er != nil {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
-			return rsp, nil
+		if req.Args != nil {
+			in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+			if er != nil {
+				rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
+				return rsp, nil
+			}
 		}
 
 		var id SelfID
@@ -245,7 +261,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 
 		// Check caller cur first sync call.
 		if id.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
+			rsp.Error = NewErrorf(ErrIDFirstSyncCallDeadlock, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
 			return rsp, nil
 		}
 

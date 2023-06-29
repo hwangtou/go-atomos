@@ -6,7 +6,6 @@ import (
 )
 
 var sharedTestAtom1, sharedTestAtom2 *AtomLocal
-var successCounter int
 
 func TestAtomLocal_FirstSyncCall(t *testing.T) {
 	initTestFakeCosmosProcess(t)
@@ -58,8 +57,8 @@ func TestAtomLocal_FirstSyncCall(t *testing.T) {
 		return
 	}
 	<-time.After(1 * time.Millisecond)
-	if successCounter != 1 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+	if localSuccessCounter != 1 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
 		return
 	}
 	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall tested")
@@ -75,8 +74,8 @@ func TestAtomLocal_FirstSyncCall(t *testing.T) {
 		return
 	}
 	<-time.After(1 * time.Millisecond)
-	if successCounter != 2 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+	if localSuccessCounter != 3 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
 		return
 	}
 	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall tested")
@@ -104,8 +103,8 @@ func TestAtomLocal_FirstSyncCall(t *testing.T) {
 		return
 	}
 	<-time.After(1 * time.Millisecond)
-	if successCounter != 3 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall successCounter=(%v)", successCounter)
+	if localSuccessCounter != 4 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
 		return
 	}
 	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall tested")
@@ -121,8 +120,8 @@ func TestAtomLocal_FirstSyncCall(t *testing.T) {
 		return
 	}
 	<-time.After(1 * time.Millisecond)
-	if successCounter != 4 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", successCounter)
+	if localSuccessCounter != 5 {
+		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
 		return
 	}
 	t.Logf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall tested")

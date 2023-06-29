@@ -265,9 +265,14 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 	client := NewAtomosRemoteServiceClient(cli)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	arg, er := anypb.New(in)
-	if er != nil {
-		return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
+
+	var er error
+	var arg *anypb.Any
+	if in != nil {
+		arg, er = anypb.New(in)
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
+		}
 	}
 
 	firstSyncCall := ""
@@ -325,9 +330,14 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 			client := NewAtomosRemoteServiceClient(cli)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			arg, er := anypb.New(in)
-			if er != nil {
-				return nil, NewError(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error.").AddStack(nil)
+
+			var er error
+			var arg *anypb.Any
+			if in != nil {
+				arg, er = anypb.New(in)
+				if er != nil {
+					return nil, NewError(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error.").AddStack(nil)
+				}
 			}
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 				CallerId:               callerIDInfo,
@@ -368,7 +378,8 @@ func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, worm
 }
 
 func (c *CosmosRemote) getGoID() uint64 {
-	return c.id.GoId
+	//return c.id.GoId
+	return 0
 }
 
 // Implementation of CosmosNode
