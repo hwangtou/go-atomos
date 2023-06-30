@@ -1,6 +1,9 @@
 package go_atomos
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAll(t *testing.T) {
 	TestAllSingleNode(t)
@@ -32,18 +35,23 @@ func TestAllSingleNode(t *testing.T) {
 func TestAllMultiNodes(t *testing.T) {
 	clearTest()
 	TestSimulateCosmosNode_LifeCycle(t)
+	<-time.After(time.Second * 5)
 
 	clearTest()
 	TestSimulateTwoCosmosNodes(t)
+	<-time.After(time.Second * 5)
 
 	clearTest()
 	TestSimulateUpgradeCosmosNode(t)
+	<-time.After(time.Second * 5)
 
 	clearTest()
 	TestSimulateTwoCosmosNodeRPC(t)
+	<-time.After(time.Second * 5)
 
 	clearTest()
 	TestSimulateTwoCosmosNode_FirstSyncCall(t)
+	<-time.After(time.Second * 5)
 }
 
 func TestAllApp(t *testing.T) {

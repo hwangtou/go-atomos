@@ -100,7 +100,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 		elements: map[string]*ElementLocal{},
 	}
 	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p)
-	if err := p.local.atomos.start(nil); err != nil {
+	if err := p.local.atomos.start(func() *Error { return nil }); err != nil {
 		return err.AddStack(nil)
 	}
 
@@ -188,7 +188,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		p.mutex.Lock()
 		p.state = CosmosProcessStateOff
 		p.mutex.Unlock()
-		return err
+		return err.AddStack(p.local)
 	}
 
 	p.mutex.Lock()
@@ -217,7 +217,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}
 		return NewError(ErrCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(p.local)
 	}(); err != nil {
-		return err
+		return err.AddStack(p.local)
 	}
 
 	err := func() (err *Error) {
@@ -238,7 +238,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}
 
 		if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
-			return err
+			return err.AddStack(p.local)
 		}
 
 		return nil

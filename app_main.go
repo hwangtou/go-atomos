@@ -54,7 +54,7 @@ func Main(runnable CosmosRunnable) {
 	}
 
 	// Init.
-	if err := InitCosmosProcess("", "", app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
+	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
 		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
 	}

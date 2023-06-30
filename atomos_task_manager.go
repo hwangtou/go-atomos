@@ -296,7 +296,11 @@ func (at *atomosTaskManager) Cancel(id uint64) *Error {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	return at.cancelTask(id, nil)
+	err := at.cancelTask(id, nil)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	return nil
 }
 
 func (at *atomosTaskManager) CancelCrontab(entryID uint64) (err *Error) {

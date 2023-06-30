@@ -83,7 +83,10 @@ func (c *CosmosLocal) getCurFirstSyncCall() string {
 }
 
 func (c *CosmosLocal) setSyncMessageAndFirstCall(s string) *Error {
-	return c.atomos.fsc.setSyncMessageAndFirstCall(s)
+	if err := c.atomos.fsc.setSyncMessageAndFirstCall(s); err != nil {
+		return err.AddStack(c)
+	}
+	return nil
 }
 
 func (c *CosmosLocal) unsetSyncMessageAndFirstCall() {
@@ -138,7 +141,7 @@ func (c *CosmosLocal) Config() map[string][]byte {
 }
 
 func (c *CosmosLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err, callback)
+	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err.AddStack(c), callback)
 }
 
 // Implementation of CosmosNode
@@ -164,15 +167,23 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *ID
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	id, tracker, err = e.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	if err != nil {
+		return nil, nil, err.AddStack(c)
+	}
+	return id, tracker, nil
 }
 
-func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
+func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message string, timeout time.Duration, args proto.Message) (id ID, tracker *IDTracker, err *Error) {
 	e, err := c.getLocalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	id, tracker, err = e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	if err != nil {
+		return nil, nil, err.AddStack(c)
+	}
+	return id, tracker, nil
 }
 
 func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
@@ -201,7 +212,7 @@ func (c *CosmosLocal) ElementBroadcast(callerID SelfID, key, contentType string,
 			ContentBuffer: contentBuffer,
 		}, func(message proto.Message, err *Error) {
 			if err != nil {
-				// TODO
+				c.Log().Error("Cosmos: ElementBroadcast error. err=(%v)", err)
 			}
 		})
 	}
@@ -219,7 +230,7 @@ func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.M
 // Mailbox Handler
 
 func (c *CosmosLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error) {
-	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.")
+	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
 }
 
 func (c *CosmosLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
@@ -237,7 +248,10 @@ func (c *CosmosLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosW
 		c.Log().Error(err.Message)
 		return err
 	}
-	return holder.AcceptWormhole(from, wormhole)
+	if err := holder.AcceptWormhole(from, wormhole); err != nil {
+		return err.AddStack(c)
+	}
+	return nil
 }
 
 func (c *CosmosLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
@@ -305,8 +319,12 @@ func (c *CosmosLocal) getLocalAllElements() (elems []*ElementLocal, err *Error) 
 	return elems, nil
 }
 
-//func (c *CosmosLocal) trySpawningElements(helper *runnableLoadingHelper) (err *Error) {
 func (c *CosmosLocal) trySpawningElements() (err *Error) {
+	if err := c.setSyncMessageAndFirstCall(c.nextFirstSyncCall()); err != nil {
+		return err.AddStack(c)
+	}
+	defer c.unsetSyncMessageAndFirstCall()
+
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
@@ -387,7 +405,7 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 
 	// Element的Spawn逻辑。
 	if err = elem.atomos.start(func() *Error {
-		if err := elem.cosmosElementSpawn(r, i); err != nil {
+		if err := elem.cosmosElementSpawn(c, r, i); err != nil {
 			return err.AddStack(elem)
 		}
 		return nil

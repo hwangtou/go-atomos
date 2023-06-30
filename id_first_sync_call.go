@@ -28,8 +28,6 @@ type idFirstSyncCall interface {
 	setSyncMessageAndFirstCall(string) *Error
 	unsetSyncMessageAndFirstCall()
 	nextFirstSyncCall() string
-	//checkLocalFirstSyncCall(callerID SelfID) (bool, string, *Error)
-	//checkRemoteFirstSyncCall(callerID SelfID) (bool, string, *Error)
 }
 
 // idFirstSyncCallLocal

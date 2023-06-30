@@ -172,7 +172,10 @@ func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 }
 
 func (a *AtomLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	return a.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole)
+	if err := a.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole); err != nil {
+		return err.AddStack(a)
+	}
+	return nil
 }
 
 func (a *AtomLocal) getGoID() uint64 {
@@ -196,7 +199,10 @@ func (a *AtomLocal) getCurFirstSyncCall() string {
 }
 
 func (a *AtomLocal) setSyncMessageAndFirstCall(s string) *Error {
-	return a.atomos.fsc.setSyncMessageAndFirstCall(s)
+	if err := a.atomos.fsc.setSyncMessageAndFirstCall(s); err != nil {
+		return err.AddStack(a)
+	}
+	return nil
 }
 
 func (a *AtomLocal) unsetSyncMessageAndFirstCall() {
@@ -304,6 +310,9 @@ func (a *AtomLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.
 			}
 		}()
 		out, err = handler(fromID, a.atomos.GetInstance(), in)
+		if err != nil {
+			err = err.AddStack(a)
+		}
 	}()
 	return
 }
@@ -315,7 +324,7 @@ func (a *AtomLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Mess
 	}
 	defer a.unsetSyncMessageAndFirstCall()
 
-	callback(in, err)
+	callback(in, err.AddStack(a))
 }
 
 func (a *AtomLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message) (id ID, err *Error) {
@@ -332,7 +341,10 @@ func (a *AtomLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosWor
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
 	}
-	return holder.AcceptWormhole(from, wormhole)
+	if err := holder.AcceptWormhole(from, wormhole); err != nil {
+		return err.AddStack(a)
+	}
+	return nil
 }
 
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
@@ -390,7 +402,7 @@ func (a *AtomLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64
 	if err = atomPersistence.SetAtomData(a.atomos.id.Atom, data); err != nil {
 		return err.AddStack(a, data)
 	}
-	return err
+	return nil
 }
 
 func (a *AtomLocal) OnIDsReleased() {
@@ -412,7 +424,7 @@ func (a *AtomLocal) elementAtomSpawn(firstSyncCall string, current *ElementImple
 					}()
 					ar.SpawnRecover(arg, err)
 				} else {
-
+					a.Log().Fatal("Atom: Spawn recovers from panic. err=(%v)", err)
 				}
 			}
 		}

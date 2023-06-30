@@ -230,16 +230,6 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 					p.logging.PushLogging(id, LogLevel_Info, "etcd: Watcher keepalive stopped, lease is not renewed.")
 					return
 				}
-				//_, er := p.cluster.etcdClient.KeepAliveOnce(context.Background(), lease.ID)
-				//if er != nil {
-				//	p.logging.PushLogging(id, LogLevel_Err, fmt.Sprintf("etcd: Watcher keepalive failed. err=(%s)", er))
-				//	if er == rpctypes.ErrLeaseNotFound {
-				//		lease, rspCh, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
-				//		if err != nil {
-				//			p.etcdErrorHandler(err.AddStack(nil))
-				//		}
-				//	}
-				//}
 			// 更新节点信息
 			// Update node information
 			case infoBuf, more := <-p.cluster.etcdInfoCh:

@@ -140,7 +140,7 @@ func (e *ElementLocal) AsyncMessagingByName(callerID SelfID, name string, timeou
 		if err != nil {
 			err = err.AddStack(e)
 		}
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err.AddStack(e), callback)
 	})
 }
 
@@ -157,7 +157,10 @@ func (e *ElementLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 }
 
 func (e *ElementLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	return e.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole)
+	if err := e.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole); err != nil {
+		return err.AddStack(e)
+	}
+	return nil
 }
 
 func (e *ElementLocal) getGoID() uint64 {
@@ -181,7 +184,10 @@ func (e *ElementLocal) getCurFirstSyncCall() string {
 }
 
 func (e *ElementLocal) setSyncMessageAndFirstCall(s string) *Error {
-	return e.atomos.fsc.setSyncMessageAndFirstCall(s)
+	if err := e.atomos.fsc.setSyncMessageAndFirstCall(s); err != nil {
+		return err.AddStack(e)
+	}
+	return nil
 }
 
 func (e *ElementLocal) unsetSyncMessageAndFirstCall() {
@@ -209,7 +215,7 @@ func (e *ElementLocal) CosmosMain() *CosmosLocal {
 // Atom kill itself from inner
 func (e *ElementLocal) KillSelf() {
 	if err := e.atomos.PushKillMailAndWaitReply(e, false, 0); err != nil {
-		e.Log().Error("Element: KillSelf failed. err=(%v)", err)
+		e.Log().Error("Element: KillSelf failed. err=(%v)", err.AddStack(e))
 		return
 	}
 	e.Log().Info("Element: KillSelf.")
@@ -240,7 +246,7 @@ func (e *ElementLocal) Config() map[string][]byte {
 }
 
 func (e *ElementLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	e.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err, callback)
+	e.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err.AddStack(e), callback)
 }
 
 // Implementation of ElementSelfID
@@ -347,7 +353,11 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 func (e *ElementLocal) SpawnAtom(callerID SelfID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error) {
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
-	return e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	if err != nil {
+		return id, t, err.AddStack(e)
+	}
+	return id, t, nil
 }
 
 func (e *ElementLocal) ScaleGetAtomID(callerID SelfID, name string, timeout time.Duration, in proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error) {
@@ -391,7 +401,7 @@ func (e *ElementLocal) OnMessaging(fromID ID, firstSyncCall, name string, in pro
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrElementMessageHandlerNotExists,
-			"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in)
+			"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e)
 	}
 
 	func() {
@@ -423,7 +433,7 @@ func (e *ElementLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.M
 	}
 	defer e.unsetSyncMessageAndFirstCall()
 
-	callback(in, err)
+	callback(in, err.AddStack(e))
 }
 
 func (e *ElementLocal) OnScaling(fromID ID, firstSyncCall, name string, in proto.Message) (id ID, err *Error) {
@@ -438,7 +448,7 @@ func (e *ElementLocal) OnScaling(fromID ID, firstSyncCall, name string, in proto
 	handler := e.elemImpl.ScaleHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrElementScaleHandlerNotExists,
-			"Element: Scale handler not found. fromID=(%s),name=(%s),in=(%v)", fromID, name, in)
+			"Element: Scale handler not found. fromID=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e)
 	}
 
 	func() {
@@ -486,7 +496,10 @@ func (e *ElementLocal) OnWormhole(from ID, firstSyncCall string, wormhole Atomos
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
 	}
-	return holder.AcceptWormhole(from, wormhole)
+	if err := holder.AcceptWormhole(from, wormhole); err != nil {
+		return err.AddStack(e)
+	}
+	return nil
 }
 
 func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
@@ -586,7 +599,7 @@ autoLoad:
 	if err = pa.Unload(); err != nil {
 		e.Log().Error("Element: OnStopping, unload failed. id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo(), e.atomos.String(), err.AddStack(e))
-		return err
+		return err.AddStack(e)
 	}
 	return err
 }
@@ -732,7 +745,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	}
 }
 
-func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {
+func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if err == nil {
@@ -749,6 +762,12 @@ func (e *ElementLocal) cosmosElementSpawn(runnable *CosmosRunnable, current *Ele
 			}
 		}
 	}()
+
+	//err = e.setSyncMessageAndFirstCall(c.getCurFirstSyncCall())
+	//if err != nil {
+	//	return err.AddStack(e)
+	//}
+	//defer e.unsetSyncMessageAndFirstCall()
 
 	// Get data and Spawning.
 	var data proto.Message

@@ -79,13 +79,9 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	}
 	mb.running = true
 	mb.mutex.Unlock()
-	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
-		mb.mutex.Lock()
-		mb.running = false
-		mb.mutex.Unlock()
+	if err := mb.startLoop(fn); err != nil {
 		return err.AddStack(nil)
 	}
-	go mb.loop()
 	return nil
 }
 
@@ -252,7 +248,17 @@ func (mb *mailBox) removeMail(dm *mail) bool {
 	return false
 }
 
-func (mb *mailBox) loop() {
+func (mb *mailBox) startLoop(fn func() *Error) *Error {
+	waitStart := make(chan *Error, 1)
+	go mb.loop(waitStart, fn)
+	err := <-waitStart
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	return nil
+}
+
+func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 	// 获取当前进程Goroutine ID。
 	// TODO: 这种处理基本上认为不会出现getGoID失败而导致的情况，因此也没有做loop在这里退出的后续处理。
 	mb.goID = func() uint64 {
@@ -264,11 +270,24 @@ func (mb *mailBox) loop() {
 		}()
 		return getGoID()
 	}()
+	if mb.goID == 0 {
+		mb.errorLogging("Mailbox: Failed to get goID.")
+		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
+		return
+	}
 
 	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)", mb.name))
 	defer func() {
 		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)", mb.name))
 	}()
+
+	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
+		mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute start up. err=(%v)", err))
+		wait <- err.AddStack(nil)
+		return
+	}
+	wait <- nil
+
 	for {
 		if exit := func() (exit bool) {
 			exit = false

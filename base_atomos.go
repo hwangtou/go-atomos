@@ -201,7 +201,7 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCal
 	initAsyncMessageCallbackMail(am, firstSyncCall, name, async, args, err)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
-		// TODO
+		a.log.logging.pushFrameworkErrorLog("PushAsyncMessageCallbackMailAndWaitReply: Atomos is not running. name=(%s),args=(%v)", name, args)
 	}
 
 	deallocAtomosMail(am)
@@ -234,7 +234,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(from SelfID, wait bool, timeout ti
 	initKillMail(am, from, firstSyncCall)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, wait).AddStack(nil)
 	}
 	if wait {
 		_, err = am.waitReply(a, timeout)
@@ -256,7 +256,7 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from SelfID, timeout time.Dura
 	initWormholeMail(am, from, firstSyncCall, wormhole)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole).AddStack(nil)
 	}
 	_, err = am.waitReply(a, timeout)
 
@@ -360,15 +360,11 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	// 如果调用ID的Go ID为0，证明远程调用，直接返回当前的FirstSyncCall即可。
 	if callerLocalGoID == 0 {
 		if firstSyncCall = callerID.getCurFirstSyncCall(); firstSyncCall == "" {
-			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: callerID is invalid. callerID=(%v)", callerID)
+			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: callerID is invalid. callerID=(%v)", callerID).AddStack(nil)
 		}
 		if a.fsc.curFirstSyncCall == firstSyncCall {
-			return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call chain deadlock. callerID=(%v)", callerID)
+			return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call chain deadlock. callerID=(%v)", callerID).AddStack(nil)
 		}
-		//// TODO: 因为远程调用的Async循环调用会捕捉不到这种死锁，所以这里需要检查一下。后续还是要反思下这里。
-		//if strings.Split(firstSyncCall, "-")[0] == a.id.Info() {
-		//	return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call to self deadlock. callerID=(%v)", callerID)
-		//}
 		return firstSyncCall, false, nil
 	}
 

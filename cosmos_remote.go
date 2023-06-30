@@ -393,7 +393,11 @@ func (c *CosmosRemote) CosmosIsLocal() bool {
 }
 
 func (c *CosmosRemote) CosmosGetElementID(elem string) (ID, *Error) {
-	return c.getElement(elem)
+	id, err := c.getElement(elem)
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	return id, nil
 }
 
 func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error) {
@@ -401,15 +405,23 @@ func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Erro
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	return element.GetAtomID(name, nil, false)
+	id, tracker, err := element.GetAtomID(name, nil, false)
+	if err != nil {
+		return nil, nil, err.AddStack(nil)
+	}
+	return id, tracker, nil
 }
 
-func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message string, timeout time.Duration, args proto.Message) (ID ID, tracker *IDTracker, err *Error) {
+func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message string, timeout time.Duration, args proto.Message) (id ID, tracker *IDTracker, err *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	return element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
+	id, tracker, err = element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
+	if err != nil {
+		return nil, nil, err.AddStack(nil)
+	}
+	return id, tracker, nil
 }
 
 func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
@@ -417,7 +429,11 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 	if err != nil {
 		return nil, nil, err
 	}
-	return element.SpawnAtom(callerID, name, arg, nil, false)
+	id, tracker, err := element.SpawnAtom(callerID, name, arg, nil, false)
+	if err != nil {
+		return nil, nil, err.AddStack(nil)
+	}
+	return id, tracker, nil
 }
 
 func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {

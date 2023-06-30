@@ -22,11 +22,11 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 		InDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, i); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
 				if err := json.Unmarshal(buf, i); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
 			return i, nil
@@ -34,11 +34,11 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, i); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
 				if err := json.Unmarshal(buf, i); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err)
+					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
 			return i, nil
@@ -105,7 +105,7 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	timeout := m.handleExt(ext...)
 
 	m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
-		callback(m.handleReply(message, err))
+		callback(m.handleReply(message, err.AddStack(nil)))
 	})
 }
 
@@ -114,13 +114,13 @@ func (m Messenger[E, A, AT, IN, OUT]) ExecuteAtom(to Atomos, in proto.Message) (
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageArgType, "Arg type=(%T)", in)
+		return nilAT, nilIN, NewErrorf(ErrAtomMessageArgType, "Arg type=(%T)", in).AddStack(nil)
 	}
 	a, ok := to.(AT)
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageAtomType, "Atom type=(%T)", to)
+		return nilAT, nilIN, NewErrorf(ErrAtomMessageAtomType, "Atom type=(%T)", to).AddStack(nil)
 	}
 	return a, i, nil
 }
@@ -130,13 +130,13 @@ func (m Messenger[E, A, AT, IN, OUT]) ExecuteScale(to Atomos, in proto.Message) 
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageArgType, "Arg type=(%T)", in)
+		return nilAT, nilIN, NewErrorf(ErrAtomMessageArgType, "Arg type=(%T)", in).AddStack(nil)
 	}
 	a, ok := to.(AT)
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageAtomType, "Atom type=(%T)", to)
+		return nilAT, nilIN, NewErrorf(ErrAtomMessageAtomType, "Atom type=(%T)", to).AddStack(nil)
 	}
 	return a, i, nil
 }

@@ -238,7 +238,7 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 }
 
 func (a *AtomRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	return NewErrorf(ErrAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.")
+	return NewErrorf(ErrAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 
 func (a *AtomRemote) getGoID() uint64 {
