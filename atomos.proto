@@ -59,6 +59,10 @@ message ErrorCallerInfo {
 
 message Nil {}
 
+message Bool {
+  bool b = 1;
+}
+
 message Int32 {
   int32 n = 1;
 }
