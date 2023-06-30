@@ -81,5 +81,14 @@ message HASpawnArg {
   int32 id = 1;
 }
 
-message HAGreetingI {}
+message HAGreetingI {
+  // 测试模式
+  enum TestMode {
+    // 无
+    None = 0;
+    // 测试自我同步调用死锁
+    SyncSelfCallDeadlock = 1;
+  }
+  TestMode mode = 1;
+}
 message HAGreetingO {}

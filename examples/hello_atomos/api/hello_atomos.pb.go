@@ -163,8 +163,8 @@ type HelloAtomosAtomID struct {
 
 // 创建（自旋）某节点中的一个Atom，并返回AtomID
 // Create (spin) an atom in a node and return the AtomID
-func SpawnHelloAtomosAtom(c go_atomos.CosmosNode, name string, arg *HASpawnArg) (*HelloAtomosAtomID, *go_atomos.Error) {
-	id, tracker, err := c.CosmosSpawnAtom(HelloAtomosName, name, arg)
+func SpawnHelloAtomosAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *HASpawnArg) (*HelloAtomosAtomID, *go_atomos.Error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, HelloAtomosName, name, arg)
 	if id == nil {
 		return nil, err.AddStack(nil)
 	}
