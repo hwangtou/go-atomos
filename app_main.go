@@ -120,11 +120,6 @@ func Main(runnable CosmosRunnable) {
 // 该函数只能被调用一次，且必须在进程启动时调用。
 func InitCosmosProcess(cosmosName, cosmosNode string, accessLogFn, errLogFn loggingFn) (err *Error) {
 	onceInitSharedCosmosProcess.Do(func() {
-		//if IsParentProcess() {
-		//	processIDType = IDType_AppLoader
-		//} else {
-		//	processIDType = IDType_App
-		//}
 		sharedCosmosProcess, err = newCosmosProcess(cosmosName, cosmosNode, accessLogFn, errLogFn)
 	})
 	return

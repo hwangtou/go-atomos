@@ -638,5 +638,5 @@ func getRunnable(t *testing.T, process *CosmosProcess, cosmosName, cosmosNode st
 
 var (
 	testClusterEtcdEndpoints = []string{"127.0.0.1:2379"}
-	testOptionalPorts        = []uint32{10001, 10002, 10003}
+	testOptionalPorts        = []int32{10001, 10002, 10003}
 )

@@ -344,7 +344,7 @@ func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 // prepareClusterLocalNode 准备集群本地节点
 // 注意顺序，先建立etcd链接，再创建gRPC监听，以避免etcd不认可当前节点的情况，也占用了gRPC资源。
 // Notice the order, first establish the etcd link, then create the gRPC listener, to avoid the situation that etcd does not recognize the current node, and also occupy the gRPC resources.
-func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName string, ports []uint32) *Error {
+func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName string, ports []int32) *Error {
 	p.cluster.etcdVersion = time.Now().Unix()
 
 	// 获取本地IP地址，用于接受集群中其他节点的连接。

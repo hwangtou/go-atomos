@@ -8,8 +8,6 @@ import (
 
 const defaultLogMailID = 0
 
-//var processIDType = IDType_App
-
 // Cosmos的Log接口。
 // Interface of Cosmos Log.
 

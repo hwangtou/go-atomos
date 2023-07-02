@@ -22,7 +22,6 @@ message IDInfo {
   string element = 4;
   string atom = 5;
   uint64 version = 6;
-//  uint64 go_id = 7;
 }
 
 enum LogLevel {
@@ -155,7 +154,7 @@ message CosmosClusterConfig{
   // etcd节点
   repeated string etcd_endpoints = 2;
 
-  repeated uint32 optional_ports = 3;
+  repeated int32 optional_ports = 3;
 
   // 证书配置
   CertConfig enable_cert = 4;
