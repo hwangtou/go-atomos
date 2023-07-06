@@ -175,16 +175,20 @@ func (a *BaseAtomos) GetGoID() uint64 {
 	return a.mailbox.goID
 }
 
-func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, firstSyncCall, name string, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
+func (a *BaseAtomos) PushMessageMailAndWaitReply(from ID, firstSyncCall, name string, wait bool, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
 	am := allocAtomosMail()
-	initMessageMail(am, from, firstSyncCall, name, in)
+	initMessageMail(am, from, firstSyncCall, name, wait, in)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
-	replyInterface, err := am.waitReply(a, timeout)
+	if !wait {
+		deallocAtomosMail(am)
+		return nil, nil
+	}
 
+	replyInterface, err := am.waitReply(a, timeout)
 	deallocAtomosMail(am)
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
 		return nil, err.AddStack(nil)

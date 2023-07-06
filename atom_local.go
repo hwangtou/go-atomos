@@ -117,7 +117,7 @@ func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout ti
 		defer callerID.unsetSyncMessageAndFirstCall()
 	}
 
-	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
+	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, true, timeout, in)
 	if err != nil {
 		err = err.AddStack(a)
 	}
@@ -136,11 +136,13 @@ func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, timeout t
 	firstSyncCall := a.nextFirstSyncCall()
 
 	a.Parallel(func() {
-		out, err := a.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
+		out, err := a.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, callback != nil, timeout, in)
 		if err != nil {
 			err = err.AddStack(a)
 		}
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+		if callback != nil {
+			callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+		}
 	})
 }
 

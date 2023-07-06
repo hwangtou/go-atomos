@@ -253,6 +253,9 @@ func (mb *mailBox) startLoop(fn func() *Error) *Error {
 	go mb.loop(waitStart, fn)
 	err := <-waitStart
 	if err != nil {
+		mb.mutex.Lock()
+		mb.running = false
+		mb.mutex.Unlock()
 		return err.AddStack(nil)
 	}
 	return nil

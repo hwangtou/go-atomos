@@ -17,6 +17,7 @@ type atomosMessageTracker struct {
 	spawningAt, spawnAt   time.Time
 	stoppingAt, stoppedAt time.Time
 
+	current  string
 	messages map[string]MessageTrackInfo
 }
 
@@ -66,6 +67,7 @@ func (t *atomosMessageTracker) set(message string, info *IDInfo, process *Cosmos
 	m.Handling = true
 	m.LastBegin = time.Now()
 	m.Count += 1
+	t.current = message
 	t.messages[message] = m
 
 	counter := atomic.AddInt64(&t.counter, 1)
@@ -100,6 +102,7 @@ func (t *atomosMessageTracker) unset(message string) {
 	m.Total += d
 	m.Handling = false
 	t.messages[message] = m
+	t.current = ""
 
 	atomic.AddInt64(&t.counter, 1)
 }

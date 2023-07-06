@@ -111,7 +111,7 @@ func deallocAtomosMail(am *atomosMail) {
 
 // 消息邮件
 // Message Mail
-func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, arg proto.Message) {
+func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, wait bool, arg proto.Message) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailMessage
@@ -128,7 +128,9 @@ func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, arg pr
 	} else {
 		am.arg = nil
 	}
-	am.waitCh = make(chan *mailReply, 1)
+	if wait {
+		am.waitCh = make(chan *mailReply, 1)
+	}
 }
 
 // AsyncMessageCallback邮件
@@ -227,7 +229,7 @@ type mailReply struct {
 func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
-	m.waitCh = nil
+	//m.waitCh = nil
 	m.mutex.Unlock()
 	if waitCh == nil {
 		return
@@ -236,13 +238,13 @@ func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mailReply.resp = resp
 	m.mailReply.err = err
 	waitCh <- &m.mailReply
-	waitCh = nil
+	//waitCh = nil
 }
 
 func (m *atomosMail) sendReplyID(id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
-	m.waitCh = nil
+	//m.waitCh = nil
 	m.mutex.Unlock()
 	if waitCh == nil {
 		return
@@ -260,7 +262,7 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos Message waits twice.").AddStack(nil)
+		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
 	}
 	var reply *mailReply
 	if timeout == 0 {
@@ -272,7 +274,7 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 			if a.mailbox.removeMail(m.mail) {
 				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
 			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),timeout=(%v),current=(%s)", a.id, m.name, timeout, a.mt.current).AddStack(nil)
 			}
 		}
 	}
@@ -292,7 +294,7 @@ func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, e
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Message waits twice.").AddStack(nil)
+		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Message wait invalid.").AddStack(nil)
 	}
 
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.

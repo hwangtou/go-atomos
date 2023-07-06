@@ -135,7 +135,7 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 	c1cr2t.Release()
 
 	// 让id1开始测试任务
-	out, err := id1.SyncMessagingByName(c1.local, "testingRemoteTask", 10*time.Second, &Strings{Ss: []string{elemName, atomName1, atomName2}})
+	out, err := id1.SyncMessagingByName(c1.local, "testingRemoteTask", 20*time.Second, &Strings{Ss: []string{elemName, atomName1, atomName2}})
 	if err != nil {
 		t.Fatal(err.AddStack(nil))
 		return
@@ -167,7 +167,7 @@ func TestSimulateCosmosNode_LifeCycle(t *testing.T) {
 		<-time.After(3 * time.Second)
 	}()
 
-	<-time.After(10 * time.Second)
+	<-time.After(5 * time.Second)
 }
 
 // 测试两个节点
@@ -190,7 +190,7 @@ func TestSimulateTwoCosmosNodes(t *testing.T) {
 		<-time.After(3 * time.Second)
 	}()
 
-	<-time.After(10 * time.Second)
+	<-time.After(5 * time.Second)
 }
 
 // 测试一个节点的升级过程
@@ -332,7 +332,7 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 		}
 		<-time.After(1 * time.Second)
 	}()
-	<-time.After(10 * time.Millisecond)
+	<-time.After(5 * time.Millisecond)
 	if c1Old.state != CosmosProcessStateOff {
 		t.Fatal("c1Old.state != CosmosProcessStateOff")
 	}

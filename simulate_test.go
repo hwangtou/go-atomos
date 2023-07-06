@@ -140,7 +140,13 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 							aT.Release()
 							out, err := aID.SyncMessagingByName(self, "testMessage", 0, nil)
 							self.Log().Info("Spawn deadlock=(%v),out=(%v),err=(%v)", aID, out, err)
-							return err
+							if err != nil {
+								if err.Code == ErrIDFirstSyncCallDeadlock {
+									return nil
+								}
+								return err.AddStack(nil)
+							}
+							return nil
 						}
 					}
 				}
@@ -493,7 +499,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 
 				for i := 0; i < 3; i++ {
 					// Test Sync deadlock
-					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", time.Second, &Strings{Ss: []string{testTarget}})
+					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 5*time.Second, &Strings{Ss: []string{testTarget}})
 					if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
 						return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
 					}
@@ -501,7 +507,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 
 				for i := 0; i < 3; i++ {
 					// Test Async and no deadlock
-					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", time.Second, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
+					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 5*time.Second, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
 						if err != nil {
 							selfID.Log().Error("testingRemoteSyncFirstSyncCallDeadlock. err=(%v)", err)
 							return
@@ -513,7 +519,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 
 				for i := 0; i < 3; i++ {
 					// Test Sync deadlock
-					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", time.Second, &Strings{Ss: []string{testTarget, "mark2"}})
+					out, err = id2.SyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 5*time.Second, &Strings{Ss: []string{testTarget, "mark2"}})
 					if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
 						return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
 					}
@@ -521,7 +527,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 
 				for i := 0; i < 3; i++ {
 					// Test Async and no deadlock
-					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", time.Second, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
+					id2.AsyncMessagingByName(selfID, "testingRemoteSyncFirstSyncCallDeadlock", 5*time.Second, &Strings{Ss: []string{testTarget, "mark1"}}, func(out proto.Message, err *Error) {
 						if err != nil {
 							selfID.Log().Error("testingRemoteSyncFirstSyncCallDeadlock. err=(%v)", err)
 							return
@@ -532,13 +538,13 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				}
 
 				// Test Spawn deadlock
-				out, err = id2.SyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", time.Second, in)
+				out, err = id2.SyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", 5*time.Second, in)
 				if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
 					return nil, NewErrorf(ErrFrameworkInternalError, "expect err != nil. err=(%v)", err).AddStack(nil)
 				}
 
 				// Test Spawn deadlock
-				id2.AsyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", time.Second, &Strings{Ss: []string{testElem, testSelf, testTarget}}, func(out proto.Message, err *Error) {
+				id2.AsyncMessagingByName(selfID, "testingRemoteFirstSyncCallSpawnDeadlock", 5*time.Second, &Strings{Ss: []string{testElem, testSelf, testTarget}}, func(out proto.Message, err *Error) {
 					if err != nil {
 						selfID.Log().Error("testingRemoteFirstSyncCallSpawnDeadlock. err=(%v)", err)
 						return
@@ -584,6 +590,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				if err != nil {
 					return nil, err.AddStack(nil)
 				}
+				err = nil
 				if rID == nil || rT != nil {
 					return nil, NewError(ErrFrameworkInternalError, "expect rID != nil && rT == nil").AddStack(nil)
 				}

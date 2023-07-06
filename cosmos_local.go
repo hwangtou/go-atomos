@@ -259,7 +259,7 @@ func (c *CosmosLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint
 
 	// Unload local elements and its atomos.
 	for i := len(c.runnable.implementOrder) - 1; i >= 0; i -= 1 {
-		name := c.runnable.implementOrder[i].Interface.Config.Name
+		name := c.runnable.implementOrder[i]
 		elem, has := c.elements[name]
 		if !has {
 			continue
@@ -328,7 +328,13 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
-	for _, impl := range c.runnable.implementOrder {
+	for _, name := range c.runnable.implementOrder {
+		impl := c.runnable.implements[name]
+		if impl == nil {
+			err = NewErrorf(ErrMainElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)
+			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%s)", name, err.Message)
+			break
+		}
 		elem, e := c.cosmosElementSpawn(c.runnable, impl)
 		if e != nil {
 			err = e.AddStack(c)

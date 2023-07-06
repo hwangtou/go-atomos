@@ -117,7 +117,7 @@ func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout
 		defer callerID.unsetSyncMessageAndFirstCall()
 	}
 
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, true, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}
@@ -136,7 +136,7 @@ func (e *ElementLocal) AsyncMessagingByName(callerID SelfID, name string, timeou
 	firstSyncCall := e.nextFirstSyncCall()
 
 	e.Parallel(func() {
-		out, err := e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
+		out, err := e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, callback != nil, timeout, in)
 		if err != nil {
 			err = err.AddStack(e)
 		}
@@ -683,6 +683,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 		}
 		return nil
 	}); err != nil {
+		//e.atomos.stop() // TODO: 这里的stop是不是应该放到start里面去？
 		e.elementAtomRelease(atom)
 		return nil, nil, err.AddStack(nil)
 	}

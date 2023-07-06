@@ -95,11 +95,12 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 	c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	if info.Elements != nil {
 		for elemName, idInfo := range info.Elements {
-			e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+			//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+			e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 			if !has {
 				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			}
-			c.elements[elemName] = newElementRemote(c, idInfo, e, version)
+			c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 		}
 	}
 	c.refresh()
@@ -117,11 +118,12 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 		if info.Elements != nil {
 			for elemName, idInfo := range info.Elements {
-				e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+				//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
+				e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 				if !has {
 					c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 				}
-				c.elements[elemName] = newElementRemote(c, idInfo, e, version)
+				c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 			}
 		}
 		c.refresh()
@@ -144,14 +146,15 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 	// If the element is not changed, it will be ignored.
 	if info.Elements != nil {
 		for elemName, newInfo := range info.Elements {
-			e, has := c.process.local.runnable.interfaces[elemName]
+			//e, has := c.process.local.runnable.interfaces[elemName]
+			e, has := c.process.local.runnable.implements[elemName]
 			if !has {
 				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			}
 			if oldElem, has := c.elements[elemName]; has {
 				oldElem.setDisable()
 			} else {
-				c.elements[elemName] = newElementRemote(c, newInfo, e, version)
+				c.elements[elemName] = newElementRemote(c, newInfo, e.Interface, version)
 			}
 		}
 	}

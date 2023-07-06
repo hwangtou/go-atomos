@@ -683,7 +683,7 @@ func checkAtomLocalInElement(t *testing.T, elem *ElementLocal, name string, isNo
 		}
 	case AtomosWaiting:
 		if !atom.atomos.IsInState(AtomosWaiting) {
-			return NewError(ErrFrameworkRecoverFromPanic, "Atom should be waiting").AddStack(nil)
+			return NewErrorf(ErrFrameworkRecoverFromPanic, "Atom should be waiting. state=(%v)", atom.atomos.state).AddStack(nil)
 		}
 	case AtomosBusy:
 		if !atom.atomos.IsInState(AtomosBusy) {

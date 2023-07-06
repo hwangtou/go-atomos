@@ -49,11 +49,11 @@ type CosmosNode interface {
 // CosmosRunnable 是Cosmos的可运行实例，每个Atomos的可执行文件，都需要实现和提供这个对象。
 // CosmosRunnable is the runnable instance of Cosmos, each executable file of Atomos needs to implement and provide this object.
 type CosmosRunnable struct {
-	config         *Config
-	interfaces     map[string]*ElementInterface
-	interfaceOrder []*ElementInterface
+	config *Config
+	//interfaces     map[string]*ElementInterface
+	//interfaceOrder []*ElementInterface
 	implements     map[string]*ElementImplementation
-	implementOrder []*ElementImplementation
+	implementOrder []string
 	mainScript     CosmosMainScript
 	mainRouter     CosmosMainGlobalRouter
 }
@@ -68,13 +68,13 @@ func (r *CosmosRunnable) Check() *Error {
 	if err := r.config.Check(); err != nil {
 		return err.AddStack(nil)
 	}
-	// Interfaces
-	if r.interfaces == nil {
-		r.interfaces = map[string]*ElementInterface{}
-	}
-	if len(r.interfaces) != len(r.interfaceOrder) {
-		return NewError(ErrRunnableInterfaceInvalid, "Runnable: Interface order not match.").AddStack(nil)
-	}
+	//// Interfaces
+	//if r.interfaces == nil {
+	//	r.interfaces = map[string]*ElementInterface{}
+	//}
+	//if len(r.interfaces) != len(r.interfaceOrder) {
+	//	return NewError(ErrRunnableInterfaceInvalid, "Runnable: Interface order not match.").AddStack(nil)
+	//}
 	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
@@ -89,29 +89,29 @@ func (r *CosmosRunnable) Check() *Error {
 	return nil
 }
 
-// AddElementInterface CosmosRunnable构造器方法，用于添加ElementInterface（接口）。
-// Construct method of CosmosRunnable, uses to add ElementInterface.
-func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
-	if r.interfaces == nil {
-		r.interfaces = map[string]*ElementInterface{}
-	}
-	if _, has := r.interfaces[i.Config.Name]; !has {
-		r.interfaces[i.Config.Name] = i
-		r.interfaceOrder = append(r.interfaceOrder, i)
-	}
-	return r
-}
+//// AddElementInterface CosmosRunnable构造器方法，用于添加ElementInterface（接口）。
+//// Construct method of CosmosRunnable, uses to add ElementInterface.
+//func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
+//	if r.interfaces == nil {
+//		r.interfaces = map[string]*ElementInterface{}
+//	}
+//	if _, has := r.interfaces[i.Config.Name]; !has {
+//		r.interfaces[i.Config.Name] = i
+//		r.interfaceOrder = append(r.interfaceOrder, i)
+//	}
+//	return r
+//}
 
 // AddElementImplementation CosmosRunnable构造器方法，用于添加ElementImplementation（实现）。
 // Construct method of CosmosRunnable, uses to add ElementImplementation.
 func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
-	r.AddElementInterface(i.Interface)
+	//r.AddElementInterface(i.Interface)
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
 	}
 	if _, has := r.implements[i.Interface.Config.Name]; !has {
 		r.implements[i.Interface.Config.Name] = i
-		r.implementOrder = append(r.implementOrder, i)
+		r.implementOrder = append(r.implementOrder, i.Interface.Config.Name)
 	}
 	return r
 }
