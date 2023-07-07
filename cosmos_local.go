@@ -155,7 +155,7 @@ func (c *CosmosLocal) CosmosIsLocal() bool {
 }
 
 func (c *CosmosLocal) CosmosGetElementID(elemName string) (ID, *Error) {
-	e, err := c.getLocalElement(elemName)
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
 		return nil, err.AddStack(c)
 	}
@@ -163,7 +163,7 @@ func (c *CosmosLocal) CosmosGetElementID(elemName string) (ID, *Error) {
 }
 
 func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *IDTracker, err *Error) {
-	e, err := c.getLocalElement(elemName)
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -175,7 +175,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *ID
 }
 
 func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message string, timeout time.Duration, args proto.Message) (id ID, tracker *IDTracker, err *Error) {
-	e, err := c.getLocalElement(elemName)
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -187,7 +187,7 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 }
 
 func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
-	e, err := c.getLocalElement(elemName)
+	e, err := c.getGlobalElement(elemName)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -258,8 +258,8 @@ func (c *CosmosLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint
 	c.Log().Info("Cosmos: Now exiting.")
 
 	// Unload local elements and its atomos.
-	for i := len(c.runnable.implementOrder) - 1; i >= 0; i -= 1 {
-		name := c.runnable.implementOrder[i]
+	for i := len(c.runnable.spawnOrder) - 1; i >= 0; i -= 1 {
+		name := c.runnable.spawnOrder[i]
 		elem, has := c.elements[name]
 		if !has {
 			continue
@@ -290,6 +290,45 @@ func (c *CosmosLocal) getClusterElementsInfo() map[string]*IDInfo {
 	}
 	c.mutex.RUnlock()
 	return m
+}
+
+func (c *CosmosLocal) getGlobalElement(elemName string) (Element, *Error) {
+	if !c.process.cluster.enable {
+		return c.getLocalElement(elemName)
+	}
+	router := c.runnable.mainRouter
+	if router == nil {
+		e, err := c.getLocalElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
+	}
+
+	nodeName, has := router.GetCosmosNodeName(elemName, "")
+	if !has {
+		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", elemName).AddStack(c)
+	}
+
+	if nodeName == c.GetNodeName() {
+		e, err := c.getLocalElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
+	} else {
+		c.process.cluster.remoteMutex.RLock()
+		defer c.process.cluster.remoteMutex.RUnlock()
+		cr, has := c.process.cluster.remoteCosmos[nodeName]
+		if !has {
+			return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Remote element not found. name=(%s)", elemName).AddStack(c)
+		}
+		e, err := cr.getElement(elemName)
+		if err != nil {
+			return nil, err.AddStack(c)
+		}
+		return e, nil
+	}
 }
 
 func (c *CosmosLocal) getLocalElement(name string) (elem *ElementLocal, err *Error) {
@@ -328,7 +367,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
-	for _, name := range c.runnable.implementOrder {
+	for _, name := range c.runnable.spawnOrder {
 		impl := c.runnable.implements[name]
 		if impl == nil {
 			err = NewErrorf(ErrMainElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)

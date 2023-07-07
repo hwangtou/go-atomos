@@ -312,7 +312,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -353,7 +353,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 func (e *ElementLocal) SpawnAtom(callerID SelfID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error) {
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
-	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
 	if err != nil {
 		return id, t, err.AddStack(e)
 	}
@@ -611,16 +611,24 @@ func (e *ElementLocal) OnIDsReleased() {
 // 内部实现
 // INTERNAL
 
-func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote, fscFree bool) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
-	firstSyncCall, toDefer, err := e.atomos.syncGetFirstSyncCallName(callerID)
-	if err != nil {
-		return nil, nil, err.AddStack(e)
-	}
-	if toDefer {
-		defer callerID.unsetSyncMessageAndFirstCall()
+
+	// TODO：临时解决方案而已
+	var firstSyncCall string
+	if !fscFree {
+		fsc, toDefer, err := e.atomos.syncGetFirstSyncCallName(callerID)
+		if err != nil {
+			return nil, nil, err.AddStack(e)
+		}
+		firstSyncCall = fsc
+		if toDefer {
+			defer callerID.unsetSyncMessageAndFirstCall()
+		}
+	} else {
+		firstSyncCall = e.atomos.fsc.nextFirstSyncCall()
 	}
 
 	// Element的容器逻辑。

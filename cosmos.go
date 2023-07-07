@@ -52,10 +52,11 @@ type CosmosRunnable struct {
 	config *Config
 	//interfaces     map[string]*ElementInterface
 	//interfaceOrder []*ElementInterface
-	implements     map[string]*ElementImplementation
-	implementOrder []string
-	mainScript     CosmosMainScript
-	mainRouter     CosmosMainGlobalRouter
+	implements   map[string]*ElementImplementation
+	spawnElement map[string]bool
+	spawnOrder   []string
+	mainScript   CosmosMainScript
+	mainRouter   CosmosMainGlobalRouter
 }
 
 // Check 检查CosmosRunnable是否正确构造。
@@ -79,9 +80,9 @@ func (r *CosmosRunnable) Check() *Error {
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
 	}
-	if len(r.implements) != len(r.implementOrder) {
-		return NewError(ErrRunnableImplementInvalid, "Runnable: Implement not match.").AddStack(nil)
-	}
+	//if len(r.implements) != len(r.implementOrder) {
+	//	return NewError(ErrRunnableImplementInvalid, "Runnable: Implement not match.").AddStack(nil)
+	//}
 	// MainScript
 	if r.mainScript == nil {
 		return NewError(ErrRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
@@ -111,8 +112,23 @@ func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *Cos
 	}
 	if _, has := r.implements[i.Interface.Config.Name]; !has {
 		r.implements[i.Interface.Config.Name] = i
-		r.implementOrder = append(r.implementOrder, i.Interface.Config.Name)
+		//r.implementOrder = append(r.implementOrder, i.Interface.Config.Name)
 	}
+	return r
+}
+
+func (r *CosmosRunnable) SetElementSpawn(name string) *CosmosRunnable {
+	if r.spawnElement == nil {
+		r.spawnElement = map[string]bool{}
+	}
+	if _, has := r.implements[name]; !has {
+		return r
+	}
+	if _, has := r.spawnElement[name]; has {
+		return r
+	}
+	r.spawnElement[name] = true
+	r.spawnOrder = append(r.spawnOrder, name)
 	return r
 }
 

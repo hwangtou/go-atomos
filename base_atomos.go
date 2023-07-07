@@ -392,7 +392,7 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
 			if eFirst := a.fsc.getCurFirstSyncCall(); callerFirst == eFirst {
 				// 如果一样，则是循环调用死锁，返回错误。
-				return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),firstSyncCall=(%s)", callerID, callerFirst).AddStack(nil)
+				return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),callerFSC=(%s),FSC=(%s)", callerID, callerFirst, eFirst).AddStack(nil)
 			} else {
 				// 这些情况都检查过，则可以正常调用。 如果是同一个，则证明调用ID就是在自己的同步调用中调用的，需要把之前的同步调用链传递下去。
 				// （所以一定要保护好SelfID，只应该让当前atomos去持有）。
