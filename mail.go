@@ -267,25 +267,25 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 	mb.goID = func() uint64 {
 		defer func() {
 			if r := recover(); r != nil {
-				mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)",
+				mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)\n",
 					r, string(debug.Stack())))
 			}
 		}()
 		return getGoID()
 	}()
 	if mb.goID == 0 {
-		mb.errorLogging("Mailbox: Failed to get goID.")
+		mb.errorLogging("Mailbox: Failed to get goID.\n")
 		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
 		return
 	}
 
-	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)", mb.name))
+	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)\n", mb.name))
 	defer func() {
-		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)", mb.name))
+		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)\n", mb.name))
 	}()
 
 	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
-		mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute start up. err=(%v)", err))
+		mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute start up. err=(%v)\n", err))
 		wait <- err.AddStack(nil)
 		return
 	}
@@ -297,7 +297,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
+					mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. reason=(%v),stack=(%s)\n",
 						r, string(debug.Stack())))
 				}
 			}()
@@ -320,7 +320,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					if m := curMail.mail; m != nil {
 						if m.executeStop {
 							if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-								mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop. err=(%v)", err))
+								mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop. err=(%v)\n", err))
 							}
 						}
 						// Wait channel.
@@ -328,7 +328,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					}
 					if l := curMail.log; l != nil {
 						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-							mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop, logMail. err=(%v)", err))
+							mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop, logMail. err=(%v)\n", err))
 						}
 					}
 					return

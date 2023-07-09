@@ -113,11 +113,11 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 	}
 	switch req.Id.Type {
 	case IDType_Atom:
-		atom := elem.getAtom(req.Id.Atom)
-		if atom != nil {
-			rsp.State = int32(atom.State())
-		} else {
+		atom, err := elem.getAtomFromRemote(req.Id.Atom)
+		if err != nil {
 			rsp.State = int32(AtomosHalt)
+		} else {
+			rsp.State = int32(atom.State())
 		}
 	case IDType_Element:
 		rsp.State = int32(elem.State())
@@ -136,11 +136,11 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	}
 	switch req.Id.Type {
 	case IDType_Atom:
-		atom := elem.getAtom(req.Id.Atom)
-		if atom != nil {
-			rsp.IdleTime = int64(atom.IdleTime())
-		} else {
+		atom, err := elem.getAtomFromRemote(req.Id.Atom)
+		if err != nil {
 			rsp.IdleTime = 0
+		} else {
+			rsp.IdleTime = int64(atom.IdleTime())
 		}
 	case IDType_Element:
 		rsp.IdleTime = int64(elem.IdleTime())
@@ -244,13 +244,12 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			return rsp, nil
 		}
 		if req.To.Type == IDType_Atom {
-			atom := elem.getAtom(req.To.Atom)
-			if atom != nil {
-				id = atom
-			} else {
-				rsp.Error = NewErrorf(ErrAtomNotExists, "CosmosRemote: SyncMessagingByName invalid atom. atom=(%v)", req.To.Atom).AddStack(nil)
+			atom, err := elem.getAtomFromRemote(req.To.Atom)
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
 				return rsp, nil
 			}
+			id = atom
 		} else {
 			id = elem
 		}

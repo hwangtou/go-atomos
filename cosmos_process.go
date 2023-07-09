@@ -53,7 +53,6 @@ type CosmosProcess struct {
 
 type CosmosMainGlobalRouter interface {
 	GetCosmosNodeName(element, atom string) (string, bool)
-	GetCosmosNodeAddress(node string) string
 }
 
 // CosmosProcessState

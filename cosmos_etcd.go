@@ -326,7 +326,10 @@ func (p *CosmosProcess) tryUnsettingCurrentAndUpdateNodeInfo() *Error {
 	if err != nil {
 		return err.AddStack(nil)
 	}
-	p.cluster.etcdInfoCh <- infoBuf
+	select {
+	case p.cluster.etcdInfoCh <- infoBuf:
+	default:
+	}
 	return nil
 }
 

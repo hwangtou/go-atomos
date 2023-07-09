@@ -3,7 +3,6 @@ package go_atomos
 import (
 	"fmt"
 	"os"
-	"sync"
 	"syscall"
 )
 
@@ -19,7 +18,7 @@ type App struct {
 
 	env     *appEnv
 	logging *appLogging
-	socket  *appUDSServer
+	//socket  *appUDSServer
 }
 
 func NewCosmosNodeApp(configPath string) (*App, *Error) {
@@ -50,16 +49,16 @@ func NewCosmosNodeApp(configPath string) (*App, *Error) {
 			exitCh:         make(chan bool, 1),
 		},
 		logging: logging,
-		socket: &appUDSServer{
-			config:         conf,
-			logging:        logging,
-			addr:           nil,
-			listener:       nil,
-			mutex:          sync.Mutex{},
-			connID:         0,
-			connMap:        map[int32]*AppUDSConn{},
-			commandHandler: udsNodeCommandHandler,
-		},
+		//socket: &appUDSServer{
+		//	config:         conf,
+		//	logging:        logging,
+		//	addr:           nil,
+		//	listener:       nil,
+		//	mutex:          sync.Mutex{},
+		//	connID:         0,
+		//	connMap:        map[int32]*AppUDSConn{},
+		//	commandHandler: udsNodeCommandHandler,
+		//},
 	}, nil
 }
 
@@ -91,16 +90,16 @@ func NewCosmosSupervisorApp(configPath string) (*App, *Error) {
 			exitCh:         make(chan bool, 1),
 		},
 		logging: logging,
-		socket: &appUDSServer{
-			config:         conf,
-			logging:        logging,
-			addr:           nil,
-			listener:       nil,
-			mutex:          sync.Mutex{},
-			connID:         0,
-			connMap:        map[int32]*AppUDSConn{},
-			commandHandler: supervisorCommandHandlers,
-		},
+		//socket: &appUDSServer{
+		//	config:         conf,
+		//	logging:        logging,
+		//	addr:           nil,
+		//	listener:       nil,
+		//	mutex:          sync.Mutex{},
+		//	connID:         0,
+		//	connMap:        map[int32]*AppUDSConn{},
+		//	commandHandler: supervisorCommandHandlers,
+		//},
 	}, nil
 }
 
@@ -112,9 +111,9 @@ func (a *App) Check() (isRunning bool, processID int, err *Error) {
 		return isRunning, processID, err.AddStack(nil)
 	}
 	// Socket
-	if err = a.socket.check(); err != nil {
-		return false, 0, err.AddStack(nil)
-	}
+	//if err = a.socket.check(); err != nil {
+	//	return false, 0, err.AddStack(nil)
+	//}
 	return false, 0, nil
 }
 
@@ -186,18 +185,18 @@ func (a *App) LaunchApp() *Error {
 	if err := a.env.daemon(); err != nil {
 		return err.AddStack(nil)
 	}
-	if err := a.socket.daemon(); err != nil {
-		return err.AddStack(nil)
-	}
+	//if err := a.socket.daemon(); err != nil {
+	//	return err.AddStack(nil)
+	//}
 	return nil
 }
 
 // Close
 
 func (a *App) close() {
-	a.socket.close()
+	//a.socket.close()
 	a.env.close()
-	a.logging.Close()
+	//a.logging.Close()
 }
 
 // Exit

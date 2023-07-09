@@ -155,7 +155,7 @@ func (c *CosmosLocal) CosmosIsLocal() bool {
 }
 
 func (c *CosmosLocal) CosmosGetElementID(elemName string) (ID, *Error) {
-	e, err := c.getGlobalElement(elemName)
+	e, err := c.getGlobalElement(elemName, "")
 	if err != nil {
 		return nil, err.AddStack(c)
 	}
@@ -163,7 +163,7 @@ func (c *CosmosLocal) CosmosGetElementID(elemName string) (ID, *Error) {
 }
 
 func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *IDTracker, err *Error) {
-	e, err := c.getGlobalElement(elemName)
+	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -175,7 +175,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string) (id ID, tracker *ID
 }
 
 func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message string, timeout time.Duration, args proto.Message) (id ID, tracker *IDTracker, err *Error) {
-	e, err := c.getGlobalElement(elemName)
+	e, err := c.getGlobalElement(elemName, "")
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -187,7 +187,7 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 }
 
 func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message) (ID, *IDTracker, *Error) {
-	e, err := c.getGlobalElement(elemName)
+	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -292,7 +292,7 @@ func (c *CosmosLocal) getClusterElementsInfo() map[string]*IDInfo {
 	return m
 }
 
-func (c *CosmosLocal) getGlobalElement(elemName string) (Element, *Error) {
+func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Error) {
 	if !c.process.cluster.enable {
 		return c.getLocalElement(elemName)
 	}
@@ -305,7 +305,7 @@ func (c *CosmosLocal) getGlobalElement(elemName string) (Element, *Error) {
 		return e, nil
 	}
 
-	nodeName, has := router.GetCosmosNodeName(elemName, "")
+	nodeName, has := router.GetCosmosNodeName(elemName, atomName)
 	if !has {
 		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", elemName).AddStack(c)
 	}

@@ -805,12 +805,21 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 	return nil
 }
 
-func (e *ElementLocal) getAtom(name string) *AtomLocal {
+func (e *ElementLocal) getAtomFromRemote(name string) (*AtomLocal, *Error) {
 	e.lock.RLock()
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
-		return atom
+		return atom, nil
 	}
-	return nil
+	// Auto data persistence.
+	persistence, ok := e.elemImpl.Developer.(AutoData)
+	if !ok || persistence == nil {
+		return nil, nil
+	}
+	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false, true)
+	if err != nil {
+		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
+	}
+	return atom, nil
 }
