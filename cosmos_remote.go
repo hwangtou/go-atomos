@@ -285,10 +285,10 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
 		// 要从调用者开始算起，所以要从调用者的ID中获取。
 		firstSyncCall = callerID.nextFirstSyncCall()
-		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-			return out, err.AddStack(nil)
-		}
-		defer callerID.unsetSyncMessageAndFirstCall()
+		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		//	return out, err.AddStack(nil)
+		//}
+		//defer callerID.unsetSyncMessageAndFirstCall()
 	} else {
 		firstSyncCall = callerFirst
 	}
@@ -452,10 +452,10 @@ func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string
 	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
 		// 要从调用者开始算起，所以要从调用者的ID中获取。
 		firstSyncCall = callerID.nextFirstSyncCall()
-		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-			return err.AddStack(nil)
-		}
-		defer callerID.unsetSyncMessageAndFirstCall()
+		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		//	return err.AddStack(nil)
+		//}
+		//defer callerID.unsetSyncMessageAndFirstCall()
 	} else {
 		firstSyncCall = callerFirst
 	}

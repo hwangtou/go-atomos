@@ -12,6 +12,14 @@ var (
 	LogStderr = false
 )
 
+func SetLogStdout(b bool) {
+	LogStdout = b
+}
+
+func SetLogStderr(b bool) {
+	LogStderr = b
+}
+
 const (
 	udsConnReadBufSize = 1024
 )

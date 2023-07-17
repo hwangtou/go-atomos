@@ -237,7 +237,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				if !more {
 					return
 				}
-				_, er := p.cluster.etcdClient.Put(context.Background(), key, string(infoBuf), clientv3.WithLease(lease.ID))
+				_, er := p.cluster.etcdClient.Put(context.Background(), key, infoBuf, clientv3.WithLease(lease.ID))
 				if er != nil {
 					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to update cluster version info. err=(%s)", er).AddStack(nil))
 				}

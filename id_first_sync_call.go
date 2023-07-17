@@ -62,7 +62,7 @@ func (f *idFirstSyncCallLocal) setSyncMessageAndFirstCall(firstSyncCall string) 
 	f.mutex.Lock()
 	if f.curFirstSyncCall != "" {
 		f.mutex.Unlock()
-		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty.").AddStack(nil)
+		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty. first=(%s),cur=(%s)", firstSyncCall, f.curFirstSyncCall).AddStack(nil)
 	}
 	f.curFirstSyncCall = firstSyncCall
 	f.mutex.Unlock()

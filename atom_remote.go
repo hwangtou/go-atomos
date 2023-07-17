@@ -90,10 +90,10 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
 		// 要从调用者开始算起，所以要从调用者的ID中获取。
 		firstSyncCall = callerID.nextFirstSyncCall()
-		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-			return nil, err.AddStack(nil)
-		}
-		defer callerID.unsetSyncMessageAndFirstCall()
+		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		//	return nil, err.AddStack(nil)
+		//}
+		//defer callerID.unsetSyncMessageAndFirstCall()
 	} else {
 		firstSyncCall = callerFirst
 	}
@@ -209,10 +209,10 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
 		// 要从调用者开始算起，所以要从调用者的ID中获取。
 		firstSyncCall = callerID.nextFirstSyncCall()
-		if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-			return err.AddStack(nil)
-		}
-		defer callerID.unsetSyncMessageAndFirstCall()
+		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+		//	return err.AddStack(nil)
+		//}
+		//defer callerID.unsetSyncMessageAndFirstCall()
 	} else {
 		firstSyncCall = callerFirst
 	}

@@ -383,11 +383,11 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 		if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
 			// 要从调用者开始算起，所以要从调用者的ID中获取。
 			firstSyncCall = callerID.nextFirstSyncCall()
-			if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-				return "", false, err.AddStack(nil)
-			}
-			//defer callerID.unsetSyncMessageAndFirstCall()
-			toDefer = true
+			//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
+			//	return "", false, err.AddStack(nil)
+			//}
+			////defer callerID.unsetSyncMessageAndFirstCall()
+			//toDefer = true
 		} else {
 			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
 			if eFirst := a.fsc.getCurFirstSyncCall(); callerFirst == eFirst {
