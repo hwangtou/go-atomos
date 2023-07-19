@@ -397,7 +397,7 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 			Cosmos:  e.info.Cosmos,
 			Node:    e.info.Node,
 			Element: e.info.Element,
-			Atom:    name,
+			Atom:    "",
 			Version: 0,
 			//GoId:    0,
 		},
@@ -413,10 +413,10 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	}
 
 	e.lock.Lock()
-	a, has := e.atoms[name]
+	a, has := e.atoms[rsp.Id.Atom]
 	if !has {
 		a = newAtomRemote(e, rsp.Id, e.version)
-		e.atoms[name] = a
+		e.atoms[rsp.Id.Atom] = a
 	}
 	e.lock.Unlock()
 
