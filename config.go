@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"gopkg.in/yaml.v2"
 	"os"
+	"strings"
 )
 
 func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
@@ -34,6 +35,10 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 		EtcPath:           y.EtcPath,
 		EnableCluster:     nil,
 		Customize:         map[string][]byte{},
+	}
+	if strings.ToLower(y.LogSTD) == "true" {
+		LogStdout = true
+		LogStderr = true
 	}
 	if cluster := y.EnableCluster; cluster != nil {
 		conf.EnableCluster = &CosmosClusterConfig{
@@ -151,6 +156,7 @@ type NodeYAMLConfig struct {
 	LogLevel   string `yaml:"log-level"`
 	LogPath    string `yaml:"log-path"`
 	LogMaxSize int    `yaml:"log-max-size"`
+	LogSTD     string `yaml:"log-std"`
 
 	BuildPath string `yaml:"build-path"`
 	BinPath   string `yaml:"bin-path"`

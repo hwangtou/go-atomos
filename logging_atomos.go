@@ -133,3 +133,8 @@ func (c *loggingAtomos) logging(lm *LogMail) {
 		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", t, msg))
 	}
 }
+
+func (c *loggingAtomos) Writer(buf []byte) (n int, err error) {
+	c.accessLog(string(buf))
+	return len(buf), nil
+}
