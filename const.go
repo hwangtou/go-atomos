@@ -31,3 +31,9 @@ const (
 const (
 	ElementBroadcastName = "Broadcast"
 )
+
+var muteKeepaliveLog = true
+
+func MuteKeepaliveLog(b bool) {
+	muteKeepaliveLog = b
+}
