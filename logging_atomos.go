@@ -42,7 +42,7 @@ func (c *loggingAtomos) stop() {
 		mail:   nil,
 		log:    &LogMail{},
 	}); !ok {
-		c.errorLog("loggingAtomos: Stop failed.")
+		c.errorLog("loggingAtomos: Stop failed.\n")
 	}
 	<-c.exitCh
 }
@@ -62,7 +62,7 @@ func (c *loggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 		log:    lm,
 	}
 	if ok := c.logBox.pushTail(m); !ok {
-		c.errorLog(fmt.Sprintf("loggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)", id, level, msg))
+		c.errorLog(fmt.Sprintf("loggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)\n", id, level, msg))
 	}
 }
 

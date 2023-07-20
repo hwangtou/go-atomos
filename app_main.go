@@ -164,7 +164,7 @@ func redirectSTD() (func(), *Error) {
 
 	go func() {
 		for str := range out {
-			SharedCosmosProcess().Self().Log().Error(str)
+			SharedCosmosProcess().logging.errorLog(str)
 		}
 	}()
 
