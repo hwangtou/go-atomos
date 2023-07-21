@@ -1,7 +1,6 @@
 package go_atomos
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -93,16 +92,16 @@ func Main(runnable CosmosRunnable) {
 		app.logging.Close()
 		return
 	} else {
-		dFn, err := redirectSTD()
-		if err != nil {
-			msg := fmt.Sprintf("App: Redirect STD failed. err=(%v)", err)
-			SharedCosmosProcess().Self().Log().Fatal(msg)
-			log.Printf(msg)
-			os.Exit(1)
-		}
-		if dFn != nil {
-			defer dFn()
-		}
+		//dFn, err := redirectSTD()
+		//if err != nil {
+		//	msg := fmt.Sprintf("App: Redirect STD failed. err=(%v)", err)
+		//	SharedCosmosProcess().Self().Log().Fatal(msg)
+		//	log.Printf(msg)
+		//	os.Exit(1)
+		//}
+		//if dFn != nil {
+		//	defer dFn()
+		//}
 
 		if err = app.LaunchApp(); err != nil {
 			msg := fmt.Sprintf("App: Launch app failed. err=(%v)", err)
@@ -145,33 +144,34 @@ func SharedCosmosProcess() *CosmosProcess {
 	return sharedCosmosProcess
 }
 
-func redirectSTD() (func(), *Error) {
-	reader, writer, er := os.Pipe()
-	if er != nil {
-		return nil, NewErrorf(ErrFrameworkInternalError, "App: RedirectSTD create pipe failed. err=(%v)", er)
-	}
-
-	os.Stdout = writer
-	os.Stderr = writer
-
-	out := make(chan string)
-	go func() {
-		scanner := bufio.NewScanner(reader)
-		for scanner.Scan() {
-			out <- scanner.Text()
-		}
-	}()
-
-	go func() {
-		for str := range out {
-			SharedCosmosProcess().logging.errorLog(str)
-		}
-	}()
-
-	// Ensure that the writes finish before we exit.
-	return func() {
-		writer.Close()
-		reader.Close()
-		close(out)
-	}, nil
-}
+// TODO: Memory Leak
+//func redirectSTD() (func(), *Error) {
+//	reader, writer, er := os.Pipe()
+//	if er != nil {
+//		return nil, NewErrorf(ErrFrameworkInternalError, "App: RedirectSTD create pipe failed. err=(%v)", er)
+//	}
+//
+//	os.Stdout = writer
+//	os.Stderr = writer
+//
+//	out := make(chan string)
+//	go func() {
+//		scanner := bufio.NewScanner(reader)
+//		for scanner.Scan() {
+//			out <- scanner.Text()
+//		}
+//	}()
+//
+//	go func() {
+//		for str := range out {
+//			SharedCosmosProcess().logging.errorLog(str)
+//		}
+//	}()
+//
+//	// Ensure that the writes finish before we exit.
+//	return func() {
+//		writer.Close()
+//		reader.Close()
+//		close(out)
+//	}, nil
+//}
