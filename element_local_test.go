@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -161,6 +162,72 @@ func TestElementLocalBase(t *testing.T) {
 		return
 	}
 	time.Sleep(10 * time.Millisecond)
+}
+
+func TestElementLocal_SpawnConditions(t *testing.T) {
+	initTestFakeCosmosProcess(t)
+	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
+		return
+	}
+	process := SharedCosmosProcess()
+	elemName := "testElement"
+	testElem := process.local.elements[elemName]
+	testAtomName := "testAtom"
+	testAtomSpawnConcurrency = true
+
+	// Check Spawn state.
+	if err := checkElementLocalInElement(t, process, elemName, AtomosWaiting); err != nil {
+		t.Errorf("TestElementLocal_SpawnConditions: State invalid. err=(%v)", err)
+		return
+	}
+
+	wa := 0
+	for i := 0; i < 10000; i += 1 {
+		a, tracker, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+		if err != nil {
+			t.Errorf("TestElementLocal_SpawnConditions: Spawn failed. err=(%v)", err)
+			return
+		}
+		//tracker.Release()
+		_ = tracker
+		if err = a.Kill(testElem, 0); err != nil {
+			t.Errorf("TestElementLocal_SpawnConditions: Kill failed. err=(%v)", err)
+			return
+		}
+		if err := checkElementLocalInElement(t, process, elemName, AtomosHalt); err != nil {
+			t.Errorf("TestElementLocal_SpawnConditions: State invalid. err=(%v)", err)
+			return
+		}
+		w := 32
+		wa += w
+		wg := sync.WaitGroup{}
+		wg.Add(w)
+		for j := 0; j < w; j += 1 {
+			go func() {
+				atom, idTracker, err := testElem.SpawnAtom(process.local, testAtomName, &String{S: testAtomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
+				//t.Log("SpawnAtom", atom, idTracker, err)
+				_ = atom
+				_ = idTracker
+				_ = err
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+
+		_ = tracker
+		if err = a.Kill(testElem, 0); err != nil {
+			t.Errorf("TestElementLocal_SpawnConditions: Kill failed. err=(%v)", err)
+			return
+		}
+		if err := checkElementLocalInElement(t, process, elemName, AtomosHalt); err != nil {
+			t.Errorf("TestElementLocal_SpawnConditions: State invalid. err=(%v)", err)
+			return
+		}
+	}
+	<-time.After(5 * time.Second)
+	t.Logf("%d, %d, %d, %d, %d", wa, na, nb, nc, nd)
+
 }
 
 func TestElementLocalScaleID(t *testing.T) {

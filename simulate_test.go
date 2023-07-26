@@ -51,7 +51,8 @@ func newTestFakeRunnable(t *testing.T, process *CosmosProcess, autoData bool) *C
 	runnable.
 		SetConfig(newTestFakeCosmosMainConfig()).
 		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, process, autoData))
+		AddElementImplementation(newTestFakeElement(t, process, autoData)).
+		SetElementSpawn("testElement")
 	return runnable
 }
 
@@ -997,34 +998,6 @@ func testElementSpawnPanic(s ElementSelfID, a Atomos, data proto.Message) *Error
 	ta.self = s
 	panic("Element Spawn Panic")
 	return nil
-}
-
-func testAppUDSServer(t *testing.T) (*appUDSServer, *Error) {
-	s := &appUDSServer{
-		config:         newTestFakeCosmosMainConfig(),
-		logging:        newTestAppLogging(t),
-		addr:           nil,
-		listener:       nil,
-		mutex:          sync.Mutex{},
-		connID:         0,
-		connMap:        map[int32]*AppUDSConn{},
-		commandHandler: udsNodeCommandHandler,
-	}
-	if err := s.check(); err != nil {
-		t.Errorf("testAppUDSServer: Check failed. err=(%v)", err.AddStack(nil))
-		return nil, err
-	}
-	if err := s.daemon(); err != nil {
-		t.Errorf("testAppUDSServer: Daemon failed. err=(%v)", err)
-		return nil, err.AddStack(nil)
-	}
-	file, er := s.listener.File()
-	if er != nil {
-		t.Errorf("testAppUDSServer: Socket error. err=(%v)", er)
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Socket file error. err=(%v)", er).AddStack(nil)
-	}
-	t.Logf("TestAppSocketListener: File=(%v)", file)
-	return s, nil
 }
 
 //func testAppSocketClient(t *testing.T) *AppUDSClient {

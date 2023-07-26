@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -611,6 +612,15 @@ func (e *ElementLocal) OnIDsReleased() {
 // 内部实现
 // INTERNAL
 
+var (
+	testAtomSpawnConcurrency = false
+
+	na = int32(0)
+	nb = int32(0)
+	nc = int32(0)
+	nd = int32(0)
+)
+
 func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote, fscFree bool) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
@@ -648,40 +658,71 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
 	if has {
-		oldAtom.atomos.mailbox.mutex.Lock()
-		if oldAtom.atomos.state > AtomosHalt { // 如果正在运行，则想办法返回正在运行的Atom。
-			oldAtom.atomos.mailbox.mutex.Unlock()
-			if oldAtom.atomos.state < AtomosStopping { // 如果正在运行，则返回正在运行的Atom，不允许创建新的Atom。
-				err = NewErrorf(ErrAtomIsRunning, "Atom: Atom is running, returns this atom. id=(%s),name=(%s)", e.GetIDInfo(), name)
-				if fromLocalOrRemote {
-					return oldAtom, oldAtom.atomos.it.addIDTracker(t, fromLocalOrRemote), err.AddStack(oldAtom, arg)
-				} else {
-					return oldAtom, nil, err.AddStack(oldAtom, arg)
+		var toReturn bool
+		var idTracker *IDTracker
+		var err *Error
+		func() {
+			oldLock := &oldAtom.atomos.mailbox.mutex
+			oldLock.Lock()
+			defer oldLock.Unlock()
+			if oldAtom.atomos.state > AtomosHalt { // 如果正在运行，则想办法返回正在运行的Atom。
+				if oldAtom.atomos.state < AtomosStopping { // 如果正在运行，则返回正在运行的Atom，不允许创建新的Atom。
+					err = NewErrorf(ErrAtomIsRunning, "Atom: Atom is running, returns this atom. id=(%s),name=(%s)", e.GetIDInfo(), name)
+					if fromLocalOrRemote {
+						toReturn = true
+						idTracker = oldAtom.atomos.it.addIDTracker(t, fromLocalOrRemote)
+						err = err.AddStack(oldAtom, arg)
+						if testAtomSpawnConcurrency {
+							atomic.AddInt32(&na, 1)
+						}
+						return
+					} else {
+						toReturn = true
+						idTracker = nil
+						err = err.AddStack(oldAtom, arg)
+						if testAtomSpawnConcurrency {
+							atomic.AddInt32(&nb, 1)
+						}
+						return
+					}
+				} else { // 如果正在停止运行，则返回这个状态。TODO 尝试等待Stopping之后再去Spawn（但也需要担心等待时间，Spawn没有timeout）。
+					toReturn = true
+					idTracker = nil
+					err = NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. id=(%s),name=(%s)", e.GetIDInfo(), name).AddStack(oldAtom, arg)
+					if testAtomSpawnConcurrency {
+						atomic.AddInt32(&nc, 1)
+					}
+					return
 				}
-			} else { // 如果正在停止运行，则返回这个状态。TODO 尝试等待Stopping之后再去Spawn（但也需要担心等待时间，Spawn没有timeout）。
-				return nil, nil, NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. id=(%s),name=(%s)", e.GetIDInfo(), name).AddStack(oldAtom, arg)
 			}
+			if testAtomSpawnConcurrency {
+				atomic.AddInt32(&nd, 1)
+			}
+
+			// 如果旧的存在且不再运行，则用旧的Atom的结构体，创建一个新的Atom内容。
+			// 先将旧的Atom的内容拷贝到新的Atom。
+
+			//// 因为这里的锁是为了保证旧的Atom的内容不会被修改，但是这里的锁是在旧的Atom已经不再运行的情况下上锁，所以不会有并发修改的问题。
+			//// 完成后再对其解锁，以避免有并发Spawn的情况下，后面的Spawn出现死锁。
+			//oldLock := &oldAtom.atomos.mailbox.mutex
+			// 将旧的Atom的Name元素复制到新的Atom。
+			atom.nameElement = oldAtom.nameElement
+			// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
+			atom.atomos.fsc.curCallCounter = oldAtom.atomos.fsc.curCallCounter
+			// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
+			atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it) // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
+
+			// 将新的Atom内容替换到旧的Atom。
+			*oldAtom = *atom
+			//// 将旧的Atom解锁。
+			//oldLock.Unlock()
+			// 把新创建的Atom的指针退换成旧的，这样就可以保证持有旧的Atom的ID能够继续使用。
+			atom = oldAtom
+		}()
+
+		if toReturn {
+			return oldAtom, idTracker, err
 		}
-
-		// 如果旧的存在且不再运行，则用旧的Atom的结构体，创建一个新的Atom内容。
-		// 先将旧的Atom的内容拷贝到新的Atom。
-
-		// 因为这里的锁是为了保证旧的Atom的内容不会被修改，但是这里的锁是在旧的Atom已经不再运行的情况下上锁，所以不会有并发修改的问题。
-		// 完成后再对其解锁，以避免有并发Spawn的情况下，后面的Spawn出现死锁。
-		oldLock := &oldAtom.atomos.mailbox.mutex
-		// 将旧的Atom的Name元素复制到新的Atom。
-		atom.nameElement = oldAtom.nameElement
-		// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
-		atom.atomos.fsc.curCallCounter = oldAtom.atomos.fsc.curCallCounter
-		// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
-		atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it) // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
-
-		// 将新的Atom内容替换到旧的Atom。
-		*oldAtom = *atom
-		// 将旧的Atom解锁。
-		oldLock.Unlock()
-		// 把新创建的Atom的指针退换成旧的，这样就可以保证持有旧的Atom的ID能够继续使用。
-		atom = oldAtom
 	}
 
 	// Atom的Spawn逻辑。
