@@ -20,28 +20,30 @@ type MessengerType interface {
 func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 	return &IOMessageDecoder{
 		InDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+			ci := proto.Clone(i)
 			if isProtoOrJson {
-				if err := proto.Unmarshal(buf, i); err != nil {
+				if err := proto.Unmarshal(buf, ci); err != nil {
 					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
-				if err := json.Unmarshal(buf, i); err != nil {
+				if err := json.Unmarshal(buf, ci); err != nil {
 					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
-			return i, nil
+			return ci, nil
 		},
 		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+			ci := proto.Clone(i)
 			if isProtoOrJson {
-				if err := proto.Unmarshal(buf, i); err != nil {
+				if err := proto.Unmarshal(buf, ci); err != nil {
 					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
-				if err := json.Unmarshal(buf, i); err != nil {
+				if err := json.Unmarshal(buf, ci); err != nil {
 					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
-			return i, nil
+			return ci, nil
 		},
 	}
 }
