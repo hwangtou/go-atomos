@@ -9,24 +9,9 @@ import (
 )
 
 var app *App
-var nodeOrSupervisor = true
-var supervisorCommandHandlers map[string]AppUDSCommandFn
-
-func SharedApp() *App {
-	return app
-}
-
-func SupervisorSet(handlers map[string]AppUDSCommandFn) {
-	nodeOrSupervisor = false
-	supervisorCommandHandlers = handlers
-}
 
 func Main(runnable CosmosRunnable) {
-	if nodeOrSupervisor {
-		log.Printf("Welcome to Atomos! pid=(%d)", os.Getpid())
-	} else {
-		log.Printf("Welcome to Atomos Supervisor! pid=(%d)", os.Getpid())
-	}
+	log.Printf("Welcome to Atomos! pid=(%d)", os.Getpid())
 
 	var (
 		configPath = flag.String("config", "", "config path")
@@ -43,11 +28,7 @@ func Main(runnable CosmosRunnable) {
 	}
 
 	// Check.
-	if nodeOrSupervisor {
-		app, err = NewCosmosNodeApp(*configPath)
-	} else {
-		app, err = NewCosmosSupervisorApp(*configPath)
-	}
+	app, err = NewCosmosNodeApp(*configPath)
 	if err != nil {
 		log.Printf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
