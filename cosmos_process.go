@@ -98,7 +98,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 		mutex:    sync.RWMutex{},
 		elements: map[string]*ElementLocal{},
 	}
-	p.local.atomos = NewBaseAtomos(id, LogLevel_Debug, p.local, p.local, p)
+	p.local.atomos = NewBaseAtomos(id, LogLevel_Info, p.local, p.local, p)
 	if err := p.local.atomos.start(func() *Error { return nil }); err != nil {
 		return err.AddStack(nil)
 	}
