@@ -12,11 +12,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"strings"
+	"time"
 )
 
 const (
-	etcdDialTime      = 5
-	etcdKeepaliveTime = 10
+	etcdDialTime      = 10
+	etcdKeepaliveTime = 20
 )
 
 const (
@@ -182,7 +183,16 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	// Keep the cosmos remote alive.
 	lease, keepAliveCh, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
 	if err != nil {
-		return err.AddStack(nil)
+		for i := 0; i < 10; i++ {
+			lease, keepAliveCh, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			return err.AddStack(nil)
+		}
+		<-time.After(3 * time.Second)
 	}
 
 	// start a separate goroutine to keep the service registration alive, and to handle the case where the service is not able to renew the lease
@@ -282,20 +292,22 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	// Watch for changes
 	go func() {
 		defer p.local.Log().Info("etcd: Watcher stopped.")
-		watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
-		for watchResp := range watchCh {
-			for _, event := range watchResp.Events {
-				p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
-				if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
-					continue
-				}
-				key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
-				switch event.Type {
-				case mvccpb.PUT:
-					p.handleKey(key, event.Kv.Value, true)
-				case mvccpb.DELETE:
-					p.handleKey(key, event.Kv.Value, false)
+		for {
+			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
+			for watchResp := range watchCh {
+				for _, event := range watchResp.Events {
+					p.logging.PushLogging(p.local.atomos.id, LogLevel_Debug, fmt.Sprintf("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value)))
+					if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
+						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+						continue
+					}
+					key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
+					switch event.Type {
+					case mvccpb.PUT:
+						p.handleKey(key, event.Kv.Value, true)
+					case mvccpb.DELETE:
+						p.handleKey(key, event.Kv.Value, false)
+					}
 				}
 			}
 		}

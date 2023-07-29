@@ -280,7 +280,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		} else {
 			id = elem
 		}
-		if id == nil {
+		if id == nil || reflect.ValueOf(id).IsNil() {
 			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
 			return rsp, nil
 		}

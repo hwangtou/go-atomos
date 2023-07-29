@@ -360,6 +360,10 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	// 获取调用ID的Go ID
 	callerLocalGoID := callerID.getGoID()
 
+	if a == nil {
+		return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: BaseAtomos is nil.").AddStack(nil)
+	}
+
 	// 远程调用
 	// 如果调用ID的Go ID为0，证明远程调用，直接返回当前的FirstSyncCall即可。
 	if callerLocalGoID == 0 {

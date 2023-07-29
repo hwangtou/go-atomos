@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"log"
 	"net"
 	"os"
 	"sync"
@@ -323,6 +326,18 @@ func (p *CosmosProcess) Self() *CosmosLocal {
 	return p.local
 }
 
+func RecoveryMiddleware() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("recovered from panic in %s: %v", info.FullMethod, r)
+				err = status.Errorf(codes.Internal, "internal server error")
+			}
+		}()
+		return handler(ctx, req)
+	}
+}
+
 // prepareCluster 准备集群
 func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 	// Check if it is a cluster process.
@@ -411,9 +426,9 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		// Try to start grpc server.
 		var svr *grpc.Server
 		if isTLS {
-			svr = grpc.NewServer(*serverOption)
+			svr = grpc.NewServer(*serverOption, grpc.UnaryInterceptor(RecoveryMiddleware()))
 		} else {
-			svr = grpc.NewServer()
+			svr = grpc.NewServer(grpc.UnaryInterceptor(RecoveryMiddleware()))
 		}
 		// Register AtomosRemoteService.
 		p.cluster.grpcImpl = &atomosRemoteService{
@@ -533,11 +548,11 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 			p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, fmt.Sprintf("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
 		}
 
-		// 关闭etcd客户端。
-		if err := p.cluster.etcdClient.Close(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, fmt.Sprintf("CosmosProcess: Failed to close etcd client while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
-		}
-		p.cluster.etcdClient = nil
+		//// 关闭etcd客户端。
+		//if err := p.cluster.etcdClient.Close(); err != nil {
+		//	p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, fmt.Sprintf("CosmosProcess: Failed to close etcd client while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+		//}
+		//p.cluster.etcdClient = nil
 	}
 
 	// 关闭gRPC服务。
