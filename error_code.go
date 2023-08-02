@@ -4,6 +4,7 @@ const (
 	OK = iota
 
 	ErrFrameworkInternalError
+	ErrFrameworkRuntimeTrouble
 	ErrFrameworkRecoverFromPanic
 	ErrFrameworkIncorrectUsage
 

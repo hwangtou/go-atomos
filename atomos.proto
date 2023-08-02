@@ -355,3 +355,12 @@ message CosmosRemoteElementBroadcastReq {
 message CosmosRemoteElementBroadcastRsp {
   Error error = 1;
 }
+
+// Performance
+
+message AppPerformance {
+  // Memory
+  uint64 total_alloc;
+  uint64 heap_alloc ;
+  uint64 heap_sys;
+}
