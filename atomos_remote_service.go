@@ -14,6 +14,10 @@ type atomosRemoteService struct {
 	process *CosmosProcess
 }
 
+var (
+	atomosClientTimeout = 5 * time.Second
+)
+
 func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
 	defer func() {
 		Recover(a.process.local)

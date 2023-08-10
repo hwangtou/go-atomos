@@ -59,7 +59,7 @@ func (e *ElementRemote) State() AtomosState {
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 	rsp, er := client.GetIDState(ctx, &CosmosRemoteGetIDStateReq{
 		Id: e.info,
@@ -79,7 +79,7 @@ func (e *ElementRemote) IdleTime() time.Duration {
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 	rsp, er := client.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{
 		Id: e.info,
@@ -111,7 +111,7 @@ func (e *ElementRemote) SyncMessagingByName(callerID SelfID, name string, timeou
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
 	defer cancel()
 
 	var er error
@@ -163,7 +163,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 	e.cosmos.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
 			client := NewAtomosRemoteServiceClient(cli)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
 			defer cancel()
 
 			var er error
@@ -237,7 +237,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, _ bool) (ID, *I
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 	rsp, er := client.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
 		Element: e.info.Element,
@@ -268,7 +268,7 @@ func (e *ElementRemote) GetAtomsNum() int {
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 	rsp, er := client.GetElementInfo(ctx, &CosmosRemoteGetElementInfoReq{
 		Element: e.info.Element,
@@ -287,7 +287,7 @@ func (e *ElementRemote) GetActiveAtomsNum() int {
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 	rsp, er := client.GetElementInfo(ctx, &CosmosRemoteGetElementInfoReq{
 		Element: e.info.Element,
@@ -323,7 +323,7 @@ func (e *ElementRemote) SpawnAtom(callerID SelfID, name string, arg proto.Messag
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), atomosClientTimeout)
 	defer cancel()
 
 	var er error
@@ -378,7 +378,7 @@ func (e *ElementRemote) ScaleGetAtomID(callerID SelfID, name string, timeout tim
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
 	defer cancel()
 
 	var er error
