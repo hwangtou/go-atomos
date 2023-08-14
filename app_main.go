@@ -28,7 +28,7 @@ func Main(runnable CosmosRunnable) {
 	}
 
 	// Check.
-	app, err = NewCosmosNodeApp(*configPath)
+	app, err = NewCosmosNodeApp(*configPath, &runnable)
 	if err != nil {
 		log.Printf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)

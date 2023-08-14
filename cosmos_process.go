@@ -55,7 +55,7 @@ type CosmosProcess struct {
 }
 
 type CosmosMainGlobalRouter interface {
-	GetCosmosNodeName(element, atom string) (string, bool)
+	GetCosmosNodeName(selfNode, element, atom string) (string, bool)
 }
 
 // CosmosProcessState
@@ -151,6 +151,12 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 			return err.AddStack(p.local)
 		}
 		p.local.runnable = runnable
+
+		// 启动时初始化脚本。
+		if err := p.local.runnable.mainScript.OnBoot(p); err != nil {
+			p.logging.PushLogging(p.local.atomos.id, LogLevel_Err, fmt.Sprintf("CosmosProcess: Main script boot failed. err=(%+v)", err))
+			return err.AddStack(p.local)
+		}
 
 		// 如果是集群进程，尝试通过etcd加载网络配置，再尝试监听。
 		// If it is a cluster process, try to load networking configuration via etcd, then try to listen.

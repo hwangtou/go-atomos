@@ -15,6 +15,7 @@ import (
 // Cosmos的Main脚本，由用户实现，用于在进程启动和关闭时执行一些操作。
 // Main script of Cosmos, which is implemented by developer, will execute some operations when process starts and closes.
 type CosmosMainScript interface {
+	OnBoot(local *CosmosProcess) *Error
 	OnStartUp(local *CosmosProcess) *Error
 	OnShutdown() *Error
 }

@@ -69,39 +69,16 @@ func (r *CosmosRunnable) Check() *Error {
 	if err := r.config.Check(); err != nil {
 		return err.AddStack(nil)
 	}
-	//// Interfaces
-	//if r.interfaces == nil {
-	//	r.interfaces = map[string]*ElementInterface{}
-	//}
-	//if len(r.interfaces) != len(r.interfaceOrder) {
-	//	return NewError(ErrRunnableInterfaceInvalid, "Runnable: Interface order not match.").AddStack(nil)
-	//}
 	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
 	}
-	//if len(r.implements) != len(r.implementOrder) {
-	//	return NewError(ErrRunnableImplementInvalid, "Runnable: Implement not match.").AddStack(nil)
-	//}
 	// MainScript
 	if r.mainScript == nil {
 		return NewError(ErrRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
 	}
 	return nil
 }
-
-//// AddElementInterface CosmosRunnable构造器方法，用于添加ElementInterface（接口）。
-//// Construct method of CosmosRunnable, uses to add ElementInterface.
-//func (r *CosmosRunnable) AddElementInterface(i *ElementInterface) *CosmosRunnable {
-//	if r.interfaces == nil {
-//		r.interfaces = map[string]*ElementInterface{}
-//	}
-//	if _, has := r.interfaces[i.Config.Name]; !has {
-//		r.interfaces[i.Config.Name] = i
-//		r.interfaceOrder = append(r.interfaceOrder, i)
-//	}
-//	return r
-//}
 
 // AddElementImplementation CosmosRunnable构造器方法，用于添加ElementImplementation（实现）。
 // Construct method of CosmosRunnable, uses to add ElementImplementation.

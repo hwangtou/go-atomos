@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
+func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
@@ -20,21 +20,18 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 		logLevel = LogLevel(lv)
 	}
 	conf := &Config{
-		Cosmos:            y.Cosmos,
-		Node:              y.Node,
-		NodeList:          nil,
-		KeepaliveNodeList: nil,
-		ReporterUrl:       y.ReporterUrl,
-		ConfigerUrl:       y.ConfigerUrl,
-		LogLevel:          logLevel,
-		LogPath:           y.LogPath,
-		LogMaxSize:        int64(y.LogMaxSize),
-		BuildPath:         y.BuildPath,
-		BinPath:           y.BinPath,
-		RunPath:           y.RunPath,
-		EtcPath:           y.EtcPath,
-		EnableCluster:     nil,
-		Customize:         map[string][]byte{},
+		Cosmos:         y.Cosmos,
+		Node:           y.Node,
+		LogLevel:       logLevel,
+		LogPath:        y.LogPath,
+		LogMaxSize:     int64(y.LogMaxSize),
+		BuildPath:      y.BuildPath,
+		BinPath:        y.BinPath,
+		RunPath:        y.RunPath,
+		EtcPath:        y.EtcPath,
+		EnableCluster:  nil,
+		EnableElements: nil,
+		Customize:      map[string][]byte{},
 	}
 	if strings.ToLower(y.LogSTD) == "true" {
 		LogStdout = true
@@ -55,39 +52,17 @@ func NewCosmosNodeConfigFromYamlPath(filepath string) (*Config, *Error) {
 			}
 		}
 	}
+	for _, element := range y.EnableElements {
+		impl, has := runnable.implements[element]
+		if !has {
+			return nil, NewErrorf(ErrCosmosConfigInvalid, "Element not found. element=(%s)", element).AddStack(nil)
+		}
+		runnable.SetElementSpawn(impl.Interface.Config.Name)
+	}
 	if custom := y.CustomizeConfig; custom != nil {
 		for key, value := range custom {
 			conf.Customize[key] = []byte(value)
 		}
-	}
-	return conf, nil
-}
-
-func NewSupervisorConfigFromYaml(filepath string) (*Config, *Error) {
-	dat, err := os.ReadFile(filepath)
-	if err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
-	}
-	y := &SupervisorYAMLConfig{}
-	if err = yaml.Unmarshal(dat, y); err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err).AddStack(nil)
-	}
-	logLevel := LogLevel_Debug
-	if lv, ok := LogLevel_value[y.LogLevel]; ok {
-		logLevel = LogLevel(lv)
-	}
-	conf := &Config{
-		Cosmos:            y.Cosmos,
-		Node:              "supervisor",
-		NodeList:          y.NodeList,
-		KeepaliveNodeList: y.KeepaliveNodeList,
-		ReporterUrl:       y.ReporterUrl,
-		ConfigerUrl:       y.ConfigerUrl,
-		LogLevel:          logLevel,
-		LogPath:           y.LogPath,
-		LogMaxSize:        int64(y.LogMaxSize),
-		RunPath:           y.RunPath,
-		EtcPath:           y.EtcPath,
 	}
 	return conf, nil
 }
@@ -130,28 +105,9 @@ func CheckNodeName(nodeName string) bool {
 
 // Config
 
-type SupervisorYAMLConfig struct {
-	Cosmos            string   `yaml:"cosmos"`
-	NodeList          []string `yaml:"node-list"`
-	KeepaliveNodeList []string `yaml:"keepalive-node-list"`
-
-	ReporterUrl string `yaml:"reporter-url"`
-	ConfigerUrl string `yaml:"configer-url"`
-
-	LogLevel   string `yaml:"log-level"`
-	LogPath    string `yaml:"log-path"`
-	LogMaxSize int    `yaml:"log-max-size"`
-
-	RunPath string `yaml:"run-path"`
-	EtcPath string `yaml:"etc-path"`
-}
-
 type NodeYAMLConfig struct {
 	Cosmos string `yaml:"cosmos"`
 	Node   string `yaml:"node"`
-
-	ReporterUrl string `yaml:"reporter-url"`
-	ConfigerUrl string `yaml:"configer-url"`
 
 	LogLevel   string `yaml:"log-level"`
 	LogPath    string `yaml:"log-path"`
@@ -163,7 +119,8 @@ type NodeYAMLConfig struct {
 	RunPath   string `yaml:"run-path"`
 	EtcPath   string `yaml:"etc-path"`
 
-	EnableCluster *ClusterYAMLConfig `yaml:"enable-cluster"`
+	EnableCluster  *ClusterYAMLConfig `yaml:"enable-cluster"`
+	EnableElements []string           `yaml:"enable-elements"`
 
 	CustomizeConfig map[string]string `yaml:"customize"`
 }

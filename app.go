@@ -18,12 +18,11 @@ type App struct {
 
 	env     *appEnv
 	logging *appLogging
-	//socket  *appUDSServer
 }
 
-func NewCosmosNodeApp(configPath string) (*App, *Error) {
+func NewCosmosNodeApp(configPath string, runnable *CosmosRunnable) (*App, *Error) {
 	// Load Config.
-	conf, err := NewCosmosNodeConfigFromYamlPath(configPath)
+	conf, err := NewCosmosNodeConfigFromYamlPath(configPath, runnable)
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
@@ -49,57 +48,6 @@ func NewCosmosNodeApp(configPath string) (*App, *Error) {
 			exitCh:         make(chan bool, 1),
 		},
 		logging: logging,
-		//socket: &appUDSServer{
-		//	config:         conf,
-		//	logging:        logging,
-		//	addr:           nil,
-		//	listener:       nil,
-		//	mutex:          sync.Mutex{},
-		//	connID:         0,
-		//	connMap:        map[int32]*AppUDSConn{},
-		//	commandHandler: udsNodeCommandHandler,
-		//},
-	}, nil
-}
-
-func NewCosmosSupervisorApp(configPath string) (*App, *Error) {
-	// Load Config.
-	conf, err := NewSupervisorConfigFromYaml(configPath)
-	if err != nil {
-		return nil, err.AddStack(nil)
-	}
-	// Open Log.
-	logSize := int(conf.LogMaxSize)
-	if logSize == 0 {
-		logSize = defaultLogMaxSize
-	}
-	logging, err := NewAppLogging(conf.LogPath, logSize)
-	if err != nil {
-		err = err.AddStack(nil)
-		return nil, err.AddStack(nil)
-	}
-	return &App{
-		config: conf,
-		env: &appEnv{
-			config:         conf,
-			executablePath: "",
-			workPath:       "",
-			args:           nil,
-			env:            nil,
-			pid:            0,
-			exitCh:         make(chan bool, 1),
-		},
-		logging: logging,
-		//socket: &appUDSServer{
-		//	config:         conf,
-		//	logging:        logging,
-		//	addr:           nil,
-		//	listener:       nil,
-		//	mutex:          sync.Mutex{},
-		//	connID:         0,
-		//	connMap:        map[int32]*AppUDSConn{},
-		//	commandHandler: supervisorCommandHandlers,
-		//},
 	}, nil
 }
 
@@ -110,10 +58,6 @@ func (a *App) Check() (isRunning bool, processID int, err *Error) {
 	if isRunning, processID, err = a.env.check(); err != nil {
 		return isRunning, processID, err.AddStack(nil)
 	}
-	// Socket
-	//if err = a.socket.check(); err != nil {
-	//	return false, 0, err.AddStack(nil)
-	//}
 	return false, 0, nil
 }
 

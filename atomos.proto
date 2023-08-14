@@ -123,28 +123,24 @@ message Config {
 
   // Node Name (For Node Config)
   string node = 2;
-  // Node List (For Supervisor Config)
-  repeated string node_list = 3;
-  // Keepalive Node List (For Supervisor Config)
-  repeated string keepalive_node_list = 4;
 
-  string reporter_url = 5;
-  string configer_url = 6;
+  LogLevel log_level = 3;
+  string log_path = 4;
+  int64 log_max_size = 5;
 
-  LogLevel log_level = 7;
-  string log_path = 8;
-  int64 log_max_size = 9;
-
-  string build_path = 10;
-  string bin_path = 11;
-  string run_path = 12;
-  string etc_path = 13;
+  string build_path = 6;
+  string bin_path = 7;
+  string run_path = 8;
+  string etc_path = 9;
 
   // 节点通讯
-  CosmosClusterConfig enable_cluster = 14;
+  CosmosClusterConfig enable_cluster = 10;
+
+  // 启动元素
+  repeated string enable_elements = 11;
 
   // 自定义配置
-  map<string, bytes> customize = 15;
+  map<string, bytes> customize = 12;
 }
 
 message CosmosClusterConfig{

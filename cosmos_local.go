@@ -305,7 +305,7 @@ func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Err
 		return e, nil
 	}
 
-	nodeName, has := router.GetCosmosNodeName(elemName, atomName)
+	nodeName, has := router.GetCosmosNodeName(c.GetNodeName(), elemName, atomName)
 	if !has {
 		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", elemName).AddStack(c)
 	}
