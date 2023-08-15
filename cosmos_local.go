@@ -462,3 +462,9 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 	}
 	return elem, nil
 }
+
+func (c *CosmosLocal) GetCosmosNode(name string) *CosmosRemote {
+	c.process.cluster.remoteMutex.RLock()
+	defer c.process.cluster.remoteMutex.RUnlock()
+	return c.process.cluster.remoteCosmos[name]
+}
