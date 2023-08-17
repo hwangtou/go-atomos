@@ -531,7 +531,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
 		func(remainMail *mail) {
-			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%+v)", remainMail).AddStack(nil)
+			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%v),mail=(%v),log=(%v)", remainMail, remainMail.mail, remainMail.log).AddStack(nil)
 			remainAtomMail := remainMail.mail
 			//defer deallocAtomosMail(remainAtomMail)
 			switch remainAtomMail.mailType {

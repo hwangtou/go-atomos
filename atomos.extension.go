@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -149,4 +150,35 @@ func (x *Error) Error() string {
 
 func (x *Error) IsAtomExist() bool {
 	return x.Code == ErrAtomIsRunning
+}
+
+func (x *Error) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	var str string
+	var ok bool
+	switch v := value.(type) {
+	case string:
+		str = v
+		ok = true
+	case []uint8:
+		str = string(v)
+		ok = true
+	}
+	if !ok {
+		return fmt.Errorf("value is not bytes. type=(%T),value=(%v)", value, value)
+	}
+	er := json.Unmarshal([]byte(str), x)
+	if er != nil {
+		return er
+	}
+	return nil
+}
+
+func (x *Error) Value() (driver.Value, error) {
+	if x == nil {
+		return nil, nil
+	}
+	return json.Marshal(x)
 }

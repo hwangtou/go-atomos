@@ -529,7 +529,14 @@ func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uin
 		e.Log().Info("Element: OnStopping, killing atom. name=(%s)", name)
 		exitWG.Add(1)
 		go func(a *AtomLocal, n string) {
-			if err := a.atomos.PushKillMailAndWaitReply(e, true, stopTimeout); err != nil {
+			var err *Error
+			defer func() {
+				if r := recover(); r != nil {
+					e.Log().Fatal("Element: OnStopping, killing atom recovers from panic. err=(%v)", err.AddPanicStack(e, 3, r))
+				}
+			}()
+			err = a.atomos.PushKillMailAndWaitReply(e, true, stopTimeout)
+			if err != nil {
 				e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", n, err)
 			}
 			exitWG.Done()
