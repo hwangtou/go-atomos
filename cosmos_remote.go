@@ -86,7 +86,7 @@ func (c *CosmosRemote) etcdDeleteLock() {
 }
 
 func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Info("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.Log().Core("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -98,7 +98,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 			e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 			if !has {
-				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 			}
@@ -108,7 +108,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 }
 
 func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Info("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.Log().Core("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -122,7 +122,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 				//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 				e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 				if !has {
-					c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+					c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 				} else {
 					c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 				}
@@ -138,7 +138,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 	c.id = info.Id
 	if info.Address != oldVersion.info.Address {
 		oldVersion.setDisable()
-		c.process.local.Log().Debug("CosmosRemote: Connect info version updated. version=(%s)", version)
+		c.process.local.Log().Core("CosmosRemote: Connect info version updated. version=(%s)", version)
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	}
 
@@ -151,7 +151,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName]
 			e, has := c.process.local.runnable.implements[elemName]
 			if !has {
-				c.process.local.Log().Error("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				if oldElem, has := c.elements[elemName]; has {
 					oldElem.setDisable()
@@ -521,11 +521,11 @@ func (c *cosmosRemoteVersion) check() bool {
 		if conn != nil {
 			conn.Close()
 		}
-		c.process.local.Log().Fatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
+		c.process.local.Log().Core("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
 		return false
 	}
 	c.avail = true
-	c.process.local.Log().Info("CosmosRemote: Dial. addr=(%s)", c.info.Address)
+	c.process.local.Log().Core("CosmosRemote: Dial. addr=(%s)", c.info.Address)
 	return true
 }
 

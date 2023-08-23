@@ -61,7 +61,13 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		lock:        sync.RWMutex{},
 		elemImpl:    impl,
 	}
-	e.atomos = NewBaseAtomos(id, impl.Interface.Config.LogLevel, e, impl.Developer.ElementConstructor(), main.process)
+	var logLevel LogLevel
+	if customizeLogLevel, ok := impl.Developer.(ElementLogLevel); ok {
+		logLevel = customizeLogLevel.GetElementLogLevel()
+	} else {
+		logLevel = runnable.config.LogLevel
+	}
+	e.atomos = NewBaseAtomos(id, logLevel, e, impl.Developer.ElementConstructor(), main.process)
 
 	// 如果实现了ElementCustomizeAtomInitNum接口，那么就使用接口中定义的数量。
 	if atomsInitNum, ok := impl.Developer.(ElementAtomInitNum); ok {
@@ -650,7 +656,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.
-	atom, err := newAtomLocal(name, e, current, current.Interface.Config.LogLevel)
+	atom, err := newAtomLocal(name, e, current, e.atomos.log.level)
 	if err != nil {
 		return nil, nil, err.AddStack(e)
 	}

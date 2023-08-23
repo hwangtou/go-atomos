@@ -19,6 +19,20 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 	if lv, ok := LogLevel_value[y.LogLevel]; ok {
 		logLevel = LogLevel(lv)
 	}
+	switch strings.ToLower(y.LogLevel) {
+	case "fatal":
+		logLevel = LogLevel_Fatal
+	case "error", "err":
+		logLevel = LogLevel_Err
+	case "warn":
+		logLevel = LogLevel_Warn
+	case "info", "inf":
+		logLevel = LogLevel_Info
+	case "debug":
+		fallthrough
+	default:
+		logLevel = LogLevel_Debug
+	}
 	conf := &Config{
 		Cosmos:         y.Cosmos,
 		Node:           y.Node,

@@ -10,6 +10,7 @@ type Logging interface {
 	Warn(format string, args ...interface{})
 	Error(format string, args ...interface{})
 	Fatal(format string, args ...interface{})
+	Core(format string, args ...interface{})
 }
 
 // Atomos日志管理器
@@ -74,4 +75,11 @@ func (l *atomosLogging) Fatal(format string, args ...interface{}) {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Fatal, fmt.Sprintf(format, args...))
+}
+
+func (l *atomosLogging) Core(format string, args ...interface{}) {
+	if l.level > LogLevel_Core {
+		return
+	}
+	l.pushAtomosLog(l.id, LogLevel_Core, fmt.Sprintf(format, args...))
 }

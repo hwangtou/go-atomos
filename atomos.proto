@@ -8,8 +8,6 @@ import "google/protobuf/timestamp.proto";
 
 enum IDType {
   InvalidIDType = 0;
-//  AppLoader = 1;
-//  App = 2;
   Cosmos = 1;
   Element = 2;
   Atom = 3;
@@ -30,6 +28,7 @@ enum LogLevel {
   Warn = 2;
   Err = 3;
   Fatal = 4;
+  Core = 5;
 }
 
 message LogMail {
@@ -170,9 +169,7 @@ message CosmosLocalConfig {
 message ElementConfig {
   string name = 1;
   uint64 version = 2;
-  LogLevel log_level = 3;
-  int32 atom_init_num = 4;
-  map<string, AtomMessageConfig> messages = 5;
+  map<string, AtomMessageConfig> messages = 3;
 }
 
 message AtomMessageConfig {

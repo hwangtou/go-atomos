@@ -9,6 +9,10 @@ type testMainScript struct {
 	t *testing.T
 }
 
+func (s *testMainScript) OnBoot(local *CosmosProcess) *Error {
+	return nil
+}
+
 func (s *testMainScript) OnStartUp(local *CosmosProcess) *Error {
 	//s.t.Log("testMainScript: LocalReady Begin")
 	//panic("startup panic")

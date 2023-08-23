@@ -18,24 +18,14 @@ func NewImplementationFromDeveloper(developer ElementDeveloper) *ElementImplemen
 // For creating ElementInterface instance in *_atomos.pb.go.
 func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *ElementInterface {
 	var version uint64
-	var logLevel LogLevel
-	var atomInitNum int
 	if customizeVersion, ok := implement.(ElementVersion); ok {
 		version = customizeVersion.GetElementVersion()
 	}
-	if customizeLogLevel, ok := implement.(ElementLogLevel); ok {
-		logLevel = customizeLogLevel.GetElementLogLevel()
-	}
-	if customizeAtomInitNum, ok := implement.(ElementAtomInitNum); ok {
-		atomInitNum = customizeAtomInitNum.GetElementAtomsInitNum()
-	}
 	return &ElementInterface{
 		Config: &ElementConfig{
-			Name:        name,
-			Version:     version,
-			LogLevel:    logLevel,
-			AtomInitNum: int32(atomInitNum),
-			Messages:    map[string]*AtomMessageConfig{},
+			Name:     name,
+			Version:  version,
+			Messages: map[string]*AtomMessageConfig{},
 		},
 		ElementSpawner:  nil,
 		AtomSpawner:     nil,

@@ -61,21 +61,17 @@ func newTestFakeCosmosMainConfig() *Config {
 	os.Mkdir("/tmp/test_atomos_app_run", 0777)
 	os.Mkdir("/tmp/test_atomos_app_etc", 0777)
 	return &Config{
-		Cosmos:            "testCosmos",
-		Node:              "testNode",
-		NodeList:          nil,
-		KeepaliveNodeList: nil,
-		ReporterUrl:       "",
-		ConfigerUrl:       "",
-		LogLevel:          0,
-		LogPath:           "/tmp/test_atomos_app_logging",
-		LogMaxSize:        0,
-		BuildPath:         "",
-		BinPath:           "",
-		RunPath:           "/tmp/test_atomos_app_run",
-		EtcPath:           "/tmp/test_atomos_app_etc",
-		EnableCluster:     nil,
-		Customize:         nil,
+		Cosmos:        "testCosmos",
+		Node:          "testNode",
+		LogLevel:      0,
+		LogPath:       "/tmp/test_atomos_app_logging",
+		LogMaxSize:    0,
+		BuildPath:     "",
+		BinPath:       "",
+		RunPath:       "/tmp/test_atomos_app_run",
+		EtcPath:       "/tmp/test_atomos_app_etc",
+		EnableCluster: nil,
+		Customize:     nil,
 	}
 }
 
@@ -99,11 +95,9 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 		Developer: dev,
 		Interface: &ElementInterface{
 			Config: &ElementConfig{
-				Name:        "testElement",
-				Version:     0,
-				LogLevel:    0,
-				AtomInitNum: 0,
-				Messages:    nil,
+				Name:     "testElement",
+				Version:  0,
+				Messages: nil,
 			},
 			ElementSpawner: func(s ElementSelfID, a Atomos, data proto.Message) *Error {
 				ta := a.(*testElement)

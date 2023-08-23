@@ -610,19 +610,15 @@ func getRunnable(t *testing.T, process *CosmosProcess, cosmosName, cosmosNode st
 	runnable := &CosmosRunnable{}
 	runnable.
 		SetConfig(&Config{
-			Cosmos:            cosmosName,
-			Node:              cosmosNode,
-			NodeList:          nil,
-			KeepaliveNodeList: nil,
-			ReporterUrl:       "",
-			ConfigerUrl:       "",
-			LogLevel:          0,
-			LogPath:           "",
-			LogMaxSize:        0,
-			BuildPath:         "",
-			BinPath:           "",
-			RunPath:           "",
-			EtcPath:           "",
+			Cosmos:     cosmosName,
+			Node:       cosmosNode,
+			LogLevel:   0,
+			LogPath:    "",
+			LogMaxSize: 0,
+			BuildPath:  "",
+			BinPath:    "",
+			RunPath:    "",
+			EtcPath:    "",
 			EnableCluster: &CosmosClusterConfig{
 				Enable:        true,
 				EtcdEndpoints: testClusterEtcdEndpoints,

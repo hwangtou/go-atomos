@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"bytes"
 	"fmt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
@@ -17,6 +18,8 @@ type loggingAtomos struct {
 	errorLog  loggingFn
 
 	exitCh chan struct{}
+
+	buf bytes.Buffer
 }
 
 type loggingFn func(string)
@@ -98,39 +101,55 @@ func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) *
 }
 
 func (c *loggingAtomos) logging(lm *LogMail) {
-	var msg string
+	c.buf.Reset()
+
+	// Time
+	c.buf.WriteString(time.Unix(lm.Time.GetSeconds(), int64(lm.Time.GetNanos())).Local().Format(logTimeFmt))
+	// Level
+	switch lm.Level {
+	case LogLevel_Debug:
+		c.buf.WriteString(" [DEBUG] ")
+	case LogLevel_Info:
+		c.buf.WriteString(" [INFO]  ")
+	case LogLevel_Warn:
+		c.buf.WriteString(" [WARN]  ")
+	case LogLevel_Err:
+		c.buf.WriteString(" [ERROR] ")
+	case LogLevel_Fatal:
+		c.buf.WriteString(" [FATAL] ")
+	case LogLevel_Core:
+		c.buf.WriteString(" [COSMO] ")
+	default:
+		c.buf.WriteString(" [N/A]   ")
+	}
+	// ID
 	if id := lm.Id; id != nil {
 		switch id.Type {
 		case IDType_Atom:
-			msg = fmt.Sprintf("%s::%s::%s => %s", id.Node, id.Element, id.Atom, lm.Message)
+			c.buf.WriteString(fmt.Sprintf("%s::%s::%s => %s\n", id.Node, id.Element, id.Atom, lm.Message))
 		case IDType_Element:
-			msg = fmt.Sprintf("%s::%s => %s", id.Node, id.Element, lm.Message)
+			c.buf.WriteString(fmt.Sprintf("%s::%s => %s\n", id.Node, id.Element, lm.Message))
 		case IDType_Cosmos:
-			msg = fmt.Sprintf("%s => %s", id.Node, lm.Message)
-		//case IDType_AppLoader:
-		//	msg = fmt.Sprintf("AppLoader => %s", lm.Message)
-		//case IDType_App:
-		//	msg = fmt.Sprintf("App => %s", lm.Message)
+			c.buf.WriteString(fmt.Sprintf("%s => %s\n", id.Node, lm.Message))
 		default:
-			msg = fmt.Sprintf("Unknown => %s", lm.Message)
+			c.buf.WriteString(fmt.Sprintf("Unknown => %s\n", lm.Message))
 		}
 	} else {
-		msg = fmt.Sprintf("%s", lm.Message)
+		c.buf.WriteString(fmt.Sprintf("%s", lm.Message))
 	}
-	t := time.Unix(int64(lm.Time.GetSeconds()), int64(lm.Time.GetNanos())).Local().Format(logTimeFmt)
 	switch lm.Level {
 	case LogLevel_Debug:
-		c.accessLog(fmt.Sprintf("%s [DEBUG] %s\n", t, msg))
+		c.accessLog(c.buf.String())
 	case LogLevel_Info:
-		c.accessLog(fmt.Sprintf("%s [INFO]  %s\n", t, msg))
+		c.accessLog(c.buf.String())
 	case LogLevel_Warn:
-		c.errorLog(fmt.Sprintf("%s [WARN]  %s\n", t, msg))
+		c.errorLog(c.buf.String())
 	case LogLevel_Err:
-		c.errorLog(fmt.Sprintf("%s [ERROR] %s\n", t, msg))
+		c.errorLog(c.buf.String())
 	case LogLevel_Fatal:
 		fallthrough
 	default:
-		c.errorLog(fmt.Sprintf("%s [FATAL] %s\n", t, msg))
+		c.errorLog(c.buf.String())
 	}
 }
 
