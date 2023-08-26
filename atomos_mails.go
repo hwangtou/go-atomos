@@ -237,7 +237,10 @@ func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 
 	m.mailReply.resp = resp
 	m.mailReply.err = err
-	waitCh <- &m.mailReply
+	select {
+	case waitCh <- &m.mailReply:
+	default:
+	}
 	//waitCh = nil
 }
 
