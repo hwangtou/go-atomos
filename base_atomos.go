@@ -345,7 +345,6 @@ func (a *BaseAtomos) setHalted(err *Error) {
 	a.state = AtomosHalt
 	a.mt.halted()
 	a.process.onIDHalted(a.id, err, a.mt)
-	releaseAtomosMessageTracker(&a.mt)
 }
 
 // IDTracker
@@ -497,6 +496,9 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 // 处理邮箱退出。
 // Handle mailbox stops.
 func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err *Error) {
+	defer releaseAtomosMessageTracker(&a.mt)
+	defer releaseAtomosTasksManager(&a.task)
+
 	a.task.stopLock()
 	defer a.task.stopUnlock()
 
