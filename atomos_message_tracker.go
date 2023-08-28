@@ -25,6 +25,10 @@ func initAtomosMessageTracker(mt *atomosMessageTracker) {
 	mt.messages = make(map[string]MessageTrackInfo)
 }
 
+func releaseAtomosMessageTracker(mt *atomosMessageTracker) {
+	mt.messages = nil
+}
+
 // Internal
 
 // idleTime returns the idle time of the Atomos.

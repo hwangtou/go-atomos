@@ -345,6 +345,7 @@ func (a *BaseAtomos) setHalted(err *Error) {
 	a.state = AtomosHalt
 	a.mt.halted()
 	a.process.onIDHalted(a.id, err, a.mt)
+	releaseAtomosMessageTracker(&a.mt)
 }
 
 // IDTracker

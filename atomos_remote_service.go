@@ -99,9 +99,6 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 	defer func() {
 		Recover(a.process.local)
 	}()
-	defer func() {
-		Recover(a.process.local)
-	}()
 	rsp := &CosmosRemoteGetAtomIDRsp{}
 	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Element)
