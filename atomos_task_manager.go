@@ -413,18 +413,24 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 	var err *Error
 	defer func() {
 		if r := recover(); r != nil {
-			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Task recovers from panic.").AddPanicStack(nil, 2, r)
-				if ar, ok := at.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
-						at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
-					}()
-					ar.TaskRecover(am.id, am.name, am.arg, err)
-				} else {
+			defer func() {
+				if r2 := recover(); r2 != nil {
 					at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
 				}
+			}()
+			if err == nil {
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Task recovers from panic.").AddPanicStack(nil, 2, r)
+			} else {
+				err = err.AddPanicStack(nil, 2, r)
 			}
+			// Hook or Log
+			if ar, ok := at.atomos.instance.(AtomosRecover); ok {
+				ar.TaskRecover(am.id, am.name, am.arg, err)
+			} else {
+				at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
+			}
+			// Global hook
+			at.atomos.process.onRecoverHook(at.atomos.id, err)
 		}
 	}()
 

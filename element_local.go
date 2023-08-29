@@ -232,16 +232,21 @@ func (e *ElementLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				err := NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Parallel recovered from panic.").AddPanicStack(e, 3, r)
-				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
+				var err *Error
+				defer func() {
+					if r2 := recover(); r2 != nil {
 						e.Log().Fatal("Element: Parallel critical problem again. err=(%v)", err)
-					}()
+					}
+				}()
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Parallel recovered from panic.").AddPanicStack(e, 3, r)
+				// Hook or Log
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
 					ar.ParallelRecover(err)
 				} else {
 					e.Log().Fatal("Element: Parallel critical problem. err=(%v)", err)
 				}
+				// Global hook
+				e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 			}
 		}()
 		fn()
@@ -414,18 +419,24 @@ func (e *ElementLocal) OnMessaging(fromID ID, firstSyncCall, name string, in pro
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
+				defer func() {
+					if r2 := recover(); r2 != nil {
+						e.Log().Fatal("Element: Messaging critical problem again. err=(%v)", err)
+					}
+				}()
 				if err == nil {
 					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Messaging recovers from panic.").AddPanicStack(e, 3, r)
-					if ar, ok := e.atomos.instance.(AtomosRecover); ok {
-						defer func() {
-							recover()
-							e.Log().Fatal("Element: Messaging critical problem again. err=(%v)", err)
-						}()
-						ar.MessageRecover(name, in, err)
-					} else {
-						e.Log().Fatal("Element: Messaging critical problem. err=(%v)", err)
-					}
+				} else {
+					err = err.AddPanicStack(e, 3, r)
 				}
+				// Hook or Log
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					ar.MessageRecover(name, in, err)
+				} else {
+					e.Log().Fatal("Element: Messaging critical problem. err=(%v)", err)
+				}
+				// Global hook
+				e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 			}
 		}()
 		out, err = handler(fromID, e.atomos.GetInstance(), in)
@@ -461,18 +472,24 @@ func (e *ElementLocal) OnScaling(fromID ID, firstSyncCall, name string, in proto
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
+				defer func() {
+					if r2 := recover(); r2 != nil {
+						e.Log().Fatal("Element: Scaling critical problem again. err=(%v)", err)
+					}
+				}()
 				if err == nil {
 					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Scaling recovers from panic.").AddPanicStack(e, 3, r)
-					if ar, ok := e.atomos.instance.(AtomosRecover); ok {
-						defer func() {
-							recover()
-							e.Log().Fatal("Element: Scaling critical problem again. err=(%v)", err)
-						}()
-						ar.ScaleRecover(name, in, err)
-					} else {
-						e.Log().Fatal("Element: Scaling critical problem. err=(%v)", err)
-					}
+				} else {
+					err = err.AddPanicStack(e, 3, r)
 				}
+				// Hook or Log
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					ar.ScaleRecover(name, in, err)
+				} else {
+					e.Log().Fatal("Element: Scaling critical problem. err=(%v)", err)
+				}
+				// Global hook
+				e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 			}
 		}()
 		id, err = handler(fromID, e.atomos.instance, name, in)
@@ -561,18 +578,24 @@ func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uin
 	var elemPersistence ElementAutoData
 	defer func() {
 		if r := recover(); r != nil {
-			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Stopping recovers from panic.").AddPanicStack(e, 3, r, data)
-				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
-						e.Log().Fatal("Element: Stopping recovers from panic. err=(%v)", err)
-					}()
-					ar.StopRecover(err)
-				} else {
+			defer func() {
+				if r2 := recover(); r2 != nil {
 					e.Log().Fatal("Element: Stopping recovers from panic. err=(%v)", err)
 				}
+			}()
+			if err == nil {
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Stopping recovers from panic.").AddPanicStack(e, 3, r, data)
+			} else {
+				err = err.AddPanicStack(e, 3, r, data)
 			}
+			// Hook or Log
+			if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+				ar.StopRecover(err)
+			} else {
+				e.Log().Fatal("Element: Stopping recovers from panic. err=(%v)", err)
+			}
+			// Global hook
+			e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 		}
 	}()
 
@@ -811,18 +834,24 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
+			defer func() {
+				if r2 := recover(); r2 != nil {
+					e.Log().Fatal("Element: Spawn critical problem again. err=(%v)", err)
+				}
+			}()
 			if err == nil {
 				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Spawn recovers from panic.").AddPanicStack(e, 3, r)
-				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
-						e.Log().Fatal("Element: Spawn critical problem again. err=(%v)", err)
-					}()
-					ar.SpawnRecover(nil, err)
-				} else {
-					e.Log().Fatal("Element: Spawn critical problem. err=(%v)", err)
-				}
+			} else {
+				err = err.AddPanicStack(e, 3, r)
 			}
+			// Hook or Log
+			if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+				ar.SpawnRecover(nil, err)
+			} else {
+				e.Log().Fatal("Element: Spawn critical problem. err=(%v)", err)
+			}
+			// Global hook
+			e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 		}
 	}()
 

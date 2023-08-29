@@ -120,16 +120,21 @@ func (c *CosmosLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				err := NewErrorf(ErrFrameworkRecoverFromPanic, "Cosmos: Parallel recovers from panic.").AddPanicStack(c, 3, r)
-				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
+				var err *Error
+				defer func() {
+					if r2 := recover(); r2 != nil {
 						c.Log().Fatal("Cosmos: Parallel critical problem again. err=(%v)", err)
-					}()
+					}
+				}()
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Cosmos: Parallel recovers from panic.").AddPanicStack(c, 3, r)
+				// Hook or Log
+				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
 					ar.ParallelRecover(err)
 				} else {
 					c.Log().Fatal("Cosmos: Parallel critical problem. err=(%v)", err)
 				}
+				// Global hook
+				c.process.onRecoverHook(c.atomos.id, err)
 			}
 		}()
 		fn()
@@ -396,23 +401,28 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 		if !ok || s == nil {
 			continue
 		}
-		go func(s ElementStartRunning) {
+		go func(s ElementStartRunning, elemID *IDInfo) {
 			defer func() {
 				if r := recover(); r != nil {
-					err := NewErrorf(ErrMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)
-					if ar, ok := c.atomos.instance.(AtomosRecover); ok {
-						defer func() {
-							recover()
+					var err *Error
+					defer func() {
+						if r2 := recover(); r2 != nil {
 							c.Log().Fatal("Cosmos: StartRunning recovers from panic. err=(%v)", err)
-						}()
+						}
+					}()
+					err = NewErrorf(ErrMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)
+					// Hook or Log
+					if ar, ok := c.atomos.instance.(AtomosRecover); ok {
 						ar.ParallelRecover(err)
 					} else {
 						c.Log().Fatal("Cosmos: StartRunning recovers from panic. err=(%v)", err)
 					}
+					// Global hook
+					c.process.onRecoverHook(elemID, err)
 				}
 			}()
 			s.StartRunning()
-		}(s)
+		}(s, elem.atomos.id)
 	}
 	return nil
 }
@@ -420,18 +430,24 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementation) (elem *ElementLocal, err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
-				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
-					defer func() {
-						recover()
-						c.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
-					}()
-					ar.SpawnRecover(nil, err)
-				} else {
+			defer func() {
+				if r2 := recover(); r2 != nil {
 					c.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
 				}
+			}()
+			if err == nil {
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
+			} else {
+				err = err.AddPanicStack(c, 4, r)
 			}
+			// Hook or Log
+			if ar, ok := c.atomos.instance.(AtomosRecover); ok {
+				ar.SpawnRecover(nil, err)
+			} else {
+				c.Log().Fatal("Element: Spawn recovers from panic. err=(%v)", err)
+			}
+			// Global hook
+			c.process.onRecoverHook(c.process.local.atomos.id, err)
 		}
 	}()
 	name := i.Interface.Config.Name

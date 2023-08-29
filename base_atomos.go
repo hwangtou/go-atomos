@@ -518,16 +518,24 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
-			if ar, ok := a.instance.(AtomosRecover); ok {
-				defer func() {
-					recover()
+			defer func() {
+				if r2 := recover(); r2 != nil {
 					a.Log().Fatal("Atomos: Stopping recovers from panic. err=(%v)", err)
-				}()
+				}
+			}()
+			if err == nil {
+				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Stopping recovers from panic.").AddPanicStack(nil, 2, r)
+			} else {
+				err = err.AddPanicStack(nil, 2, r)
+			}
+			// Hook or Log
+			if ar, ok := a.instance.(AtomosRecover); ok {
 				ar.StopRecover(err)
 			} else {
 				a.Log().Fatal("Atomos: Stopping recovers from panic. err=(%v)", err)
 			}
+			// Global hook
+			a.process.onRecoverHook(a.id, err)
 		}
 	}()
 

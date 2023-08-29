@@ -596,3 +596,15 @@ func (p *CosmosProcess) onIDMessageTimeout(info *IDInfo, message string) {
 	p.logging.PushLogging(info, LogLevel_Core,
 		fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", info, message))
 }
+
+func (p *CosmosProcess) onRecoverHook(id *IDInfo, err *Error) {
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	recoverHook := runnable.recoverHook
+	if recoverHook == nil {
+		return
+	}
+	(*recoverHook)(id, err)
+}

@@ -57,6 +57,9 @@ type CosmosRunnable struct {
 	spawnOrder   []string
 	mainScript   CosmosMainScript
 	mainRouter   CosmosMainGlobalRouter
+
+	// hooks
+	recoverHook *func(id *IDInfo, err *Error)
 }
 
 // Check 检查CosmosRunnable是否正确构造。
