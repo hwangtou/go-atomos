@@ -22,6 +22,10 @@ message IDInfo {
   uint64 version = 6;
 }
 
+message IDContextInfo {
+  repeated string id_chain = 1;
+}
+
 enum LogLevel {
   Debug = 0;
   Info = 1;
@@ -253,7 +257,7 @@ message CosmosRemoteTryKillingRsp {
 // Scale Get Atom ID
 message CosmosRemoteScaleGetAtomIDReq {
   IDInfo caller_id = 1;
-  string caller_cur_first_sync_call = 2;
+  IDContextInfo caller_context = 2;
   IDInfo to = 4;
   int64 timeout = 5;
   string message = 6;
@@ -304,7 +308,7 @@ message CosmosRemoteGetElementInfoRsp {
 // Spawn Atom
 message CosmosRemoteSpawnAtomReq {
   IDInfo caller_id = 1;
-  string caller_cur_first_sync_call = 2;
+  IDContextInfo caller_context = 2;
   string element = 3;
   string atom = 4;
   google.protobuf.Any args = 5;
@@ -317,11 +321,12 @@ message CosmosRemoteSpawnAtomRsp {
 // Sync Messaging
 message CosmosRemoteSyncMessagingByNameReq {
   IDInfo caller_id = 1;
-  string caller_cur_first_sync_call = 2;
+  IDContextInfo caller_context = 2;
   IDInfo to = 3;
   int64 timeout = 4;
-  string message = 5;
-  google.protobuf.Any args = 6;
+  bool need_reply = 5;
+  string message = 6;
+  google.protobuf.Any args = 7;
 }
 message CosmosRemoteSyncMessagingByNameRsp {
   google.protobuf.Any reply = 1;
@@ -331,7 +336,7 @@ message CosmosRemoteSyncMessagingByNameRsp {
 // Kill Atom
 message CosmosRemoteKillAtomReq {
   IDInfo caller_id = 1;
-  string caller_cur_first_sync_call = 2;
+  IDContextInfo caller_context = 2;
   IDInfo id = 3;
   int64 timeout = 5;
 }
@@ -342,7 +347,7 @@ message CosmosRemoteKillAtomRsp {
 // Element Broadcast
 message CosmosRemoteElementBroadcastReq {
   IDInfo caller_id = 1;
-  string caller_cur_first_sync_call = 2;
+  IDContextInfo caller_context = 2;
   string key = 3;
   string content_type = 4;
   bytes content_buffer = 5;

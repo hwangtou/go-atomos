@@ -73,7 +73,7 @@ type atomosMail struct {
 	// Message和Task邮件会使用到的，调用的目标对象的名称。
 	// Mail target name, used by Message mail and Task mail.
 	name          string
-	firstSyncCall string
+	fromCallChain []string
 
 	// Message和Task邮件的参数。
 	// Argument that pass to target, used by Message mail and Task mail.
@@ -109,21 +109,27 @@ func allocAtomosMail() *atomosMail {
 func deallocAtomosMail(am *atomosMail) {
 }
 
+//
+// Spawn Mail
+func initSpawnMail() {
+
+}
+
 // 消息邮件
 // Message Mail
-func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, wait bool, arg proto.Message) {
+func initMessageMail(am *atomosMail, from ID, fromCallChain []string, name string, wait bool, arg proto.Message) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailMessage
 	am.from = from
-	am.firstSyncCall = firstSyncCall
+	am.fromCallChain = fromCallChain
 	am.name = name
 	// I think it has to be cloned, because argument is passing between atomos.
 	if arg != nil {
 		if ShouldArgumentClone {
 			am.arg = proto.Clone(arg)
 		} else {
-			am.arg = proto.Clone(arg)
+			am.arg = arg
 		}
 	} else {
 		am.arg = nil
@@ -135,30 +141,35 @@ func initMessageMail(am *atomosMail, from ID, firstSyncCall, name string, wait b
 
 // AsyncMessageCallback邮件
 // Async Message Callback Mail
-func initAsyncMessageCallbackMail(am *atomosMail, firstSyncCall, name string, async func(proto.Message, *Error), arg proto.Message, err *Error) {
+func initAsyncMessageCallbackMail(am *atomosMail, from ID, name string, callback func(proto.Message, *Error), arg proto.Message, err *Error) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailAsyncMessageCallback
-	am.firstSyncCall = firstSyncCall
+	am.from = from
+	am.fromCallChain = nil
 	am.name = name
 	am.arg = arg
 	am.err = err
-	am.asyncMessageCallbackClosure = async
+	am.asyncMessageCallbackClosure = callback
 	am.waitCh = make(chan *mailReply, 1)
 }
 
 // Scale邮件
 // Scale Mail
-func initScaleMail(am *atomosMail, from ID, firstSyncCall, name string, arg proto.Message) {
+func initScaleMail(am *atomosMail, from ID, fromCallChain []string, name string, arg proto.Message) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailScale
 	am.from = from
-	am.firstSyncCall = firstSyncCall
+	am.fromCallChain = fromCallChain
 	am.name = name
 	// I think it has to be cloned, because argument is passing between atomos.
 	if arg != nil {
-		am.arg = proto.Clone(arg)
+		if ShouldArgumentClone {
+			am.arg = proto.Clone(arg)
+		} else {
+			am.arg = arg
+		}
 	} else {
 		am.arg = nil
 	}
@@ -184,12 +195,12 @@ func initTaskClosureMail(am *atomosMail, name string, taskID uint64, closure fun
 
 // 虫洞邮件
 // Reload Mail
-func initWormholeMail(am *atomosMail, from ID, firstSyncCall string, wormhole AtomosWormhole) {
+func initWormholeMail(am *atomosMail, from ID, fromCallChain []string, wormhole AtomosWormhole) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionRun
 	am.mailType = MailWormhole
 	am.from = from
-	am.firstSyncCall = firstSyncCall
+	am.fromCallChain = fromCallChain
 	am.name = ""
 	am.arg = nil
 	am.tracker = nil
@@ -201,12 +212,12 @@ func initWormholeMail(am *atomosMail, from ID, firstSyncCall string, wormhole At
 
 // 终止邮件
 // Stopping Mail
-func initKillMail(am *atomosMail, from ID, firstSyncCall string) {
+func initKillMail(am *atomosMail, from ID, fromCallChain []string) {
 	am.mail.id = DefaultMailID
 	am.mail.action = MailActionExit
 	am.mailType = MailHalt
 	am.from = from
-	am.firstSyncCall = firstSyncCall
+	am.fromCallChain = fromCallChain
 	am.name = ""
 	am.tracker = nil
 	am.wormhole = nil

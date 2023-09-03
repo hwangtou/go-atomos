@@ -13,7 +13,7 @@ import (
 
 type CosmosRemote struct {
 	process *CosmosProcess
-	id      *IDInfo
+	context atomosIDContextRemote
 	lock    *CosmosNodeVersionLock
 
 	mutex   sync.RWMutex
@@ -27,26 +27,28 @@ type CosmosRemote struct {
 func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersionInfo) *CosmosRemote {
 	c := &CosmosRemote{
 		process:  process,
-		id:       info.Id,
+		context:  atomosIDContextRemote{},
 		mutex:    sync.RWMutex{},
 		enable:   false,
 		current:  nil,
 		version:  map[string]*cosmosRemoteVersion{},
 		elements: map[string]*ElementRemote{},
 	}
+	initAtomosIDContextRemote(&c.context, info.Id)
 	return c
 }
 
 func newCosmosRemoteFromLockInfo(process *CosmosProcess, lock *CosmosNodeVersionLock) *CosmosRemote {
 	c := &CosmosRemote{
 		process:  process,
-		id:       nil,
+		context:  atomosIDContextRemote{},
 		mutex:    sync.RWMutex{},
 		enable:   false,
 		current:  nil,
 		version:  map[string]*cosmosRemoteVersion{},
 		elements: map[string]*ElementRemote{},
 	}
+	initAtomosIDContextRemote(&c.context, &IDInfo{})
 	return c
 }
 
@@ -91,7 +93,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.id = info.Id
+	c.context.info = info.Id
 	c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	if info.Elements != nil {
 		for elemName, idInfo := range info.Elements {
@@ -115,7 +117,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 
 	oldVersion, has := c.version[version]
 	if !has {
-		c.id = info.Id
+		c.context.info = info.Id
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 		if info.Elements != nil {
 			for elemName, idInfo := range info.Elements {
@@ -135,7 +137,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 		return
 	}
 
-	c.id = info.Id
+	c.context.info = info.Id
 	if info.Address != oldVersion.info.Address {
 		oldVersion.setDisable()
 		c.process.local.Log().coreInfo("CosmosRemote: Connect info version updated. version=(%s)", version)
@@ -181,17 +183,25 @@ func (c *CosmosRemote) etcdDeleteVersion(version string) {
 	c.refresh()
 }
 
-func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
+func (c *CosmosRemote) getCurrentClientWithTimeout(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	if !c.enable {
-		return nil
+		return nil, nil, nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: Not enabled.").AddStack(nil)
 	}
 	if c.current == nil {
-		return nil
+		return nil, nil, nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: No current remote.").AddStack(nil)
 	}
-	return c.current.client
+	if timeout == 0 {
+		// 0 means no timeout, but we need to set a timeout to avoid deadlock.
+		timeout = atomosGRPCTimeout
+	} else {
+		timeout += atomosGRPCTTL
+	}
+	client := NewAtomosRemoteServiceClient(c.current.client)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return client, ctx, cancel, nil
 }
 
 func (c *CosmosRemote) getElement(name string) (*ElementRemote, *Error) {
@@ -207,15 +217,19 @@ func (c *CosmosRemote) getElement(name string) (*ElementRemote, *Error) {
 
 // Implementation of ID
 
+func (c *CosmosRemote) GetIDContext() IDContext {
+	return &c.context
+}
+
 func (c *CosmosRemote) GetIDInfo() *IDInfo {
 	if c == nil {
 		return nil
 	}
-	return c.id
+	return c.context.info
 }
 
 func (c *CosmosRemote) String() string {
-	return c.id.Info()
+	return c.context.info.Info()
 }
 
 func (c *CosmosRemote) Cosmos() CosmosNode {
@@ -223,17 +237,14 @@ func (c *CosmosRemote) Cosmos() CosmosNode {
 }
 
 func (c *CosmosRemote) State() AtomosState {
-	cli := c.getCurrentClient()
-	if cli == nil {
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(atomosGRPCTTL)
+	if err != nil {
+		c.process.local.Log().Error("CosmosRemote: GetIDState failed. err=(%v)", err)
 		return AtomosState(0)
 	}
-
-	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	rsp, er := client.GetIDState(ctx, &CosmosRemoteGetIDStateReq{
-		Id: c.id,
-	})
+
+	rsp, er := client.GetIDState(ctx, &CosmosRemoteGetIDStateReq{Id: c.context.info})
 	if er != nil {
 		c.process.local.Log().Error("CosmosRemote: GetIDState failed. err=(%v)", er)
 		return AtomosState(0)
@@ -243,16 +254,15 @@ func (c *CosmosRemote) State() AtomosState {
 }
 
 func (c *CosmosRemote) IdleTime() time.Duration {
-	cli := c.getCurrentClient()
-	if cli == nil {
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(atomosGRPCTTL)
+	if err != nil {
+		c.process.local.Log().Error("CosmosRemote: GetIDIdleTime failed. err=(%v)", err)
 		return 0
 	}
-
-	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
+
 	rsp, er := client.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{
-		Id: c.id,
+		Id: c.context.info,
 	})
 	if er != nil {
 		c.process.local.Log().Error("CosmosRemote: GetIDIdleTime failed. err=(%v)", er)
@@ -263,14 +273,9 @@ func (c *CosmosRemote) IdleTime() time.Duration {
 }
 
 func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	cli := c.getCurrentClient()
-	if cli == nil {
-		return nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: SyncMessagingByName client error.").AddStack(nil)
+	if callerID == nil {
+		return nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: SyncMessagingByName without fromID.").AddStack(nil)
 	}
-
-	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 
 	var er error
 	var arg *anypb.Any
@@ -281,25 +286,25 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		}
 	}
 
-	firstSyncCall := ""
-	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-		// 要从调用者开始算起，所以要从调用者的ID中获取。
-		firstSyncCall = callerID.nextFirstSyncCall()
-		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		//	return out, err.AddStack(nil)
-		//}
-		//defer callerID.unsetSyncMessageAndFirstCall()
-	} else {
-		firstSyncCall = callerFirst
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(timeout)
+	if err != nil {
+		return nil, err.AddStack(nil)
 	}
+	defer cancel()
+
+	callerIdInfo := callerID.GetIDInfo()
+	toIDInfo := c.context.info
 
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
-		CallerId:               callerID.GetIDInfo(),
-		CallerCurFirstSyncCall: firstSyncCall,
-		To:                     c.id,
-		Timeout:                int64(timeout),
-		Message:                name,
-		Args:                   arg,
+		CallerId: callerIdInfo,
+		CallerContext: &IDContextInfo{
+			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
+		},
+		To:        toIDInfo,
+		Timeout:   int64(timeout),
+		NeedReply: true,
+		Message:   name,
+		Args:      arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -317,62 +322,75 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 }
 
 func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
-	cli := c.getCurrentClient()
-	if cli == nil {
-		if callback != nil {
-			callback(nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: AsyncMessagingByName client error.").AddStack(nil))
-		}
-		return
-	}
 	if callerID == nil {
 		if callback != nil {
 			callback(nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: AsyncMessagingByName without fromID.").AddStack(nil))
 		}
+		c.process.local.Log().Error("CosmosRemote: AsyncMessagingByName without fromID.")
 		return
 	}
 
-	// 这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
-	callerIDInfo := callerID.GetIDInfo()
-	firstSyncCall := callerID.nextFirstSyncCall()
+	var er error
+	var arg *anypb.Any
+	if in != nil {
+		arg, er = anypb.New(in)
+		if er != nil {
+			if callback != nil {
+				callback(nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
+			}
+			c.process.local.Log().Error("CosmosRemote: AsyncMessagingByName arg error. err=(%v)", er)
+			return
+		}
+	}
+
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(timeout)
+	if err != nil {
+		if callback != nil {
+			callback(nil, err.AddStack(nil))
+		}
+		c.process.local.Log().Error("CosmosRemote: AsyncMessagingByName client error. err=(%v)", err)
+		return
+	}
+	defer cancel()
+
+	callerIdInfo := callerID.GetIDInfo()
+	toIDInfo := c.context.info
+	needReply := callback != nil
 
 	c.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
-			client := NewAtomosRemoteServiceClient(cli)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
 
-			var er error
-			var arg *anypb.Any
-			if in != nil {
-				arg, er = anypb.New(in)
-				if er != nil {
-					return nil, NewError(ErrCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName arg error.").AddStack(nil)
-				}
-			}
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
-				CallerId:               callerIDInfo,
-				CallerCurFirstSyncCall: firstSyncCall,
-				To:                     c.id,
-				Timeout:                int64(timeout),
-				Message:                name,
-				Args:                   arg,
+				CallerId: callerIdInfo,
+				CallerContext: &IDContextInfo{
+					IdChain: []string{},
+				},
+				To:        toIDInfo,
+				Timeout:   int64(timeout),
+				NeedReply: needReply,
+				Message:   name,
+				Args:      arg,
 			})
-			if rsp.Reply != nil {
-				out, er = rsp.Reply.UnmarshalNew()
-				if er != nil {
-					return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+			if er != nil {
+				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
+			}
+			if needReply {
+				if rsp.Reply != nil {
+					out, er = rsp.Reply.UnmarshalNew()
+					if er != nil {
+						return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+					}
+				}
+				if rsp.Error != nil {
+					err = rsp.Error.AddStack(nil)
 				}
 			}
-			if er != nil {
-				return nil, NewError(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error.").AddStack(nil)
-			}
-			if rsp.Error != nil {
-				err = rsp.Error.AddStack(nil)
-			}
+
 			return out, err
 		}()
-		if callback != nil {
-			callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+
+		if needReply {
+			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
 		}
 	})
 }
@@ -386,7 +404,7 @@ func (c *CosmosRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 }
 
 func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
+	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosRemote: Cannot send wormhole to remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) getGoID() uint64 {
@@ -449,32 +467,17 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 }
 
 func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {
-	cli := c.getCurrentClient()
-	if cli == nil {
-		return NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: ElementBroadcast client error.").AddStack(nil)
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(atomosGRPCTTL + atomosGRPCTimeout)
+	if err != nil {
+		return err.AddStack(nil)
 	}
-
-	firstSyncCall := ""
-	if callerFirst := callerID.getCurFirstSyncCall(); callerFirst == "" {
-		// 要从调用者开始算起，所以要从调用者的ID中获取。
-		firstSyncCall = callerID.nextFirstSyncCall()
-		//if err := callerID.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		//	return err.AddStack(nil)
-		//}
-		//defer callerID.unsetSyncMessageAndFirstCall()
-	} else {
-		firstSyncCall = callerFirst
-	}
-
-	client := NewAtomosRemoteServiceClient(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rsp, er := client.ElementBroadcast(ctx, &CosmosRemoteElementBroadcastReq{
-		CallerId:               callerID.GetIDInfo(),
-		CallerCurFirstSyncCall: firstSyncCall,
-		Key:                    key,
-		ContentType:            contentType,
-		ContentBuffer:          contentBuffer,
+		CallerId:      callerID.GetIDInfo(),
+		CallerContext: nil,
+		Key:           key,
+		ContentType:   contentType,
+		ContentBuffer: contentBuffer,
 	})
 
 	if er != nil {
@@ -581,13 +584,15 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 
 type remoteCosmosFakeSelfID struct {
 	*CosmosRemote
-	firstSyncCall string
+	callerIDInfo    *IDInfo
+	callerIDContext *IDContextInfo
 }
 
-func (c *CosmosRemote) newFakeCosmosSelfID(call string) *remoteCosmosFakeSelfID {
+func (c *CosmosRemote) newFakeCosmosSelfID(callerID *IDInfo, callerIDContext *IDContextInfo) *remoteCosmosFakeSelfID {
 	return &remoteCosmosFakeSelfID{
-		CosmosRemote:  c,
-		firstSyncCall: call,
+		CosmosRemote:    c,
+		callerIDInfo:    callerID,
+		callerIDContext: callerIDContext,
 	}
 }
 
@@ -598,22 +603,6 @@ func (r *remoteCosmosFakeSelfID) Log() Logging {
 }
 
 func (r *remoteCosmosFakeSelfID) Task() Task {
-	panic("not supported, should not be called")
-}
-
-func (r *remoteCosmosFakeSelfID) getCurFirstSyncCall() string {
-	return r.firstSyncCall
-}
-
-func (r *remoteCosmosFakeSelfID) setSyncMessageAndFirstCall(s string) *Error {
-	panic("not supported, should not be called")
-}
-
-func (r *remoteCosmosFakeSelfID) unsetSyncMessageAndFirstCall() {
-	panic("not supported, should not be called")
-}
-
-func (r *remoteCosmosFakeSelfID) nextFirstSyncCall() string {
 	panic("not supported, should not be called")
 }
 
@@ -633,6 +622,6 @@ func (r *remoteCosmosFakeSelfID) Config() map[string][]byte {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteCosmosFakeSelfID) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
+func (r *remoteCosmosFakeSelfID) getAtomos() *BaseAtomos {
 	panic("not supported, should not be called")
 }
