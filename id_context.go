@@ -1,7 +1,7 @@
 package go_atomos
 
 import (
-	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -22,63 +22,74 @@ import (
 // 2. 异步调用：这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
 // 3. 远程调用：这种情况必须有FirstSyncCall，因为远程调用肯定有一个起源。
 
-// idFirstSyncCall
-type idFirstSyncCall interface {
-	getCurFirstSyncCall() string
-	setSyncMessageAndFirstCall(string) *Error
-	unsetSyncMessageAndFirstCall()
-	nextFirstSyncCall() string
+// atomosIDContext
+type atomosIDContext interface {
+	isLoop(fromChain []string) *Error
+	//setSyncMessageAndFirstCall(string) *Error
+	//unsetSyncMessageAndFirstCall()
+	//nextFirstSyncCall() string
 }
 
-// idFirstSyncCallLocal
+// atomosIDContextLocal
 // 本地实现的idFirstSyncCall
-type idFirstSyncCallLocal struct {
-	info *IDInfo
+type atomosIDContextLocal struct {
+	atomos *BaseAtomos
 
-	mutex sync.Mutex
-	// 当前调用链的首个同步调用名。
-	curFirstSyncCall string
-	// 用于调用链的firstSyncCall生成的计数器。
-	curCallCounter uint64
+	context *IDContextInfo
 }
 
-func initAtomosFirstSyncCall(fsc *idFirstSyncCallLocal, id *IDInfo) {
-	fsc.info = id
+func initAtomosIDContextLocal(ctx *atomosIDContextLocal, atomos *BaseAtomos) {
+	ctx.atomos = atomos
+	ctx.context = &IDContextInfo{}
 }
 
-// Implementation of idFirstSyncCall
+// Implementation of atomosIDContext
 
-func (f *idFirstSyncCallLocal) getCurFirstSyncCall() string {
-	f.mutex.Lock()
-	c := f.curFirstSyncCall
-	f.mutex.Unlock()
-	return c
+func (f *atomosIDContextLocal) FromCallChain() []string {
+	f.atomos.mailbox.mutex.Lock()
+	defer f.atomos.mailbox.mutex.Unlock()
+	return f.context.IdChain
 }
 
-func (f *idFirstSyncCallLocal) setSyncMessageAndFirstCall(firstSyncCall string) *Error {
-	if firstSyncCall == "" {
-		return NewError(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Inputting firstSyncCall should not be empty.").AddStack(nil)
+func (f *atomosIDContextLocal) isLoop(fromChain []string) *Error {
+	f.atomos.mailbox.mutex.Lock()
+	defer f.atomos.mailbox.mutex.Unlock()
+
+	self := f.atomos.id.Info()
+	for _, chain := range fromChain {
+		if chain == self {
+			return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", self, strings.Join(fromChain, "->")).AddStack(nil)
+		}
 	}
-	f.mutex.Lock()
-	if f.curFirstSyncCall != "" {
-		f.mutex.Unlock()
-		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty. first=(%s),cur=(%s)", firstSyncCall, f.curFirstSyncCall).AddStack(nil)
-	}
-	f.curFirstSyncCall = firstSyncCall
-	f.mutex.Unlock()
 	return nil
 }
 
-func (f *idFirstSyncCallLocal) unsetSyncMessageAndFirstCall() {
-	f.mutex.Lock()
-	f.curFirstSyncCall = ""
-	f.mutex.Unlock()
+// atomosIDContextRemote
+// 远程实现的idFirstSyncCall
+type atomosIDContextRemote struct {
+	mutex   sync.RWMutex
+	info    *IDInfo
+	context *IDContextInfo
 }
 
-func (f *idFirstSyncCallLocal) nextFirstSyncCall() string {
-	f.mutex.Lock()
-	f.curCallCounter += 1
-	callID := f.curCallCounter
-	f.mutex.Unlock()
-	return fmt.Sprintf("%s-%d", f.info.Info(), callID)
+func initAtomosIDContextRemote(ctx *atomosIDContextRemote, info *IDInfo) {
+	ctx.info = info
+	ctx.context = &IDContextInfo{}
+}
+
+// Implementation of atomosIDContext
+
+func (f *atomosIDContextRemote) FromCallChain() []string {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	return f.context.IdChain
+}
+
+func (f *atomosIDContextRemote) isLoop(fromChain []string) *Error {
+	for _, chain := range fromChain {
+		if chain == f.info.Info() {
+			return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", f.info, strings.Join(fromChain, "->")).AddStack(nil)
+		}
+	}
+	return nil
 }

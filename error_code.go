@@ -110,9 +110,9 @@ const (
 	ErrAtomosPushTimeoutHandling
 	ErrAtomosPushTimeoutReject
 
-	// idFirstSyncCall
+	// atomosIDContext
 
-	ErrIDFirstSyncCallDeadlock
+	ErrAtomosIDCallLoop
 
 	// Element
 

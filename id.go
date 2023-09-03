@@ -8,9 +8,13 @@ import (
 // ID 是对Atomos的标识符，类似指针和句柄的概念。
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
+	// GetIDContext
+	// 获取ID上下文。
+	GetIDContext() IDContext
 	// GetIDInfo
 	// 获取ID信息。
 	GetIDInfo() *IDInfo
+
 	// String
 	// 获取ID的字符串表示。
 	String() string
@@ -53,6 +57,10 @@ type ID interface {
 	getGoID() uint64
 }
 
+type IDContext interface {
+	FromCallChain() []string
+}
+
 // ReleasableID 可以释放的ID，每当我们成功获得一个ID之后，都应该defer Release。
 // ReleasableID, an ID that can be released, we should defer Release after we get an ID successfully.
 type ReleasableID interface {
@@ -67,7 +75,6 @@ type ReleasableID interface {
 type SelfID interface {
 	ID
 	AtomosUtilities
-	idFirstSyncCall
 
 	// CosmosMain 获取Cosmos的本地实现。
 	// Get local implementation of Cosmos.
@@ -87,7 +94,7 @@ type SelfID interface {
 
 	// Internal
 
-	pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
+	getAtomos() *BaseAtomos
 }
 
 // AtomSelfID 是Atom的SelfID。
