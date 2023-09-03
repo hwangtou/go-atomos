@@ -15,7 +15,8 @@ type atomosRemoteService struct {
 }
 
 var (
-	atomosClientTimeout = 5 * time.Second
+	atomosGRPCTTL     = 1 * time.Second
+	atomosGRPCTimeout = 1 * time.Minute
 )
 
 func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
@@ -39,15 +40,11 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteScaleGetAtomIDRsp{}
-	if req.CallerCurFirstSyncCall == "" {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: ScaleGetAtomID invalid caller cur first sync call.").AddStack(nil)
-		return rsp, nil
-	}
 
 	switch req.To.Type {
 	case IDType_Atom:
 		// Caller id.
-		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+		callerID := a.getFromCaller(req.CallerId, req.CallerContext)
 		if callerID != nil {
 			defer callerID.callerCounterRelease()
 		}
@@ -67,12 +64,6 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 		elem, err := a.process.local.getLocalElement(req.To.Element)
 		if err != nil {
 			rsp.Error = err.AddStack(a.process.local)
-			return rsp, nil
-		}
-
-		// Check caller cur first sync call.
-		if elem.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: ScaleGetAtomID invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
 			return rsp, nil
 		}
 
@@ -188,11 +179,7 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteSpawnAtomRsp{}
-	if req.CallerCurFirstSyncCall == "" {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: SpawnAtom invalid caller cur first sync call.").AddStack(nil)
-		return rsp, nil
-	}
-	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+	callerID := a.getFromCaller(req.CallerId, req.CallerContext)
 	if callerID != nil {
 		defer callerID.callerCounterRelease()
 	}
@@ -236,19 +223,12 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		Recover(a.process.local)
 	}()
 	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
-	//if req.Message == "testingRemoteFirstSyncCallSpawnDeadlock" {
-	//	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
-	//}
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
-	if req.CallerCurFirstSyncCall == "" {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call.").AddStack(nil)
-		return rsp, nil
-	}
 
 	switch req.To.Type {
 	case IDType_Atom, IDType_Element:
 		// Caller id.
-		callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+		callerID := a.getFromCaller(req.CallerId, req.CallerContext)
 		if callerID != nil {
 			defer callerID.callerCounterRelease()
 		}
@@ -286,14 +266,8 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			return rsp, nil
 		}
 
-		// Check caller cur first sync call.
-		if id.getCurFirstSyncCall() == req.CallerCurFirstSyncCall {
-			rsp.Error = NewErrorf(ErrIDFirstSyncCallDeadlock, "CosmosRemote: SyncMessagingByName invalid caller cur first sync call. caller_cur_first_sync_call=(%v)", req.CallerCurFirstSyncCall).AddStack(nil)
-			return rsp, nil
-		}
-
 		// Sync messaging.
-		out, err := id.SyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in)
+		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, req.NeedReply, time.Duration(req.Timeout), in)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -312,10 +286,6 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteKillAtomRsp{}
-	if req.CallerCurFirstSyncCall == "" {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: KillAtom invalid caller cur first sync call.").AddStack(nil)
-		return rsp, nil
-	}
 
 	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Id.Element)
@@ -324,7 +294,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 		return rsp, nil
 	}
 	// Caller id.
-	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+	callerID := a.getFromCaller(req.CallerId, req.CallerContext)
 	if callerID != nil {
 		defer callerID.callerCounterRelease()
 	}
@@ -348,11 +318,7 @@ func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosR
 	}()
 	rsp := &CosmosRemoteElementBroadcastRsp{}
 
-	if req.CallerCurFirstSyncCall == "" {
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidFirstSyncCall, "CosmosRemote: ElementBroadcast invalid caller cur first sync call.").AddStack(nil)
-		return rsp, nil
-	}
-	callerID := a.getFromCaller(req.CallerId, req.CallerCurFirstSyncCall)
+	callerID := a.getFromCaller(req.CallerId, req.CallerContext)
 	if callerID != nil {
 		defer callerID.callerCounterRelease()
 	}
@@ -365,7 +331,7 @@ func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosR
 
 func (a *atomosRemoteService) mustEmbedUnimplementedAtomosRemoteServiceServer() {}
 
-func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall string) remoteFakeSelfID {
+func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, callerIDContextInfo *IDContextInfo) remoteFakeSelfID {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -374,14 +340,12 @@ func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall 
 	}
 
 	// Cosmos
-	a.process.cluster.remoteMutex.RLock()
-	cosmosNode, has := a.process.cluster.remoteCosmos[callerIDInfo.Node]
-	a.process.cluster.remoteMutex.RUnlock()
-	if !has {
+	cosmosNode := a.process.local.GetCosmosNode(callerIDInfo.Node)
+	if cosmosNode == nil {
 		return nil
 	}
 	if callerIDInfo.Type == IDType_Cosmos {
-		return cosmosNode.newFakeCosmosSelfID(firstSyncCall)
+		return cosmosNode.newFakeCosmosSelfID(callerIDInfo, callerIDContextInfo)
 	}
 
 	// Element
@@ -390,12 +354,12 @@ func (a *atomosRemoteService) getFromCaller(callerIDInfo *IDInfo, firstSyncCall 
 		return nil
 	}
 	if callerIDInfo.Type == IDType_Element {
-		return elem.newRemoteElementFromCaller(callerIDInfo, firstSyncCall)
+		return elem.newRemoteElementFromCaller(callerIDInfo, callerIDContextInfo)
 	}
 
 	// Atom
 	if callerIDInfo.Type != IDType_Atom {
 		return nil
 	}
-	return elem.newRemoteAtomFromCaller(callerIDInfo, firstSyncCall)
+	return elem.newRemoteAtomFromCaller(callerIDInfo, callerIDContextInfo)
 }

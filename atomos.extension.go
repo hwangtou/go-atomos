@@ -34,10 +34,6 @@ func (x *IDInfo) Info() string {
 		return fmt.Sprintf("%s::%s", x.Node, x.Element)
 	case IDType_Cosmos:
 		return x.Node
-	//case IDType_AppLoader:
-	//	return "AppLoader"
-	//case IDType_App:
-	//	return "App"
 	default:
 		return x.Node
 	}

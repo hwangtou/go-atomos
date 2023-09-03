@@ -19,6 +19,10 @@ type CosmosLocal struct {
 
 // Implementation of ID
 
+func (c *CosmosLocal) GetIDContext() IDContext {
+	return &c.atomos.ctx
+}
+
 func (c *CosmosLocal) GetIDInfo() *IDInfo {
 	if c == nil {
 		return nil
@@ -76,27 +80,6 @@ func (c *CosmosLocal) Task() Task {
 	return c.atomos.Task()
 }
 
-// Implementation of idFirstSyncCall
-
-func (c *CosmosLocal) getCurFirstSyncCall() string {
-	return c.atomos.fsc.getCurFirstSyncCall()
-}
-
-func (c *CosmosLocal) setSyncMessageAndFirstCall(s string) *Error {
-	if err := c.atomos.fsc.setSyncMessageAndFirstCall(s); err != nil {
-		return err.AddStack(c)
-	}
-	return nil
-}
-
-func (c *CosmosLocal) unsetSyncMessageAndFirstCall() {
-	c.atomos.fsc.unsetSyncMessageAndFirstCall()
-}
-
-func (c *CosmosLocal) nextFirstSyncCall() string {
-	return c.atomos.fsc.nextFirstSyncCall()
-}
-
 // Implementation of atomos.SelfID
 //
 // SelfID，是Atom内部可以访问的Atom资源的概念。
@@ -145,8 +128,8 @@ func (c *CosmosLocal) Config() map[string][]byte {
 	return c.runnable.config.Customize
 }
 
-func (c *CosmosLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err.AddStack(c), callback)
+func (c *CosmosLocal) getAtomos() *BaseAtomos {
+	return c.atomos
 }
 
 // Implementation of CosmosNode
@@ -234,19 +217,19 @@ func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.M
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (c *CosmosLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error) {
+func (c *CosmosLocal) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
 }
 
-func (c *CosmosLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err)
 }
 
-func (c *CosmosLocal) OnScaling(from ID, firstSyncCall, name string, args proto.Message) (id ID, err *Error) {
+func (c *CosmosLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrMainCannotScale, "Cosmos: Cannot scale.").AddStack(c)
 }
 
-func (c *CosmosLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosWormhole) *Error {
+func (c *CosmosLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
@@ -259,7 +242,7 @@ func (c *CosmosLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosW
 	return nil
 }
 
-func (c *CosmosLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
+func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
 
 	// Unload local elements and its atomos.
@@ -364,10 +347,10 @@ func (c *CosmosLocal) getLocalAllElements() (elems []*ElementLocal, err *Error) 
 }
 
 func (c *CosmosLocal) trySpawningElements() (err *Error) {
-	if err := c.setSyncMessageAndFirstCall(c.nextFirstSyncCall()); err != nil {
-		return err.AddStack(c)
-	}
-	defer c.unsetSyncMessageAndFirstCall()
+	//if err := c.setSyncMessageAndFirstCall(c.nextFirstSyncCall()); err != nil {
+	//	return err.AddStack(c)
+	//}
+	//defer c.unsetSyncMessageAndFirstCall()
 
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
@@ -465,6 +448,7 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 	}
 
 	// Element的Spawn逻辑。
+	//callChain := c.atomos.ctx.CallChain()
 	if err = elem.atomos.start(func() *Error {
 		if err := elem.cosmosElementSpawn(c, r, i); err != nil {
 			return err.AddStack(elem)

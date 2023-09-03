@@ -83,6 +83,10 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 // Implementation of ID
 //
 
+func (e *ElementLocal) GetIDContext() IDContext {
+	return &e.atomos.ctx
+}
+
 func (e *ElementLocal) GetIDInfo() *IDInfo {
 	if e == nil {
 		return nil
@@ -112,19 +116,7 @@ func (e *ElementLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	if callerID == nil {
-		return nil, NewError(ErrFrameworkIncorrectUsage, "Element: SyncMessagingByName without fromID.").AddStack(e)
-	}
-
-	firstSyncCall, toDefer, err := e.atomos.syncGetFirstSyncCallName(callerID)
-	if err != nil {
-		return nil, err.AddStack(e)
-	}
-	if toDefer {
-		defer callerID.unsetSyncMessageAndFirstCall()
-	}
-
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, true, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, true, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}
@@ -134,21 +126,7 @@ func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout
 // AsyncMessagingByName
 // 异步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(proto.Message, *Error)) {
-	if callerID == nil {
-		callback(nil, NewError(ErrFrameworkIncorrectUsage, "Element: AsyncMessagingByName without fromID.").AddStack(e))
-		return
-	}
-
-	// 这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
-	firstSyncCall := e.nextFirstSyncCall()
-
-	e.Parallel(func() {
-		out, err := e.atomos.PushMessageMailAndWaitReply(callerID, firstSyncCall, name, callback != nil, timeout, in)
-		if err != nil {
-			err = err.AddStack(e)
-		}
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err.AddStack(e), callback)
-	})
+	e.atomos.PushAsyncMessageMail(callerID, e, name, timeout, in, callback)
 }
 
 func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -182,27 +160,6 @@ func (e *ElementLocal) Log() Logging {
 
 func (e *ElementLocal) Task() Task {
 	return e.atomos.Task()
-}
-
-// Implementation of idFirstSyncCall
-
-func (e *ElementLocal) getCurFirstSyncCall() string {
-	return e.atomos.fsc.getCurFirstSyncCall()
-}
-
-func (e *ElementLocal) setSyncMessageAndFirstCall(s string) *Error {
-	if err := e.atomos.fsc.setSyncMessageAndFirstCall(s); err != nil {
-		return err.AddStack(e)
-	}
-	return nil
-}
-
-func (e *ElementLocal) unsetSyncMessageAndFirstCall() {
-	e.atomos.fsc.unsetSyncMessageAndFirstCall()
-}
-
-func (e *ElementLocal) nextFirstSyncCall() string {
-	return e.atomos.fsc.nextFirstSyncCall()
 }
 
 // Implementation of atomos.SelfID
@@ -257,8 +214,8 @@ func (e *ElementLocal) Config() map[string][]byte {
 	return e.cosmosLocal.runnable.config.Customize
 }
 
-func (e *ElementLocal) pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall string, in proto.Message, err *Error, callback func(out proto.Message, err *Error)) {
-	e.atomos.PushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, in, err.AddStack(e), callback)
+func (e *ElementLocal) getAtomos() *BaseAtomos {
+	return e.atomos
 }
 
 // Implementation of ElementSelfID
@@ -377,15 +334,7 @@ func (e *ElementLocal) ScaleGetAtomID(callerID SelfID, name string, timeout time
 		return nil, nil, NewError(ErrFrameworkIncorrectUsage, "Element: ScaleGetAtomID without fromID.").AddStack(e)
 	}
 
-	firstSyncCall, toDefer, err := e.atomos.syncGetFirstSyncCallName(callerID)
-	if err != nil {
-		return nil, nil, err.AddStack(e)
-	}
-	if toDefer {
-		defer callerID.unsetSyncMessageAndFirstCall()
-	}
-
-	id, err := e.atomos.PushScaleMailAndWaitReply(callerID, firstSyncCall, name, timeout, in)
+	id, err := e.atomos.PushScaleMailAndWaitReply(callerID, name, timeout, in)
 	if err != nil {
 		return nil, nil, err.AddStack(e, &String{S: name}, in)
 	}
@@ -401,14 +350,10 @@ func (e *ElementLocal) ScaleGetAtomID(callerID SelfID, name string, timeout time
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (e *ElementLocal) OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error) {
+func (e *ElementLocal) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	if fromID == nil {
 		return nil, NewError(ErrFrameworkInternalError, "Element: OnMessaging without fromID.").AddStack(e)
 	}
-	if err = e.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		return nil, err.AddStack(e)
-	}
-	defer e.unsetSyncMessageAndFirstCall()
 
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
@@ -444,24 +389,14 @@ func (e *ElementLocal) OnMessaging(fromID ID, firstSyncCall, name string, in pro
 	return
 }
 
-func (e *ElementLocal) OnAsyncMessagingCallback(firstSyncCall string, in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
-	if err = e.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		e.Log().Fatal("Element: OnAsyncMessagingCallback failed. err=(%v)", err.AddStack(e))
-		return
-	}
-	defer e.unsetSyncMessageAndFirstCall()
-
+func (e *ElementLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err.AddStack(e))
 }
 
-func (e *ElementLocal) OnScaling(fromID ID, firstSyncCall, name string, in proto.Message) (id ID, err *Error) {
+func (e *ElementLocal) OnScaling(fromID ID, name string, in proto.Message) (id ID, err *Error) {
 	if fromID == nil {
 		return nil, NewError(ErrFrameworkInternalError, "Element: OnScaling without fromID.").AddStack(e)
 	}
-	if err = e.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		return nil, err.AddStack(e)
-	}
-	defer e.unsetSyncMessageAndFirstCall()
 
 	handler := e.elemImpl.ScaleHandlers[name]
 	if handler == nil {
@@ -510,12 +445,7 @@ func (e *ElementLocal) OnScaling(fromID ID, firstSyncCall, name string, in proto
 	return
 }
 
-func (e *ElementLocal) OnWormhole(from ID, firstSyncCall string, wormhole AtomosWormhole) *Error {
-	if err := e.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-		return err.AddStack(e)
-	}
-	defer e.unsetSyncMessageAndFirstCall()
-
+func (e *ElementLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
@@ -526,15 +456,7 @@ func (e *ElementLocal) OnWormhole(from ID, firstSyncCall string, wormhole Atomos
 	return nil
 }
 
-func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uint64) (err *Error) {
-	if firstSyncCall != "" {
-		if err := e.setSyncMessageAndFirstCall(firstSyncCall); err != nil {
-			e.Log().Fatal("Element: Stopping failed. err=(%v)", err.AddStack(e))
-		} else {
-			defer e.unsetSyncMessageAndFirstCall()
-		}
-	}
-
+func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	// Send Kill to all atoms.
 	var stopTimeout, stopGap time.Duration
 	elemExit, ok := e.elemImpl.Developer.(ElementAtomExit)
@@ -662,20 +584,12 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
-	// TODO：临时解决方案而已
-	var firstSyncCall string
-	if !fscFree {
-		fsc, toDefer, err := e.atomos.syncGetFirstSyncCallName(callerID)
-		if err != nil {
-			return nil, nil, err.AddStack(e)
-		}
-		firstSyncCall = fsc
-		if toDefer {
-			defer callerID.unsetSyncMessageAndFirstCall()
-		}
-	} else {
-		firstSyncCall = e.atomos.fsc.nextFirstSyncCall()
+	fromCallChain := callerID.GetIDContext().FromCallChain()
+	err := e.atomos.ctx.isLoop(fromCallChain)
+	if err != nil {
+		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
+	callChain := append(fromCallChain, e.atomos.id.Info())
 
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.
@@ -743,8 +657,8 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 			//oldLock := &oldAtom.atomos.mailbox.mutex
 			// 将旧的Atom的Name元素复制到新的Atom。
 			atom.nameElement = oldAtom.nameElement
-			// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
-			atom.atomos.fsc.curCallCounter = oldAtom.atomos.fsc.curCallCounter
+			//// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
+			//atom.atomos.ctx.curCallCounter = oldAtom.atomos.ctx.curCallCounter
 			// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
 			atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it) // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
 
@@ -763,7 +677,8 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 
 	// Atom的Spawn逻辑。
 	if err = atom.atomos.start(func() *Error {
-		if err := atom.elementAtomSpawn(firstSyncCall, current, persistence, arg); err != nil {
+		atom.atomos.setSpawningFromChain(callChain)
+		if err := atom.elementAtomSpawn(current, persistence, arg); err != nil {
 			return err.AddStack(nil)
 		}
 		return nil
