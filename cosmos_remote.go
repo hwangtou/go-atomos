@@ -88,7 +88,7 @@ func (c *CosmosRemote) etcdDeleteLock() {
 }
 
 func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Core("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.Log().coreInfo("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -100,7 +100,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 			e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 			if !has {
-				c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 			}
@@ -110,7 +110,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 }
 
 func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().Core("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.Log().coreInfo("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -124,7 +124,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 				//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 				e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 				if !has {
-					c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+					c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 				} else {
 					c.elements[elemName] = newElementRemote(c, idInfo, e.Interface, version)
 				}
@@ -140,7 +140,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 	c.context.info = info.Id
 	if info.Address != oldVersion.info.Address {
 		oldVersion.setDisable()
-		c.process.local.Log().Core("CosmosRemote: Connect info version updated. version=(%s)", version)
+		c.process.local.Log().coreInfo("CosmosRemote: Connect info version updated. version=(%s)", version)
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	}
 
@@ -153,7 +153,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName]
 			e, has := c.process.local.runnable.implements[elemName]
 			if !has {
-				c.process.local.Log().Core("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				if oldElem, has := c.elements[elemName]; has {
 					oldElem.setDisable()
@@ -467,7 +467,7 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 }
 
 func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {
-	client, ctx, cancel, err := c.getCurrentClientWithTimeout(atomosGRPCTTL + atomosGRPCTimeout)
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(0)
 	if err != nil {
 		return err.AddStack(nil)
 	}
@@ -530,11 +530,11 @@ func (c *cosmosRemoteVersion) check() bool {
 		if conn != nil {
 			conn.Close()
 		}
-		c.process.local.Log().Core("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
+		c.process.local.Log().coreFatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
 		return false
 	}
 	c.avail = true
-	c.process.local.Log().Core("CosmosRemote: Dial. addr=(%s)", c.info.Address)
+	c.process.local.Log().coreInfo("CosmosRemote: Dial. addr=(%s)", c.info.Address)
 	return true
 }
 
@@ -584,19 +584,25 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 
 type remoteCosmosFakeSelfID struct {
 	*CosmosRemote
-	callerIDInfo    *IDInfo
 	callerIDContext *IDContextInfo
 }
 
 func (c *CosmosRemote) newFakeCosmosSelfID(callerID *IDInfo, callerIDContext *IDContextInfo) *remoteCosmosFakeSelfID {
 	return &remoteCosmosFakeSelfID{
 		CosmosRemote:    c,
-		callerIDInfo:    callerID,
 		callerIDContext: callerIDContext,
 	}
 }
 
 func (r *remoteCosmosFakeSelfID) callerCounterRelease() {}
+
+func (r *remoteCosmosFakeSelfID) GetIDContext() IDContext {
+	return r
+}
+
+func (r *remoteCosmosFakeSelfID) FromCallChain() []string {
+	return r.callerIDContext.IdChain
+}
 
 func (r *remoteCosmosFakeSelfID) Log() Logging {
 	panic("not supported, should not be called")

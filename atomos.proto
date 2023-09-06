@@ -30,9 +30,11 @@ enum LogLevel {
   Debug = 0;
   Info = 1;
   Warn = 2;
-  Err = 3;
-  Fatal = 4;
-  Core = 5;
+  CoreInfo = 3;
+  Err = 4;
+  Fatal = 5;
+  CoreErr = 6;
+  CoreFatal = 7;
 }
 
 message LogMail {
@@ -322,9 +324,10 @@ message CosmosRemoteSyncMessagingByNameReq {
   IDContextInfo caller_context = 2;
   IDInfo to = 3;
   int64 timeout = 4;
-  bool need_reply = 5;
-  string message = 6;
-  google.protobuf.Any args = 7;
+  bool async = 5;
+  bool need_reply = 6;
+  string message = 7;
+  google.protobuf.Any args = 8;
 }
 message CosmosRemoteSyncMessagingByNameRsp {
   google.protobuf.Any reply = 1;
