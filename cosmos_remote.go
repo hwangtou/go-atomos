@@ -467,7 +467,7 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 }
 
 func (c *CosmosRemote) ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error) {
-	client, ctx, cancel, err := c.getCurrentClientWithTimeout(atomosGRPCTTL + atomosGRPCTimeout)
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(0)
 	if err != nil {
 		return err.AddStack(nil)
 	}
@@ -584,19 +584,25 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 
 type remoteCosmosFakeSelfID struct {
 	*CosmosRemote
-	callerIDInfo    *IDInfo
 	callerIDContext *IDContextInfo
 }
 
 func (c *CosmosRemote) newFakeCosmosSelfID(callerID *IDInfo, callerIDContext *IDContextInfo) *remoteCosmosFakeSelfID {
 	return &remoteCosmosFakeSelfID{
 		CosmosRemote:    c,
-		callerIDInfo:    callerID,
 		callerIDContext: callerIDContext,
 	}
 }
 
 func (r *remoteCosmosFakeSelfID) callerCounterRelease() {}
+
+func (r *remoteCosmosFakeSelfID) GetIDContext() IDContext {
+	return r
+}
+
+func (r *remoteCosmosFakeSelfID) FromCallChain() []string {
+	return r.callerIDContext.IdChain
+}
 
 func (r *remoteCosmosFakeSelfID) Log() Logging {
 	panic("not supported, should not be called")

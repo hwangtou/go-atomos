@@ -238,7 +238,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 			}
 		}()
 		defer func() {
-			if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
+			if err := p.local.atomos.cosmosProcessPushKillMailAndWaitReply(p.local, 0); err != nil {
 				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
@@ -301,7 +301,7 @@ func (p *CosmosProcess) Stop() *Error {
 			}
 		}()
 		defer func() {
-			if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
+			if err := p.local.atomos.cosmosProcessPushKillMailAndWaitReply(p.local, 0); err != nil {
 				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
@@ -568,7 +568,7 @@ func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 // handleStartUpFailedLocalCleanUp 当准备集群本地失败时，如果本地已经加载成功了，就做本地的清理工作。
 // When preparing the cluster locally fails, if the local has been loaded successfully, do the local cleanup work.
 func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
-	if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
+	if err := p.local.atomos.cosmosProcessPushKillMailAndWaitReply(p.local, 0); err != nil {
 		p.local.Log().coreFatal("CosmosProcess: Failed to kill local cosmos. err=(%v)", err)
 	}
 }
