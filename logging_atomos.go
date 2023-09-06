@@ -113,14 +113,18 @@ func (c *loggingAtomos) logging(lm *LogMail) {
 		c.buf.WriteString(" [INFO]  ")
 	case LogLevel_Warn:
 		c.buf.WriteString(" [WARN]  ")
+	case LogLevel_CoreInfo:
+		c.buf.WriteString(" [COSMO] ")
 	case LogLevel_Err:
 		c.buf.WriteString(" [ERROR] ")
+	case LogLevel_CoreErr:
+		c.buf.WriteString(" [COSMOS ERROR] ")
 	case LogLevel_Fatal:
 		c.buf.WriteString(" [FATAL] ")
-	case LogLevel_Core:
-		c.buf.WriteString(" [COSMO] ")
+	case LogLevel_CoreFatal:
+		c.buf.WriteString(" [COSMOS FATAL] ")
 	default:
-		c.buf.WriteString(" [N/A]   ")
+		c.buf.WriteString(" [UNKNOWN ERROR] ")
 	}
 	// ID
 	if id := lm.Id; id != nil {
@@ -138,16 +142,10 @@ func (c *loggingAtomos) logging(lm *LogMail) {
 		c.buf.WriteString(fmt.Sprintf("%s", lm.Message))
 	}
 	switch lm.Level {
-	case LogLevel_Debug:
+	case LogLevel_Debug, LogLevel_Info, LogLevel_Warn, LogLevel_CoreInfo:
 		c.accessLog(c.buf.String())
-	case LogLevel_Info:
-		c.accessLog(c.buf.String())
-	case LogLevel_Warn:
+	case LogLevel_Err, LogLevel_CoreErr, LogLevel_Fatal, LogLevel_CoreFatal:
 		c.errorLog(c.buf.String())
-	case LogLevel_Err:
-		c.errorLog(c.buf.String())
-	case LogLevel_Fatal:
-		fallthrough
 	default:
 		c.errorLog(c.buf.String())
 	}
