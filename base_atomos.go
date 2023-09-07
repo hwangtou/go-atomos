@@ -183,7 +183,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 	var fromCallChain []string
 	if needReply && !async {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID)
+		err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
@@ -249,7 +249,7 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(callerID SelfID, n
 
 func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, timeout time.Duration, in proto.Message) (ID, *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := a.ctx.isLoop(fromCallChain, callerID)
+	err := a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
@@ -274,7 +274,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeou
 	var fromCallChain []string
 	if wait {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID)
+		err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
@@ -306,7 +306,7 @@ func (a *BaseAtomos) cosmosProcessPushKillMailAndWaitReply(callerID SelfID, time
 
 func (a *BaseAtomos) PushWormholeMailAndWaitReply(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err = a.ctx.isLoop(fromCallChain, callerID)
+	err = a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}

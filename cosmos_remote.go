@@ -351,7 +351,6 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		c.process.local.Log().Error("CosmosRemote: AsyncMessagingByName client error. err=(%v)", err)
 		return
 	}
-	defer cancel()
 
 	callerIdInfo := callerID.GetIDInfo()
 	toIDInfo := c.context.info
@@ -360,6 +359,7 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 	c.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
 
+			defer cancel()
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
