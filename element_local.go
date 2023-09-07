@@ -594,7 +594,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 	}
 
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := e.atomos.ctx.isLoop(fromCallChain, callerID)
+	err := e.atomos.ctx.isLoop(fromCallChain, callerID, true)
 	if err != nil {
 		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
