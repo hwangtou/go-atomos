@@ -7,7 +7,7 @@ import (
 
 var sharedTestAtom1, sharedTestAtom2 *AtomLocal
 
-func TestAtomLocal_FirstSyncCall(t *testing.T) {
+func TestAtomLocal_IDContextLoopDetect(t *testing.T) {
 	initTestFakeCosmosProcess(t)
 	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
@@ -21,170 +21,170 @@ func TestAtomLocal_FirstSyncCall(t *testing.T) {
 
 	a, tracker, err := testElem.SpawnAtom(process.local, atomName, &String{S: atomName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: Spawn failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: Spawn failed. err=(%v)", err)
 		return
 	}
 	tracker.Release()
 
 	a2, tracker2, err := testElem.SpawnAtom(process.local, atomOtherName, &String{S: atomOtherName}, NewIDTrackerInfoFromLocalGoroutine(1), true)
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: Spawn failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: Spawn failed. err=(%v)", err)
 		return
 	}
 	_ = a2
 	tracker2.Release()
 
 	// 测试本地同步调用到自己的情况，传入的from和to都是自己，in是自己的名字。会出现死锁，并返回错误。
-	out, err := a.SyncMessagingByName(process.local, "testingLocalSyncSelfFirstSyncCallDeadlock", 0, &String{S: atomName})
+	out, err := a.SyncMessagingByName(process.local, "testingLocalSyncCallLoopDeadlock", 0, &String{S: atomName})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncCallLoopDeadlock failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncCallLoopDeadlock out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncSelfFirstSyncCallDeadlock tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncCallLoopDeadlock tested")
 
 	// 测试本地异步调用到自己的情况，传入的from和to都是自己，in是自己的名字。不会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncSelfFirstSyncCall", 0, &String{S: atomName})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncCallLoop", 0, &String{S: atomName})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop out=(%v)", out)
 		return
 	}
 	<-time.After(1 * time.Millisecond)
 	if localSuccessCounter != 1 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop successCounter=(%v)", localSuccessCounter)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop tested")
 
 	// 测试本地同步和异步调用外部的情况，传入的from是自己，to是外部的名字，in是自己的名字。不会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncAndAsyncOtherFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncAndAsyncOtherCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncAndAsyncOtherCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncAndAsyncOtherCallLoop out=(%v)", out)
 		return
 	}
 	<-time.After(1 * time.Millisecond)
 	if localSuccessCounter != 3 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop successCounter=(%v)", localSuccessCounter)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncAndAsyncOtherFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncAndAsyncOtherCallLoop tested")
 
 	// 测试本地同步调用外部，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncChainSelfFirstSyncCallDeadlock", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSyncChainSelfCallLoopDeadlock", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncChainSelfCallLoopDeadlock failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncChainSelfCallLoopDeadlock out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSyncChainSelfFirstSyncCallDeadlock tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalSyncChainSelfCallLoopDeadlock tested")
 
 	// 测试本地异步调用外部，并回调到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。不会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalAsyncChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncChainSelfCallLoop out=(%v)", out)
 		return
 	}
 	<-time.After(1 * time.Millisecond)
 	if localSuccessCounter != 4 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncChainSelfCallLoop successCounter=(%v)", localSuccessCounter)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalAsyncChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncChainSelfCallLoop tested")
 
 	// 测试本地同步执行任务，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalTaskChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalTaskChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalTaskChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalTaskChainSelfCallLoop out=(%v)", out)
 		return
 	}
 	<-time.After(1 * time.Millisecond)
 	if localSuccessCounter != 5 {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalAsyncSelfFirstSyncCall successCounter=(%v)", localSuccessCounter)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalAsyncCallLoop successCounter=(%v)", localSuccessCounter)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalTaskChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalTaskChainSelfCallLoop tested")
 
 	// 测试本地发送Wormhole，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalWormholeChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalWormholeChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalWormholeChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalWormholeChainSelfCallLoop out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalWormholeChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalWormholeChainSelfCallLoop tested")
 
 	// 测试本地同步Scale调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalScaleChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalScaleChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalScaleChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalScaleChainSelfCallLoop out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalScaleChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalScaleChainSelfCallLoop tested")
 
 	// 测试本地同步Kill调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalKillChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalKillChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalKillChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalKillChainSelfCallLoop out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalKillChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalKillChainSelfCallLoop tested")
 
 	// 测试本地同步KillSelf调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalKillSelfChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalKillSelfChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalKillSelfChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalKillSelfChainSelfCallLoop out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalKillSelfChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalKillSelfChainSelfCallLoop tested")
 
 	// 测试本地同步Spawn调用，并链式调用到自己的情况，传入的from是自己，to是外部的名字，in是自己的名字。会出现死锁。
-	out, err = a.SyncMessagingByName(process.local, "testingLocalSpawnSelfChainSelfFirstSyncCall", 0, &Strings{Ss: []string{atomName, atomOtherName}})
+	out, err = a.SyncMessagingByName(process.local, "testingLocalSpawnSelfChainSelfCallLoop", 0, &Strings{Ss: []string{atomName, atomOtherName}})
 	if err != nil {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall failed. err=(%v)", err)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSpawnSelfChainSelfCallLoop failed. err=(%v)", err)
 		return
 	}
 	if out.(*String).S != "OK" {
-		t.Errorf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall out=(%v)", out)
+		t.Errorf("TestAtomLocal_IDContextLoopDetect: testingLocalSpawnSelfChainSelfCallLoop out=(%v)", out)
 		return
 	}
-	t.Logf("TestElementLocal_FirstSyncCall: testingLocalSpawnSelfChainSelfFirstSyncCall tested")
+	t.Logf("TestAtomLocal_IDContextLoopDetect: testingLocalSpawnSelfChainSelfCallLoop tested")
 }
 
 func TestAtomLocalBase(t *testing.T) {

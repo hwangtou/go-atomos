@@ -123,7 +123,7 @@ type BaseAtomos struct {
 	it *atomosIDTracker
 
 	// 首个同步调用的信息
-	// Info of first sync call
+	// Info of ID Context
 	ctx atomosIDContextLocal
 }
 

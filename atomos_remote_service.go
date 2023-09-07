@@ -213,8 +213,8 @@ func (a *atomosRemoteService) SpawnAtom(_ context.Context, req *CosmosRemoteSpaw
 }
 
 // SyncMessagingByName sync messaging by name.
-// CallerId is the caller id.
-// CallerCurFirstSyncCall is the caller current first sync call.
+// CallerID is the caller id.
+// CallerContext is the caller context.
 // To is the target id.
 // Args is the args.
 // Rsp is the rsp.

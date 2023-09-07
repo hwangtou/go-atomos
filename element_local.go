@@ -664,8 +664,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 			//oldLock := &oldAtom.atomos.mailbox.mutex
 			// 将旧的Atom的Name元素复制到新的Atom。
 			atom.nameElement = oldAtom.nameElement
-			//// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
-			//atom.atomos.ctx.curCallCounter = oldAtom.atomos.ctx.curCallCounter
+			//atom.atomos.ctx = oldAtom.atomos.ctx // TODO: 验证这种情况下，IDContext的内容是否需要转移。
 			// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
 			atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it) // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
 
@@ -776,12 +775,6 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 			e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
 		}
 	}()
-
-	//err = e.setSyncMessageAndFirstCall(c.getCurFirstSyncCall())
-	//if err != nil {
-	//	return err.AddStack(e)
-	//}
-	//defer e.unsetSyncMessageAndFirstCall()
 
 	// Get data and Spawning.
 	var data proto.Message

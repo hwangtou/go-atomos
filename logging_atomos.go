@@ -71,11 +71,9 @@ func (c *loggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 
 func (c *loggingAtomos) pushFrameworkErrorLog(format string, args ...interface{}) {
 	c.PushLogging(&IDInfo{
-		//Type:    processIDType,
 		Node:    "",
 		Element: "",
 		Atom:    "",
-		//GoId:    0,
 	}, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
