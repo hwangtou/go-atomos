@@ -12,13 +12,13 @@ import (
 
 func (x *Config) Check() *Error {
 	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+		return NewError(ErrRunnableConfigInvalid, "Config is nil").AddStack(nil)
 	}
 	if x.Cosmos == "" {
-		return NewError(ErrCosmosConfigInvalid, "Cosmos is empty").AddStack(nil)
+		return NewError(ErrRunnableConfigInvalid, "Cosmos is empty").AddStack(nil)
 	}
 	if x.Node == "" {
-		return NewError(ErrCosmosConfigInvalid, "Node is empty").AddStack(nil)
+		return NewError(ErrRunnableConfigInvalid, "Node is empty").AddStack(nil)
 	}
 	return nil
 }
