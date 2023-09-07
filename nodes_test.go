@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
+func TestSimulateTwoCosmosNode_IDContextLoopDectect(t *testing.T) {
 	// 两个节点的模拟
 	// Simulate two nodes
 

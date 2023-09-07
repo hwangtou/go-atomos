@@ -19,7 +19,7 @@ func TestAllSingleNode(t *testing.T) {
 	TestAtomLocalBase(t)
 
 	clearTest()
-	TestAtomLocal_FirstSyncCall(t)
+	TestAtomLocal_IDContextLoopDetect(t)
 }
 
 func TestAllMultiNodes(t *testing.T) {
@@ -40,6 +40,6 @@ func TestAllMultiNodes(t *testing.T) {
 	<-time.After(time.Second * 1)
 
 	clearTest()
-	TestSimulateTwoCosmosNode_FirstSyncCall(t)
+	TestSimulateTwoCosmosNode_IDContextLoopDectect(t)
 	<-time.After(time.Second * 1)
 }

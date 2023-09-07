@@ -347,11 +347,6 @@ func (c *CosmosLocal) getLocalAllElements() (elems []*ElementLocal, err *Error) 
 }
 
 func (c *CosmosLocal) trySpawningElements() (err *Error) {
-	//if err := c.setSyncMessageAndFirstCall(c.nextFirstSyncCall()); err != nil {
-	//	return err.AddStack(c)
-	//}
-	//defer c.unsetSyncMessageAndFirstCall()
-
 	// Spawn
 	// TODO 有个问题，如果这里的Spawn逻辑需要用到新的helper里面的配置，那就会有问题，所以Spawn尽量不要做对其它Cosmos的操作，延后到Script。
 	var loaded []*ElementLocal
