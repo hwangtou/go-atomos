@@ -11,6 +11,11 @@ type AtomosHolder interface {
 	// OnMessaging
 	// 收到消息
 	OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error)
+
+	// OnAsyncMessaging
+	// 收到异步消息
+	OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error))
+
 	// OnAsyncMessagingCallback
 	// 收到异步消息回调
 	OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error))
@@ -123,7 +128,7 @@ type BaseAtomos struct {
 	it *atomosIDTracker
 
 	// 首个同步调用的信息
-	// Info of first sync call
+	// Info of ID Context
 	ctx atomosIDContextLocal
 }
 
@@ -175,30 +180,29 @@ func (a *BaseAtomos) GetGoID() uint64 {
 	return a.mailbox.goID
 }
 
-func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, needReply bool, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
+func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, async bool, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
 	if callerID == nil {
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
 	var fromCallChain []string
-	if needReply {
+	if !async {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain)
+		err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
+		}
+		if callerID.GetIDInfo().Type > IDType_Cosmos {
+			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 		}
 	}
 
 	am := allocAtomosMail()
-	initMessageMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), name, needReply, in)
+	initMessageMail(am, callerID, fromCallChain, name, in)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos: It is not running. callerID=(%s),name=(%s),in=(%v)", callerID, name, in).AddStack(nil)
-	}
-	if !needReply {
-		deallocAtomosMail(am)
-		return nil, nil
 	}
 
 	replyInterface, err := am.waitReply(a, timeout)
@@ -221,16 +225,14 @@ func (a *BaseAtomos) PushAsyncMessageMail(callerID, selfID SelfID, name string, 
 		return
 	}
 
-	selfID.Parallel(func() {
-		needReply := callback != nil
-		out, err := a.PushMessageMailAndWaitReply(callerID, name, needReply, timeout, in)
-		if err != nil {
-			err = err.AddStack(nil)
-		}
-		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err.AddStack(nil), callback)
-		}
-	})
+	am := allocAtomosMail()
+	initAsyncMessageMail(am, callerID, selfID, name, timeout, callback, in)
+
+	if ok := a.mailbox.pushTail(am.mail); !ok {
+		a.log.logging.pushFrameworkErrorLog("Atomos: PushAsyncMessageMail, Atomos: It is not running. name=(%s),args=(%v)", name, in)
+	}
+
+	deallocAtomosMail(am)
 }
 
 func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(callerID SelfID, name string, args proto.Message, err *Error, async func(proto.Message, *Error)) {
@@ -238,21 +240,25 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(callerID SelfID, n
 	initAsyncMessageCallbackMail(am, callerID, name, async, args, err)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
-		a.log.logging.pushFrameworkErrorLog("Atomos: PushAsyncMessageCallbackMailAndWaitReply, Atomos is not running. name=(%s),args=(%v)", name, args)
+		a.log.logging.pushFrameworkErrorLog("Atomos: PushAsyncMessageCallbackMailAndWaitReply, Atomos: It is not running. name=(%s),args=(%v)", name, args)
 	}
 
 	deallocAtomosMail(am)
 }
 
-func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID ID, name string, timeout time.Duration, in proto.Message) (ID, *Error) {
+func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, timeout time.Duration, in proto.Message) (ID, *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := a.ctx.isLoop(fromCallChain)
+	err := a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	}
+
 	am := allocAtomosMail()
-	initScaleMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), name, in)
+	initScaleMail(am, callerID, fromCallChain, name, in)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
@@ -269,19 +275,23 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID ID, name string, timeout
 
 func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeout time.Duration) (err *Error) {
 	var fromCallChain []string
-	if !wait {
+	if wait {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain)
+		err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
 
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	}
+
 	am := allocAtomosMail()
-	initKillMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()))
+	initKillMail(am, callerID, fromCallChain)
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", callerID, wait).AddStack(nil)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos: It is not running. from=(%s),wait=(%v)", callerID, wait).AddStack(nil)
 	}
 	if wait {
 		_, err = am.waitReply(a, timeout)
@@ -290,18 +300,33 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeou
 	return nil
 }
 
+func (a *BaseAtomos) cosmosProcessPushKillMailAndWaitReply(callerID SelfID, timeout time.Duration) (err *Error) {
+	am := allocAtomosMail()
+	initKillMail(am, callerID, []string{})
+
+	if ok := a.mailbox.pushHead(am.mail); !ok {
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos: It is not running. from=(%s)", callerID).AddStack(nil)
+	}
+	_, err = am.waitReply(a, timeout)
+	return err.AddStack(nil)
+}
+
 func (a *BaseAtomos) PushWormholeMailAndWaitReply(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err = a.ctx.isLoop(fromCallChain)
+	err = a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	}
+
 	am := allocAtomosMail()
-	initWormholeMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), wormhole)
+	initWormholeMail(am, callerID, fromCallChain, wormhole)
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
-		return NewErrorf(ErrAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", callerID, wormhole).AddStack(nil)
+		return NewErrorf(ErrAtomosIsNotRunning, "Atomos: It is not running. from=(%s),wormhole=(%v)", callerID, wormhole).AddStack(nil)
 	}
 	_, err = am.waitReply(a, timeout)
 
@@ -364,12 +389,12 @@ func (a *BaseAtomos) setSpawn() {
 	a.process.onIDSpawn(a.id)
 }
 
-func (a *BaseAtomos) setBusyWithContext(message string, fromCallChain []string) {
+func (a *BaseAtomos) setBusyWithContext(message string, arg proto.Message, fromCallChain []string) {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosBusy
 	a.ctx.context.IdChain = fromCallChain
-	a.mt.set(message, a.id, a.process)
+	a.mt.set(message, a.id, a.process, arg)
 }
 
 func (a *BaseAtomos) setWaitingWithContext(message string) {
@@ -434,7 +459,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	switch am.mailType {
 	case MailMessage:
 		{
-			a.setBusyWithContext(am.name, am.fromCallChain)
+			a.setBusyWithContext(am.name, am.arg, am.fromCallChain)
 			defer a.setWaitingWithContext(am.name)
 
 			resp, err := a.holder.OnMessaging(am.from, am.name, am.arg)
@@ -444,10 +469,18 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			am.sendReply(resp, err)
 			// Mail dealloc in AtomCore.pushMessageMail.
 		}
+	case MailAsyncMessage:
+		{
+			name := "AsyncMessage-" + am.name
+			a.setBusyWithContext(name, nil, nil)
+			defer a.setWaitingWithContext(name)
+
+			a.holder.OnAsyncMessaging(am.from, am.name, am.arg, am.asyncMessageCallbackClosure)
+		}
 	case MailAsyncMessageCallback:
 		{
 			name := "AsyncMessageCallback-" + am.name
-			a.setBusyWithContext(name, nil)
+			a.setBusyWithContext(name, nil, nil)
 			defer a.setWaitingWithContext(name)
 
 			a.holder.OnAsyncMessagingCallback(am.arg, am.err, am.asyncMessageCallbackClosure)
@@ -455,7 +488,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	case MailTask:
 		{
 			name := "Task-" + am.name
-			a.setBusyWithContext(name, nil)
+			a.setBusyWithContext(name, nil, nil)
 			defer a.setWaitingWithContext(name)
 
 			a.task.handleTask(am)
@@ -463,7 +496,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 		}
 	case MailWormhole:
 		{
-			a.setBusyWithContext("AcceptWormhole", am.fromCallChain)
+			a.setBusyWithContext("AcceptWormhole", nil, am.fromCallChain)
 			defer a.setWaitingWithContext("AcceptWormhole")
 
 			err := a.holder.OnWormhole(am.from, am.wormhole)
@@ -473,7 +506,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	case MailScale:
 		{
 			name := "Scale-" + am.name
-			a.setBusyWithContext(name, am.fromCallChain)
+			a.setBusyWithContext(name, nil, am.fromCallChain)
 			defer a.setWaitingWithContext(name)
 
 			id, err := a.holder.OnScaling(am.from, am.name, am.arg)
@@ -544,6 +577,10 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 			case MailMessage:
 				remainAtomMail.sendReply(nil, err)
 				// Mail dealloc in AtomCore.pushMessageMail.
+			case MailAsyncMessage:
+				remainAtomMail.asyncReply(nil, err)
+			case MailAsyncMessageCallback:
+				remainAtomMail.asyncReply(nil, err)
 			case MailTask:
 				// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 				// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
@@ -556,6 +593,9 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 			case MailWormhole:
 				remainAtomMail.sendReply(nil, err)
 				// Mail dealloc in AtomCore.pushWormholeMail.
+			case MailScale:
+				remainAtomMail.sendReplyID(nil, err)
+				// Mail dealloc in AtomCore.pushScaleMail.
 			default:
 				a.log.Fatal("Atomos: Stopping unknown message type. type=%v,mail=%+v",
 					remainAtomMail.mailType, remainAtomMail)

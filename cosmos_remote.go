@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"net"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -300,11 +301,10 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:        toIDInfo,
-		Timeout:   int64(timeout),
-		NeedReply: true,
-		Message:   name,
-		Args:      arg,
+		To:      toIDInfo,
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -351,7 +351,6 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		c.process.local.Log().Error("CosmosRemote: AsyncMessagingByName client error. err=(%v)", err)
 		return
 	}
-	defer cancel()
 
 	callerIdInfo := callerID.GetIDInfo()
 	toIDInfo := c.context.info
@@ -360,7 +359,8 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 	c.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
 
-			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+			defer cancel()
+			rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
@@ -390,26 +390,33 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		}()
 
 		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
+			callerID.asyncCallback(callerID, name, out, err, callback)
 		}
 	})
 }
 
-func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+func (c *CosmosRemote) DecoderByName(_ string) (MessageDecoder, MessageDecoder) {
 	return nil, nil
 }
 
-func (c *CosmosRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (c *CosmosRemote) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+func (c *CosmosRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosRemote: Cannot send wormhole to remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) getGoID() uint64 {
 	//return c.id.GoId
 	return 0
+}
+
+func (c *CosmosRemote) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if callback == nil {
+		return
+	}
+	callback(reply, err)
 }
 
 // Implementation of CosmosNode
@@ -450,6 +457,9 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	id, tracker, err = element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
+	}
+	if reflect.ValueOf(id).IsNil() {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "CosmosRemote: ScaleGetAtomID failed. id is nil").AddStack(nil)
 	}
 	return id, tracker, nil
 }
@@ -516,7 +526,7 @@ func (c *cosmosRemoteVersion) check() bool {
 	//}
 
 	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
+	ctx, cancel := context.WithTimeout(context.Background(), atomosGRPCDialTimeout)
 	defer cancel()
 
 	var er error
@@ -526,7 +536,11 @@ func (c *cosmosRemoteVersion) check() bool {
 		c.client, er = grpc.DialContext(ctx, c.info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
 	}
 	if er != nil {
-		conn, connEr := net.DialTimeout("tcp", c.info.Address, time.Second*1)
+		dialTime := atomosGRPCDialTimeout
+		if atomosGRPCDialTimeout < time.Second {
+			dialTime = time.Second
+		}
+		conn, connEr := net.DialTimeout("tcp", c.info.Address, dialTime)
 		if conn != nil {
 			conn.Close()
 		}
@@ -620,7 +634,7 @@ func (r *remoteCosmosFakeSelfID) KillSelf() {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteCosmosFakeSelfID) Parallel(f func()) {
+func (r *remoteCosmosFakeSelfID) Parallel(_ func()) {
 	panic("not supported, should not be called")
 }
 

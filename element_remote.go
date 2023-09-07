@@ -118,11 +118,10 @@ func (e *ElementRemote) SyncMessagingByName(callerID SelfID, name string, timeou
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:        toIDInfo,
-		Timeout:   int64(timeout),
-		NeedReply: true,
-		Message:   name,
-		Args:      arg,
+		To:      toIDInfo,
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
@@ -169,7 +168,6 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 		e.cosmos.process.local.Log().Error("ElementRemote: AsyncMessagingByName client error. err=(%v)", err)
 		return
 	}
-	defer cancel()
 
 	callerIdInfo := callerID.GetIDInfo()
 	toIDInfo := e.context.info
@@ -178,7 +176,8 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 	e.cosmos.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
 
-			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+			defer cancel()
+			rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
@@ -208,7 +207,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 		}()
 
 		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
+			callerID.asyncCallback(callerID, name, out, err, callback)
 		}
 	})
 }
@@ -224,11 +223,11 @@ func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecod
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (e *ElementRemote) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(nil)
 }
 
-func (e *ElementRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+func (e *ElementRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
 	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
 }
 
@@ -239,6 +238,13 @@ func (e *ElementRemote) getIDTrackerManager() *atomosIDTracker {
 func (e *ElementRemote) getGoID() uint64 {
 	//return e.info.GoId
 	return 0
+}
+
+func (e *ElementRemote) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if callback == nil {
+		return
+	}
+	callback(reply, err)
 }
 
 // Implementation of Element
@@ -419,19 +425,25 @@ func (e *ElementRemote) setDisable() {
 
 type remoteElementFakeSelfID struct {
 	*ElementRemote
-	callerIDInfo    *IDInfo
 	callerIDContext *IDContextInfo
 }
 
 func (e *ElementRemote) newRemoteElementFromCaller(callerID *IDInfo, callerIDContext *IDContextInfo) *remoteElementFakeSelfID {
 	return &remoteElementFakeSelfID{
 		ElementRemote:   e,
-		callerIDInfo:    callerID,
 		callerIDContext: callerIDContext,
 	}
 }
 
 func (r *remoteElementFakeSelfID) callerCounterRelease() {
+}
+
+func (r *remoteElementFakeSelfID) GetIDContext() IDContext {
+	return r
+}
+
+func (r *remoteElementFakeSelfID) FromCallChain() []string {
+	return r.callerIDContext.IdChain
 }
 
 func (r *remoteElementFakeSelfID) Log() Logging {
@@ -450,7 +462,7 @@ func (r *remoteElementFakeSelfID) KillSelf() {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteElementFakeSelfID) Parallel(f func()) {
+func (r *remoteElementFakeSelfID) Parallel(_ func()) {
 	panic("not supported, should not be called")
 }
 

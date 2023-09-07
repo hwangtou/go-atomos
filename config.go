@@ -9,11 +9,11 @@ import (
 func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
+		return nil, NewErrorf(ErrRunnableConfigInvalid, "Read failed. filepath=(%s),err=(%v)", filepath, err).AddStack(nil)
 	}
 	y := &NodeYAMLConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err).AddStack(nil)
+		return nil, NewErrorf(ErrRunnableConfigInvalid, "Unmarshal failed, err=(%v)", err).AddStack(nil)
 	}
 	logLevel := LogLevel_Debug
 	if lv, ok := LogLevel_value[y.LogLevel]; ok {
@@ -69,7 +69,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 	for _, element := range y.EnableElements {
 		impl, has := runnable.implements[element]
 		if !has {
-			return nil, NewErrorf(ErrCosmosConfigInvalid, "Element not found. element=(%s)", element).AddStack(nil)
+			return nil, NewErrorf(ErrRunnableConfigInvalid, "Element not found. element=(%s)", element).AddStack(nil)
 		}
 		runnable.SetElementSpawn(impl.Interface.Config.Name)
 	}

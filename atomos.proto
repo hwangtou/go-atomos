@@ -243,6 +243,7 @@ service AtomosRemoteService {
 
   rpc SpawnAtom(CosmosRemoteSpawnAtomReq) returns (CosmosRemoteSpawnAtomRsp) {}
   rpc SyncMessagingByName(CosmosRemoteSyncMessagingByNameReq) returns (CosmosRemoteSyncMessagingByNameRsp) {}
+  rpc AsyncMessagingByName(CosmosRemoteAsyncMessagingByNameReq) returns (CosmosRemoteAsyncMessagingByNameRsp) {}
   rpc KillAtom(CosmosRemoteKillAtomReq) returns (CosmosRemoteKillAtomRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
@@ -324,12 +325,24 @@ message CosmosRemoteSyncMessagingByNameReq {
   IDContextInfo caller_context = 2;
   IDInfo to = 3;
   int64 timeout = 4;
-  bool async = 5;
-  bool need_reply = 6;
-  string message = 7;
-  google.protobuf.Any args = 8;
+  string message = 5;
+  google.protobuf.Any args = 6;
 }
 message CosmosRemoteSyncMessagingByNameRsp {
+  google.protobuf.Any reply = 1;
+  Error error = 2;
+}
+
+message CosmosRemoteAsyncMessagingByNameReq {
+  IDInfo caller_id = 1;
+  IDContextInfo caller_context = 2;
+  IDInfo to = 3;
+  int64 timeout = 4;
+  bool need_reply = 5;
+  string message = 6;
+  google.protobuf.Any args = 7;
+}
+message CosmosRemoteAsyncMessagingByNameRsp {
   google.protobuf.Any reply = 1;
   Error error = 2;
 }

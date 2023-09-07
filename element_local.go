@@ -117,7 +117,7 @@ func (e *ElementLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, true, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, false, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}
@@ -138,7 +138,7 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (e *ElementLocal) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
 }
 
@@ -151,6 +151,10 @@ func (e *ElementLocal) SendWormhole(callerID SelfID, timeout time.Duration, worm
 
 func (e *ElementLocal) getGoID() uint64 {
 	return e.atomos.GetGoID()
+}
+
+func (e *ElementLocal) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	e.atomos.PushAsyncMessageCallbackMailAndWaitReply(callerID, name, reply, err, callback)
 }
 
 // Implementation of AtomosUtilities
@@ -282,7 +286,14 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
+	id, idTracker, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	if err != nil && err.Code != ErrAtomIsRunning {
+		return nil, nil, err.AddStack(e)
+	}
+	if id == nil {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
+	}
+	return id, idTracker, nil
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -323,7 +334,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 func (e *ElementLocal) SpawnAtom(callerID SelfID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error) {
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
-	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
+	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote)
 	if err != nil {
 		return id, t, err.AddStack(e)
 	}
@@ -388,6 +399,62 @@ func (e *ElementLocal) OnMessaging(fromID ID, name string, in proto.Message) (ou
 		out, err = handler(fromID, e.atomos.GetInstance(), in)
 	}()
 	return
+}
+
+func (e *ElementLocal) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
+	if fromID == nil {
+		if callback != nil {
+			callback(nil, NewError(ErrFrameworkInternalError, "Element: OnAsyncMessaging without fromID.").AddStack(e))
+		}
+		e.Log().Fatal("Element: OnAsyncMessaging without fromID.")
+		return
+	}
+
+	handler := e.elemImpl.ElementHandlers[name]
+	if handler == nil {
+		if callback != nil {
+			callback(nil, NewErrorf(ErrElementMessageHandlerNotExists,
+				"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
+		}
+		e.Log().Fatal("Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in)
+		return
+	}
+
+	var err *Error
+	var out proto.Message
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				defer func() {
+					if r2 := recover(); r2 != nil {
+						e.Log().Fatal("Element: AsyncMessaging critical problem again. err=(%v)", err)
+					}
+				}()
+				if err == nil {
+					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: AsyncMessaging recovers from panic.").AddPanicStack(e, 3, r)
+				} else {
+					err = err.AddPanicStack(e, 3, r)
+				}
+				// Hook or Log
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					ar.MessageRecover(name, in, err)
+				} else {
+					e.Log().Fatal("Element: AsyncMessaging critical problem. err=(%v)", err)
+				}
+				// Global hook
+				e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
+			}
+		}()
+		out, err = handler(fromID, e.atomos.GetInstance(), in)
+		if err != nil {
+			err = err.AddStack(e)
+		}
+		if callback != nil {
+			fromID.asyncCallback(e, name, out, err, callback)
+		} else {
+			e.Log().Debug("Element: AsyncMessaging without callback. from=(%s),name=(%s),in=(%v),out=(%v),err=(%v)", fromID, name, in, out, err)
+		}
+	}()
 }
 
 func (e *ElementLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
@@ -591,17 +658,20 @@ var (
 	nd = int32(0)
 )
 
-func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote, fscFree bool) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := e.atomos.ctx.isLoop(fromCallChain)
+	err := e.atomos.ctx.isLoop(fromCallChain, callerID, true)
 	if err != nil {
 		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
-	callChain := append(fromCallChain, e.atomos.id.Info())
+	callChain := append(fromCallChain)
+	if e.atomos.id.Type > IDType_Cosmos {
+		callChain = append(callChain, e.atomos.id.Info())
+	}
 
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.
@@ -669,8 +739,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 			//oldLock := &oldAtom.atomos.mailbox.mutex
 			// 将旧的Atom的Name元素复制到新的Atom。
 			atom.nameElement = oldAtom.nameElement
-			//// 将旧的Atom的firstSyncCall计数器复制到新的Atom。
-			//atom.atomos.ctx.curCallCounter = oldAtom.atomos.ctx.curCallCounter
+			//atom.atomos.ctx = oldAtom.atomos.ctx // TODO: 验证这种情况下，IDContext的内容是否需要转移。
 			// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
 			atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it) // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
 
@@ -782,12 +851,6 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 		}
 	}()
 
-	//err = e.setSyncMessageAndFirstCall(c.getCurFirstSyncCall())
-	//if err != nil {
-	//	return err.AddStack(e)
-	//}
-	//defer e.unsetSyncMessageAndFirstCall()
-
 	// Get data and Spawning.
 	var data proto.Message
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
@@ -825,10 +888,13 @@ func (e *ElementLocal) getAtomFromRemote(name string) (*AtomLocal, *Error) {
 	// Auto data persistence.
 	persistence, ok := e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
-		return nil, nil
+		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false, true)
-	if err != nil {
+	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false)
+	if err != nil && err.Code != ErrAtomIsRunning {
+		return nil, err.AddStack(e)
+	}
+	if atom == nil {
 		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
 	return atom, nil

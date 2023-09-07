@@ -55,6 +55,8 @@ type ID interface {
 	// 当前ID的邮箱GoID
 	// GoID of the mailbox of current ID.
 	getGoID() uint64
+
+	asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error))
 }
 
 type IDContext interface {

@@ -239,7 +239,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}()
 		defer func() {
 			if err := p.local.atomos.cosmosProcessPushKillMailAndWaitReply(p.local, 0); err != nil {
-				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
+				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%s)", err.Message)
 			}
 		}()
 

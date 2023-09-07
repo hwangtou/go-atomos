@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -78,7 +79,7 @@ func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 	if er.Error() == "os: app already finished" {
 		goto removePID
 	}
-	errno, ok = er.(syscall.Errno)
+	ok = errors.As(er, &errno)
 	if !ok {
 		goto removePID
 	}

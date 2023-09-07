@@ -36,7 +36,7 @@ func (t *TestAtomosHolder) OnAsyncMessagingCallback(in proto.Message, err *Error
 	panic("implement me")
 }
 
-func (t *TestAtomosHolder) OnMessaging(fromID ID, firstSyncCall, name string, in proto.Message) (out proto.Message, err *Error) {
+func (t *TestAtomosHolder) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", fromID, a.state, name, in)
 	func() {
 		defer func() {
@@ -54,7 +54,10 @@ func (t *TestAtomosHolder) OnMessaging(fromID ID, firstSyncCall, name string, in
 	return
 }
 
-func (t *TestAtomosHolder) OnScaling(from ID, firstSyncCall, name string, args proto.Message, tracker *IDTracker) (id ID, err *Error) {
+func (t *TestAtomosHolder) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
+}
+
+func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	panic("not supported")
 }
 
@@ -66,6 +69,11 @@ func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 func (t *TestAtomosHolder) OnStopping(from ID, cancelled []uint64) *Error {
 	t.T.Logf("OnStopping: from=(%v),state=(%v),cancelled=(%v)", from, a.state, cancelled)
 	return nil
+}
+
+func (t *TestAtomosHolder) OnIDsReleased() {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (t *TestAtomosHolder) Spawn() {

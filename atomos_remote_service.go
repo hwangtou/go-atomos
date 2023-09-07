@@ -15,11 +15,12 @@ type atomosRemoteService struct {
 }
 
 var (
-	atomosGRPCTTL     = 1 * time.Second
-	atomosGRPCTimeout = 1 * time.Minute
+	atomosGRPCTTL         = 1 * time.Second
+	atomosGRPCDialTimeout = 3 * time.Second
+	atomosGRPCTimeout     = 1 * time.Minute
 )
 
-func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
+func (a *atomosRemoteService) TryKilling(_ context.Context, _ *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -35,7 +36,7 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 
 // ScaleGetAtomID is the remote service of ScaleGetAtomID.
 // It is used to communicate with the remote Atomos.
-func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRemoteScaleGetAtomIDReq) (*CosmosRemoteScaleGetAtomIDRsp, error) {
+func (a *atomosRemoteService) ScaleGetAtomID(_ context.Context, req *CosmosRemoteScaleGetAtomIDReq) (*CosmosRemoteScaleGetAtomIDRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -86,7 +87,7 @@ func (a *atomosRemoteService) ScaleGetAtomID(ctx context.Context, req *CosmosRem
 	}
 }
 
-func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
+func (a *atomosRemoteService) GetAtomID(_ context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -108,7 +109,7 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteGetIDStateReq) (*CosmosRemoteGetIDStateRsp, error) {
+func (a *atomosRemoteService) GetIDState(_ context.Context, req *CosmosRemoteGetIDStateReq) (*CosmosRemoteGetIDStateRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -134,7 +135,7 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemoteGetIDIdleTimeReq) (*CosmosRemoteGetIDIdleTimeRsp, error) {
+func (a *atomosRemoteService) GetIDIdleTime(_ context.Context, req *CosmosRemoteGetIDIdleTimeReq) (*CosmosRemoteGetIDIdleTimeRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -160,7 +161,7 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) GetElementInfo(ctx context.Context, req *CosmosRemoteGetElementInfoReq) (*CosmosRemoteGetElementInfoRsp, error) {
+func (a *atomosRemoteService) GetElementInfo(_ context.Context, req *CosmosRemoteGetElementInfoReq) (*CosmosRemoteGetElementInfoRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -174,7 +175,7 @@ func (a *atomosRemoteService) GetElementInfo(ctx context.Context, req *CosmosRem
 	}, nil
 }
 
-func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
+func (a *atomosRemoteService) SpawnAtom(_ context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -212,13 +213,13 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 }
 
 // SyncMessagingByName sync messaging by name.
-// CallerId is the caller id.
-// CallerCurFirstSyncCall is the caller current first sync call.
+// CallerID is the caller id.
+// CallerContext is the caller context.
 // To is the target id.
 // Args is the args.
 // Rsp is the rsp.
 // Error is the error.
-func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
+func (a *atomosRemoteService) SyncMessagingByName(_ context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -257,17 +258,17 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 				rsp.Error = err.AddStack(a.process.local)
 				return rsp, nil
 			}
+			//if id == nil || reflect.ValueOf(id).IsNil() {
+			//	rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
+			//	return rsp, nil
+			//}
 			id = atom
 		} else {
 			id = elem
 		}
-		if id == nil || reflect.ValueOf(id).IsNil() {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%s)", req.To.Info()).AddStack(nil)
-			return rsp, nil
-		}
 
 		// Sync messaging.
-		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, req.NeedReply, time.Duration(req.Timeout), in)
+		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, false, time.Duration(req.Timeout), in)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -281,7 +282,74 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 	}
 }
 
-func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
+func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
+	defer func() {
+		Recover(a.process.local)
+	}()
+	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName req=(%v)", req)
+	rsp := &CosmosRemoteAsyncMessagingByNameRsp{}
+
+	switch req.To.Type {
+	case IDType_Atom, IDType_Element:
+		// Caller id.
+		callerID := a.getFromCaller(req.CallerId, req.CallerContext)
+		if callerID != nil {
+			defer callerID.callerCounterRelease()
+		}
+
+		var in proto.Message
+		var er error
+		// Unmarshal args.
+		if req.Args != nil {
+			in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+			if er != nil {
+				rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
+				return rsp, nil
+			}
+		}
+
+		var id SelfID
+		// Get element.
+		elem, err := a.process.local.getLocalElement(req.To.Element)
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
+		}
+		if req.To.Type == IDType_Atom {
+			atom, err := elem.getAtomFromRemote(req.To.Atom)
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
+				return rsp, nil
+			}
+			//if id == nil || reflect.ValueOf(id).IsNil() {
+			//	rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
+			//	return rsp, nil
+			//}
+			id = atom
+		} else {
+			id = elem
+		}
+
+		// Async messaging.
+		if req.NeedReply {
+			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, true, time.Duration(req.Timeout), in)
+			if out != nil {
+				rsp.Reply, _ = anypb.New(out)
+			}
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
+			}
+		} else {
+			id.getAtomos().PushAsyncMessageMail(callerID, id, req.Message, time.Duration(req.Timeout), in, nil)
+		}
+		return rsp, nil
+	default:
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName invalid ToID type. to=(%v)", req.To).AddStack(nil)
+		return rsp, nil
+	}
+}
+
+func (a *atomosRemoteService) KillAtom(_ context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -312,7 +380,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
+func (a *atomosRemoteService) ElementBroadcast(_ context.Context, req *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
