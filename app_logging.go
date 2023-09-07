@@ -41,10 +41,10 @@ type appLogging struct {
 func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 	stat, er := os.Stat(logPath)
 	if er != nil {
-		return nil, NewErrorf(ErrAppLoggingPathInvalid, "invalid log path. path=(%s),err=(%v)", logPath, er).AddStack(nil)
+		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "invalid log path. path=(%s),err=(%v)", logPath, er).AddStack(nil)
 	}
 	if !stat.IsDir() {
-		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path is not directory").AddStack(nil)
+		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "log path is not directory").AddStack(nil)
 	}
 
 	l := &appLogging{
@@ -55,10 +55,10 @@ func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 	// Test Log File.
 	logTestPath := logPath + "/test"
 	if er = ioutil.WriteFile(logTestPath, []byte{}, 0644); er != nil {
-		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path cannot write, err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "log path cannot write, err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Remove(logTestPath); er != nil {
-		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path test file cannot delete, err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "log path test file cannot delete, err=(%v)", er).AddStack(nil)
 	}
 
 	// Open Log File.
@@ -100,7 +100,7 @@ func (l *appLogging) Close() {
 func (l *appLogging) openLogFile(path string) (*os.File, *Error) {
 	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, logFilePerm)
 	if er != nil {
-		return nil, NewErrorf(ErrAppLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
+		return nil, NewErrorf(ErrAppEnvLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
 	}
 	return f, nil
 }
