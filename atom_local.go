@@ -109,7 +109,7 @@ func (a *AtomLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Atom的消息处理函数。
 func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, name, true, timeout, in)
+	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, name, false, true, timeout, in)
 	if err != nil {
 		err = err.AddStack(a)
 	}
@@ -285,7 +285,7 @@ func (a *AtomLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callb
 	callback(in, err.AddStack(a))
 }
 
-func (a *AtomLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
+func (a *AtomLocal) OnScaling(_ ID, _ string, _ proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrFrameworkInternalError, "Atom: Atom not supported scaling.").AddStack(a)
 }
 

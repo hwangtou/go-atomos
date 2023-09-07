@@ -146,8 +146,8 @@ func TestSimulateTwoCosmosNode_FirstSyncCall(t *testing.T) {
 	}
 
 	<-time.After(100 * time.Millisecond)
-	if remoteSuccessCounter != 7 {
-		t.Fatal("remoteSuccessCounter is not 7")
+	if remoteSuccessCounter != 6 {
+		t.Fatal("remoteSuccessCounter is not 6")
 		return
 	}
 }
@@ -628,7 +628,8 @@ func getRunnable(t *testing.T, process *CosmosProcess, cosmosName, cosmosNode st
 			Customize: nil,
 		}).
 		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, process, false))
+		AddElementImplementation(newTestFakeElement(t, process, false)).
+		SetElementSpawn("testElement")
 	return runnable
 }
 

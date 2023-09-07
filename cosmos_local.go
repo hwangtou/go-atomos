@@ -46,23 +46,23 @@ func (c *CosmosLocal) IdleTime() time.Duration {
 	return c.atomos.idleTime()
 }
 
-func (c *CosmosLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
+func (c *CosmosLocal) SyncMessagingByName(_ SelfID, _ string, _ time.Duration, _ proto.Message) (out proto.Message, err *Error) {
 	panic("not supported")
 }
 
-func (c *CosmosLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
+func (c *CosmosLocal) AsyncMessagingByName(_ SelfID, _ string, _ time.Duration, _ proto.Message, _ func(out proto.Message, err *Error)) {
 	panic("not supported")
 }
 
-func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+func (c *CosmosLocal) DecoderByName(_ string) (MessageDecoder, MessageDecoder) {
 	return nil, nil
 }
 
-func (c *CosmosLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (c *CosmosLocal) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
 }
 
-func (c *CosmosLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+func (c *CosmosLocal) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
 	return NewError(ErrMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
 }
 
@@ -209,7 +209,7 @@ func (c *CosmosLocal) ElementBroadcast(callerID SelfID, key, contentType string,
 
 // Main as an Atomos
 
-func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+func (c *CosmosLocal) Halt(_ ID, _ []uint64) (save bool, data proto.Message) {
 	c.Log().Fatal("Cosmos: Stopping of CosmosLocal should not be called.")
 	return false, nil
 }
@@ -217,7 +217,7 @@ func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.M
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (c *CosmosLocal) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (c *CosmosLocal) OnMessaging(_ ID, _ string, _ proto.Message) (out proto.Message, err *Error) {
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
 }
 
@@ -225,7 +225,7 @@ func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, cal
 	callback(in, err)
 }
 
-func (c *CosmosLocal) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
+func (c *CosmosLocal) OnScaling(_ ID, _ string, _ proto.Message) (id ID, err *Error) {
 	return nil, NewError(ErrMainCannotScale, "Cosmos: Cannot scale.").AddStack(c)
 }
 

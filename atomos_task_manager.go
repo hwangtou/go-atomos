@@ -144,7 +144,7 @@ func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAt
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
 }
 
-func releaseAtomosTasksManager(at *atomosTaskManager) {
+func releaseAtomosTasksManager(_ *atomosTaskManager) {
 }
 
 // 在Atomos开始退出的时候上锁，以避免新的任务请求。

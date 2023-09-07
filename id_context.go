@@ -22,14 +22,6 @@ import (
 // 2. 异步调用：这种情况需要创建新的FirstSyncCall，因为这是一个新的调用链，调用的开端是push向的ID。
 // 3. 远程调用：这种情况必须有FirstSyncCall，因为远程调用肯定有一个起源。
 
-// atomosIDContext
-type atomosIDContext interface {
-	isLoop(fromChain []string) *Error
-	//setSyncMessageAndFirstCall(string) *Error
-	//unsetSyncMessageAndFirstCall()
-	//nextFirstSyncCall() string
-}
-
 // atomosIDContextLocal
 // 本地实现的idFirstSyncCall
 type atomosIDContextLocal struct {
@@ -51,10 +43,13 @@ func (f *atomosIDContextLocal) FromCallChain() []string {
 	return f.context.IdChain
 }
 
-func (f *atomosIDContextLocal) isLoop(fromChain []string) *Error {
+func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID) *Error {
 	f.atomos.mailbox.mutex.Lock()
 	defer f.atomos.mailbox.mutex.Unlock()
 
+	if callerID.GetIDInfo().IsEqual(f.atomos.id) {
+		return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call to self detected. target=(%s),chain=(%s)", f.atomos.id.Info(), strings.Join(fromChain, "->")).AddStack(nil)
+	}
 	self := f.atomos.id.Info()
 	for _, chain := range fromChain {
 		if chain == self {

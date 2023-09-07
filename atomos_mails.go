@@ -106,7 +106,7 @@ func allocAtomosMail() *atomosMail {
 	return am
 }
 
-func deallocAtomosMail(am *atomosMail) {
+func deallocAtomosMail(_ *atomosMail) {
 }
 
 //
@@ -236,7 +236,7 @@ type mailReply struct {
 
 // Method sendReply() will only be called in for-loop of MailBox, it's safe to do so, because while an atomos is
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
-// has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
+// has been sent to waitCh, there will have no reference to the waitCh, waitCh will be collected.
 func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
@@ -286,9 +286,9 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 		case reply = <-waitCh:
 		case <-time.After(timeout):
 			if a.mailbox.removeMail(m.mail) {
-				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%v),name=(%s),arg=(%v),timeout=(%v)", a.id, m.name, m.arg, timeout).AddStack(nil)
 			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),timeout=(%v),current=(%s)", a.id, m.name, timeout, a.mt.current).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),arg=(%v),timeout=(%v),current=(%s)", a.id, m.name, m.arg, timeout, a.mt.current).AddStack(nil)
 			}
 		}
 	}

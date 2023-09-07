@@ -395,15 +395,15 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 	})
 }
 
-func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
+func (c *CosmosRemote) DecoderByName(_ string) (MessageDecoder, MessageDecoder) {
 	return nil, nil
 }
 
-func (c *CosmosRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (c *CosmosRemote) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+func (c *CosmosRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosRemote: Cannot send wormhole to remote.").AddStack(nil)
 }
 
@@ -516,7 +516,7 @@ func (c *cosmosRemoteVersion) check() bool {
 	//}
 
 	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
+	ctx, cancel := context.WithTimeout(context.Background(), atomosGRPCDialTimeout)
 	defer cancel()
 
 	var er error
@@ -526,7 +526,11 @@ func (c *cosmosRemoteVersion) check() bool {
 		c.client, er = grpc.DialContext(ctx, c.info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
 	}
 	if er != nil {
-		conn, connEr := net.DialTimeout("tcp", c.info.Address, time.Second*1)
+		dialTime := atomosGRPCDialTimeout
+		if atomosGRPCDialTimeout < time.Second {
+			dialTime = time.Second
+		}
+		conn, connEr := net.DialTimeout("tcp", c.info.Address, dialTime)
 		if conn != nil {
 			conn.Close()
 		}
@@ -620,7 +624,7 @@ func (r *remoteCosmosFakeSelfID) KillSelf() {
 	panic("not supported, should not be called")
 }
 
-func (r *remoteCosmosFakeSelfID) Parallel(f func()) {
+func (r *remoteCosmosFakeSelfID) Parallel(_ func()) {
 	panic("not supported, should not be called")
 }
 
