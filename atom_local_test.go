@@ -313,7 +313,7 @@ func TestAtomLocalBase(t *testing.T) {
 	sharedTestAtom1 = atom
 	sharedTestAtom2 = deadlockAtom.(*AtomLocal)
 	reply, err = atom.SyncMessagingByName(testElem, "testMessageDeadlock", 0, &String{S: testAtomName})
-	if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+	if err == nil || err.Code != ErrAtomosIDCallLoop {
 		t.Errorf("TestAtomLocalBase: Push Message Deadlock failed.")
 		return
 	}
@@ -381,6 +381,17 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Spawn twice state invalid. err=(%v)", err)
 		return
 	}
+
+	// Message Tracker.
+	messageCount := 0
+	for _, info := range atom.atomos.mt.messages {
+		messageCount += info.Count
+	}
+	if messages != messageCount {
+		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
+		return
+	}
+
 	// Try kill self.
 	sharedTestAtom1 = atom
 	reply, err = atom.SyncMessagingByName(testElem, "testKillSelf", 0, nil)
@@ -397,16 +408,6 @@ func TestAtomLocalBase(t *testing.T) {
 	trackerTwice.Release()
 	if err = checkAtomLocalInElement(t, testElem, testAtomName, false, AtomosHalt, 1); err != nil {
 		t.Errorf("TestAtomLocalBase: KillSelf state invalid. err=(%v)", err)
-		return
-	}
-
-	// Message Tracker.
-	messageCount := 0
-	for _, info := range atom.atomos.mt.messages {
-		messageCount += info.Count
-	}
-	if messages != messageCount {
-		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
 		return
 	}
 
@@ -459,6 +460,23 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: Reference count state invalid. err=(%v)", err)
 		return
 	}
+
+	// Message Tracker.
+	messageCount = 0
+	for _, info := range atom.atomos.mt.messages {
+		messageCount += info.Count
+	}
+	if messages != messageCount {
+		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
+		return
+	}
+	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
+		atom.atomos.mt.spawnAt.Sub(atom.atomos.mt.spawningAt),
+		atom.atomos.mt.stoppingAt.Sub(atom.atomos.mt.spawnAt),
+		atom.atomos.mt.stoppedAt.Sub(atom.atomos.mt.stoppingAt),
+		atom.atomos.mt.dump())
+	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
+
 	if err = deadlockAtom.(*AtomLocal).atomos.PushKillMailAndWaitReply(testElem, true, 0); err != nil {
 		t.Errorf("TestAtomLocalBase: Push Kill failed. err=(%v)", err)
 		return
@@ -499,21 +517,6 @@ func TestAtomLocalBase(t *testing.T) {
 		t.Errorf("TestAtomLocalBase: ID Tracker state invalid.")
 		return
 	}
-	// Message Tracker.
-	messageCount = 0
-	for _, info := range atom.atomos.mt.messages {
-		messageCount += info.Count
-	}
-	if messages != messageCount {
-		t.Errorf("TestAtomLocalBase: Message Tracker state invalid.")
-		return
-	}
-	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
-		atom.atomos.mt.spawnAt.Sub(atom.atomos.mt.spawningAt),
-		atom.atomos.mt.stoppingAt.Sub(atom.atomos.mt.spawnAt),
-		atom.atomos.mt.stoppedAt.Sub(atom.atomos.mt.stoppingAt),
-		atom.atomos.mt.dump())
-	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
 
 	// Spawn panic.
 	spawnPanicAtomName := "spawn_panic"

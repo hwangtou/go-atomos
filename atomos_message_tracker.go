@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -63,7 +64,7 @@ func (t *atomosMessageTracker) spawn() {
 }
 
 // set sets the message handling info and start time.
-func (t *atomosMessageTracker) set(message string, info *IDInfo, process *CosmosProcess) {
+func (t *atomosMessageTracker) set(message string, info *IDInfo, process *CosmosProcess, arg proto.Message) {
 	m, has := t.messages[message]
 	if !has {
 		m = MessageTrackInfo{}
@@ -84,7 +85,7 @@ func (t *atomosMessageTracker) set(message string, info *IDInfo, process *Cosmos
 							r, string(debug.Stack())))
 					}
 				}()
-				process.onIDMessageTimeout(info, message)
+				process.onIDMessageTimeout(info, messageTimeoutDefault, message, arg)
 			}
 		})
 	}

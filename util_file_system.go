@@ -36,7 +36,7 @@ func (p *Path) GetPath() string {
 }
 
 func (p *Path) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm os.FileMode) *Error {
-	// If it is not exists, create it. If it is exists and not a directory, return failed.
+	// If it is not exists, create it. If it is existing and not a directory, return failed.
 	if err := p.Refresh(); err != nil {
 		return err.AddStack(nil)
 	}

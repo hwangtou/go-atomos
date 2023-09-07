@@ -5,11 +5,6 @@ import (
 	"time"
 )
 
-func TestAll(t *testing.T) {
-	TestAllSingleNode(t)
-	TestAllMultiNodes(t)
-}
-
 func TestAllSingleNode(t *testing.T) {
 	clearTest()
 	TestCosmosMain(t)

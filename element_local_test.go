@@ -77,7 +77,7 @@ func TestElementLocalBase(t *testing.T) {
 	sharedTestElement1 = testElem
 	sharedTestAtom1 = atom
 	reply, err = testElem.SyncMessagingByName(process.local, "testMessageDeadlock", 0, &String{S: testAtomName})
-	if err == nil || err.Code != ErrIDFirstSyncCallDeadlock {
+	if err == nil || err.Code != ErrAtomosIDCallLoop {
 		t.Errorf("TestElementLocalBase: Push Message Deadlock failed. err=(%v)", err)
 		return
 	}
@@ -150,12 +150,12 @@ func TestElementLocalBase(t *testing.T) {
 		return
 	}
 	// TODO: 重新Spawn之后的Spawn统计时间不准确。
-	t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
+	t.Logf("TestAtomLocalBase: Message Tracker. spawn=(%v),run=(%v),stop=(%v),dump=(%v)",
 		atom.atomos.mt.spawnAt.Sub(atom.atomos.mt.spawningAt),
 		atom.atomos.mt.stoppingAt.Sub(atom.atomos.mt.spawnAt),
 		atom.atomos.mt.stoppedAt.Sub(atom.atomos.mt.stoppingAt),
 		atom.atomos.mt.dump())
-	//t.Logf("TestAtomLocalBase: Meesage Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
+	//t.Logf("TestAtomLocalBase: Message Tracker. spawn=(%v),run=(%v),stop=(%v)", spawn, run, stop)
 
 	if err = process.Stop(); err != nil {
 		t.Errorf("TestAtomLocalBase: Process exit state invalid.")

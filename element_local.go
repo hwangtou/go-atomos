@@ -116,7 +116,7 @@ func (e *ElementLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, true, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, false, true, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}
@@ -137,7 +137,7 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (e *ElementLocal) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
 }
 
@@ -281,7 +281,14 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
+	id, idTracker, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, fromLocalOrRemote)
+	if err != nil && err.Code != ErrAtomIsRunning {
+		return nil, nil, err.AddStack(e)
+	}
+	if id == nil {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
+	}
+	return id, idTracker, nil
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -322,7 +329,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 func (e *ElementLocal) SpawnAtom(callerID SelfID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool) (ID, *IDTracker, *Error) {
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
-	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote, true)
+	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, fromLocalOrRemote)
 	if err != nil {
 		return id, t, err.AddStack(e)
 	}
@@ -579,13 +586,13 @@ var (
 	nd = int32(0)
 )
 
-func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote, fscFree bool) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := e.atomos.ctx.isLoop(fromCallChain)
+	err := e.atomos.ctx.isLoop(fromCallChain, callerID)
 	if err != nil {
 		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
@@ -813,10 +820,13 @@ func (e *ElementLocal) getAtomFromRemote(name string) (*AtomLocal, *Error) {
 	// Auto data persistence.
 	persistence, ok := e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
-		return nil, nil
+		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false, true)
-	if err != nil {
+	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false)
+	if err != nil && err.Code != ErrAtomIsRunning {
+		return nil, err.AddStack(e)
+	}
+	if atom == nil {
 		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
 	return atom, nil

@@ -91,7 +91,7 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		}
 	}
 
-	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(atomosGRPCTTL)
+	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(timeout)
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
@@ -100,7 +100,7 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 	callerIdInfo := callerID.GetIDInfo()
 	toIDInfo := a.context.info
 
-	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+	req := &CosmosRemoteSyncMessagingByNameReq{
 		CallerId: callerIdInfo,
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
@@ -110,14 +110,15 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		NeedReply: true,
 		Message:   name,
 		Args:      arg,
-	})
+	}
+	rsp, er := client.SyncMessagingByName(ctx, req)
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. name=(%s),err=(%v)", name, er).AddStack(nil)
 	}
 	if rsp.Reply != nil {
 		out, er = rsp.Reply.UnmarshalNew()
 		if er != nil {
-			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName reply unmarshal error. name=(%s),err=(%v)", name, er).AddStack(nil)
 		}
 	}
 	if rsp.Error != nil {
@@ -148,7 +149,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 		}
 	}
 
-	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(atomosGRPCTTL)
+	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(timeout)
 	if err != nil {
 		if callback != nil {
 			callback(nil, err.AddStack(nil))
@@ -156,7 +157,6 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 		a.element.cosmos.process.local.Log().Error("AtomRemote: AsyncMessagingByName client error. err=(%v)", err)
 		return
 	}
-	defer cancel()
 
 	callerIdInfo := callerID.GetIDInfo()
 	toIDInfo := a.context.info
@@ -165,6 +165,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 	a.element.cosmos.process.local.Parallel(func() {
 		out, err := func() (out proto.Message, err *Error) {
 
+			defer cancel()
 			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
@@ -172,6 +173,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 				},
 				To:        toIDInfo,
 				Timeout:   int64(timeout),
+				Async:     true,
 				NeedReply: needReply,
 				Message:   name,
 				Args:      arg,
@@ -216,7 +218,7 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 		return NewError(ErrFrameworkIncorrectUsage, "AtomRemote: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
-	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(atomosGRPCTTL)
+	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(timeout)
 	if err != nil {
 		return err.AddStack(nil)
 	}
@@ -240,7 +242,7 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 	return nil
 }
 
-func (a *AtomRemote) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
+func (a *AtomRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
 	return NewErrorf(ErrAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 
@@ -255,7 +257,6 @@ func (a *AtomRemote) getGoID() uint64 {
 
 type remoteAtomFakeSelfID struct {
 	*AtomRemote
-	callerIDInfo    *IDInfo
 	callerIDContext *IDContextInfo
 }
 
@@ -269,43 +270,50 @@ func (e *ElementRemote) newRemoteAtomFromCaller(callerIDInfo *IDInfo, callerIDCo
 	e.lock.Unlock()
 	return &remoteAtomFakeSelfID{
 		AtomRemote:      a,
-		callerIDInfo:    callerIDInfo,
 		callerIDContext: callerIDContext,
 	}
 }
 
-func (a *remoteAtomFakeSelfID) callerCounterRelease() {
-	a.element.lock.Lock()
-	if a.callerCounter > 0 {
-		a.callerCounter -= 1
+func (r *remoteAtomFakeSelfID) callerCounterRelease() {
+	r.element.lock.Lock()
+	if r.callerCounter > 0 {
+		r.callerCounter -= 1
 	}
-	a.element.lock.Unlock()
+	r.element.lock.Unlock()
 }
 
-func (a *remoteAtomFakeSelfID) Log() Logging {
+func (r *remoteAtomFakeSelfID) GetIDContext() IDContext {
+	return r
+}
+
+func (r *remoteAtomFakeSelfID) FromCallChain() []string {
+	return r.callerIDContext.IdChain
+}
+
+func (r *remoteAtomFakeSelfID) Log() Logging {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) Task() Task {
+func (r *remoteAtomFakeSelfID) Task() Task {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) CosmosMain() *CosmosLocal {
+func (r *remoteAtomFakeSelfID) CosmosMain() *CosmosLocal {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) KillSelf() {
+func (r *remoteAtomFakeSelfID) KillSelf() {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) Parallel(f func()) {
+func (r *remoteAtomFakeSelfID) Parallel(_ func()) {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) Config() map[string][]byte {
+func (r *remoteAtomFakeSelfID) Config() map[string][]byte {
 	panic("not supported, should not be called")
 }
 
-func (a *remoteAtomFakeSelfID) getAtomos() *BaseAtomos {
+func (r *remoteAtomFakeSelfID) getAtomos() *BaseAtomos {
 	panic("not supported, should not be called")
 }

@@ -18,7 +18,7 @@ func etcdKeepalive(cli *clientv3.Client, key, value string, ttl int64) (*clientv
 	}
 
 	// register the service with etcd.
-	_, er = cli.Put(context.Background(), key, string(value), clientv3.WithLease(lease.ID))
+	_, er = cli.Put(context.Background(), key, value, clientv3.WithLease(lease.ID))
 	if er != nil {
 		return nil, nil, NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to register service. err=(%s)", er).AddStack(nil)
 	}
