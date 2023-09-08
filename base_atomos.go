@@ -180,15 +180,17 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
+	parallel := a.mailbox.goID != getGoID()
+
 	var fromCallChain []string
 	if needReply && !async {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID, false)
+		err = a.ctx.isLoop(fromCallChain, callerID, parallel)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
-	if !async {
+	if !async && !parallel {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
