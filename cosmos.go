@@ -130,3 +130,8 @@ func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnabl
 	r.mainRouter = router
 	return r
 }
+
+func (r *CosmosRunnable) SetRecoverHook(hook *func(id *IDInfo, err *Error)) *CosmosRunnable {
+	r.recoverHook = hook
+	return r
+}
