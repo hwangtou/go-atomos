@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -337,9 +338,9 @@ func RecoveryMiddleware() grpc.UnaryServerInterceptor {
 		defer func() {
 			if r := recover(); r != nil {
 				if sharedCosmosProcess != nil {
-					sharedCosmosProcess.local.Log().Core("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v)", req, info.FullMethod, r)
+					sharedCosmosProcess.local.Log().Core("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				} else {
-					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v)", req, info.FullMethod, r)
+					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				}
 				err = status.Errorf(codes.Internal, "CosmosProcess: gRPC error. req=(%+v),info=(%+v),recovery=(%v)", req, info.FullMethod, r)
 			}
