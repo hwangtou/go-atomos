@@ -190,7 +190,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
-	if !async && !parallel {
+	if !async || !parallel {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 

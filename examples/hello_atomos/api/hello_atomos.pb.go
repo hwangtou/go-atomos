@@ -56,6 +56,9 @@ type HelloAtomosAtom interface {
 	// 向Atom发送Greeting消息
 	// Send Greeting message to Atom
 	Greeting(from go_atomos.ID, in *HAGreetingI) (out *HAGreetingO, err *go_atomos.Error)
+	// DoTest
+	// 测试方法
+	DoTest(from go_atomos.ID, in *HADoTestI) (out *HADoTestO, err *go_atomos.Error)
 
 	// Scale Methods
 
@@ -205,6 +208,18 @@ func (c *HelloAtomosAtomID) AsyncGreeting(callerID go_atomos.SelfID, in *HAGreet
 	helloAtomosAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
+// Sync
+func (c *HelloAtomosAtomID) DoTest(callerID go_atomos.SelfID, in *HADoTestI, ext ...interface{}) (out *HADoTestO, err *go_atomos.Error) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.DoTest }
+	return helloAtomosAtomMessengerValue.DoTest().SyncAtom(c, callerID, in, ext...)
+}
+
+// Async
+func (c *HelloAtomosAtomID) AsyncDoTest(callerID go_atomos.SelfID, in *HADoTestI, callback func(out *HADoTestO, err *go_atomos.Error), ext ...interface{}) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.DoTest }
+	helloAtomosAtomMessengerValue.DoTest().AsyncAtom(c, callerID, in, callback, ext...)
+}
+
 // Atomos Interface
 
 func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImplementation {
@@ -240,6 +255,13 @@ func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 				return nil, err.AddStack(nil)
 			}
 			return a.Greeting(from, i)
+		},
+		"DoTest": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.Error) {
+			a, i, err := helloAtomosAtomMessengerValue.DoTest().ExecuteAtom(to, in)
+			if err != nil {
+				return nil, err.AddStack(nil)
+			}
+			return a.DoTest(from, i)
 		},
 	}
 	elem.ScaleHandlers = map[string]go_atomos.ScaleHandler{
@@ -280,6 +302,7 @@ func GetHelloAtomosInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"ScaleBonjour": helloAtomosAtomMessengerValue.ScaleBonjour().Decoder(&HABonjourI{}, &HABonjourO{}),
 		"Greeting":     helloAtomosAtomMessengerValue.Greeting().Decoder(&HAGreetingI{}, &HAGreetingO{}),
+		"DoTest":       helloAtomosAtomMessengerValue.DoTest().Decoder(&HADoTestI{}, &HADoTestO{}),
 	}
 	return elem
 }
@@ -312,6 +335,9 @@ func (m helloAtomosAtomMessenger) ScaleBonjour() go_atomos.Messenger[*HelloAtomo
 }
 func (m helloAtomosAtomMessenger) Greeting() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HAGreetingI, *HAGreetingO] {
 	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HAGreetingI, *HAGreetingO]{nil, nil, "Greeting"}
+}
+func (m helloAtomosAtomMessenger) DoTest() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HADoTestI, *HADoTestO] {
+	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HADoTestI, *HADoTestO]{nil, nil, "DoTest"}
 }
 
 var helloAtomosAtomMessengerValue helloAtomosAtomMessenger

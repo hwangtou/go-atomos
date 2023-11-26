@@ -41,7 +41,8 @@ type appLogging struct {
 func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 	stat, er := os.Stat(logPath)
 	if er != nil {
-		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "invalid log path. path=(%s),err=(%v)", logPath, er).AddStack(nil)
+		base, _ := os.Getwd()
+		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "invalid log path. base=(%s),path=(%s),err=(%v)", base, logPath, er).AddStack(nil)
 	}
 	if !stat.IsDir() {
 		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "log path is not directory").AddStack(nil)

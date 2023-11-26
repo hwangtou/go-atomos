@@ -75,14 +75,22 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		if callback != nil {
+			callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		} else {
+			callerID.Log().Fatal("Messenger: callerID is nil.")
+		}
 	}
 	m.ElementID = e
 	timeout := m.handleExt(ext...)
 
-	m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
-		callback(m.handleReply(message, err))
-	})
+	if callback != nil {
+		m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
+			callback(m.handleReply(message, err))
+		})
+	} else {
+		m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, nil)
+	}
 }
 
 func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext ...interface{}) (OUT, *Error) {
@@ -101,14 +109,22 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		if callback != nil {
+			callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		} else {
+			callerID.Log().Fatal("Messenger: callerID is nil.")
+		}
 	}
 	m.AtomID = a
 	timeout := m.handleExt(ext...)
 
-	m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
-		callback(m.handleReply(message, err.AddStack(nil)))
-	})
+	if callback != nil {
+		m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
+			callback(m.handleReply(message, err.AddStack(nil)))
+		})
+	} else {
+		m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, nil)
+	}
 }
 
 func (m Messenger[E, A, AT, IN, OUT]) ExecuteAtom(to Atomos, in proto.Message) (AT, IN, *Error) {
