@@ -62,6 +62,10 @@ service HelloAtomos {
   // 向Atom发送Greeting消息
   // Send Greeting message to Atom
   rpc Greeting (HAGreetingI) returns (HAGreetingO) {}
+
+  // DoTest
+  // 测试方法
+  rpc DoTest (HADoTestI) returns (HADoTestO) {}
 }
 
 message HAEData {}
@@ -82,13 +86,39 @@ message HASpawnArg {
 }
 
 message HAGreetingI {
+  string message = 1;
+}
+message HAGreetingO {
+  string message = 1;
+}
+
+message HADoTestI {
   // 测试模式
   enum TestMode {
     // 无
     None = 0;
     // 测试自我同步调用死锁
     SyncSelfCallDeadlock = 1;
+    // 测试自我异步调用无死锁
+    AsyncSelfCallNoDeadlock = 2;
+    // 测试环形同步调用死锁
+    SyncRingCallDeadlock = 3;
+    // 测试环形异步调用无死锁
+    AsyncRingCallNoDeadlock = 4;
+    // 测试环形异步调用死锁
+    AsyncRingCallDeadlock = 5;
+    // 测试环形异步调用无死锁无循环
+    AsyncRingCallNoReplyNoDeadlock = 6;
+    // 测试环形异步调用无死锁有循环
+    AsyncRingCallNoReplyDeadlock = 7;
+
+    // 后续步骤
+    SyncRingCallDeadlockStep2 = 100;
+    AsyncRingCallNoDeadlockStep2 = 101;
+    AsyncRingCallDeadlockStep2 = 102;
+    AsyncRingCallNoReplyNoDeadlockStep2 = 103;
+    AsyncRingCallNoReplyDeadlockStep2 = 104;
   }
   TestMode mode = 1;
 }
-message HAGreetingO {}
+message HADoTestO {}

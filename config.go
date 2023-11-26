@@ -9,7 +9,7 @@ import (
 func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
-		return nil, NewErrorf(ErrRunnableConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
+		return nil, NewErrorf(ErrRunnableConfigInvalid, "Read failed. filepath=(%s),err=(%v)", filepath, err).AddStack(nil)
 	}
 	y := &NodeYAMLConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
