@@ -268,7 +268,7 @@ func (a *atomosRemoteService) SyncMessagingByName(_ context.Context, req *Cosmos
 		}
 
 		// Sync messaging.
-		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, req.Async, req.NeedReply, time.Duration(req.Timeout), in)
+		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, time.Duration(req.Timeout), in)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -278,6 +278,73 @@ func (a *atomosRemoteService) SyncMessagingByName(_ context.Context, req *Cosmos
 		return rsp, nil
 	default:
 		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid ToID type. to=(%v)", req.To).AddStack(nil)
+		return rsp, nil
+	}
+}
+
+func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
+	defer func() {
+		Recover(a.process.local)
+	}()
+	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName req=(%v)", req)
+	rsp := &CosmosRemoteAsyncMessagingByNameRsp{}
+
+	switch req.To.Type {
+	case IDType_Atom, IDType_Element:
+		// Caller id.
+		callerID := a.getFromCaller(req.CallerId, req.CallerContext)
+		if callerID != nil {
+			defer callerID.callerCounterRelease()
+		}
+
+		var in proto.Message
+		var er error
+		// Unmarshal args.
+		if req.Args != nil {
+			in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
+			if er != nil {
+				rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName unmarshal args failed. err=(%v)", er).AddStack(nil)
+				return rsp, nil
+			}
+		}
+
+		var id SelfID
+		// Get element.
+		elem, err := a.process.local.getLocalElement(req.To.Element)
+		if err != nil {
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
+		}
+		if req.To.Type == IDType_Atom {
+			atom, err := elem.getAtomFromRemote(req.To.Atom)
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
+				return rsp, nil
+			}
+			//if id == nil || reflect.ValueOf(id).IsNil() {
+			//	rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
+			//	return rsp, nil
+			//}
+			id = atom
+		} else {
+			id = elem
+		}
+
+		// Async messaging.
+		if req.NeedReply {
+			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, time.Duration(req.Timeout), in)
+			if out != nil {
+				rsp.Reply, _ = anypb.New(out)
+			}
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
+			}
+		} else {
+			id.getAtomos().PushAsyncMessageMail(callerID, id, req.Message, time.Duration(req.Timeout), in, nil)
+		}
+		return rsp, nil
+	default:
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName invalid ToID type. to=(%v)", req.To).AddStack(nil)
 		return rsp, nil
 	}
 }

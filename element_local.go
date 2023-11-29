@@ -116,7 +116,7 @@ func (e *ElementLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, false, true, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}
@@ -150,6 +150,10 @@ func (e *ElementLocal) SendWormhole(callerID SelfID, timeout time.Duration, worm
 
 func (e *ElementLocal) getGoID() uint64 {
 	return e.atomos.GetGoID()
+}
+
+func (e *ElementLocal) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	e.atomos.PushAsyncMessageCallbackMailAndWaitReply(callerID, name, reply, err, callback)
 }
 
 // Implementation of AtomosUtilities
@@ -396,6 +400,62 @@ func (e *ElementLocal) OnMessaging(fromID ID, name string, in proto.Message) (ou
 	return
 }
 
+func (e *ElementLocal) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
+	if fromID == nil {
+		if callback != nil {
+			callback(nil, NewError(ErrFrameworkInternalError, "Element: OnAsyncMessaging without fromID.").AddStack(e))
+		}
+		e.Log().Fatal("Element: OnAsyncMessaging without fromID.")
+		return
+	}
+
+	handler := e.elemImpl.ElementHandlers[name]
+	if handler == nil {
+		if callback != nil {
+			callback(nil, NewErrorf(ErrElementMessageHandlerNotExists,
+				"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
+		}
+		e.Log().Fatal("Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in)
+		return
+	}
+
+	var err *Error
+	var out proto.Message
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				defer func() {
+					if r2 := recover(); r2 != nil {
+						e.Log().Fatal("Element: AsyncMessaging critical problem again. err=(%v)", err)
+					}
+				}()
+				if err == nil {
+					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: AsyncMessaging recovers from panic.").AddPanicStack(e, 3, r)
+				} else {
+					err = err.AddPanicStack(e, 3, r)
+				}
+				// Hook or Log
+				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
+					ar.MessageRecover(name, in, err)
+				} else {
+					e.Log().Fatal("Element: AsyncMessaging critical problem. err=(%v)", err)
+				}
+				// Global hook
+				e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)
+			}
+		}()
+		out, err = handler(fromID, e.atomos.GetInstance(), in)
+		if err != nil {
+			err = err.AddStack(e)
+		}
+		if callback != nil {
+			fromID.asyncCallback(e, name, out, err, callback)
+		} else {
+			e.Log().Debug("Element: AsyncMessaging without callback. from=(%s),name=(%s),in=(%v),out=(%v),err=(%v)", fromID, name, in, out, err)
+		}
+	}()
+}
+
 func (e *ElementLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
 	callback(in, err.AddStack(e))
 }
@@ -598,7 +658,10 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 	if err != nil {
 		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
-	callChain := append(fromCallChain, e.atomos.id.Info())
+	callChain := append(fromCallChain)
+	if e.atomos.id.Type > IDType_Cosmos {
+		callChain = append(callChain, e.atomos.id.Info())
+	}
 
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.

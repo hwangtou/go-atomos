@@ -40,6 +40,9 @@ type HelloAtomosElement interface {
 	// Send Bonjour message to the ID of the load balancer
 	// HA = HelloAtomosAtom
 	ScaleBonjour(from go_atomos.ID, in *HABonjourI) (*HelloAtomosAtomID, *go_atomos.Error)
+	// 负载均衡的测试
+	// Load balancing test
+	ScaleDoTest(from go_atomos.ID, in *HADoTestI) (*HelloAtomosAtomID, *go_atomos.Error)
 }
 
 // HelloAtomosAtom is the atomos implements of HelloAtomos atom.
@@ -66,6 +69,9 @@ type HelloAtomosAtom interface {
 	// Send Bonjour message to the ID of the load balancer
 	// HA = HelloAtomosAtom
 	ScaleBonjour(from go_atomos.ID, in *HABonjourI) (out *HABonjourO, err *go_atomos.Error)
+	// 负载均衡的测试
+	// Load balancing test
+	ScaleDoTest(from go_atomos.ID, in *HADoTestI) (out *HADoTestO, err *go_atomos.Error)
 }
 
 ////////////////////////////////////
@@ -157,6 +163,41 @@ func (c *HelloAtomosElementID) ScaleAsyncBonjour(callerID go_atomos.SelfID, in *
 	helloAtomosAtomMessengerValue.ScaleBonjour().AsyncAtom(id, callerID, in, callback, ext...)
 }
 
+// GetID
+func (c *HelloAtomosElementID) ScaleDoTestGetID(callerID go_atomos.SelfID, in *HADoTestI, ext ...interface{}) (id *HelloAtomosAtomID, err *go_atomos.Error) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosElementValue.ScaleDoTest }
+	i, tracker, err := helloAtomosElementMessengerValue.ScaleDoTest().GetScaleID(c, callerID, HelloAtomosName, in, ext...)
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	return &HelloAtomosAtomID{i, tracker}, nil
+}
+
+// Sync
+func (c *HelloAtomosElementID) ScaleDoTest(callerID go_atomos.SelfID, in *HADoTestI, ext ...interface{}) (out *HADoTestO, err *go_atomos.Error) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosElementValue.ScaleDoTest }
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.ScaleDoTest }
+	id, err := c.ScaleDoTestGetID(callerID, in, ext...)
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	defer id.Release()
+	return helloAtomosAtomMessengerValue.ScaleDoTest().SyncAtom(id, callerID, in)
+}
+
+// Async
+func (c *HelloAtomosElementID) ScaleAsyncDoTest(callerID go_atomos.SelfID, in *HADoTestI, callback func(*HADoTestO, *go_atomos.Error), ext ...interface{}) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosElementValue.ScaleDoTest }
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.ScaleDoTest }
+	id, err := c.ScaleDoTestGetID(callerID, in, ext...)
+	if err != nil {
+		callback(nil, err.AddStack(nil))
+		return
+	}
+	defer id.Release()
+	helloAtomosAtomMessengerValue.ScaleDoTest().AsyncAtom(id, callerID, in, callback, ext...)
+}
+
 // Atom: HelloAtomos
 
 type HelloAtomosAtomID struct {
@@ -194,6 +235,18 @@ func (c *HelloAtomosAtomID) ScaleBonjour(callerID go_atomos.SelfID, in *HABonjou
 func (c *HelloAtomosAtomID) AsyncScaleBonjour(callerID go_atomos.SelfID, in *HABonjourI, callback func(out *HABonjourO, err *go_atomos.Error), ext ...interface{}) {
 	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.ScaleBonjour }
 	helloAtomosAtomMessengerValue.ScaleBonjour().AsyncAtom(c, callerID, in, callback, ext...)
+}
+
+// Sync
+func (c *HelloAtomosAtomID) ScaleDoTest(callerID go_atomos.SelfID, in *HADoTestI, ext ...interface{}) (out *HADoTestO, err *go_atomos.Error) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.ScaleDoTest }
+	return helloAtomosAtomMessengerValue.ScaleDoTest().SyncAtom(c, callerID, in, ext...)
+}
+
+// Async
+func (c *HelloAtomosAtomID) AsyncScaleDoTest(callerID go_atomos.SelfID, in *HADoTestI, callback func(out *HADoTestO, err *go_atomos.Error), ext ...interface{}) {
+	/* CODE JUMPER 代码跳转 */ _ = func() { _ = helloAtomosAtomValue.ScaleDoTest }
+	helloAtomosAtomMessengerValue.ScaleDoTest().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
 // Sync
@@ -249,6 +302,13 @@ func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 			}
 			return a.ScaleBonjour(from, i)
 		},
+		"ScaleDoTest": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.Error) {
+			a, i, err := helloAtomosAtomMessengerValue.ScaleDoTest().ExecuteAtom(to, in)
+			if err != nil {
+				return nil, err.AddStack(nil)
+			}
+			return a.ScaleDoTest(from, i)
+		},
 		"Greeting": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, *go_atomos.Error) {
 			a, i, err := helloAtomosAtomMessengerValue.Greeting().ExecuteAtom(to, in)
 			if err != nil {
@@ -271,6 +331,13 @@ func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 				return nil, err.AddStack(nil)
 			}
 			return a.ScaleBonjour(from, i)
+		},
+		"ScaleDoTest": func(from go_atomos.ID, e go_atomos.Atomos, message string, in proto.Message) (id go_atomos.ID, err *go_atomos.Error) {
+			a, i, err := helloAtomosElementMessengerValue.ScaleDoTest().ExecuteScale(e, in)
+			if err != nil {
+				return nil, err.AddStack(nil)
+			}
+			return a.ScaleDoTest(from, i)
 		},
 	}
 	return elem
@@ -298,9 +365,11 @@ func GetHelloAtomosInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 		"SayHello":     helloAtomosElementMessengerValue.SayHello().Decoder(&HAEHelloI{}, &HAEHelloO{}),
 		"Broadcast":    helloAtomosElementMessengerValue.Broadcast().Decoder(&go_atomos.ElementBroadcastI{}, &go_atomos.ElementBroadcastO{}),
 		"ScaleBonjour": helloAtomosElementMessengerValue.ScaleBonjour().Decoder(&HABonjourI{}, &HABonjourO{}),
+		"ScaleDoTest":  helloAtomosElementMessengerValue.ScaleDoTest().Decoder(&HADoTestI{}, &HADoTestO{}),
 	}
 	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"ScaleBonjour": helloAtomosAtomMessengerValue.ScaleBonjour().Decoder(&HABonjourI{}, &HABonjourO{}),
+		"ScaleDoTest":  helloAtomosAtomMessengerValue.ScaleDoTest().Decoder(&HADoTestI{}, &HADoTestO{}),
 		"Greeting":     helloAtomosAtomMessengerValue.Greeting().Decoder(&HAGreetingI{}, &HAGreetingO{}),
 		"DoTest":       helloAtomosAtomMessengerValue.DoTest().Decoder(&HADoTestI{}, &HADoTestO{}),
 	}
@@ -322,6 +391,9 @@ func (m helloAtomosElementMessenger) Broadcast() go_atomos.Messenger[*HelloAtomo
 func (m helloAtomosElementMessenger) ScaleBonjour() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosElement, *HABonjourI, *HABonjourO] {
 	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosElement, *HABonjourI, *HABonjourO]{nil, nil, "ScaleBonjour"}
 }
+func (m helloAtomosElementMessenger) ScaleDoTest() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosElement, *HADoTestI, *HADoTestO] {
+	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosElement, *HADoTestI, *HADoTestO]{nil, nil, "ScaleDoTest"}
+}
 
 var helloAtomosElementMessengerValue helloAtomosElementMessenger
 var helloAtomosElementValue HelloAtomosElement
@@ -332,6 +404,9 @@ type helloAtomosAtomMessenger struct{}
 
 func (m helloAtomosAtomMessenger) ScaleBonjour() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HABonjourI, *HABonjourO] {
 	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HABonjourI, *HABonjourO]{nil, nil, "ScaleBonjour"}
+}
+func (m helloAtomosAtomMessenger) ScaleDoTest() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HADoTestI, *HADoTestO] {
+	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HADoTestI, *HADoTestO]{nil, nil, "ScaleDoTest"}
 }
 func (m helloAtomosAtomMessenger) Greeting() go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HAGreetingI, *HAGreetingO] {
 	return go_atomos.Messenger[*HelloAtomosElementID, *HelloAtomosAtomID, HelloAtomosAtom, *HAGreetingI, *HAGreetingO]{nil, nil, "Greeting"}

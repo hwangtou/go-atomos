@@ -48,6 +48,10 @@ service HelloAtomos {
   // HA = HelloAtomosAtom
   rpc ScaleBonjour (HABonjourI) returns (HABonjourO) {}
 
+  // 负载均衡的测试
+  // Load balancing test
+  rpc ScaleDoTest (HADoTestI) returns (HADoTestO) {}
+
   // Atom
   //
   // 不以Element和Scale开头的方法，是用于创建Atom相关的功能。
@@ -83,6 +87,7 @@ message HABonjourO {}
 message HAData {}
 message HASpawnArg {
   int32 id = 1;
+  string message = 2;
 }
 
 message HAGreetingI {
@@ -97,27 +102,67 @@ message HADoTestI {
   enum TestMode {
     // 无
     None = 0;
-    // 测试自我同步调用死锁
-    SyncSelfCallDeadlock = 1;
-    // 测试自我异步调用无死锁
-    AsyncSelfCallNoDeadlock = 2;
-    // 测试环形同步调用死锁
-    SyncRingCallDeadlock = 3;
-    // 测试环形异步调用无死锁
-    AsyncRingCallNoDeadlock = 4;
-    // 测试环形异步调用死锁
-    AsyncRingCallDeadlock = 5;
-    // 测试环形异步调用无死锁无循环
+
+    // 测试循环检测
+
+    // Spawn
+    // Spawn-测试在Spawn的时候直接调用自己导致死锁(hello1->hello3->hello3)
+    SpawnSelfCallDeadlock = 1;
+    // Spawn-测试在Spawn的时候调用外部后环形调用回自己导致死锁(hello1->hello3->hello2->hello3)
+    SpawnRingCallDeadlock = 2;
+
+    // Atom Sync and Async
+    // Atom-测试在直接调用自己导致死锁(hello1->hello1)
+    SyncSelfCallDeadlock = 3;
+    // Atom-测试调用外部后环形调用回自己导致死锁(hello1->hello2->hello1)
+    SyncRingCallDeadlock = 4;
+    // Atom-测试调用外部后异步调用回自己不会死锁(hello1->hello2->hello1)
+    AsyncRingCallNoDeadlock = 5;
+    // Atom-测试环形无返回异步调用无死锁无循环(hello1->hello2->hello1)
     AsyncRingCallNoReplyNoDeadlock = 6;
-    // 测试环形异步调用无死锁有循环
-    AsyncRingCallNoReplyDeadlock = 7;
+
+    // Scale
+    // Scale-测试自我同步调用死锁(hello1->scale::element->element)
+    ScaleSelfCallDeadlock = 7;
+    // Scale-测试环形同步调用死锁(hello1->scale::element->hello1(deadlock)->hello1(deadlock))
+    ScaleRingCallDeadlockCase1 = 8;
+    // Scale-测试环形同步调用死锁(hello1->scale::element->hello1(deadlock)->hello1(deadlock))
+    ScaleRingCallDeadlockCase2 = 9;
+
+    // Wormhole
+    // Wormhole-测试自我同步调用死锁(hello1->wormhole::hello1)
+    WormholeSelfCallDeadlock = 10;
+    // Wormhole-测试环形同步调用死锁(hello1->wormhole::hello2->hello1)
+    WormholeRingCallDeadlock = 11;
+
+    // Task
+    // Task-测试自我同步调用死锁(hello1->task::hello1)
+    TaskSelfCallDeadlock = 12;
+    // Task-测试环形同步调用死锁(hello1->task::hello1->hello2->hello1)
+    TaskRingCallDeadlock = 13;
+    // Task-测试环形同步调用无死锁(hello1->task::hello1->hello2)
+    TaskRingCallNoDeadlock = 14;
+
+    // Parallel
+    // Parallel-测试自我同步调用无死锁(hello1->parallel::hello1)
+    ParallelSelfCallNoDeadlock = 15;
+    // Parallel-测试环形同步调用无死锁(hello1->parallel::hello1->hello2->hello1)
+    ParallelRingCallDeadlock = 16;
+
+    // Kill
+    // Kill-测试自我同步调用死锁(hello1->hello1)
+    KillSelfCallDeadlock = 17;
+    // Kill-测试环形同步调用死锁(hello1->hello2->hello1)
+    KillRingCallDeadlock = 18;
 
     // 后续步骤
-    SyncRingCallDeadlockStep2 = 100;
-    AsyncRingCallNoDeadlockStep2 = 101;
-    AsyncRingCallDeadlockStep2 = 102;
+    SpawnRingCallDeadlockStep2 = 100;
+    SyncRingCallDeadlockStep2 = 101;
+    AsyncRingCallNoDeadlockStep2 = 102;
     AsyncRingCallNoReplyNoDeadlockStep2 = 103;
-    AsyncRingCallNoReplyDeadlockStep2 = 104;
+    TaskRingCallDeadlockStep2 = 104;
+    ParallelRingCallDeadlockStep2 = 105;
+    KillRingCallDeadlockStep2 = 106;
   }
   TestMode mode = 1;
 }

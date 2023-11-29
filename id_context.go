@@ -29,11 +29,11 @@ func (f *atomosIDContextLocal) FromCallChain() []string {
 	return f.context.IdChain
 }
 
-func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, ignoreSelf bool) *Error {
+func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, isSpawn bool) *Error {
 	f.atomos.mailbox.mutex.Lock()
 	defer f.atomos.mailbox.mutex.Unlock()
 
-	if !ignoreSelf && callerID.GetIDInfo().IsEqual(f.atomos.id) {
+	if !isSpawn && callerID.GetIDInfo().IsEqual(f.atomos.id) {
 		return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call to self detected. target=(%s),chain=(%s)", f.atomos.id.Info(), strings.Join(fromChain, "->")).AddStack(nil)
 	}
 	self := f.atomos.id.Info()

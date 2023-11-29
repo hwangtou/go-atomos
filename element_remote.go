@@ -118,11 +118,10 @@ func (e *ElementRemote) SyncMessagingByName(callerID SelfID, name string, timeou
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:        toIDInfo,
-		Timeout:   int64(timeout),
-		NeedReply: true,
-		Message:   name,
-		Args:      arg,
+		To:      toIDInfo,
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
@@ -178,7 +177,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 		out, err := func() (out proto.Message, err *Error) {
 
 			defer cancel()
-			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+			rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
@@ -208,7 +207,7 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 		}()
 
 		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
+			callerID.asyncCallback(callerID, name, out, err, callback)
 		}
 	})
 }
@@ -239,6 +238,13 @@ func (e *ElementRemote) getIDTrackerManager() *atomosIDTracker {
 func (e *ElementRemote) getGoID() uint64 {
 	//return e.info.GoId
 	return 0
+}
+
+func (e *ElementRemote) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if callback == nil {
+		return
+	}
+	callback(reply, err)
 }
 
 // Implementation of Element

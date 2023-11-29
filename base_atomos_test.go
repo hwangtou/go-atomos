@@ -54,6 +54,9 @@ func (t *TestAtomosHolder) OnMessaging(fromID ID, name string, in proto.Message)
 	return
 }
 
+func (t *TestAtomosHolder) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
+}
+
 func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
 	panic("not supported")
 }

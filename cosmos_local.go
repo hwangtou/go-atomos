@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -68,6 +69,10 @@ func (c *CosmosLocal) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) 
 
 func (c *CosmosLocal) getGoID() uint64 {
 	return c.atomos.GetGoID()
+}
+
+func (c *CosmosLocal) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	c.atomos.PushAsyncMessageCallbackMailAndWaitReply(callerID, name, reply, err, callback)
 }
 
 // Implementation of AtomosUtilities
@@ -171,6 +176,9 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
+	if reflect.ValueOf(id).IsNil() {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "Cosmos: ScaleGetAtomID not exists. name=(%s)", elemName).AddStack(c)
+	}
 	return id, tracker, nil
 }
 
@@ -219,6 +227,9 @@ func (c *CosmosLocal) Halt(_ ID, _ []uint64) (save bool, data proto.Message) {
 
 func (c *CosmosLocal) OnMessaging(_ ID, _ string, _ proto.Message) (out proto.Message, err *Error) {
 	return nil, NewError(ErrCosmosCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
+}
+
+func (c *CosmosLocal) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
 }
 
 func (c *CosmosLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {

@@ -105,11 +105,10 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:        toIDInfo,
-		Timeout:   int64(timeout),
-		NeedReply: true,
-		Message:   name,
-		Args:      arg,
+		To:      toIDInfo,
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	}
 	rsp, er := client.SyncMessagingByName(ctx, req)
 	if er != nil {
@@ -166,14 +165,13 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 		out, err := func() (out proto.Message, err *Error) {
 
 			defer cancel()
-			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+			rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
 				},
 				To:        toIDInfo,
 				Timeout:   int64(timeout),
-				Async:     true,
 				NeedReply: needReply,
 				Message:   name,
 				Args:      arg,
@@ -197,7 +195,7 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 		}()
 
 		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
+			callerID.asyncCallback(callerID, name, out, err, callback)
 		}
 	})
 }
@@ -249,6 +247,13 @@ func (a *AtomRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *
 func (a *AtomRemote) getGoID() uint64 {
 	//return a.info.GoId
 	return 0
+}
+
+func (a *AtomRemote) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if callback == nil {
+		return
+	}
+	callback(reply, err)
 }
 
 // remoteAtomFakeSelfID 用于在远程Atom中实现SelfID接口

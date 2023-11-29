@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"encoding/json"
 	"google.golang.org/protobuf/proto"
+	"reflect"
 	"time"
 )
 
@@ -66,6 +67,9 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, e
 		return nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
 	}
 	m.ElementID = e
+	if m.isElementNil() {
+		return nilID, NewErrorf(ErrAtomNotExists, "Messenger: elementID is nil").AddStack(nil)
+	}
 	timeout := m.handleExt(ext...)
 
 	return m.handleReply(m.ElementID.SyncMessagingByName(callerID, m.Name, timeout, in))
@@ -80,8 +84,19 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 		} else {
 			callerID.Log().Fatal("Messenger: callerID is nil.")
 		}
+		return
 	}
+	// If element is nil, it will be handled by the Atomos.
 	m.ElementID = e
+	if m.isElementNil() {
+		var nilID OUT
+		if callback != nil {
+			callback(nilID, NewErrorf(ErrAtomNotExists, "Messenger: elementID is nil").AddStack(nil))
+		} else {
+			callerID.Log().Fatal("Messenger: elementID is nil.")
+		}
+		return
+	}
 	timeout := m.handleExt(ext...)
 
 	if callback != nil {
@@ -100,6 +115,9 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext 
 		return nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
 	}
 	m.AtomID = a
+	if m.isAtomNil() {
+		return nilID, NewErrorf(ErrAtomNotExists, "Messenger: atomID is nil").AddStack(nil)
+	}
 	timeout := m.handleExt(ext...)
 
 	return m.handleReply(m.AtomID.SyncMessagingByName(callerID, m.Name, timeout, in))
@@ -114,8 +132,18 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 		} else {
 			callerID.Log().Fatal("Messenger: callerID is nil.")
 		}
+		return
 	}
 	m.AtomID = a
+	if m.isAtomNil() {
+		var nilID OUT
+		if callback != nil {
+			callback(nilID, NewErrorf(ErrAtomNotExists, "Messenger: atomID is nil").AddStack(nil))
+		} else {
+			callerID.Log().Fatal("Messenger: atomID is nil.")
+		}
+		return
+	}
 	timeout := m.handleExt(ext...)
 
 	if callback != nil {
@@ -181,4 +209,12 @@ func (m Messenger[E, A, AT, IN, OUT]) handleReply(rsp proto.Message, err *Error)
 		return nilID, NewErrorf(ErrAtomMessageReplyType, "Reply type invalid. name=(%s),type=(%T)", m.Name, rsp).AddStack(nil)
 	}
 	return reply, err.AddStack(nil)
+}
+
+func (m Messenger[E, A, AT, IN, OUT]) isElementNil() bool {
+	return reflect.ValueOf(m.ElementID).IsNil()
+}
+
+func (m Messenger[E, A, AT, IN, OUT]) isAtomNil() bool {
+	return reflect.ValueOf(m.AtomID).IsNil()
 }

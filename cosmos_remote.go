@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"net"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -300,11 +301,10 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:        toIDInfo,
-		Timeout:   int64(timeout),
-		NeedReply: true,
-		Message:   name,
-		Args:      arg,
+		To:      toIDInfo,
+		Timeout: int64(timeout),
+		Message: name,
+		Args:    arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -360,7 +360,7 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		out, err := func() (out proto.Message, err *Error) {
 
 			defer cancel()
-			rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+			rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 				CallerId: callerIdInfo,
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
@@ -390,7 +390,7 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		}()
 
 		if needReply {
-			callerID.getAtomos().PushAsyncMessageCallbackMailAndWaitReply(callerID, name, out, err, callback)
+			callerID.asyncCallback(callerID, name, out, err, callback)
 		}
 	})
 }
@@ -410,6 +410,13 @@ func (c *CosmosRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole)
 func (c *CosmosRemote) getGoID() uint64 {
 	//return c.id.GoId
 	return 0
+}
+
+func (c *CosmosRemote) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
+	if callback == nil {
+		return
+	}
+	callback(reply, err)
 }
 
 // Implementation of CosmosNode
@@ -450,6 +457,9 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	id, tracker, err = element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
+	}
+	if reflect.ValueOf(id).IsNil() {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "CosmosRemote: ScaleGetAtomID failed. id is nil").AddStack(nil)
 	}
 	return id, tracker, nil
 }
