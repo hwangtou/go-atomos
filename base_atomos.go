@@ -180,17 +180,17 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
-	parallel := a.mailbox.goID != getGoID()
+	diffGoroutine := a.mailbox.goID != getGoID()
 
 	var fromCallChain []string
 	if needReply && !async {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID, parallel)
+		err = a.ctx.isLoop(fromCallChain, callerID, diffGoroutine)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
-	if !async || !parallel {
+	if callerID.GetIDInfo().Type > IDType_Cosmos && !async || !diffGoroutine {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
@@ -257,7 +257,11 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, tim
 	}
 
 	am := allocAtomosMail()
-	initScaleMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), name, in)
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		initScaleMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), name, in)
+	} else {
+		initScaleMail(am, callerID, fromCallChain, name, in)
+	}
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return nil, NewErrorf(ErrAtomosIsNotRunning,
@@ -283,7 +287,11 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeou
 	}
 
 	am := allocAtomosMail()
-	initKillMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()))
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		initKillMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()))
+	} else {
+		initKillMail(am, callerID, fromCallChain)
+	}
 
 	if ok := a.mailbox.pushHead(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos: It is not running. from=(%s),wait=(%v)", callerID, wait).AddStack(nil)
@@ -314,7 +322,11 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(callerID SelfID, timeout time.
 	}
 
 	am := allocAtomosMail()
-	initWormholeMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), wormhole)
+	if callerID.GetIDInfo().Type > IDType_Cosmos {
+		initWormholeMail(am, callerID, append(fromCallChain, callerID.GetIDInfo().Info()), wormhole)
+	} else {
+		initWormholeMail(am, callerID, fromCallChain, wormhole)
+	}
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		return NewErrorf(ErrAtomosIsNotRunning, "Atomos: It is not running. from=(%s),wormhole=(%v)", callerID, wormhole).AddStack(nil)

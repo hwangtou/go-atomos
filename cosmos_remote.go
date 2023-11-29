@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"net"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -450,6 +451,9 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	id, tracker, err = element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
+	}
+	if reflect.ValueOf(id).IsNil() {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "CosmosRemote: ScaleGetAtomID failed. id is nil").AddStack(nil)
 	}
 	return id, tracker, nil
 }

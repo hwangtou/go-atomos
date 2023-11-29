@@ -596,7 +596,10 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 	if err != nil {
 		return nil, nil, NewErrorf(ErrAtomosIDCallLoop, "Element: Spawn atom failed, call chain loop. err=(%v)", err).AddStack(e)
 	}
-	callChain := append(fromCallChain, e.atomos.id.Info())
+	callChain := append(fromCallChain)
+	if e.atomos.id.Type > IDType_Cosmos {
+		callChain = append(callChain, e.atomos.id.Info())
+	}
 
 	// Element的容器逻辑。
 	// Alloc an atomos and try setting.

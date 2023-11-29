@@ -2,6 +2,7 @@ package go_atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -170,6 +171,9 @@ func (c *CosmosLocal) CosmosGetScaleAtomID(callerID SelfID, elemName, message st
 	id, tracker, err = e.ScaleGetAtomID(callerID, message, timeout, args, NewIDTrackerInfoFromLocalGoroutine(3), true)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
+	}
+	if reflect.ValueOf(id).IsNil() {
+		return nil, nil, NewErrorf(ErrAtomNotExists, "Cosmos: ScaleGetAtomID not exists. name=(%s)", elemName).AddStack(c)
 	}
 	return id, tracker, nil
 }
