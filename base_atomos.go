@@ -180,17 +180,19 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
-	diffGoroutine := a.mailbox.goID != getGoID()
+	goID := getGoID()
+	isMailbox := isMailboxGoID(goID)
+	diffGoroutine := a.mailbox.goID != goID
 
 	var fromCallChain []string
-	if needReply && !async {
+	if needReply && !async && isMailbox {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
 		err = a.ctx.isLoop(fromCallChain, callerID, diffGoroutine)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
-	if callerID.GetIDInfo().Type > IDType_Cosmos && !async || !diffGoroutine {
+	if callerID.GetIDInfo().Type > IDType_Cosmos && isMailbox && !async || !diffGoroutine {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
@@ -397,7 +399,7 @@ func (a *BaseAtomos) setBusyWithContext(message string, arg proto.Message, fromC
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosBusy
 	a.ctx.context.IdChain = fromCallChain
-	a.mt.set(message, a.id, a.process, arg)
+	a.mt.set(message, a.id, a.process, arg, a)
 }
 
 func (a *BaseAtomos) setWaitingWithContext(message string) {
@@ -462,6 +464,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	switch am.mailType {
 	case MailMessage:
 		{
+			a.Log().Info(">>>>>>>>>>cur=(%v),arg=(%v),from=(%v)", am.name, am.arg, am.fromCallChain)
 			a.setBusyWithContext(am.name, am.arg, am.fromCallChain)
 			defer a.setWaitingWithContext(am.name)
 

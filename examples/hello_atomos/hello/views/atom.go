@@ -5,6 +5,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"hello_atomos/api"
 	"sync"
+	"time"
 )
 
 type atom struct {
@@ -13,8 +14,13 @@ type atom struct {
 	data *api.HAData
 }
 
-var TestMap map[api.HADoTestI_TestMode]int = map[api.HADoTestI_TestMode]int{}
-var TestMapMutex sync.Mutex
+var (
+	TestMap      = map[api.HADoTestI_TestMode]int{}
+	TestMapMutex sync.Mutex
+
+	TestMultiTaskMap      = map[int]int{}
+	TestMultiTaskMapMutex sync.Mutex
+)
 
 func NewAtom(string) api.HelloAtomosAtom {
 	return &atom{}
@@ -56,6 +62,9 @@ func (a *atom) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.M
 
 func (a *atom) Greeting(from atomos.ID, in *api.HAGreetingI) (out *api.HAGreetingO, err *atomos.Error) {
 	a.self.Log().Info("Greeting: in=(%v)", in)
+	if in.Message == "wait100ms" {
+		<-time.After(time.Millisecond * 100)
+	}
 	return &api.HAGreetingO{}, nil
 }
 
@@ -343,7 +352,6 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 		return &api.HADoTestO{}, nil
 
 	case api.HADoTestI_ParallelSelfCallNoDeadlock:
-		wait := make(chan struct{}, 1)
 		a.self.Parallel(func() {
 			gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), a.self.GetIDInfo().Atom)
 			if err != nil {
@@ -351,7 +359,6 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 				return
 			}
 			defer gotSelfID.Release()
-			wait <- struct{}{}
 			if _, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{}); err != nil {
 				a.self.Log().Fatal("ParallelSelfCallDeadlock FAILED, should be ok. err=(%v)", err)
 				return
@@ -361,11 +368,9 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			TestMapMutex.Unlock()
 			a.self.Log().Info("ParallelSelfCallDeadlock PASS")
 		})
-		<-wait
 		return &api.HADoTestO{}, nil
 
 	case api.HADoTestI_ParallelRingCallNoDeadlock:
-		wait := make(chan struct{}, 1)
 		a.self.Parallel(func() {
 			gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), "hello2")
 			if err != nil {
@@ -373,7 +378,6 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 				return
 			}
 			defer gotSelfID.Release()
-			wait <- struct{}{}
 			if _, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_ParallelRingCallNoDeadlockStep2}); err != nil {
 				a.self.Log().Fatal("ParallelRingCallDeadlock FAILED, should be ok. err=(%v)", err)
 				return
@@ -381,13 +385,11 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			TestMapMutex.Lock()
 			TestMap[in.Mode] = 2
 			TestMapMutex.Unlock()
-			a.self.Log().Info("ParallelRingCallDeadlock PASS")
+			a.self.Log().Info("ParallelRingCallNoDeadlock PASS")
 		})
-		<-wait
 		return &api.HADoTestO{}, nil
 
 	case api.HADoTestI_ParallelRingCallDeadlock:
-		wait := make(chan struct{}, 1)
 		a.self.Parallel(func() {
 			gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), "hello2")
 			if err != nil {
@@ -395,7 +397,6 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 				return
 			}
 			defer gotSelfID.Release()
-			wait <- struct{}{}
 			if _, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_ParallelRingCallDeadlockStep2}); err != nil {
 				a.self.Log().Fatal("ParallelRingCallDeadlock FAILED, should be ok. err=(%v)", err)
 				return
@@ -405,11 +406,73 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			TestMapMutex.Unlock()
 			a.self.Log().Info("ParallelRingCallDeadlock PASS")
 		})
-		<-wait
+		a.self.Log().Info("ParallelRingCallDeadlock RETURN")
 		return &api.HADoTestO{}, nil
 
 	case api.HADoTestI_KillSelfCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), a.self.GetIDInfo().Atom)
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		err = gotSelfID.Kill(a.self, 0)
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		a.self.Log().Info("KillSelfCallDeadlock PASS")
+		return &api.HADoTestO{}, nil
+
 	case api.HADoTestI_KillRingCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), "hello2")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_KillRingCallDeadlockStep2})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		a.self.Log().Info("KillRingCallDeadlock PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_ParallelMultiTaskingRingCall:
+		num := 100
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), "hello2")
+		if err != nil {
+			a.self.Log().Fatal("MultiTasking FAILED, should be ok. err=(%v)", err)
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		for i := 0; i < num; i++ {
+			id := i
+			TestMultiTaskMapMutex.Lock()
+			TestMultiTaskMap[id] = 1
+			TestMultiTaskMapMutex.Unlock()
+			a.self.Parallel(func() {
+				//a.self.Log().Info("==========id=(%d)", id)
+				if _, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_ParallelMultiTaskingRingCallStep2}); err != nil {
+					a.self.Log().Fatal("MultiTasking FAILED, should be ok. err=(%v)", err)
+					return
+				}
+				TestMultiTaskMapMutex.Lock()
+				TestMultiTaskMap[id] = 2
+				TestMultiTaskMapMutex.Unlock()
+			})
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		a.self.Log().Info("MultiTasking PASS")
+		return &api.HADoTestO{}, nil
 
 	// Test Use
 
@@ -516,11 +579,24 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			return nil, err.AddStack(a.self)
 		}
 		defer gotSelfID.Release()
-		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_ParallelRingCallDeadlockStep3})
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{})
 		if err != nil {
 			return nil, err.AddStack(a.self)
 		}
 		a.self.Log().Info("ParallelRingCallNoDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_ParallelRingCallDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_ParallelRingCallDeadlockStep3})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("ParallelRingCallDeadlockStep2 PASS")
 		return &api.HADoTestO{}, nil
 
 	case api.HADoTestI_ParallelRingCallDeadlockStep3:
@@ -539,7 +615,32 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 		a.self.Log().Info("ParallelRingCallDeadlockStep3 PASS")
 		return &api.HADoTestO{}, nil
 
-	case api.HADoTestI_KillSelfCallDeadlockStep2:
+	case api.HADoTestI_KillRingCallDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), fromID.GetIDInfo().Atom)
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		err = gotSelfID.Kill(a.self, 0)
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_ParallelMultiTaskingRingCallStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.Cosmos(), fromID.GetIDInfo().Atom)
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{Message: "wait100ms"})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		return &api.HADoTestO{}, nil
 
 	}
 

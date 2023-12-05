@@ -24,6 +24,17 @@ const (
 	MailActionExit = 1
 )
 
+var (
+	mailIDMap     = make(map[uint64]bool)
+	mailIDMapLock sync.RWMutex
+)
+
+func isMailboxGoID(id uint64) bool {
+	mailIDMapLock.RLock()
+	defer mailIDMapLock.RUnlock()
+	return mailIDMap[id]
+}
+
 // Mail Box
 
 type MailboxHandler interface {
@@ -278,10 +289,17 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
 		return
 	}
+	gid := mb.goID
+	mailIDMapLock.Lock()
+	mailIDMap[gid] = true
+	mailIDMapLock.Unlock()
 
 	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)\n", mb.name))
 	defer func() {
 		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)\n", mb.name))
+		mailIDMapLock.Lock()
+		delete(mailIDMap, gid)
+		mailIDMapLock.Unlock()
 	}()
 
 	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
