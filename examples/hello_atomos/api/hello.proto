@@ -153,14 +153,16 @@ message HADoTestI {
     ParallelRingCallNoDeadlock = 19;
     // Parallel-测试环形同步调用死锁
     ParallelRingCallDeadlock = 20;
+    // Parallel-测试多任务环形同步调用死锁
+    ParallelMultiTaskingRingCall = 21;
 
     // Kill
     // Kill-测试自我同步调用死锁
-    KillSelfCallDeadlock = 21;
+    KillSelfCallDeadlock = 22;
     // Kill-测试环形同步调用死锁
-    KillRingCallDeadlock = 22;
-    // Kill-测试环形同步调用无死锁
-    KillRingCallNoDeadlock = 23;
+    KillRingCallDeadlock = 23;
+
+    // MultiTasking
 
     // 后续步骤
     SpawnSelfCallDeadlockStep2 = 100;
@@ -173,7 +175,8 @@ message HADoTestI {
     ParallelRingCallNoDeadlockStep2 = 107;
     ParallelRingCallDeadlockStep2 = 108;
     ParallelRingCallDeadlockStep3 = 109;
-    KillSelfCallDeadlockStep2 = 110;
+    ParallelMultiTaskingRingCallStep2 = 110;
+    KillRingCallDeadlockStep2 = 111;
   }
   TestMode mode = 1;
 }

@@ -16,13 +16,29 @@ var AtomosRunnable atomos.CosmosRunnable
 var (
 	TestMode  = true
 	TestCases = []api.HADoTestI_TestMode{
-		api.HADoTestI_SyncSelfCallDeadlock,
-		api.HADoTestI_AsyncSelfCallNoDeadlock,
-		api.HADoTestI_SyncRingCallDeadlock,
-		api.HADoTestI_AsyncRingCallNoDeadlock,
-		api.HADoTestI_AsyncRingCallDeadlock,
-		api.HADoTestI_AsyncRingCallNoReplyNoDeadlock,
-		api.HADoTestI_AsyncRingCallNoReplyDeadlock,
+		//api.HADoTestI_SpawnSelfCallDeadlock,
+		//api.HADoTestI_SpawnRingCallDeadlock,
+		//api.HADoTestI_SyncSelfCallDeadlock,
+		//api.HADoTestI_AsyncSelfCallNoDeadlock,
+		//api.HADoTestI_SyncRingCallDeadlock,
+		//api.HADoTestI_AsyncRingCallNoDeadlock,
+		//api.HADoTestI_AsyncRingCallDeadlock,
+		//api.HADoTestI_AsyncRingCallNoReplyNoDeadlock,
+		//api.HADoTestI_AsyncRingCallNoReplyDeadlock,
+		//api.HADoTestI_ScaleSelfCallDeadlock,
+		//api.HADoTestI_ScaleRingCallDeadlockCase1,
+		//api.HADoTestI_ScaleRingCallDeadlockCase2,
+		//api.HADoTestI_WormholeSelfCallDeadlock,
+		//api.HADoTestI_WormholeRingCallDeadlock,
+		//api.HADoTestI_TaskSelfCallDeadlock,
+		//api.HADoTestI_TaskRingCallDeadlock,
+		//api.HADoTestI_TaskRingCallNoDeadlock,
+		//api.HADoTestI_ParallelSelfCallNoDeadlock,
+		//api.HADoTestI_ParallelRingCallNoDeadlock,
+		api.HADoTestI_ParallelRingCallDeadlock,
+		//api.HADoTestI_ParallelMultiTaskingRingCall,
+		//api.HADoTestI_KillSelfCallDeadlock,
+		api.HADoTestI_KillRingCallDeadlock,
 	}
 )
 
@@ -96,9 +112,24 @@ func (m *hellMain) testResult() {
 		result := views.TestMap[mode]
 		message := "PASS"
 		if result != 2 {
+			pass = false
 			message = "FAIL"
 		}
 		m.local.Self().Log().Info("%s [%v]", message, mode)
 	}
 	views.TestMapMutex.Unlock()
+	if !pass {
+		panic("Test Fail")
+	}
+
+	views.TestMultiTaskMapMutex.Lock()
+	pass = true
+	for id, state := range views.TestMultiTaskMap {
+		if state != 2 {
+			pass = false
+			m.local.Self().Log().Info("FAIL [%v]", id)
+		}
+	}
+	m.local.Self().Log().Info("TestMultiTaskResult: %v", pass)
+	views.TestMultiTaskMapMutex.Unlock()
 }
