@@ -545,7 +545,9 @@ func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uin
 	exitWG := sync.WaitGroup{}
 	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
 		name := nameElem.Value.(string)
+		e.lock.RLock()
 		atom, has := e.atoms[name]
+		e.lock.RUnlock()
 		if !has || atom == nil {
 			continue
 		}
