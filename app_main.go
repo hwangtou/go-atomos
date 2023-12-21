@@ -97,7 +97,7 @@ func Main(runnable CosmosRunnable) {
 		}()
 		runnable.SetConfig(app.config)
 		if err = SharedCosmosProcess().Start(&runnable); err != nil {
-			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed. err=(%v)", err.AddStack(nil))
+			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
 			return
 		}
 		SharedCosmosProcess().Self().Log().coreInfo("App: Started.")

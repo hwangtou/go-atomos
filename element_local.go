@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -531,7 +532,10 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		stopTimeout = elemExit.StopTimeout()
 		stopGap = elemExit.StopGap()
 	}
+
+	sem := make(chan struct{}, runtime.NumCPU()) // 信号量，用于控制并发goroutine的数量。
 	exitWG := sync.WaitGroup{}
+
 	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
 		name := nameElem.Value.(string)
 		e.lock.RLock()
@@ -541,7 +545,12 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 			continue
 		}
 		e.Log().Info("Element: OnStopping, killing atom. name=(%s)", name)
+
+		// 获取信号量的一个槽位。如果信号量已满，则这里将阻塞，直到信号量中有可用的槽位。
+		sem <- struct{}{}
 		exitWG.Add(1)
+
+		// 启动一个goroutine来处理任务
 		go func(a *AtomLocal, n string) {
 			var err *Error
 			defer func() {
@@ -549,11 +558,12 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 					e.Log().Fatal("Element: OnStopping, killing atom recovers from panic. err=(%v)", err.AddPanicStack(e, 3, r))
 				}
 			}()
+			defer exitWG.Done()
+			defer func() { <-sem }() // 任务完成，释放信号量的一个槽位。
 			err = a.atomos.PushKillMailAndWaitReply(e, true, stopTimeout)
 			if err != nil {
 				e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", n, err)
 			}
-			exitWG.Done()
 		}(atom, name)
 		if stopGap > 0 {
 			<-time.After(stopGap)
