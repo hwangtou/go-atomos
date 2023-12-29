@@ -117,7 +117,7 @@ func (e *ElementLocal) IdleTime() time.Duration {
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, timeout, in)
+	out, err = e.atomos.PushMessageMailAndWaitReply(callerID, name, false, timeout, in)
 	if err != nil {
 		err = err.AddStack(e)
 	}

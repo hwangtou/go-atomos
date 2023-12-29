@@ -96,6 +96,48 @@ func (e *element) ScaleDoTest(from atomos.ID, in *api.HADoTestI) (*api.HelloAtom
 		TestMap[in.Mode] = 2
 		TestMapMutex.Unlock()
 		return gotSelfID, nil
+
+	case api.HADoTestI_RemoteScaleSelfCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosElementID(e.self.Cosmos())
+		if err != nil {
+			return nil, err.AddStack(e.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.SayHello(e.self, &api.HAEHelloI{})
+		if err == nil || err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		return nil, nil
+
+	case api.HADoTestI_RemoteScaleRingCallDeadlockCase1:
+		gotSelfID, err := api.GetHelloAtomosAtomID(e.self.CosmosMain().GetCosmosNode("a"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(e.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(e.self, &api.HAGreetingI{Message: "SyncSelfCallDeadlock"})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(e.self)
+		}
+		return gotSelfID, nil
+
+	case api.HADoTestI_RemoteScaleRingCallDeadlockCase2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(e.self.CosmosMain().GetCosmosNode("a"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(e.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(e.self, &api.HAGreetingI{Message: "SyncSelfCallDeadlock"})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(e.self)
+		}
+		return gotSelfID, nil
 	}
 
 	return nil, atomos.NewError(atomos.ErrFrameworkIncorrectUsage, "unknown mode").AddStack(e.self)

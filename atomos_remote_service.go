@@ -268,7 +268,7 @@ func (a *atomosRemoteService) SyncMessagingByName(_ context.Context, req *Cosmos
 		}
 
 		// Sync messaging.
-		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, time.Duration(req.Timeout), in)
+		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, false, time.Duration(req.Timeout), in)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -332,7 +332,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 
 		// Async messaging.
 		if req.NeedReply {
-			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, time.Duration(req.Timeout), in)
+			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, true, time.Duration(req.Timeout), in)
 			if out != nil {
 				rsp.Reply, _ = anypb.New(out)
 			}

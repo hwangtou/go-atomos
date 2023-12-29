@@ -34,6 +34,16 @@ var (
 		api.HADoTestI_ParallelRingCallDeadlock,
 		api.HADoTestI_KillSelfCallDeadlock,
 		api.HADoTestI_KillRingCallDeadlock,
+		api.HADoTestI_RemoteSpawnAtomAndHalt,
+		api.HADoTestI_RemoteSpawnSelfCallDeadlock,
+		api.HADoTestI_RemoteSpawnRingCallDeadlock,
+		api.HADoTestI_RemoteSyncSelfCallDeadlock,
+		api.HADoTestI_RemoteSyncRingCallDeadlock,
+		api.HADoTestI_RemoteAsyncRingCallNoDeadlock,
+		api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlock,
+		api.HADoTestI_RemoteScaleSelfCallDeadlock,
+		api.HADoTestI_RemoteScaleRingCallDeadlockCase1,
+		//api.HADoTestI_RemoteScaleRingCallDeadlockCase2, // TODO
 	}
 )
 
@@ -55,7 +65,12 @@ func (m *hellMain) OnBoot(local *atomos.CosmosProcess) *atomos.Error {
 
 func (m *hellMain) OnStartUp(local *atomos.CosmosProcess) *atomos.Error {
 	if TestMode {
-		return m.testing(local)
+		switch local.Self().GetNodeName() {
+		case "a":
+			return m.testing(local)
+		case "b":
+			return m.prepare(local)
+		}
 	}
 	return nil
 }
@@ -87,8 +102,25 @@ func (m *hellMain) testing(local *atomos.CosmosProcess) *atomos.Error {
 	return nil
 }
 
+func (m *hellMain) prepare(local *atomos.CosmosProcess) *atomos.Error {
+	hello1, err := api.SpawnHelloAtomosAtom(local.Self(), local.Self().CosmosMain(), "hello1", &api.HASpawnArg{Id: 1})
+	if err != nil {
+		return err.AddStack(local.Self())
+	}
+	defer hello1.Release()
+	local.Self().Log().Info("Spawned: %v", hello1)
+
+	hello2, err := api.SpawnHelloAtomosAtom(local.Self(), local.Self().CosmosMain(), "hello2", &api.HASpawnArg{Id: 1})
+	if err != nil {
+		return err.AddStack(local.Self())
+	}
+	defer hello2.Release()
+	local.Self().Log().Info("Spawned: %v", hello2)
+	return nil
+}
+
 func (m *hellMain) OnShutdown() *atomos.Error {
-	if TestMode {
+	if TestMode && m.local.Self().GetNodeName() == "a" {
 		m.testResult()
 	}
 	return nil

@@ -52,6 +52,18 @@ func (a *atom) Spawn(self atomos.AtomSelfID, arg *api.HASpawnArg, data *api.HADa
 		if err != nil {
 			return err.AddStack(self)
 		}
+
+	case "RemoteSpawnRingCallDeadlock":
+		gotSelfID, err := api.GetHelloAtomosAtomID(self.CosmosMain().GetCosmosNode("a"), "hello2")
+		if err != nil {
+			return err.AddStack(self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(self, &api.HADoTestI{Mode: api.HADoTestI_RemoteSpawnRingCallDeadlockStep2})
+		if err != nil {
+			return err.AddStack(self)
+		}
+
 	}
 	return nil
 }
@@ -62,8 +74,13 @@ func (a *atom) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.M
 
 func (a *atom) Greeting(from atomos.ID, in *api.HAGreetingI) (out *api.HAGreetingO, err *atomos.Error) {
 	a.self.Log().Info("Greeting: in=(%v)", in)
-	if in.Message == "wait100ms" {
+	switch in.Message {
+	case "wait100ms":
 		<-time.After(time.Millisecond * 100)
+	case "RemoteAsyncRingCallNoReplyNoDeadlockStep2":
+		TestMapMutex.Lock()
+		TestMap[api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlock] = 2
+		TestMapMutex.Unlock()
 	}
 	return &api.HAGreetingO{}, nil
 }
@@ -384,6 +401,170 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 		a.self.Log().Info("KillRingCallDeadlock PASS")
 		return &api.HADoTestO{}, nil
 
+	case api.HADoTestI_RemoteSpawnAtomAndHalt:
+		nodeB := a.self.CosmosMain().GetCosmosNode("b")
+		atomBHello1, err := api.SpawnHelloAtomosAtom(a.self, nodeB, "b_hello1", &api.HASpawnArg{})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer atomBHello1.Release()
+		if err = atomBHello1.Kill(a.self, 0); err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSpawnAtomAndHalt PASS")
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSpawnSelfCallDeadlock:
+		nodeB := a.self.CosmosMain().GetCosmosNode("b")
+		id3, err := api.SpawnHelloAtomosAtom(a.self, nodeB, "b_hello1", &api.HASpawnArg{Message: "SpawnSelfCallDeadlock"})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer id3.Release()
+		if err = id3.Kill(a.self, 0); err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSpawnSelfCallDeadlock PASS")
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSpawnRingCallDeadlock:
+		nodeB := a.self.CosmosMain().GetCosmosNode("b")
+		id3, err := api.SpawnHelloAtomosAtom(a.self, nodeB, "b_hello1", &api.HASpawnArg{Message: "RemoteSpawnRingCallDeadlock"})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer id3.Release()
+		err = id3.Kill(a.self, 0)
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSpawnRingCallDeadlock PASS")
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSyncSelfCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteSyncSelfCallDeadlockStep2})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSyncSelfCallDeadlock PASS")
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSyncRingCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteSyncRingCallDeadlockStep2})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSyncRingCallDeadlock PASS")
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteAsyncRingCallNoDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		gotSelfID.AsyncDoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteAsyncRingCallNoDeadlockStep2}, func(out *api.HADoTestO, err *atomos.Error) {
+			if err != nil {
+				a.self.Log().Fatal("RemoteAsyncRingCallNoDeadlock FAILED, should be ok. err=(%v)", err.AddStack(a.self))
+			} else {
+				a.self.Log().Info("RemoteAsyncRingCallNoDeadlock PASS")
+				TestMapMutex.Lock()
+				TestMap[in.Mode] = 2
+				TestMapMutex.Unlock()
+			}
+		})
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlock:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		gotSelfID.AsyncDoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlockStep2}, nil)
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteScaleSelfCallDeadlock:
+		gotSelfID, err := api.GetHelloAtomosElementID(a.self.CosmosMain().GetCosmosNode("b"))
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.ScaleDoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteScaleSelfCallDeadlock})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomNotExists {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteScaleRingCallDeadlockCase1:
+		gotSelfID, err := api.GetHelloAtomosElementID(a.self.CosmosMain().GetCosmosNode("b"))
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		id, err := gotSelfID.ScaleDoTestGetID(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteScaleRingCallDeadlockCase1})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		// 相当于自我调用
+		_, err = id.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteScaleRingCallDeadlockCase1})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteScaleRingCallDeadlockCase2:
+		gotSelfID, err := api.GetHelloAtomosElementID(a.self.CosmosMain().GetCosmosNode("b"))
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.ScaleDoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteScaleRingCallDeadlockCase2})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[in.Mode] = 2
+		TestMapMutex.Unlock()
+		return &api.HADoTestO{}, nil
+
 	// Test Use
 
 	case api.HADoTestI_SpawnRingCallDeadlockStep2:
@@ -494,6 +675,95 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 		}
 		return &api.HADoTestO{}, nil
 
+	case api.HADoTestI_RemoteSpawnRingCallDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "b_hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock").AddStack(a.self)
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSpawnRingCallDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSyncSelfCallDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock").AddStack(a.self)
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSyncSelfCallDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSyncRingCallDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("a"), "hello2")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.DoTest(a.self, &api.HADoTestI{Mode: api.HADoTestI_RemoteSyncRingCallDeadlockStep3})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSyncSelfCallDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteSyncRingCallDeadlockStep3:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("b"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{})
+		if err == nil {
+			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock").AddStack(a.self)
+		}
+		if err.Code != atomos.ErrAtomosIDCallLoop {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteSyncSelfCallDeadlockStep3 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteAsyncRingCallNoDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("a"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		a.self.Log().Info("RemoteAsyncRingCallNoDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
+
+	case api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlockStep2:
+		gotSelfID, err := api.GetHelloAtomosAtomID(a.self.CosmosMain().GetCosmosNode("a"), "hello1")
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		defer gotSelfID.Release()
+		_, err = gotSelfID.Greeting(a.self, &api.HAGreetingI{Message: "RemoteAsyncRingCallNoReplyNoDeadlockStep2"})
+		if err != nil {
+			return nil, err.AddStack(a.self)
+		}
+		TestMapMutex.Lock()
+		TestMap[api.HADoTestI_RemoteAsyncRingCallNoReplyNoDeadlock] = 2
+		TestMapMutex.Unlock()
+		a.self.Log().Info("RemoteAsyncRingCallNoReplyNoDeadlockStep2 PASS")
+		return &api.HADoTestO{}, nil
 	}
 
 	return nil, atomos.NewError(atomos.ErrFrameworkIncorrectUsage, "unknown mode").AddStack(a.self)

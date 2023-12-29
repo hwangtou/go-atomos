@@ -180,18 +180,21 @@ func (a *BaseAtomos) GetGoID() uint64 {
 	return a.mailbox.goID
 }
 
-func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
+func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, async bool, timeout time.Duration, in proto.Message) (reply proto.Message, err *Error) {
 	if callerID == nil {
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
-	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err = a.ctx.isLoop(fromCallChain, callerID, false)
-	if err != nil {
-		return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
-	}
-	if callerID.GetIDInfo().Type > IDType_Cosmos {
-		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	var fromCallChain []string
+	if !async {
+		fromCallChain = callerID.GetIDContext().FromCallChain()
+		err = a.ctx.isLoop(fromCallChain, callerID, false)
+		if err != nil {
+			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
+		}
+		if callerID.GetIDInfo().Type > IDType_Cosmos {
+			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+		}
 	}
 
 	am := allocAtomosMail()

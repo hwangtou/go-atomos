@@ -106,9 +106,9 @@ message HADoTestI {
     // 测试循环检测
 
     // Spawn
-    // Spawn-测试在Spawn的时候直接调用自己导致死锁(hello1->hello3->hello3)
+    // Spawn-测试在Spawn的时候直接调用自己导致死锁(hello1->spawn::hello3->hello3)
     SpawnSelfCallDeadlock = 1;
-    // Spawn-测试在Spawn的时候调用外部后环形调用回自己导致死锁(hello1->hello3->hello2->hello3)
+    // Spawn-测试在Spawn的时候调用外部后环形调用回自己导致死锁(hello1->spawn::hello3->hello2->hello3)
     SpawnRingCallDeadlock = 2;
 
     // Atom Sync and Async
@@ -155,6 +155,36 @@ message HADoTestI {
     // Kill-测试环形同步调用死锁(hello1->hello2->hello1)
     KillRingCallDeadlock = 18;
 
+    // 远程调用
+
+    // 远程启动Atom(a:hello1->b:b_hello1)
+    RemoteSpawnAtomAndHalt = 19;
+
+    // 测试循环检测
+
+    // Spawn-测试在Spawn的时候直接调用自己导致死锁(a:hello1->spawn::b:b_hello1->b:b_hello1)
+    RemoteSpawnSelfCallDeadlock = 20;
+    // Spawn-测试在Spawn的时候调用外部后环形调用回自己导致死锁(a:hello1->spawn::b:b_hello1->a:hello2->b:b_hello1)
+    RemoteSpawnRingCallDeadlock = 21;
+
+    // Remote Atom Sync and Async
+    // Atom-测试在直接调用自己导致死锁(a:hello1->b:hello1->b:hello1)
+    RemoteSyncSelfCallDeadlock = 22;
+    // Atom-测试调用外部后环形调用回自己导致死锁(a:hello1->b:hello1->a:hello2->b:hello1)
+    RemoteSyncRingCallDeadlock = 23;
+    // Atom-测试调用外部后异步调用回自己不会死锁(a:hello1->b:hello1->a:hello1)
+    RemoteAsyncRingCallNoDeadlock = 24;
+    // Atom-测试环形无返回异步调用无死锁无循环(a:hello1->b:hello1->a:hello1)
+    RemoteAsyncRingCallNoReplyNoDeadlock = 25;
+
+    // Remote Scale
+    // Scale-测试自我同步调用死锁(a:hello1->b:scale::element->b:element)
+    RemoteScaleSelfCallDeadlock = 26;
+    // Scale-测试环形同步调用死锁(a:hello1->b:scale::element->a:hello1(deadlock)->a:hello1(deadlock))
+    RemoteScaleRingCallDeadlockCase1 = 27;
+    // Scale-测试环形同步调用死锁(a:hello1->b:scale::element->a:hello1(deadlock)->a:hello1(deadlock))
+    RemoteScaleRingCallDeadlockCase2 = 28; // TODO: 解决Sync回同节点却用了Remote的问题
+
     // 后续步骤
     SpawnRingCallDeadlockStep2 = 100;
     SyncRingCallDeadlockStep2 = 101;
@@ -163,6 +193,16 @@ message HADoTestI {
     TaskRingCallDeadlockStep2 = 104;
     ParallelRingCallDeadlockStep2 = 105;
     KillRingCallDeadlockStep2 = 106;
+    // 远程调用后续步骤
+    RemoteSpawnRingCallDeadlockStep2 = 107;
+    RemoteSyncSelfCallDeadlockStep2 = 108;
+    RemoteSyncRingCallDeadlockStep2 = 109;
+    RemoteSyncRingCallDeadlockStep3 = 110;
+    RemoteAsyncRingCallNoDeadlockStep2 = 111;
+    RemoteAsyncRingCallNoReplyNoDeadlockStep2 = 112;
+    RemoteTaskRingCallDeadlockStep2 = 113;
+    RemoteParallelRingCallDeadlockStep2 = 114;
+    RemoteKillRingCallDeadlockStep2 = 115;
   }
   TestMode mode = 1;
 }
