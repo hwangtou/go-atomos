@@ -92,7 +92,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, accessLogFn, errLogF
 		errLogFn(fmt.Sprintf("CosmosProcess: Init logging failed, exitting. err=(%+v)", err))
 		return err.AddStack(nil)
 	}
-	p.logging.PushLogging(id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Launching. pid=(%d)", os.Getpid()))
+	p.logging.PushLogging(id, LogLevel_CoreInfo, fmt.Sprintf("CosmosProcess: Launching. pid=(%d)", os.Getpid()))
 
 	// Init CosmosLocal.
 	p.local = &CosmosLocal{
@@ -155,7 +155,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 
 		// 启动时初始化脚本。
 		if err := p.local.runnable.mainScript.OnBoot(p); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Main script boot failed. err=(%+v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%+v)", err)
 			return err.AddStack(p.local)
 		}
 
@@ -177,7 +177,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		// Try to set yourself as current and keepalive. First, if there are other nodes, exit them, and if the exit fails, the program will exit.
 		// Then set the current process information to etcd and keepalive.
 		if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Set cluster to current and keepalive failed. err=(%+v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Set cluster to current and keepalive failed. err=(%+v)", err)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
@@ -186,7 +186,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		// 启动主脚本。
 		// Start the main script.
 		if err = p.local.runnable.mainScript.OnStartUp(p); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Main script startup failed. err=(%+v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Main script startup failed. err=(%+v)", err)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
@@ -238,12 +238,12 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}()
 		defer func() {
 			if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
-				p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Push kill mail failed. err=(%+v)", err))
+				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
 
 		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Update cluster info failed. err=(%+v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Update cluster info failed. err=(%+v)", err)
 		}
 
 		if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
@@ -301,12 +301,12 @@ func (p *CosmosProcess) Stop() *Error {
 		}()
 		defer func() {
 			if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
-				p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Push kill mail failed. err=(%+v)", err))
+				p.local.Log().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
 
 		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Update cluster info failed. err=(%+v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Update cluster info failed. err=(%+v)", err)
 		}
 
 		if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
@@ -338,7 +338,7 @@ func RecoveryMiddleware() grpc.UnaryServerInterceptor {
 		defer func() {
 			if r := recover(); r != nil {
 				if sharedCosmosProcess != nil {
-					sharedCosmosProcess.local.Log().Core("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
+					sharedCosmosProcess.local.Log().coreFatal("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				} else {
 					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				}
@@ -391,7 +391,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	if ip == "" {
 		return NewError(ErrCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address.").AddStack(p.local)
 	}
-	p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Using IP. ip=(%s)", ip))
+	p.local.Log().coreInfo("CosmosProcess: Using IP. ip=(%s)", ip)
 
 	// 建立到etcd服务器的连接。
 	// Set up a connection to the etcd server.
@@ -448,13 +448,13 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		RegisterAtomosRemoteServiceServer(svr, p.cluster.grpcImpl)
 		go func() {
 			if err := svr.Serve(listener); err != nil {
-				p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: gRPC server has exited. err=(%v)", err))
+				p.local.Log().coreInfo("CosmosProcess: gRPC server has exited. err=(%v)", err)
 			}
 		}()
 		// Returns available grpc server.
 		grpcServer = svr
 		grpcListener = listener
-		p.local.Log().Core("CosmosProcess: gRPC server is listening. addr=(%s)", grpcListenAddress)
+		p.local.Log().coreInfo("CosmosProcess: gRPC server is listening. addr=(%s)", grpcListenAddress)
 		break
 	}
 	// Check if grpc server is available.
@@ -471,7 +471,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	// Watch cluster.
 	// 先拉取一次集群信息，再检测集群变化。
 	if err := p.watchCluster(cli); err != nil {
-		p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to watch cluster. err=(%v)", err))
+		p.local.Log().coreFatal("CosmosProcess: Failed to watch cluster. err=(%v)", err)
 		return err.AddStack(p.local)
 	}
 
@@ -495,18 +495,18 @@ func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 	if p.cluster.etcdClient != nil {
 		// 解锁version锁。
 		if err := p.etcdStartUpFailedNodeVersionUnlock(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to unlock version while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Failed to unlock version while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err)
 		}
 
 		// 删除node信息。
 		key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node, p.cluster.etcdVersion)
 		if err := etcdDelete(p.cluster.etcdClient, key); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err)
 		}
 
 		// 关闭etcd客户端。
 		if err := p.cluster.etcdClient.Close(); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to close etcd client while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+			p.local.Log().coreFatal("CosmosProcess: Failed to close etcd client while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err)
 		}
 		p.cluster.etcdClient = nil
 	}
@@ -529,7 +529,7 @@ func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 // When preparing the cluster locally fails, if the local has been loaded successfully, do the local cleanup work.
 func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
 	if err := p.local.atomos.PushKillMailAndWaitReply(p.local, true, 0); err != nil {
-		p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to kill local cosmos. err=(%v)", err))
+		p.local.Log().coreFatal("CosmosProcess: Failed to kill local cosmos. err=(%v)", err)
 	}
 }
 
@@ -556,7 +556,7 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 		// 删除node信息。
 		key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node, p.cluster.etcdVersion)
 		if err := etcdDelete(p.cluster.etcdClient, key); err != nil {
-			p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
+			p.local.Log().coreError("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err)
 		}
 
 		//// 关闭etcd客户端。
@@ -582,7 +582,7 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 }
 
 func (p *CosmosProcess) onIDSpawning(id *IDInfo) {
-	p.logging.PushLogging(id, LogLevel_Core, fmt.Sprintf("MessageTracker: Spawning. id=(%v)", id))
+	p.local.Log().coreInfo("MessageTracker: Spawning. id=(%v)", id)
 }
 
 func (p *CosmosProcess) onIDSpawn(id *IDInfo) {
@@ -594,12 +594,11 @@ func (p *CosmosProcess) onIDStopping(id *IDInfo) {
 }
 
 func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTracker) {
-	p.logging.PushLogging(id, LogLevel_Core, fmt.Sprintf("MessageTracker: Halted. id=(%v),err=(%v),tracker=(%s)", id, err, mt.dump()))
+	p.local.Log().coreInfo("MessageTracker: Halted. id=(%v),err=(%v),tracker=(%s)", id, err, mt.dump())
 }
 
 func (p *CosmosProcess) onIDMessageTimeout(info *IDInfo, message string) {
-	p.logging.PushLogging(info, LogLevel_Core,
-		fmt.Sprintf("MessageTracker: Message Timeout. id=(%v),message=(%s)", info, message))
+	p.local.Log().Warn("MessageTracker: Message Timeout. id=(%v),message=(%s)", info, message)
 }
 
 func (p *CosmosProcess) onRecoverHook(id *IDInfo, err *Error) {

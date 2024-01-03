@@ -26,9 +26,11 @@ enum LogLevel {
   Debug = 0;
   Info = 1;
   Warn = 2;
-  Err = 3;
-  Fatal = 4;
-  Core = 5;
+  CoreInfo = 3;
+  Err = 4;
+  Fatal = 5;
+  CoreErr = 6;
+  CoreFatal = 7;
 }
 
 message LogMail {

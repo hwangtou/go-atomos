@@ -43,13 +43,13 @@ func Main(runnable CosmosRunnable) {
 	isRunning, processID, err := app.Check()
 	if err != nil && !isRunning {
 		msg := fmt.Sprintf("App: Check failed. err=(%v)", err)
-		SharedCosmosProcess().Self().Log().Core(msg)
+		SharedCosmosProcess().Self().Log().coreFatal(msg)
 		log.Printf(msg)
 		os.Exit(1)
 	}
 	if isRunning {
 		msg := fmt.Sprintf("App: App is already running. pid=(%d)", processID)
-		SharedCosmosProcess().Self().Log().Core(msg)
+		SharedCosmosProcess().Self().Log().coreFatal(msg)
 		log.Printf(msg)
 		os.Exit(1)
 	}
@@ -61,12 +61,12 @@ func Main(runnable CosmosRunnable) {
 	if IsParentProcess() && !sa {
 		if err = app.ForkAppProcess(); err != nil {
 			msg := fmt.Sprintf("App: Fork app failed. err=(%v)", err)
-			SharedCosmosProcess().Self().Log().Core(msg)
+			SharedCosmosProcess().Self().Log().coreFatal(msg)
 			log.Printf(msg)
 			os.Exit(1)
 		}
 		msg := fmt.Sprintf("App: Fork app succeed. Loader will exit.")
-		SharedCosmosProcess().Self().Log().Core(msg)
+		SharedCosmosProcess().Self().Log().coreInfo(msg)
 		log.Printf(msg)
 		log.Printf("App: Access Log File=(%s)", app.logging.curAccessLogName)
 		log.Printf("App: Error Log File=(%s)", app.logging.curErrorLogName)
@@ -86,24 +86,24 @@ func Main(runnable CosmosRunnable) {
 
 		if err = app.LaunchApp(); err != nil {
 			msg := fmt.Sprintf("App: Launch app failed. err=(%v)", err)
-			SharedCosmosProcess().Self().Log().Core(msg)
+			SharedCosmosProcess().Self().Log().coreFatal(msg)
 			log.Printf(msg)
 			os.Exit(1)
 		}
 
 		defer func() {
-			SharedCosmosProcess().Self().Log().Core("App: Exiting.")
+			SharedCosmosProcess().Self().Log().coreInfo("App: Exiting.")
 			app.close()
 		}()
 		runnable.SetConfig(app.config)
 		if err = SharedCosmosProcess().Start(&runnable); err != nil {
-			SharedCosmosProcess().Self().Log().Core("App: Runnable starts failed. err=(%v)", err.AddStack(nil))
+			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed. err=(%v)", err.AddStack(nil))
 			return
 		}
-		SharedCosmosProcess().Self().Log().Core("App: Started.")
+		SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
 		<-app.WaitExitApp()
 		if err = SharedCosmosProcess().Stop(); err != nil {
-			SharedCosmosProcess().Self().Log().Core("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
+			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
 		}
 		return
 	}

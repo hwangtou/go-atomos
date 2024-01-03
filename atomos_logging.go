@@ -8,9 +8,12 @@ type Logging interface {
 	Debug(format string, args ...interface{})
 	Info(format string, args ...interface{})
 	Warn(format string, args ...interface{})
+	coreInfo(format string, args ...interface{})
+
 	Error(format string, args ...interface{})
+	coreError(format string, args ...interface{})
 	Fatal(format string, args ...interface{})
-	Core(format string, args ...interface{})
+	coreFatal(format string, args ...interface{})
 }
 
 // Atomos日志管理器
@@ -56,6 +59,13 @@ func (l *atomosLogging) Info(format string, args ...interface{}) {
 	l.pushAtomosLog(l.id, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
+func (l *atomosLogging) coreInfo(format string, args ...interface{}) {
+	if l.level > LogLevel_CoreInfo {
+		return
+	}
+	l.pushAtomosLog(l.id, LogLevel_CoreInfo, fmt.Sprintf(format, args...))
+}
+
 func (l *atomosLogging) Warn(format string, args ...interface{}) {
 	if l.level > LogLevel_Warn {
 		return
@@ -70,6 +80,13 @@ func (l *atomosLogging) Error(format string, args ...interface{}) {
 	l.pushAtomosLog(l.id, LogLevel_Err, fmt.Sprintf(format, args...))
 }
 
+func (l *atomosLogging) coreError(format string, args ...interface{}) {
+	if l.level > LogLevel_CoreErr {
+		return
+	}
+	l.pushAtomosLog(l.id, LogLevel_CoreErr, fmt.Sprintf(format, args...))
+}
+
 func (l *atomosLogging) Fatal(format string, args ...interface{}) {
 	if l.level > LogLevel_Fatal {
 		return
@@ -77,9 +94,9 @@ func (l *atomosLogging) Fatal(format string, args ...interface{}) {
 	l.pushAtomosLog(l.id, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) Core(format string, args ...interface{}) {
-	if l.level > LogLevel_Core {
+func (l *atomosLogging) coreFatal(format string, args ...interface{}) {
+	if l.level > LogLevel_CoreFatal {
 		return
 	}
-	l.pushAtomosLog(l.id, LogLevel_Core, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.id, LogLevel_CoreErr, fmt.Sprintf(format, args...))
 }
