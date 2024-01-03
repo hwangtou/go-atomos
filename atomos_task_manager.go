@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/robfig/cron/v3"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -441,6 +442,9 @@ func (at *atomosTaskManager) closureInfo() string {
 	_, file, line, ok := runtime.Caller(2)
 	if !ok {
 		file, line = "???", 0
+	}
+	if buildPath := at.atomos.process.local.runnable.config.BuildPath; buildPath != "" {
+		file = strings.TrimPrefix(file, buildPath)
 	}
 	return fmt.Sprintf("%s:%d", file, line)
 }

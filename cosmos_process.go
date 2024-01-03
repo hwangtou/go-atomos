@@ -154,8 +154,8 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		p.local.runnable = runnable
 
 		// 启动时初始化脚本。
-		if err := p.local.runnable.mainScript.OnBoot(p); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%+v)", err)
+		if err := p.mainScriptOnBootProtect(); err != nil {
+			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%s)", err.Message)
 			return err.AddStack(p.local)
 		}
 
@@ -177,7 +177,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		// Try to set yourself as current and keepalive. First, if there are other nodes, exit them, and if the exit fails, the program will exit.
 		// Then set the current process information to etcd and keepalive.
 		if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Set cluster to current and keepalive failed. err=(%+v)", err)
+			p.local.Log().coreFatal("CosmosProcess: Set cluster to current and keepalive failed. err=(%s)", err.Message)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
@@ -185,8 +185,8 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 
 		// 启动主脚本。
 		// Start the main script.
-		if err = p.local.runnable.mainScript.OnStartUp(p); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Main script startup failed. err=(%+v)", err)
+		if err = p.mainScriptOnStartUpProtect(); err != nil {
+			p.local.Log().coreFatal("CosmosProcess: Main script startup failed. err=(%s)", err.Message)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
@@ -243,10 +243,10 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}()
 
 		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Update cluster info failed. err=(%+v)", err)
+			p.local.Log().coreFatal("CosmosProcess: Update cluster info failed. err=(%s)", err.Message)
 		}
 
-		if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
+		if err = p.mainScriptOnShutdownProtect(); err != nil {
 			return err.AddStack(p.local)
 		}
 
@@ -309,7 +309,7 @@ func (p *CosmosProcess) Stop() *Error {
 			p.local.Log().coreFatal("CosmosProcess: Update cluster info failed. err=(%+v)", err)
 		}
 
-		if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
+		if err = p.mainScriptOnShutdownProtect(); err != nil {
 			return err
 		}
 
@@ -327,6 +327,45 @@ func (p *CosmosProcess) Stop() *Error {
 	<-time.After(100 * time.Millisecond)
 	p.logging.stop()
 	return err
+}
+
+func (p *CosmosProcess) mainScriptOnBootProtect() (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = NewError(ErrCosmosProcessOnStartupPanic, "CosmosProcess: Process boots panic.").AddPanicStack(p.local, 3, r)
+			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%+v)", err)
+		}
+	}()
+	if err = p.local.runnable.mainScript.OnBoot(p); err != nil {
+		return err.AddStack(p.local)
+	}
+	return nil
+}
+
+func (p *CosmosProcess) mainScriptOnStartUpProtect() (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = NewError(ErrCosmosProcessOnStartupPanic, "CosmosProcess: Process startups panic.").AddPanicStack(p.local, 3, r)
+			p.local.Log().coreFatal("CosmosProcess: Main script startup failed. err=(%+v)", r)
+		}
+	}()
+	if err = p.local.runnable.mainScript.OnStartUp(p); err != nil {
+		return err.AddStack(p.local)
+	}
+	return nil
+}
+
+func (p *CosmosProcess) mainScriptOnShutdownProtect() (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = NewError(ErrCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").AddPanicStack(p.local, 3, r)
+			p.local.Log().coreFatal("CosmosProcess: Main script shutdown failed. err=(%+v)", r)
+		}
+	}()
+	if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
+		return err.AddStack(p.local)
+	}
+	return nil
 }
 
 func (p *CosmosProcess) Self() *CosmosLocal {
