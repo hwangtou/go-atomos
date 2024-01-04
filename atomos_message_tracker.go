@@ -32,10 +32,36 @@ func releaseAtomosMessageTracker(mt *atomosMessageTracker) {
 }
 
 type AtomosMessageTrackerExporter struct {
-	Counter               int64
-	SpawningAt, SpawnAt   time.Time
-	StoppingAt, StoppedAt time.Time
-	Messages              []MessageTrackInfo
+	Spawning time.Duration
+	Stopping time.Duration
+	Messages []AtomosMessageTrackerExporterInfo
+}
+
+func (a *AtomosMessageTrackerExporter) String() string {
+	b := strings.Builder{}
+	b.WriteString("AtomosMessageTrackerExporter Info:")
+	b.WriteString("\n\tSpawning: ")
+	b.WriteString(a.Spawning.String())
+	b.WriteString("\n\tStopping: ")
+	b.WriteString(a.Stopping.String())
+	for _, info := range a.Messages {
+		b.WriteString("\n\t")
+		b.WriteString(info.Message)
+		b.WriteString(": ")
+		b.WriteString(info.String())
+	}
+	return b.String()
+}
+
+type AtomosMessageTrackerExporterInfo struct {
+	Message string
+	Max     time.Duration
+	Average time.Duration
+	Count   int
+}
+
+func (a *AtomosMessageTrackerExporterInfo) String() string {
+	return fmt.Sprintf("count=(%d),max=(%v),average=(%v)", a.Count, a.Max, a.Average)
 }
 
 // Internal
@@ -147,20 +173,22 @@ func (t *atomosMessageTracker) dump() string {
 }
 
 func (t *atomosMessageTracker) Export() *AtomosMessageTrackerExporter {
-	messages := make([]MessageTrackInfo, 0, len(t.messages))
-	for _, info := range t.messages {
-		messages = append(messages, info)
+	messages := make([]AtomosMessageTrackerExporterInfo, 0, len(t.messages))
+	for name, info := range t.messages {
+		messages = append(messages, AtomosMessageTrackerExporterInfo{
+			Message: name,
+			Max:     info.Max,
+			Average: info.Total / time.Duration(info.Count),
+			Count:   info.Count,
+		})
 	}
 	sort.Slice(messages, func(i, j int) bool {
-		return messages[i].Count > messages[j].Count
+		return messages[i].Message > messages[j].Message
 	})
 	return &AtomosMessageTrackerExporter{
-		Counter:    t.counter,
-		SpawningAt: t.spawningAt,
-		SpawnAt:    t.spawnAt,
-		StoppingAt: t.stoppingAt,
-		StoppedAt:  t.stoppedAt,
-		Messages:   messages,
+		Spawning: t.spawnAt.Sub(t.spawningAt),
+		Stopping: t.stoppedAt.Sub(t.stoppingAt),
+		Messages: messages,
 	}
 }
 

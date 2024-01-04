@@ -627,9 +627,8 @@ func (p *CosmosProcess) onIDSpawning(id *IDInfo) {
 		return
 	}
 	spawningHook := runnable.spawningHook
-	if spawningHook == nil {
-		p.local.Log().coreInfo("Tracker: Spawning. id=(%s)", id.Info())
-	} else {
+	p.local.Log().coreInfo("Tracker: Spawning. id=(%s)", id.Info())
+	if spawningHook != nil {
 		spawningHook(id)
 	}
 }
@@ -666,9 +665,8 @@ func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTrack
 		return
 	}
 	haltedHook := runnable.haltedHook
-	if haltedHook == nil {
-		p.local.Log().coreInfo("Tracker: Halted. id=(%s),err=(%v)", id.Info(), err)
-	} else {
+	p.local.Log().coreInfo("Tracker: Halted. id=(%s),err=(%v)", id.Info(), err)
+	if haltedHook != nil {
 		exporter := mt.Export()
 		haltedHook(id, err, exporter)
 	}
