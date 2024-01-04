@@ -275,9 +275,9 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 		case reply = <-waitCh:
 		case <-time.After(timeout):
 			if a.mailbox.removeMail(m.mail) {
-				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),timeout=(%v),current=(%s)", a.id, m.name, timeout, a.mt.current).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
 			}
 		}
 	}
@@ -309,9 +309,9 @@ func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, e
 		case reply = <-waitCh:
 		case <-time.After(timeout):
 			if a.mailbox.removeMail(m.mail) {
-				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%v),name=(%s),timeout=(%v)", a.id, m.name, timeout).AddStack(nil)
+				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 			}
 		}
 	}

@@ -317,11 +317,11 @@ func (a *BaseAtomos) setSpawn() {
 	a.process.onIDSpawn(a.id)
 }
 
-func (a *BaseAtomos) setBusy(message string) {
+func (a *BaseAtomos) setBusy(message string, arg proto.Message) {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
 	a.state = AtomosBusy
-	a.mt.set(message, a.id, a.process)
+	a.mt.set(message, a.id, a.process, arg)
 }
 
 func (a *BaseAtomos) setWaiting(message string) {
@@ -442,7 +442,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	switch am.mailType {
 	case MailMessage:
 		{
-			a.setBusy(am.name)
+			a.setBusy(am.name, am.arg)
 			defer a.setWaiting(am.name)
 
 			resp, err := a.holder.OnMessaging(am.from, am.firstSyncCall, am.name, am.arg)
@@ -455,7 +455,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	case MailAsyncMessageCallback:
 		{
 			name := "AsyncMessageCallback-" + am.name
-			a.setBusy(name)
+			a.setBusy(name, am.arg)
 			defer a.setWaiting(name)
 
 			a.holder.OnAsyncMessagingCallback(am.firstSyncCall, am.arg, am.err, am.asyncMessageCallbackClosure)
@@ -463,7 +463,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	case MailTask:
 		{
 			name := "Task-" + am.name
-			a.setBusy(name)
+			a.setBusy(name, nil)
 			defer a.setWaiting(name)
 
 			a.task.handleTask(am)
@@ -471,7 +471,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 		}
 	case MailWormhole:
 		{
-			a.setBusy("AcceptWormhole")
+			a.setBusy("AcceptWormhole", am.arg)
 			defer a.setWaiting("AcceptWormhole")
 
 			err := a.holder.OnWormhole(am.from, am.firstSyncCall, am.wormhole)
@@ -481,7 +481,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	case MailScale:
 		{
 			name := "Scale-" + am.name
-			a.setBusy(name)
+			a.setBusy(name, am.arg)
 			defer a.setWaiting(name)
 
 			id, err := a.holder.OnScaling(am.from, am.firstSyncCall, am.name, am.arg)

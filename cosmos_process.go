@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"net"
 	"os"
@@ -621,23 +622,69 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 }
 
 func (p *CosmosProcess) onIDSpawning(id *IDInfo) {
-	p.local.Log().coreInfo("MessageTracker: Spawning. id=(%v)", id)
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	spawningHook := runnable.spawningHook
+	if spawningHook == nil {
+		p.local.Log().coreInfo("Tracker: Spawning. id=(%s)", id.Info())
+	} else {
+		spawningHook(id)
+	}
 }
 
 func (p *CosmosProcess) onIDSpawn(id *IDInfo) {
-
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	spawnHook := runnable.spawnHook
+	if spawnHook == nil {
+		p.local.Log().coreInfo("Tracker: Spawned. id=(%s)", id.Info())
+	} else {
+		spawnHook(id)
+	}
 }
 
 func (p *CosmosProcess) onIDStopping(id *IDInfo) {
-
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	stoppingHook := runnable.stoppingHook
+	if stoppingHook == nil {
+		p.local.Log().coreInfo("Tracker: Stopping. id=(%s)", id.Info())
+	} else {
+		stoppingHook(id)
+	}
 }
 
 func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTracker) {
-	p.local.Log().coreInfo("MessageTracker: Halted. id=(%v),err=(%v),tracker=(%s)", id, err, mt.dump())
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	haltedHook := runnable.haltedHook
+	if haltedHook == nil {
+		p.local.Log().coreInfo("Tracker: Halted. id=(%s),err=(%v)", id.Info(), err)
+	} else {
+		exporter := mt.Export()
+		haltedHook(id, err, exporter)
+	}
 }
 
-func (p *CosmosProcess) onIDMessageTimeout(info *IDInfo, message string) {
-	p.local.Log().Warn("MessageTracker: Message Timeout. id=(%v),message=(%s)", info, message)
+func (p *CosmosProcess) onIDMessageTimeout(info *IDInfo, timeout time.Duration, message string, arg proto.Message) {
+	p.local.Log().Warn("Tracker: Message Timeout. id=(%s),duration=(%v),message=(%s),arg=(%v)", info.Info(), timeout, message, arg)
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	messageTimeoutHook := runnable.messageTimeoutHook
+	if messageTimeoutHook == nil {
+		return
+	}
+	messageTimeoutHook(info, timeout, message, arg)
 }
 
 func (p *CosmosProcess) onRecoverHook(id *IDInfo, err *Error) {
@@ -649,5 +696,17 @@ func (p *CosmosProcess) onRecoverHook(id *IDInfo, err *Error) {
 	if recoverHook == nil {
 		return
 	}
-	(*recoverHook)(id, err)
+	recoverHook(id, err)
+}
+
+func (p *CosmosProcess) onNewError(err *Error) {
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	newErrorHook := runnable.newErrorHook
+	if newErrorHook == nil {
+		return
+	}
+	newErrorHook(err)
 }

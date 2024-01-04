@@ -2,7 +2,9 @@ package go_atomos
 
 import (
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -27,6 +29,13 @@ func initAtomosMessageTracker(mt *atomosMessageTracker) {
 
 func releaseAtomosMessageTracker(mt *atomosMessageTracker) {
 	mt.messages = nil
+}
+
+type AtomosMessageTrackerExporter struct {
+	Counter               int64
+	SpawningAt, SpawnAt   time.Time
+	StoppingAt, StoppedAt time.Time
+	Messages              []MessageTrackInfo
 }
 
 // Internal
@@ -63,7 +72,7 @@ func (t *atomosMessageTracker) spawn() {
 }
 
 // set sets the message handling info and start time.
-func (t *atomosMessageTracker) set(message string, info *IDInfo, process *CosmosProcess) {
+func (t *atomosMessageTracker) set(message string, info *IDInfo, process *CosmosProcess, arg proto.Message) {
 	m, has := t.messages[message]
 	if !has {
 		m = MessageTrackInfo{}
@@ -84,7 +93,7 @@ func (t *atomosMessageTracker) set(message string, info *IDInfo, process *Cosmos
 							r, string(debug.Stack())))
 					}
 				}()
-				process.onIDMessageTimeout(info, message)
+				process.onIDMessageTimeout(info, messageTimeoutDefault, message, arg)
 			}
 		})
 	}
@@ -135,6 +144,24 @@ func (t *atomosMessageTracker) dump() string {
 		b.WriteString(info.String())
 	}
 	return b.String()
+}
+
+func (t *atomosMessageTracker) Export() *AtomosMessageTrackerExporter {
+	messages := make([]MessageTrackInfo, 0, len(t.messages))
+	for _, info := range t.messages {
+		messages = append(messages, info)
+	}
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Count > messages[j].Count
+	})
+	return &AtomosMessageTrackerExporter{
+		Counter:    t.counter,
+		SpawningAt: t.spawningAt,
+		SpawnAt:    t.spawnAt,
+		StoppingAt: t.stoppingAt,
+		StoppedAt:  t.stoppedAt,
+		Messages:   messages,
+	}
 }
 
 // MessageTrackInfo is the message tracking info.

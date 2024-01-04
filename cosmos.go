@@ -59,7 +59,15 @@ type CosmosRunnable struct {
 	mainRouter   CosmosMainGlobalRouter
 
 	// hooks
-	recoverHook *func(id *IDInfo, err *Error)
+	// hook cycle
+	spawningHook func(id *IDInfo)
+	spawnHook    func(id *IDInfo)
+	stoppingHook func(id *IDInfo)
+	haltedHook   func(id *IDInfo, err *Error, mt *AtomosMessageTrackerExporter)
+	// hook errors
+	messageTimeoutHook func(id *IDInfo, timeout time.Duration, message string, args proto.Message)
+	recoverHook        func(id *IDInfo, err *Error)
+	newErrorHook       func(err *Error)
 }
 
 // Check 检查CosmosRunnable是否正确构造。
@@ -131,7 +139,37 @@ func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnabl
 	return r
 }
 
-func (r *CosmosRunnable) SetRecoverHook(hook *func(id *IDInfo, err *Error)) *CosmosRunnable {
+func (r *CosmosRunnable) SetSpawningHook(hook func(id *IDInfo)) *CosmosRunnable {
+	r.spawningHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetSpawnHook(hook func(id *IDInfo)) *CosmosRunnable {
+	r.spawnHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetStoppingHook(hook func(id *IDInfo)) *CosmosRunnable {
+	r.stoppingHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetHaltedHook(hook func(id *IDInfo, err *Error, mt *AtomosMessageTrackerExporter)) *CosmosRunnable {
+	r.haltedHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetMessageTimeoutHook(hook func(id *IDInfo, timeout time.Duration, message string, args proto.Message)) *CosmosRunnable {
+	r.messageTimeoutHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetRecoverHook(hook func(id *IDInfo, err *Error)) *CosmosRunnable {
 	r.recoverHook = hook
+	return r
+}
+
+func (r *CosmosRunnable) SetNewErrorHook(hook func(err *Error)) *CosmosRunnable {
+	r.newErrorHook = hook
 	return r
 }

@@ -621,20 +621,20 @@ func (e *ElementLocal) OnStopping(from ID, firstSyncCall string, cancelled []uin
 	persistence, ok = e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"Element: OnStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo()).AddStack(e)
+			"Element: OnStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		goto autoLoad
 	}
 	elemPersistence = persistence.ElementAutoData()
 	if elemPersistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"Element: OnStopping, saving data error, no element auto data persistence. id=(%s)", e.GetIDInfo()).AddStack(e)
+			"Element: OnStopping, saving data error, no element auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		return err
 	}
 	if err = elemPersistence.SetElementData(data); err != nil {
 		e.Log().Error("Element: OnStopping, saving data failed, set atom data error. id=(%s),instance=(%+v),err=(%s)",
-			e.GetIDInfo(), e.atomos.String(), err.AddStack(e))
+			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		goto autoLoad
 	}
 
@@ -647,7 +647,7 @@ autoLoad:
 	}
 	if err = pa.Unload(); err != nil {
 		e.Log().Error("Element: OnStopping, unload failed. id=(%s),instance=(%+v),err=(%s)",
-			e.GetIDInfo(), e.atomos.String(), err.AddStack(e))
+			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		return err.AddStack(e)
 	}
 	return err
@@ -715,7 +715,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 			defer oldLock.Unlock()
 			if oldAtom.atomos.state > AtomosHalt { // 如果正在运行，则想办法返回正在运行的Atom。
 				if oldAtom.atomos.state < AtomosStopping { // 如果正在运行，则返回正在运行的Atom，不允许创建新的Atom。
-					err = NewErrorf(ErrAtomIsRunning, "Atom: Atom is running, returns this atom. id=(%s),name=(%s)", e.GetIDInfo(), name)
+					err = NewErrorf(ErrAtomIsRunning, "Atom: Atom is running, returns this atom. id=(%s),name=(%s)", e.GetIDInfo().Info(), name)
 					if fromLocalOrRemote {
 						toReturn = true
 						idTracker = oldAtom.atomos.it.addIDTracker(t, fromLocalOrRemote)
@@ -736,7 +736,7 @@ func (e *ElementLocal) elementAtomSpawn(callerID SelfID, name string, arg proto.
 				} else { // 如果正在停止运行，则返回这个状态。TODO 尝试等待Stopping之后再去Spawn（但也需要担心等待时间，Spawn没有timeout）。
 					toReturn = true
 					idTracker = nil
-					err = NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. id=(%s),name=(%s)", e.GetIDInfo(), name).AddStack(oldAtom, arg)
+					err = NewErrorf(ErrAtomIsStopping, "Atom: Atom is stopping. id=(%s),name=(%s)", e.GetIDInfo().Info(), name).AddStack(oldAtom, arg)
 					if testAtomSpawnConcurrency {
 						atomic.AddInt32(&nc, 1)
 					}

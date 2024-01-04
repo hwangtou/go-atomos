@@ -138,7 +138,7 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 	case IDType_Element:
 		rsp.State = int32(elem.State())
 	default:
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDState invalid id type. id=(%v)", req.Id).AddStack(nil)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDState invalid id type. id=(%s)", req.Id.Info()).AddStack(nil)
 	}
 	return rsp, nil
 }
@@ -164,7 +164,7 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	case IDType_Element:
 		rsp.IdleTime = int64(elem.IdleTime())
 	default:
-		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDIdleTime invalid id type. id=(%v)", req.Id).AddStack(nil)
+		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDIdleTime invalid id type. id=(%s)", req.Id.Info()).AddStack(nil)
 	}
 	return rsp, nil
 }
@@ -282,7 +282,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			id = elem
 		}
 		if id == nil || reflect.ValueOf(id).IsNil() {
-			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%v)", req.To).AddStack(nil)
+			rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid id. id=(%s)", req.To.Info()).AddStack(nil)
 			return rsp, nil
 		}
 
