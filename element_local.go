@@ -136,7 +136,9 @@ func (e *ElementLocal) SyncMessagingByName(callerID SelfID, name string, timeout
 // 异步调用，通过名字调用Element的消息处理函数。
 func (e *ElementLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(proto.Message, *Error)) {
 	if callerID == nil {
-		callback(nil, NewError(ErrFrameworkIncorrectUsage, "Element: AsyncMessagingByName without fromID.").AddStack(e))
+		if callback != nil {
+			callback(nil, NewError(ErrFrameworkIncorrectUsage, "Element: AsyncMessagingByName without fromID.").AddStack(e))
+		}
 		return
 	}
 
@@ -148,7 +150,9 @@ func (e *ElementLocal) AsyncMessagingByName(callerID SelfID, name string, timeou
 		if err != nil {
 			err = err.AddStack(e)
 		}
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err.AddStack(e), callback)
+		if callback != nil {
+			callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err.AddStack(e), callback)
+		}
 	})
 }
 

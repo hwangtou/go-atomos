@@ -319,11 +319,15 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
 	cli := c.getCurrentClient()
 	if cli == nil {
-		callback(nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: AsyncMessagingByName client error.").AddStack(nil))
+		if callback != nil {
+			callback(nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: AsyncMessagingByName client error.").AddStack(nil))
+		}
 		return
 	}
 	if callerID == nil {
-		callback(nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: AsyncMessagingByName without fromID.").AddStack(nil))
+		if callback != nil {
+			callback(nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: AsyncMessagingByName without fromID.").AddStack(nil))
+		}
 		return
 	}
 
@@ -367,7 +371,9 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 			}
 			return out, err
 		}()
-		callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+		if callback != nil {
+			callerID.pushAsyncMessageCallbackMailAndWaitReply(name, firstSyncCall, out, err, callback)
+		}
 	})
 }
 
