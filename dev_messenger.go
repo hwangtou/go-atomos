@@ -80,9 +80,13 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	m.ElementID = e
 	timeout := m.handleExt(ext...)
 
-	m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
-		callback(m.handleReply(message, err))
-	})
+	if callback == nil {
+		m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, nil)
+	} else {
+		m.ElementID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
+			callback(m.handleReply(message, err))
+		})
+	}
 }
 
 func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext ...interface{}) (OUT, *Error) {
@@ -106,9 +110,13 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	m.AtomID = a
 	timeout := m.handleExt(ext...)
 
-	m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
-		callback(m.handleReply(message, err.AddStack(nil)))
-	})
+	if callback == nil {
+		m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, nil)
+	} else {
+		m.AtomID.AsyncMessagingByName(callerID, m.Name, timeout, in, func(message proto.Message, err *Error) {
+			callback(m.handleReply(message, err.AddStack(nil)))
+		})
+	}
 }
 
 func (m Messenger[E, A, AT, IN, OUT]) ExecuteAtom(to Atomos, in proto.Message) (AT, IN, *Error) {
