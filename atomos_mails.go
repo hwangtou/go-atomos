@@ -269,16 +269,15 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 	}
 	var reply *mailReply
 	if timeout == 0 {
-		reply = <-waitCh
-	} else {
-		select {
-		case reply = <-waitCh:
-		case <-time.After(timeout):
-			if a.mailbox.removeMail(m.mail) {
-				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
-			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
-			}
+		timeout = 10 * time.Second
+	}
+	select {
+	case reply = <-waitCh:
+	case <-time.After(timeout):
+		if a.mailbox.removeMail(m.mail) {
+			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+		} else {
+			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
 		}
 	}
 	// Wait channel must be empty before delete a mail.
@@ -303,16 +302,15 @@ func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, e
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	var reply *mailReply
 	if timeout == 0 {
-		reply = <-waitCh
-	} else {
-		select {
-		case reply = <-waitCh:
-		case <-time.After(timeout):
-			if a.mailbox.removeMail(m.mail) {
-				return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
-			} else {
-				return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
-			}
+		timeout = 10 * time.Second
+	}
+	select {
+	case reply = <-waitCh:
+	case <-time.After(timeout):
+		if a.mailbox.removeMail(m.mail) {
+			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+		} else {
+			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		}
 	}
 	// Wait channel must be empty before delete a mail.
