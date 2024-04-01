@@ -47,10 +47,10 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 		EnableElements: nil,
 		Customize:      map[string][]byte{},
 	}
-	if strings.ToLower(y.LogSTD) == "true" {
-		LogStdout = true
-		LogStderr = true
-	}
+	//if strings.ToLower(y.LogSTD) == "true" {
+	//	LogStdout = true
+	//	LogStderr = true
+	//}
 	if cluster := y.EnableCluster; cluster != nil {
 		conf.EnableCluster = &CosmosClusterConfig{
 			Enable:        cluster.Enable,
