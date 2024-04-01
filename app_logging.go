@@ -19,9 +19,13 @@ const (
 	logFilePerm      = 0644
 )
 
-var (
-	appLoggingTestingT *testing.T
-)
+type appLoggingIntf interface {
+	WriteAccessLog(s string)
+	WriteErrorLog(s string)
+	Close()
+	getCurAccessLogName() string
+	getCurErrorLogName() string
+}
 
 type appLogging struct {
 	logPath    string
@@ -120,12 +124,6 @@ func (l *appLogging) logFileFormatter(prefix, flag string) string {
 // Log
 
 func (l *appLogging) WriteAccessLog(s string) {
-	if LogStdout {
-		_, _ = os.Stdout.WriteString(s)
-	}
-	if logTestOut && appLoggingTestingT != nil {
-		appLoggingTestingT.Log(s)
-	}
 	n, er := l.curAccessLog.WriteString(s)
 	if er != nil {
 		// TODO: Write to System Error
@@ -152,13 +150,6 @@ func (l *appLogging) WriteAccessLog(s string) {
 func (l *appLogging) WriteErrorLog(s string) {
 	l.WriteAccessLog(s)
 
-	if LogStderr {
-		_, _ = os.Stdout.WriteString(s)
-		_, _ = os.Stderr.WriteString(s)
-	}
-	if logTestErr && appLoggingTestingT != nil {
-		appLoggingTestingT.Error(s)
-	}
 	n, er := l.curErrorLog.WriteString(s)
 	if er != nil {
 		// TODO: Write to System Error
@@ -180,4 +171,35 @@ func (l *appLogging) WriteErrorLog(s string) {
 		}
 		l.curErrorSize = 0
 	}
+}
+
+func (l *appLogging) getCurAccessLogName() string {
+	return l.curAccessLogName
+}
+
+func (l *appLogging) getCurErrorLogName() string {
+	return l.curErrorLogName
+}
+
+type appLoggingForTest struct {
+	t *testing.T
+}
+
+func (l *appLoggingForTest) WriteAccessLog(s string) {
+	l.t.Log(s)
+}
+
+func (l *appLoggingForTest) WriteErrorLog(s string) {
+	l.t.Error(s)
+}
+
+func (l *appLoggingForTest) Close() {
+}
+
+func (l *appLoggingForTest) getCurAccessLogName() string {
+	return ""
+}
+
+func (l *appLoggingForTest) getCurErrorLogName() string {
+	return ""
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"testing"
 )
 
 const (
@@ -17,10 +18,10 @@ type App struct {
 	config *Config
 
 	env     *appEnv
-	logging *appLogging
+	logging appLoggingIntf
 }
 
-func NewCosmosNodeApp(configPath string, runnable *CosmosRunnable) (*App, *Error) {
+func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable) (*App, *Error) {
 	// Load Config.
 	conf, err := NewCosmosNodeConfigFromYamlPath(configPath, runnable)
 	if err != nil {
@@ -48,6 +49,22 @@ func NewCosmosNodeApp(configPath string, runnable *CosmosRunnable) (*App, *Error
 			exitCh:         make(chan bool, 1),
 		},
 		logging: logging,
+	}, nil
+}
+
+func NewCosmosNodeAppWithTest(config *Config, t *testing.T) (*App, *Error) {
+	return &App{
+		config: config,
+		env: &appEnv{
+			config:         config,
+			executablePath: "",
+			workPath:       "",
+			args:           nil,
+			env:            nil,
+			pid:            0,
+			exitCh:         make(chan bool, 1),
+		},
+		logging: &appLoggingForTest{t: t},
 	}, nil
 }
 
@@ -105,8 +122,8 @@ func (a *App) ForkAppProcess() *Error {
 
 	a.env.env = os.Environ()
 	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAppKey(), "1"))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.curAccessLogName))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.curErrorLogName))
+	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.getCurAccessLogName()))
+	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.getCurErrorLogName()))
 
 	// Fork Process
 	attr := &os.ProcAttr{
