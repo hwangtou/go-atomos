@@ -192,7 +192,7 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
-		if callerID.GetIDInfo().Type > IDType_Cosmos {
+		if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
 			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 		}
 	}
@@ -239,7 +239,7 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(callerID SelfID, n
 	am := allocAtomosMail()
 	initAsyncMessageCallbackMail(am, callerID, name, async, args, err)
 
-	if ok := a.mailbox.pushHead(am.mail); !ok {
+	if ok := a.mailbox.pushTail(am.mail); !ok {
 		a.log.logging.pushFrameworkErrorLog("Atomos: PushAsyncMessageCallbackMailAndWaitReply, Atomos: It is not running. name=(%s),args=(%v)", name, args)
 	}
 
@@ -253,7 +253,7 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, tim
 		return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos {
+	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
@@ -283,7 +283,7 @@ func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeou
 		}
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos {
+	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
@@ -318,7 +318,7 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(callerID SelfID, timeout time.
 		return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos {
+	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
 		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
 	}
 
