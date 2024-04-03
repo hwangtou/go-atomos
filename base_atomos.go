@@ -185,15 +185,21 @@ func (a *BaseAtomos) PushMessageMailAndWaitReply(callerID SelfID, name string, a
 		return nil, NewError(ErrFrameworkIncorrectUsage, "Atomos: SyncMessagingByName without fromID.").AddStack(nil)
 	}
 
+	var gID uint64
 	var fromCallChain []string
 	if !async {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID, false)
+		gID, err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
-		if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
-			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+		if callerID.GetIDInfo().Type > IDType_Cosmos { //&& a.mailbox.goID == getGoID() {
+			if gID == 0 {
+				gID = getGoID()
+			}
+			if a.mailbox.goID == gID {
+				fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+			}
 		}
 	}
 
@@ -248,13 +254,18 @@ func (a *BaseAtomos) PushAsyncMessageCallbackMailAndWaitReply(callerID SelfID, n
 
 func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, timeout time.Duration, in proto.Message) (ID, *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err := a.ctx.isLoop(fromCallChain, callerID, false)
+	gID, err := a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return nil, NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
-		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	if callerID.GetIDInfo().Type > IDType_Cosmos { //&& a.mailbox.goID == getGoID() {
+		if gID == 0 {
+			gID = getGoID()
+		}
+		if a.mailbox.goID == gID {
+			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+		}
 	}
 
 	am := allocAtomosMail()
@@ -274,17 +285,23 @@ func (a *BaseAtomos) PushScaleMailAndWaitReply(callerID SelfID, name string, tim
 }
 
 func (a *BaseAtomos) PushKillMailAndWaitReply(callerID SelfID, wait bool, timeout time.Duration) (err *Error) {
+	var gID uint64
 	var fromCallChain []string
 	if wait {
 		fromCallChain = callerID.GetIDContext().FromCallChain()
-		err = a.ctx.isLoop(fromCallChain, callerID, false)
+		gID, err = a.ctx.isLoop(fromCallChain, callerID, false)
 		if err != nil {
 			return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 		}
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
-		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	if callerID.GetIDInfo().Type > IDType_Cosmos { //&& a.mailbox.goID == getGoID() {
+		if gID == 0 {
+			gID = getGoID()
+		}
+		if a.mailbox.goID == gID {
+			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+		}
 	}
 
 	am := allocAtomosMail()
@@ -313,13 +330,18 @@ func (a *BaseAtomos) cosmosProcessPushKillMailAndWaitReply(callerID SelfID, time
 
 func (a *BaseAtomos) PushWormholeMailAndWaitReply(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) (err *Error) {
 	fromCallChain := callerID.GetIDContext().FromCallChain()
-	err = a.ctx.isLoop(fromCallChain, callerID, false)
+	gID, err := a.ctx.isLoop(fromCallChain, callerID, false)
 	if err != nil {
 		return NewErrorf(ErrAtomosIDCallLoop, "Atomos: Loop call detected. target=(%s),chain=(%s)", callerID, fromCallChain).AddStack(nil)
 	}
 
-	if callerID.GetIDInfo().Type > IDType_Cosmos && a.mailbox.goID == getGoID() {
-		fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+	if callerID.GetIDInfo().Type > IDType_Cosmos { //&& a.mailbox.goID == getGoID() {
+		if gID == 0 {
+			gID = getGoID()
+		}
+		if a.mailbox.goID == gID {
+			fromCallChain = append(fromCallChain, callerID.GetIDInfo().Info())
+		}
 	}
 
 	am := allocAtomosMail()

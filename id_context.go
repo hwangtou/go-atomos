@@ -29,20 +29,23 @@ func (f *atomosIDContextLocal) FromCallChain() []string {
 	return f.context.IdChain
 }
 
-func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, isSpawn bool) *Error {
+func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, isSpawn bool) (gID uint64, err *Error) {
 	f.atomos.mailbox.mutex.Lock()
 	defer f.atomos.mailbox.mutex.Unlock()
 
 	if !isSpawn && callerID.GetIDInfo().IsEqual(f.atomos.id) {
-		return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call to self detected. target=(%s),chain=(%s)", f.atomos.id.Info(), strings.Join(fromChain, "->")).AddStack(nil)
+		gID = getGoID()
+		if f.atomos.mailbox.goID == gID {
+			return gID, NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call to self detected. target=(%s),chain=(%s)", f.atomos.id.Info(), strings.Join(fromChain, "->")).AddStack(nil)
+		}
 	}
 	self := f.atomos.id.Info()
 	for _, chain := range fromChain {
 		if chain == self {
-			return NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", self, strings.Join(fromChain, "->")).AddStack(nil)
+			return gID, NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", self, strings.Join(fromChain, "->")).AddStack(nil)
 		}
 	}
-	return nil
+	return gID, nil
 }
 
 // atomosIDContextRemote
