@@ -112,6 +112,10 @@ func (i *IDTracker) Release() {
 	}
 }
 
+func (i *IDTracker) GetTracker() *IDTracker {
+	return i
+}
+
 // IDTrackerInfo is used to create IDTracker in local.
 
 func NewIDTrackerInfoFromLocalGoroutine(skip int) *IDTrackerInfo {

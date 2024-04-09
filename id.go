@@ -68,6 +68,7 @@ type IDContext interface {
 type ReleasableID interface {
 	ID
 	Release()
+	GetTracker() *IDTracker
 }
 
 // SelfID 是让Atomos对象内部访问的ID的概念。

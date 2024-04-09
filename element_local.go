@@ -351,6 +351,12 @@ func (e *ElementLocal) ScaleGetAtomID(callerID SelfID, name string, timeout time
 		return nil, nil, err.AddStack(e, &String{S: name}, in)
 	}
 	if fromLocalOrRemote {
+		switch id.(type) {
+		case *AtomLocal:
+			return id, id.(*AtomLocal).atomos.it.addScaleIDTracker(tracker.newScaleIDTracker()), nil
+		case ReleasableID:
+			return id, id.(ReleasableID).GetTracker(), nil
+		}
 		atom, ok := id.(*AtomLocal)
 		if ok {
 			return id, atom.atomos.it.addScaleIDTracker(tracker.newScaleIDTracker()), nil
