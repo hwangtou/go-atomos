@@ -206,6 +206,9 @@ func (c *CosmosRemote) getCurrentClientWithTimeout(timeout time.Duration) (Atomo
 }
 
 func (c *CosmosRemote) getElement(name string) (*ElementRemote, *Error) {
+	if c == nil {
+		return nil, NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: Not enabled.").AddStack(nil)
+	}
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
