@@ -327,7 +327,7 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		g.P("return nil, err.AddStack(nil)")
 		g.P("}")
 		g.P("defer id.Release()")
-		g.P("return ", atomMessengerValueName+"."+methodName+"().SyncAtom(id, callerID, in)")
+		g.P("return ", atomMessengerValueName+"."+methodName+"().SyncAtom(id, callerID, in, ext...)")
 		g.P("}")
 
 		// Async
