@@ -3,7 +3,6 @@ package go_atomos
 import (
 	"fmt"
 	"os"
-	"syscall"
 	"testing"
 )
 
@@ -130,7 +129,7 @@ func (a *App) ForkAppProcess() *Error {
 		Dir:   a.env.workPath,
 		Env:   a.env.env,
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Sys:   &syscall.SysProcAttr{Setsid: true},
+		Sys:   createSysProcAttr(),
 	}
 	proc, er = os.StartProcess(a.env.executablePath, a.env.args, attr)
 	if er != nil {

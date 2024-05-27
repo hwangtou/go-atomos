@@ -6,7 +6,6 @@ import (
 	"os/user"
 	"path"
 	"strconv"
-	"syscall"
 )
 
 // Path
@@ -35,63 +34,63 @@ func (p *Path) GetPath() string {
 	return p.path
 }
 
-func (p *Path) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm os.FileMode) *Error {
-	// If it is not exists, create it. If it is exists and not a directory, return failed.
-	if err := p.Refresh(); err != nil {
-		return err.AddStack(nil)
-	}
-	if !p.Exist() {
-		if err := p.MakeDirectory(perm); err != nil {
-			return err.AddStack(nil)
-		}
-		if err := p.ChangeOwnerAndMode(u, g, perm); err != nil {
-			return err.AddStack(nil)
-		}
-	} else if !p.IsDir() {
-		return NewError(ErrUtilPathShouldBeDirectory, "Path: Path should be a directory.").AddStack(nil)
-	} else {
-		// Check its owner and mode.
-		if err := p.ConfirmOwnerAndMode(g, perm); err != nil {
-			return err.AddStack(nil)
-		}
-	}
-	return nil
-}
+//func (p *Path) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm os.FileMode) *Error {
+//	// If it is not exists, create it. If it is exists and not a directory, return failed.
+//	if err := p.Refresh(); err != nil {
+//		return err.AddStack(nil)
+//	}
+//	if !p.Exist() {
+//		if err := p.MakeDirectory(perm); err != nil {
+//			return err.AddStack(nil)
+//		}
+//		if err := p.ChangeOwnerAndMode(u, g, perm); err != nil {
+//			return err.AddStack(nil)
+//		}
+//	} else if !p.IsDir() {
+//		return NewError(ErrUtilPathShouldBeDirectory, "Path: Path should be a directory.").AddStack(nil)
+//	} else {
+//		// Check its owner and mode.
+//		if err := p.ConfirmOwnerAndMode(g, perm); err != nil {
+//			return err.AddStack(nil)
+//		}
+//	}
+//	return nil
+//}
 
-func (p *Path) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) *Error {
-	if er := p.Refresh(); er != nil {
-		return er.AddStack(nil)
-	}
-	if !p.Exist() {
-		return NewError(ErrUtilDirectoryNotExist, "Path: Directory not exists.").AddStack(nil)
-	}
-	// Owner
-	gidList, er := u.GroupIds()
-	if er != nil {
-		return NewErrorf(ErrUtilGetUserGroupIDsFailed, "Path: Get user group id list failed. err=(%v)", er).AddStack(nil)
-	}
-	switch stat := p.Sys().(type) {
-	case *syscall.Stat_t:
-		groupOwner := false
-		statGid := strconv.FormatUint(uint64(stat.Gid), 10)
-		for _, gid := range gidList {
-			if gid == statGid {
-				groupOwner = true
-				break
-			}
-		}
-		if !groupOwner {
-			return NewError(ErrUtilUsersGroupsHaveNotOwnedDirectory, "Path: User's groups have not owned directory.").AddStack(nil)
-		}
-	default:
-		return NewErrorf(ErrUtilNotSupportedOS, "Path: Not supported OS.").AddStack(nil)
-	}
-	// Mode
-	if p.Mode().Perm() != perm {
-		return NewError(ErrUtilFileModePermNotMatch, "Path: File mode perm not match.").AddStack(nil)
-	}
-	return nil
-}
+//func (p *Path) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) *Error {
+//	if er := p.Refresh(); er != nil {
+//		return er.AddStack(nil)
+//	}
+//	if !p.Exist() {
+//		return NewError(ErrUtilDirectoryNotExist, "Path: Directory not exists.").AddStack(nil)
+//	}
+//	// Owner
+//	gidList, er := u.GroupIds()
+//	if er != nil {
+//		return NewErrorf(ErrUtilGetUserGroupIDsFailed, "Path: Get user group id list failed. err=(%v)", er).AddStack(nil)
+//	}
+//	switch stat := p.Sys().(type) {
+//	case *syscall.Stat_t:
+//		groupOwner := false
+//		statGid := strconv.FormatUint(uint64(stat.Gid), 10)
+//		for _, gid := range gidList {
+//			if gid == statGid {
+//				groupOwner = true
+//				break
+//			}
+//		}
+//		if !groupOwner {
+//			return NewError(ErrUtilUsersGroupsHaveNotOwnedDirectory, "Path: User's groups have not owned directory.").AddStack(nil)
+//		}
+//	default:
+//		return NewErrorf(ErrUtilNotSupportedOS, "Path: Not supported OS.").AddStack(nil)
+//	}
+//	// Mode
+//	if p.Mode().Perm() != perm {
+//		return NewError(ErrUtilFileModePermNotMatch, "Path: File mode perm not match.").AddStack(nil)
+//	}
+//	return nil
+//}
 
 func (p *Path) Exist() bool {
 	return p.FileInfo != nil
@@ -140,22 +139,22 @@ func (p *Path) ChangeOwnerAndMode(u *user.User, group *user.Group, perm os.FileM
 	return nil
 }
 
-func (p *Path) ConfirmOwnerAndMode(group *user.Group, perm os.FileMode) *Error {
-	// Owner
-	switch stat := p.Sys().(type) {
-	case *syscall.Stat_t:
-		if strconv.FormatUint(uint64(stat.Gid), 10) != group.Gid {
-			return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: Parse group gid failed.").AddStack(nil)
-		}
-	default:
-		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: Not supported OS.").AddStack(nil)
-	}
-	// Mode
-	if p.Mode().Perm() != perm {
-		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: File mode perm not match.").AddStack(nil)
-	}
-	return nil
-}
+//func (p *Path) ConfirmOwnerAndMode(group *user.Group, perm os.FileMode) *Error {
+//	// Owner
+//	switch stat := p.Sys().(type) {
+//	case *syscall.Stat_t:
+//		if strconv.FormatUint(uint64(stat.Gid), 10) != group.Gid {
+//			return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: Parse group gid failed.").AddStack(nil)
+//		}
+//	default:
+//		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: Not supported OS.").AddStack(nil)
+//	}
+//	// Mode
+//	if p.Mode().Perm() != perm {
+//		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "Path: File mode perm not match.").AddStack(nil)
+//	}
+//	return nil
+//}
 
 func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) *Error {
 	if p.Exist() {
