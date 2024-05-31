@@ -360,9 +360,11 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	// 获取调用ID的Go ID
 	callerLocalGoID := callerID.getGoID()
 
-	if a == nil {
+	ba := a
+	if ba == nil {
 		return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: BaseAtomos is nil.").AddStack(nil)
 	}
+	info := ba.id
 
 	// 远程调用
 	// 如果调用ID的Go ID为0，证明远程调用，直接返回当前的FirstSyncCall即可。
@@ -370,7 +372,10 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 		if firstSyncCall = callerID.getCurFirstSyncCall(); firstSyncCall == "" {
 			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: callerID is invalid. callerID=(%v)", callerID).AddStack(nil)
 		}
-		if a.fsc.curFirstSyncCall == firstSyncCall {
+		if ba == nil {
+			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: BaseAtomos or fsc is nil. info=(%v),callerID=(%v)", info, callerID).AddStack(nil)
+		}
+		if ba.fsc.curFirstSyncCall == firstSyncCall {
 			return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call chain deadlock. callerID=(%v)", callerID).AddStack(nil)
 		}
 		return firstSyncCall, false, nil
@@ -394,7 +399,7 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 			//toDefer = true
 		} else {
 			// 如果不为空，则检查是否和push向的ID的当前curFirstSyncCall一样，
-			if eFirst := a.fsc.getCurFirstSyncCall(); callerFirst == eFirst {
+			if eFirst := ba.fsc.getCurFirstSyncCall(); callerFirst == eFirst {
 				// 如果一样，则是循环调用死锁，返回错误。
 				return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Sync call is dead lock. callerID=(%v),callerFSC=(%s),FSC=(%s)", callerID, callerFirst, eFirst).AddStack(nil)
 			} else {
@@ -407,7 +412,7 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	} else {
 		// 例如在Parallel和被其它框架调用的情况，就是这种。
 		// 因为是其它goroutine发起的，所以可以不用把caller设置成firstSyncCall。
-		firstSyncCall = a.fsc.nextFirstSyncCall()
+		firstSyncCall = ba.fsc.nextFirstSyncCall()
 	}
 	return firstSyncCall, toDefer, nil
 }
