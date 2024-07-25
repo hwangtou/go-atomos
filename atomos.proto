@@ -133,19 +133,20 @@ message Config {
   string log_path = 4;
   int64 log_max_size = 5;
 
-  string build_path = 6;
-  string bin_path = 7;
-  string run_path = 8;
-  string etc_path = 9;
+  string working_path = 6;
+  string build_path = 7;
+  string bin_path = 8;
+  string run_path = 9;
+  string etc_path = 10;
 
   // 节点通讯
-  CosmosClusterConfig enable_cluster = 10;
+  CosmosClusterConfig enable_cluster = 11;
 
   // 启动元素
-  repeated string enable_elements = 11;
+  repeated string enable_elements = 12;
 
   // 自定义配置
-  map<string, bytes> customize = 12;
+  map<string, bytes> customize = 13;
 }
 
 message CosmosClusterConfig{

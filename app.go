@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"fmt"
 	"os"
+	"path"
 	"syscall"
 	"testing"
 )
@@ -19,6 +20,68 @@ type App struct {
 
 	env     *appEnv
 	logging appLoggingIntf
+}
+
+func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, *Error) {
+	if len(os.Args) < 1 {
+		return nil, NewErrorf(ErrRunnableConfigInvalid, "App: Args is invalid.").AddStack(nil)
+	}
+	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
+	if err := ensureDirectory(wd); err != nil {
+		return nil, err.AddStack(nil)
+	}
+	// Join log, run, etc path with os separator.
+	logPath := path.Join(wd, "log")
+	runPath := path.Join(wd, "run")
+	etcPath := path.Join(wd, "etc")
+	if err := ensureDirectory(logPath); err != nil {
+		return nil, err.AddStack(nil)
+	}
+	if err := ensureDirectory(runPath); err != nil {
+		return nil, err.AddStack(nil)
+	}
+	if err := ensureDirectory(etcPath); err != nil {
+		return nil, err.AddStack(nil)
+	}
+	// Open Log.
+	logMaxSize := defaultLogMaxSize
+	logging, err := NewAppLogging(logPath, logMaxSize)
+	if err != nil {
+		err = err.AddStack(nil)
+		return nil, err.AddStack(nil)
+	}
+	// Create App instance.
+	if customize == nil {
+		customize = map[string][]byte{}
+	}
+	config := &Config{
+		Cosmos:         cosmos,
+		Node:           node,
+		LogLevel:       logLevel,
+		LogPath:        logPath,
+		LogMaxSize:     int64(logMaxSize),
+		WorkingPath:    wd,
+		BuildPath:      "",
+		BinPath:        os.Args[0],
+		RunPath:        runPath,
+		EtcPath:        etcPath,
+		EnableCluster:  nil,
+		EnableElements: nil,
+		Customize:      customize,
+	}
+	return &App{
+		config: config,
+		env: &appEnv{
+			config:         config,
+			executablePath: "",
+			workPath:       "",
+			args:           nil,
+			env:            nil,
+			pid:            0,
+			exitCh:         make(chan bool, 1),
+		},
+		logging: logging,
+	}, nil
 }
 
 func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable) (*App, *Error) {
@@ -168,4 +231,20 @@ func (a *App) ExitApp() {
 
 func (a *App) WaitExitApp() <-chan bool {
 	return a.env.exitCh
+}
+
+// Utils
+
+func ensureDirectory(path string) *Error {
+	pathStat, er := os.Stat(path)
+	if os.IsNotExist(er) {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Create working directory failed. err=(%v)", err).AddStack(nil)
+		}
+	} else {
+		if !pathStat.IsDir() {
+			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Working directory is not a directory. path=(%s)", path).AddStack(nil)
+		}
+	}
+	return nil
 }

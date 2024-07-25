@@ -20,6 +20,7 @@ const (
 	ErrAppEnvRunPathRemovePIDFailed    = 17
 	ErrAppEnvLoggingPathInvalid        = 18
 	ErrAppEnvLoggingFileOpenFailed     = 19
+	ErrAppEnvCreateWorkDirFailed       = 20
 
 	// Cosmos Runnable 31-40
 

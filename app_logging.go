@@ -2,8 +2,9 @@ package go_atomos
 
 import (
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -59,7 +60,7 @@ func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 
 	// Test Log File.
 	logTestPath := logPath + "/test"
-	if er = ioutil.WriteFile(logTestPath, []byte{}, 0644); er != nil {
+	if er = os.WriteFile(logTestPath, []byte{}, 0644); er != nil {
 		return nil, NewErrorf(ErrAppEnvLoggingPathInvalid, "log path cannot write, err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Remove(logTestPath); er != nil {
@@ -76,6 +77,8 @@ func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 		return nil, err.AddStack(nil)
 	}
 	l.curAccessLog = accessLogFile
+	//os.Stdout = l.curAccessLog
+	log.Default().SetOutput(l.curAccessLog)
 
 	l.curErrorLogName = os.Getenv(GetEnvErrorLogKey())
 	if l.curErrorLogName == "" {
@@ -87,6 +90,7 @@ func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
 		return nil, err.AddStack(nil)
 	}
 	l.curErrorLog = errLogFile
+	os.Stderr = l.curErrorLog
 
 	return l, nil
 }
@@ -136,12 +140,14 @@ func (l *appLogging) WriteAccessLog(s string) {
 		if err != nil {
 			// TODO
 		} else {
+			l.curAccessLogName = newName
+			l.curAccessLog = f
+			//os.Stdout = l.curAccessLog
+			log.Default().SetOutput(l.curAccessLog)
 			er := l.curAccessLog.Close()
 			if er != nil {
 				// TODO
 			}
-			l.curAccessLogName = newName
-			l.curAccessLog = f
 		}
 		l.curAccessSize = 0
 	}
@@ -162,12 +168,13 @@ func (l *appLogging) WriteErrorLog(s string) {
 		if err != nil {
 			// TODO
 		} else {
+			l.curErrorLogName = newName
+			l.curErrorLog = f
+			os.Stderr = l.curErrorLog
 			er := l.curErrorLog.Close()
 			if er != nil {
 				// TODO
 			}
-			l.curErrorLogName = newName
-			l.curErrorLog = f
 		}
 		l.curErrorSize = 0
 	}
@@ -186,11 +193,11 @@ type appLoggingForTest struct {
 }
 
 func (l *appLoggingForTest) WriteAccessLog(s string) {
-	l.t.Log(s)
+	l.t.Log(strings.TrimSuffix(s, "\n"))
 }
 
 func (l *appLoggingForTest) WriteErrorLog(s string) {
-	l.t.Error(s)
+	l.t.Error(strings.TrimSuffix(s, "\n"))
 }
 
 func (l *appLoggingForTest) Close() {

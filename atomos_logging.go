@@ -1,10 +1,14 @@
 package go_atomos
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 )
 
 type Logging interface {
+	io.Writer
+
 	Debug(format string, args ...interface{})
 	Info(format string, args ...interface{})
 	Warn(format string, args ...interface{})
@@ -40,6 +44,13 @@ func initAtomosLog(l *atomosLogging, id *IDInfo, lv LogLevel, logging *loggingAt
 // write Logs as Mails to Cosmos Log instance.
 func (l *atomosLogging) pushAtomosLog(id *IDInfo, level LogLevel, msg string) {
 	l.logging.PushLogging(id, level, msg)
+}
+
+func (l *atomosLogging) Write(p []byte) (n int, err error) {
+	// Remove return character, if any.
+	p = bytes.TrimRight(p, "\n")
+	l.pushAtomosLog(l.id, LogLevel_CoreInfo, string(p))
+	return len(p), nil
 }
 
 // 各种级别的日志函数。
