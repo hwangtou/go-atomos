@@ -3,6 +3,7 @@ package go_atomos
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // 调用链
@@ -37,7 +38,7 @@ type idFirstSyncCallLocal struct {
 
 	mutex sync.Mutex
 	// 当前调用链的首个同步调用名。
-	curFirstSyncCall string
+	curFirstSyncCall atomic.Value
 	// 用于调用链的firstSyncCall生成的计数器。
 	curCallCounter uint64
 }
@@ -49,9 +50,7 @@ func initAtomosFirstSyncCall(fsc *idFirstSyncCallLocal, id *IDInfo) {
 // Implementation of idFirstSyncCall
 
 func (f *idFirstSyncCallLocal) getCurFirstSyncCall() string {
-	f.mutex.Lock()
-	c := f.curFirstSyncCall
-	f.mutex.Unlock()
+	c := f.curFirstSyncCall.Load().(string)
 	return c
 }
 
@@ -59,20 +58,14 @@ func (f *idFirstSyncCallLocal) setSyncMessageAndFirstCall(firstSyncCall string) 
 	if firstSyncCall == "" {
 		return NewError(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Inputting firstSyncCall should not be empty.").AddStack(nil)
 	}
-	f.mutex.Lock()
-	if f.curFirstSyncCall != "" {
-		f.mutex.Unlock()
-		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty. first=(%s),cur=(%s)", firstSyncCall, f.curFirstSyncCall).AddStack(nil)
+	if !f.curFirstSyncCall.CompareAndSwap("", firstSyncCall) {
+		return NewErrorf(ErrFrameworkRecoverFromPanic, "IDFirstSyncCall: Running firstSyncCall should be empty. first=(%s),cur=(%s)", firstSyncCall, f.getCurFirstSyncCall()).AddStack(nil)
 	}
-	f.curFirstSyncCall = firstSyncCall
-	f.mutex.Unlock()
 	return nil
 }
 
 func (f *idFirstSyncCallLocal) unsetSyncMessageAndFirstCall() {
-	f.mutex.Lock()
-	f.curFirstSyncCall = ""
-	f.mutex.Unlock()
+	f.curFirstSyncCall.Store("")
 }
 
 func (f *idFirstSyncCallLocal) nextFirstSyncCall() string {

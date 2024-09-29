@@ -364,7 +364,6 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 	if ba == nil {
 		return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: BaseAtomos is nil.").AddStack(nil)
 	}
-	info := ba.id
 
 	// 远程调用
 	// 如果调用ID的Go ID为0，证明远程调用，直接返回当前的FirstSyncCall即可。
@@ -372,10 +371,8 @@ func (a *BaseAtomos) syncGetFirstSyncCallName(callerID SelfID) (string, bool, *E
 		if firstSyncCall = callerID.getCurFirstSyncCall(); firstSyncCall == "" {
 			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: callerID is invalid. callerID=(%v)", callerID).AddStack(nil)
 		}
-		if ba == nil {
-			return "", false, NewErrorf(ErrFrameworkInternalError, "IDFirstSyncCall: BaseAtomos or fsc is nil. info=(%v),callerID=(%v)", info, callerID).AddStack(nil)
-		}
-		if ba.fsc.curFirstSyncCall == firstSyncCall {
+		curFirstSyncCall := ba.fsc.getCurFirstSyncCall()
+		if curFirstSyncCall == firstSyncCall {
 			return "", false, NewErrorf(ErrIDFirstSyncCallDeadlock, "IDFirstSyncCall: Call chain deadlock. callerID=(%v)", callerID).AddStack(nil)
 		}
 		return firstSyncCall, false, nil

@@ -189,7 +189,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				selfAtomLocal := selfAtom.(*AtomLocal)
 				defer selfAtomTracker.Release()
 				selfAtom.AsyncMessagingByName(selfAtomLocal, "testMessage", 0, &String{S: "in"}, func(out proto.Message, err *Error) {
-					if selfAtomLocal.atomos.fsc.curFirstSyncCall == "" {
+					if selfAtomLocal.atomos.fsc.getCurFirstSyncCall() == "" {
 						selfAtomLocal.Log().Error("testingLocalAsyncSelfFirstSyncCall: curFirstSyncCall is empty")
 						return
 					}
@@ -234,7 +234,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				}
 
 				selfAtom.AsyncMessagingByName(selfAtomLocal, "testMessage", 0, &String{S: "in"}, func(out proto.Message, err *Error) {
-					if selfAtomLocal.atomos.fsc.curFirstSyncCall == "" {
+					if selfAtomLocal.atomos.fsc.getCurFirstSyncCall() == "" {
 						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: curFirstSyncCall is empty")
 						return
 					}
@@ -259,7 +259,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				}
 
 				selfAtom.AsyncMessagingByName(selfAtomLocal, "testMessage", 0, &String{S: "in"}, func(out proto.Message, err *Error) {
-					if selfAtomLocal.atomos.fsc.curFirstSyncCall == "" {
+					if selfAtomLocal.atomos.fsc.getCurFirstSyncCall() == "" {
 						selfAtomLocal.Log().Error("testingLocalSyncAndAsyncOtherFirstSyncCall: curFirstSyncCall is empty")
 						return
 					}
@@ -327,7 +327,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				defer otherAtomTracker.Release()
 
 				otherAtomLocal.AsyncMessagingByName(selfAtomLocal, "testingUtilLocalSyncChain", 0, in, func(out proto.Message, err *Error) {
-					if selfAtomLocal.atomos.fsc.curFirstSyncCall == "" {
+					if selfAtomLocal.atomos.fsc.getCurFirstSyncCall() == "" {
 						selfAtomLocal.Log().Error("testingLocalAsyncChainSelfFirstSyncCall: curFirstSyncCall is empty")
 						return
 					}
@@ -372,7 +372,7 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 						selfAtomLocal.Log().Error("testingLocalSyncChainSelfFirstSyncCallDeadlock: taskID not match")
 						return
 					}
-					if selfAtomLocal.atomos.fsc.curFirstSyncCall != "" {
+					if selfAtomLocal.atomos.fsc.getCurFirstSyncCall() != "" {
 						selfAtomLocal.Log().Error("testingLocalSyncChainSelfFirstSyncCallDeadlock: curFirstSyncCall is empty")
 						return
 					}
