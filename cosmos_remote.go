@@ -300,6 +300,7 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		Timeout:                int64(timeout),
 		Message:                name,
 		Args:                   arg,
+		Callback:               true,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -356,15 +357,19 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 				Timeout:                int64(timeout),
 				Message:                name,
 				Args:                   arg,
+				Callback:               callback != nil,
 			})
+			if er != nil {
+				return nil, NewError(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error.").AddStack(nil)
+			}
+			if callback == nil {
+				return nil, nil
+			}
 			if rsp.Reply != nil {
 				out, er = rsp.Reply.UnmarshalNew()
 				if er != nil {
 					return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
 				}
-			}
-			if er != nil {
-				return nil, NewError(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error.").AddStack(nil)
 			}
 			if rsp.Error != nil {
 				err = rsp.Error.AddStack(nil)

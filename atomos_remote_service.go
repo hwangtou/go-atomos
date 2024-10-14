@@ -292,15 +292,21 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 			return rsp, nil
 		}
 
-		// Sync messaging.
-		out, err := id.SyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in)
-		if out != nil {
-			rsp.Reply, _ = anypb.New(out)
+		if req.Callback {
+			// Sync messaging.
+			out, err := id.SyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in)
+			if out != nil {
+				rsp.Reply, _ = anypb.New(out)
+			}
+			if err != nil {
+				rsp.Error = err.AddStack(a.process.local)
+			}
+			return rsp, nil
+		} else {
+			// Async messaging.
+			id.AsyncMessagingByName(callerID, req.Message, time.Duration(req.Timeout), in, nil)
+			return rsp, nil
 		}
-		if err != nil {
-			rsp.Error = err.AddStack(a.process.local)
-		}
-		return rsp, nil
 	default:
 		rsp.Error = NewErrorf(ErrCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName invalid ToID type. to=(%v)", req.To).AddStack(nil)
 		return rsp, nil

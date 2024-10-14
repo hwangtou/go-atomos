@@ -322,6 +322,7 @@ message CosmosRemoteSyncMessagingByNameReq {
   int64 timeout = 4;
   string message = 5;
   google.protobuf.Any args = 6;
+  bool callback = 7;
 }
 message CosmosRemoteSyncMessagingByNameRsp {
   google.protobuf.Any reply = 1;

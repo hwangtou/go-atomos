@@ -129,6 +129,7 @@ func (e *ElementRemote) SyncMessagingByName(callerID SelfID, name string, timeou
 		Timeout:                int64(timeout),
 		Message:                name,
 		Args:                   arg,
+		Callback:               true,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
@@ -185,9 +186,13 @@ func (e *ElementRemote) AsyncMessagingByName(callerID SelfID, name string, timeo
 				Timeout:                int64(timeout),
 				Message:                name,
 				Args:                   arg,
+				Callback:               callback != nil,
 			})
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+			}
+			if callback == nil {
+				return nil, nil
 			}
 			if rsp.Reply != nil {
 				out, er = rsp.Reply.UnmarshalNew()

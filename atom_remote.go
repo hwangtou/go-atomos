@@ -117,6 +117,7 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		Timeout:                int64(timeout),
 		Message:                name,
 		Args:                   arg,
+		Callback:               true,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
@@ -173,9 +174,13 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 				Timeout:                int64(timeout),
 				Message:                name,
 				Args:                   arg,
+				Callback:               callback != nil,
 			})
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "AtomRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+			}
+			if callback == nil {
+				return nil, nil
 			}
 			if rsp.Reply != nil {
 				out, er = rsp.Reply.UnmarshalNew()
