@@ -50,7 +50,7 @@ func initAtomosFirstSyncCall(fsc *idFirstSyncCallLocal, id *IDInfo) {
 // Implementation of idFirstSyncCall
 
 func (f *idFirstSyncCallLocal) getCurFirstSyncCall() string {
-	c := f.curFirstSyncCall.Load().(string)
+	c, _ := f.curFirstSyncCall.Load().(string)
 	return c
 }
 
