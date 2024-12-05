@@ -45,6 +45,7 @@ type idFirstSyncCallLocal struct {
 
 func initAtomosFirstSyncCall(fsc *idFirstSyncCallLocal, id *IDInfo) {
 	fsc.info = id
+	fsc.curFirstSyncCall.Store("")
 }
 
 // Implementation of idFirstSyncCall
