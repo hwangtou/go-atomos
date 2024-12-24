@@ -8,6 +8,8 @@ const (
 	ErrFrameworkInternalError    = 1
 	ErrFrameworkRecoverFromPanic = 2
 	ErrFrameworkIncorrectUsage   = 3
+	ErrMailboxIsRunning          = 4
+	ErrMailboxRuntimeError       = 5
 
 	// App Env 11-30
 

@@ -849,8 +849,8 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 			// Hook or Log
 			if ar, ok := e.atomos.instance.(AtomosRecover); ok {
 				ar.SpawnRecover(nil, err)
-			} else {
-				e.Log().Fatal("Element: Spawn critical problem. err=(%v)", err)
+				//} else {
+				//	e.Log().Fatal("Element: Spawn critical problem. err=(%v)", err)
 			}
 			// Global hook
 			e.cosmosLocal.process.onRecoverHook(e.atomos.id, err)

@@ -9,6 +9,18 @@ import (
 	"testing"
 )
 
+// 若干種啓動模式：
+// 1. standalone
+// 2. daemon
+// 3. embedded
+// 4. test
+// 5. benchmark
+
+// 若干種配置方式，具體方法取決於啓動模式：
+// 1. config file
+// 2. code
+// 3. etcd
+
 var app *App
 
 func MainForConfigFile(runnable CosmosRunnable) {
@@ -20,6 +32,7 @@ func MainForConfigFile(runnable CosmosRunnable) {
 	)
 	flag.Parse()
 
+	var critical bool
 	var err *Error
 
 	// Load Config.
@@ -36,7 +49,7 @@ func MainForConfigFile(runnable CosmosRunnable) {
 	}
 
 	// Init.
-	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
+	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging); err != nil {
 		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
 	}
@@ -69,9 +82,9 @@ func MainForConfigFile(runnable CosmosRunnable) {
 		msg := fmt.Sprintf("App: Fork app succeed. Loader will exit.")
 		SharedCosmosProcess().Self().Log().coreInfo(msg)
 		log.Printf(msg)
-		log.Printf("App: Access Log File=(%s)", app.logging.getCurAccessLogName())
-		log.Printf("App: Error Log File=(%s)", app.logging.getCurErrorLogName())
-		app.logging.Close()
+		//log.Printf("App: Access Log File=(%s)") //, app.logging.getCurAccessLogName())
+		//log.Printf("App: Error Log File=(%s)")  //, app.logging.getCurErrorLogName())
+		//app.logging.Close()
 		return
 	} else {
 		if err = app.LaunchApp(); err != nil {
@@ -86,10 +99,15 @@ func MainForConfigFile(runnable CosmosRunnable) {
 			app.close()
 		}()
 		runnable.SetConfig(app.config)
-		if err = SharedCosmosProcess().Start(&runnable); err != nil {
-			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		if critical, err = SharedCosmosProcess().start(&runnable); err != nil {
+			if critical {
+				SharedCosmosProcess().Self().Log().coreFatal("App: CosmosRunnable starts failed critically, now exiting. err=(%v)", err.AddStack(nil))
+			} else {
+				SharedCosmosProcess().Self().Log().coreFatal("App: CosmosRunnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+			}
 			return
 		}
+
 		SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
 		<-app.WaitExitApp()
 		if err = SharedCosmosProcess().Stop(); err != nil {
@@ -114,6 +132,9 @@ func MainForWorkingPath(runnable CosmosRunnable, path, cosmos, node string, logL
 		}
 	}
 
+	var critical bool
+	var err *Error
+
 	app, err := NewCosmosNodeAppWithWorkingPath(runnable, path, cosmos, node, logLevel, customize)
 	if err != nil {
 		log.Printf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
@@ -121,7 +142,7 @@ func MainForWorkingPath(runnable CosmosRunnable, path, cosmos, node string, logL
 	}
 
 	// Init.
-	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
+	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging); err != nil {
 		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
 	}
@@ -157,8 +178,12 @@ func MainForWorkingPath(runnable CosmosRunnable, path, cosmos, node string, logL
 			app.close()
 		}()
 		runnable.SetConfig(app.config)
-		if err = SharedCosmosProcess().Start(&runnable); err != nil {
-			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		if critical, err = SharedCosmosProcess().start(&runnable); err != nil {
+			if critical {
+				SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed critically, now exiting. err=(%v)", err.AddStack(nil))
+			} else {
+				SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+			}
 			return
 		}
 		SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
@@ -173,6 +198,7 @@ func MainForWorkingPath(runnable CosmosRunnable, path, cosmos, node string, logL
 func MainForTest(runnable CosmosRunnable, t *testing.T) {
 	t.Logf("Welcome to Atomos! pid=(%d)", os.Getpid())
 
+	var critical bool
 	var err *Error
 
 	// Check.
@@ -183,14 +209,18 @@ func MainForTest(runnable CosmosRunnable, t *testing.T) {
 	}
 
 	// Init.
-	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging.WriteAccessLog, app.logging.WriteErrorLog); err != nil {
+	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging); err != nil {
 		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
 	}
 
 	runnable.SetConfig(app.config)
-	if err = SharedCosmosProcess().Start(&runnable); err != nil {
-		SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+	if critical, err = SharedCosmosProcess().start(&runnable); err != nil {
+		if critical {
+			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed critically, now exiting. err=(%v)", err.AddStack(nil))
+		} else {
+			SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		}
 		return
 	}
 	SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
@@ -199,9 +229,9 @@ func MainForTest(runnable CosmosRunnable, t *testing.T) {
 
 // InitCosmosProcess 初始化进程
 // 该函数只能被调用一次，且必须在进程启动时调用。
-func InitCosmosProcess(cosmosName, cosmosNode string, accessLogFn, errLogFn loggingFn) (err *Error) {
+func InitCosmosProcess(cosmosName, cosmosNode string, logging appLogging) (err *Error) {
 	onceInitSharedCosmosProcess.Do(func() {
-		sharedCosmosProcess, err = newCosmosProcess(cosmosName, cosmosNode, accessLogFn, errLogFn)
+		sharedCosmosProcess, err = newCosmosProcess(cosmosName, cosmosNode, logging)
 	})
 	return
 }

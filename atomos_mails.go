@@ -106,8 +106,6 @@ type atomosMail struct {
 	mailReply mailReply
 	waitCh    chan *mailReply
 
-	executeStop bool
-
 	mutex sync.Mutex
 }
 
@@ -115,7 +113,7 @@ type atomosMail struct {
 
 func allocAtomosMail() *atomosMail {
 	am := &atomosMail{}
-	am.mail = &mail{mail: am}
+	am.mail = &mail{content: am}
 	return am
 }
 
@@ -203,7 +201,6 @@ func initScaleMail(am *atomosMail, from SelfID, fromCallChain []string, name str
 	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
-	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -233,7 +230,6 @@ func initWormholeMail(am *atomosMail, from SelfID, fromCallChain []string, wormh
 	am.tracker = nil
 	am.wormhole = wormhole
 	am.mailReply = mailReply{}
-	am.executeStop = false
 	am.waitCh = make(chan *mailReply, 1)
 }
 
@@ -249,7 +245,6 @@ func initKillMail(am *atomosMail, from SelfID, fromCallChain []string) {
 	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
-	am.executeStop = true
 	am.waitCh = make(chan *mailReply, 1)
 }
 
