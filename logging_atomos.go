@@ -13,26 +13,22 @@ const defaultLogMailID = 0
 // Interface of Cosmos Log.
 
 type loggingAtomos struct {
-	logBox    *mailBox
-	accessLog loggingFn
-	errorLog  loggingFn
+	logBox  *mailBox
+	logging appLogging
 
 	exitCh chan struct{}
 
 	buf bytes.Buffer
 }
 
-type loggingFn func(string)
-
 type LoggingRaw interface {
 	PushLogging(id *IDInfo, level LogLevel, msg string)
 	pushFrameworkErrorLog(format string, args ...interface{})
 }
 
-func (c *loggingAtomos) init(accessLog, errLog loggingFn) *Error {
-	c.accessLog = accessLog
-	c.errorLog = errLog
-	c.logBox = newMailBox("logging", c, accessLog, errLog)
+func (c *loggingAtomos) init(logging appLogging) *Error {
+	c.logging = logging
+	c.logBox = newMailBox("logging", c, logging)
 	return c.logBox.start(func() *Error { return nil })
 }
 
@@ -45,7 +41,7 @@ func (c *loggingAtomos) stop() {
 		mail:   nil,
 		log:    &LogMail{},
 	}); !ok {
-		c.errorLog("loggingAtomos: Stop failed.\n")
+		c.logging.WriteErrorLog("loggingAtomos: Stop failed.\n")
 	}
 	<-c.exitCh
 }
@@ -65,7 +61,7 @@ func (c *loggingAtomos) PushLogging(id *IDInfo, level LogLevel, msg string) {
 		log:    lm,
 	}
 	if ok := c.logBox.pushTail(m); !ok {
-		c.errorLog(fmt.Sprintf("loggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)\n", id, level, msg))
+		c.logging.WriteErrorLog(fmt.Sprintf("loggingAtomos: Add log mail failed. id=(%+v),level=(%v),msg=(%s)\n", id, level, msg))
 	}
 }
 
@@ -85,12 +81,12 @@ func (c *loggingAtomos) mailboxOnStartUp(func() *Error) *Error {
 }
 
 func (c *loggingAtomos) mailboxOnReceive(mail *mail) {
-	c.logging(mail.log)
+	c.log(mail.log)
 }
 
 func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
-		c.logging(curMail.log)
+		c.log(curMail.log)
 	}
 	if c.exitCh != nil {
 		c.exitCh <- struct{}{}
@@ -98,7 +94,7 @@ func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) *
 	return nil
 }
 
-func (c *loggingAtomos) logging(lm *LogMail) {
+func (c *loggingAtomos) log(lm *LogMail) {
 	c.buf.Reset()
 
 	// Time
@@ -141,15 +137,15 @@ func (c *loggingAtomos) logging(lm *LogMail) {
 	}
 	switch lm.Level {
 	case LogLevel_Debug, LogLevel_Info, LogLevel_Warn, LogLevel_CoreInfo:
-		c.accessLog(c.buf.String())
+		c.logging.WriteAccessLog(c.buf.String())
 	case LogLevel_Err, LogLevel_CoreErr, LogLevel_Fatal, LogLevel_CoreFatal:
-		c.errorLog(c.buf.String())
+		c.logging.WriteErrorLog(c.buf.String())
 	default:
-		c.errorLog(c.buf.String())
+		c.logging.WriteErrorLog(c.buf.String())
 	}
 }
 
 func (c *loggingAtomos) Writer(buf []byte) (n int, err error) {
-	c.accessLog(string(buf))
+	c.logging.WriteAccessLog(string(buf))
 	return len(buf), nil
 }
