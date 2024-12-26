@@ -1,7 +1,6 @@
 package go_atomos
 
 import (
-	"fmt"
 	"runtime/debug"
 	"sync"
 )
@@ -42,24 +41,22 @@ type mailBox struct {
 	tail    *mail
 	num     uint32
 
-	accessLogging loggingFn
-	errorLogging  loggingFn
+	logging *loggingService
 
 	goID uint64
 }
 
-func newMailBox(name string, handler MailboxHandler, accessLogging, errorLogging loggingFn) *mailBox {
+func newMailBox(name string, handler MailboxHandler, logging *loggingService) *mailBox {
 	mb := &mailBox{
-		name:          name,
-		mutex:         sync.Mutex{},
-		cond:          nil,
-		running:       false,
-		handler:       handler,
-		head:          nil,
-		tail:          nil,
-		num:           0,
-		accessLogging: accessLogging,
-		errorLogging:  errorLogging,
+		name:    name,
+		mutex:   sync.Mutex{},
+		cond:    nil,
+		running: false,
+		handler: handler,
+		head:    nil,
+		tail:    nil,
+		num:     0,
+		logging: logging,
 	}
 	mb.cond = sync.NewCond(&mb.mutex)
 	return mb
@@ -267,25 +264,25 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 	mb.goID = func() uint64 {
 		defer func() {
 			if r := recover(); r != nil {
-				mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)\n",
-					r, string(debug.Stack())))
+				mb.logging.pushFrameworkErrorLog("Mailbox: Recover from panic. It's getting goID. reason=(%v),stack=(%s)",
+					r, string(debug.Stack()))
 			}
 		}()
 		return getGoID()
 	}()
 	if mb.goID == 0 {
-		mb.errorLogging("Mailbox: Failed to get goID.\n")
+		mb.logging.pushFrameworkErrorLog("Mailbox: Failed to get goID.")
 		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
 		return
 	}
 
-	mb.accessLogging(fmt.Sprintf("Mailbox: Start. name=(%s)\n", mb.name))
+	mb.logging.pushFrameworkInfoLog("Mailbox: Start. name=(%s)", mb.name)
 	defer func() {
-		mb.accessLogging(fmt.Sprintf("Mailbox: Stop. name=(%s)\n", mb.name))
+		mb.logging.pushFrameworkInfoLog("Mailbox: Stop. name=(%s)", mb.name)
 	}()
 
 	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
-		mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute start up. err=(%v)\n", err))
+		//mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute start up. err=(%v)", err)
 		wait <- err.AddStack(nil)
 		return
 	}
@@ -297,8 +294,8 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 			var curMail *mail
 			defer func() {
 				if r := recover(); r != nil {
-					mb.errorLogging(fmt.Sprintf("Mailbox: Recover from panic. reason=(%v),stack=(%s)\n",
-						r, string(debug.Stack())))
+					mb.logging.pushFrameworkErrorLog("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
+						r, string(debug.Stack()))
 				}
 			}()
 			for {
@@ -320,7 +317,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					if m := curMail.mail; m != nil {
 						if m.executeStop {
 							if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-								mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop. err=(%v)\n", err))
+								mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop. err=(%v)", err)
 							}
 						}
 						// Wait channel.
@@ -328,7 +325,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					}
 					if l := curMail.log; l != nil {
 						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-							mb.errorLogging(fmt.Sprintf("Mailbox: Failed to execute stop, logMail. err=(%v)\n", err))
+							mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop, logMail. err=(%v)", err)
 						}
 					}
 					return

@@ -109,7 +109,7 @@ type atomosTask struct {
 // Atomos Task Manager
 // In charge of the management of the increase task id and the task holder.
 type atomosTaskManager struct {
-	log *loggingAtomos
+	log LoggingService
 
 	// AtomosCore实例的引用。
 	// Reference to Atomos instance.
@@ -138,7 +138,7 @@ type atomosTaskManager struct {
 //
 // Initialization of atomosTaskManager.
 // No New and Delete function because atomosTaskManager is struct inner BaseAtomos.
-func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAtomos) {
+func initAtomosTasksManager(log LoggingService, at *atomosTaskManager, a *BaseAtomos) {
 	at.log = log
 	at.atomos = a
 	at.curID = 0

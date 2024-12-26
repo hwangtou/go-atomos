@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -269,6 +270,8 @@ func (l *AppLoggingToFile) WriteErrorLog(s string) {
 
 type appLoggingForTest struct {
 	t *testing.T
+
+	ignoreError bool
 }
 
 func (l *appLoggingForTest) WriteAccessLog(s string) {
@@ -276,10 +279,26 @@ func (l *appLoggingForTest) WriteAccessLog(s string) {
 }
 
 func (l *appLoggingForTest) WriteErrorLog(s string) {
-	l.t.Error(strings.TrimSuffix(s, "\n"))
+	if l.ignoreError {
+		l.t.Log(strings.TrimSuffix(s, "\n"))
+	} else {
+		l.t.Error(strings.TrimSuffix(s, "\n"))
+	}
 }
 
-func (l *appLoggingForTest) Close() {
+// For Test to string
+
+type appLoggingForTestToString struct {
+	access bytes.Buffer
+	error  bytes.Buffer
+}
+
+func (l *appLoggingForTestToString) WriteAccessLog(s string) {
+	l.access.WriteString(s)
+}
+
+func (l *appLoggingForTestToString) WriteErrorLog(s string) {
+	l.error.WriteString(s)
 }
 
 // For Benchmark
@@ -294,4 +313,19 @@ func (l *appLoggingForBenchmark) WriteAccessLog(s string) {
 
 func (l *appLoggingForBenchmark) WriteErrorLog(s string) {
 	l.b.Error(strings.TrimSuffix(s, "\n"))
+}
+
+// For Benchmark to string
+
+type appLoggingForBenchmarkToString struct {
+	access bytes.Buffer
+	error  bytes.Buffer
+}
+
+func (l *appLoggingForBenchmarkToString) WriteAccessLog(s string) {
+	l.access.WriteString(s)
+}
+
+func (l *appLoggingForBenchmarkToString) WriteErrorLog(s string) {
+	l.error.WriteString(s)
 }

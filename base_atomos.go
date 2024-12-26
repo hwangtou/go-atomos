@@ -146,7 +146,7 @@ func NewBaseAtomos(id *IDInfo, lv LogLevel, holder AtomosHolder, inst Atomos, pr
 		it:       &atomosIDTracker{},
 		ctx:      atomosIDContextLocal{},
 	}
-	a.mailbox = newMailBox(id.Info(), a, process.logging.accessLog, process.logging.errorLog)
+	a.mailbox = newMailBox(id.Info(), a, process.logging)
 	initAtomosLog(&a.log, a.id, lv, process.logging)
 	initAtomosTasksManager(a.log.logging, &a.task, a)
 	initAtomosMessageTracker(&a.mt)
