@@ -41,8 +41,7 @@ func (c *loggingService) stop() {
 	m.next = nil
 	m.id = 0
 	m.action = MailActionExit
-	m.mail = nil
-	m.log = &LogMail{}
+	m.content = &LogMail{}
 
 	if ok := c.logBox.pushTail(m); !ok {
 		c.pushFrameworkErrorLog("loggingService: Has already stopped.")
@@ -60,8 +59,7 @@ func (c *loggingService) PushLogging(id *IDInfo, level LogLevel, msg string) {
 	m.next = nil
 	m.id = LoggingServiceDefaultLogMailID
 	m.action = MailActionRun
-	m.mail = nil
-	m.log = lm
+	m.content = lm
 
 	if ok := c.logBox.pushTail(m); !ok {
 		c.mailboxWriteLog(lm, false)
@@ -84,13 +82,13 @@ func (c *loggingService) mailboxOnStartUp(func() *Error) *Error {
 }
 
 func (c *loggingService) mailboxOnReceive(mail *mail) {
-	c.mailboxWriteLog(mail.log, true)
+	c.mailboxWriteLog(mail.log(), true)
 	loggingMailPool.Put(mail)
 }
 
 func (c *loggingService) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
 	for curMail := remainMails; curMail != nil; curMail = curMail.next {
-		c.mailboxWriteLog(curMail.log, true)
+		c.mailboxWriteLog(curMail.log(), true)
 		loggingMailPool.Put(curMail)
 	}
 	loggingMailPool.Put(killMail)

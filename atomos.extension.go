@@ -4,11 +4,14 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
 )
+
+// Config
 
 func (x *Config) Check() *Error {
 	if x == nil {
@@ -23,15 +26,17 @@ func (x *Config) Check() *Error {
 	return nil
 }
 
+// IDInfo
+
 func (x *IDInfo) Info() string {
 	if x == nil {
 		return "NilID"
 	}
 	switch x.Type {
 	case IDType_Atom:
-		return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Atom)
+		return x.Node + "::" + x.Element + "::" + x.Atom
 	case IDType_Element:
-		return fmt.Sprintf("%s::%s", x.Node, x.Element)
+		return x.Node + "::" + x.Element
 	case IDType_Cosmos:
 		return x.Node
 	default:
@@ -52,6 +57,13 @@ func SelfID2IDInfo(id SelfID) *IDInfo {
 	}
 	return nil
 }
+
+// LogMail
+
+func (x *LogMail) sendReply(reply proto.Message, err *Error) {
+}
+
+// Error
 
 func NewError(code int64, message string) *Error {
 	return &Error{

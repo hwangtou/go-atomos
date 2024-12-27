@@ -1,6 +1,7 @@
 package go_atomos
 
 import (
+	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"sync"
 )
@@ -12,9 +13,18 @@ type mail struct {
 	id     uint64
 	action MailAction
 
-	mail *atomosMail
-	log  *LogMail
+	content mailContent
 }
+
+func (m *mail) mail() *atomosMail {
+	return m.content.(*atomosMail)
+}
+
+func (m *mail) log() *LogMail {
+	return m.content.(*LogMail)
+}
+
+// Mail Action
 
 type MailAction int
 
@@ -23,7 +33,13 @@ const (
 	MailActionExit = 1
 )
 
-// Mail Box
+// Mail Content
+
+type mailContent interface {
+	sendReply(reply proto.Message, err *Error)
+}
+
+// Mailbox
 
 type MailboxHandler interface {
 	mailboxOnStartUp(fn func() *Error) *Error
@@ -72,7 +88,7 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
-		return NewError(ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
+		return NewError(ErrMailboxIsRunning, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
 	mb.mutex.Unlock()
@@ -272,7 +288,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 	}()
 	if mb.goID == 0 {
 		mb.logging.pushFrameworkErrorLog("Mailbox: Failed to get goID.")
-		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
+		wait <- NewError(ErrMailboxRuntimeError, "Failed to get goID.").AddStack(nil)
 		return
 	}
 
@@ -314,20 +330,29 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					exit = true
 					// Reject all mails backward.
 					mails, num := mb.popAll()
-					if m := curMail.mail; m != nil {
-						if m.executeStop {
-							if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-								mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop. err=(%v)", err)
-							}
+					if m := curMail.content; m != nil {
+						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+							mb.logging.pushFrameworkErrorLog("Mailbox: Exited with error. err=(%v)", err)
 						}
 						// Wait channel.
+						// Error message will not be sent to the sender. Because the mailbox stops running.
 						m.sendReply(nil, nil)
 					}
-					if l := curMail.log; l != nil {
-						if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
-							mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop, logMail. err=(%v)", err)
-						}
-					}
+
+					//if m := curMail.mail; m != nil {
+					//	if m.executeStop {
+					//		if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+					//			mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop. err=(%v)", err)
+					//		}
+					//	}
+					//	// Wait channel.
+					//	m.sendReply(nil, nil)
+					//}
+					//if l := curMail.log; l != nil {
+					//	if err := mb.handler.mailboxOnStop(curMail, mails, num); err != nil {
+					//		mb.logging.pushFrameworkErrorLog("Mailbox: Failed to execute stop, logMail. err=(%v)", err)
+					//	}
+					//}
 					return
 				}
 			}

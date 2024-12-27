@@ -473,7 +473,7 @@ func (a *BaseAtomos) mailboxOnStartUp(fn func() *Error) *Error {
 // 处理邮箱消息。
 // Handle mailbox messages.
 func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
-	am := mail.mail
+	am := mail.mail()
 	if !a.IsInState(AtomosWaiting) {
 		a.log.logging.pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
 			a, a.GetState(), mail)
@@ -560,7 +560,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 		a.log.logging.pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. atomos=(%v)", a)
 	}
 
-	a.setStopping(killMail.mail.fromCallChain)
+	a.setStopping(killMail.mail().fromCallChain)
 	defer a.setHalted(err)
 
 	defer func() {
@@ -589,8 +589,8 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	cancels := a.task.cancelAllSchedulingTasks()
 	for ; remainMail != nil; remainMail = remainMail.next {
 		func(remainMail *mail) {
-			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%v),mail=(%v),log=(%v)", remainMail, remainMail.mail, remainMail.log).AddStack(nil)
-			remainAtomMail := remainMail.mail
+			err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%v),mail=(%v)", remainMail, remainMail.content).AddStack(nil)
+			remainAtomMail := remainMail.mail()
 			//defer deallocAtomosMail(remainAtomMail)
 			switch remainAtomMail.mailType {
 			case MailHalt:
@@ -626,11 +626,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	}
 
 	// Handle Kill and Reply Kill.
-	err = a.holder.OnStopping(killMail.mail.from, cancels)
+	err = a.holder.OnStopping(killMail.mail().from, cancels)
 	if err != nil {
 		err = err.AddStack(nil)
 	}
-	killMail.mail.sendReply(nil, err)
+	killMail.mail().sendReply(nil, err)
 
 	return err
 }
