@@ -1,331 +1,198 @@
 package atomos
 
 import (
-	"bytes"
 	"fmt"
-	"log"
+	"io/ioutil"
 	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
 	"time"
 )
 
 const (
-	// AppLoggingDefaultMaxSize Default log max size is 10MB.
-	AppLoggingDefaultMaxSize = 10 * 1024 * 1024
-	// AppLoggingAutoCleanupRatio Default auto cleanup size is 300MB.
-	AppLoggingAutoCleanupRatio = int64(30)
-	AppLoggingAutoCleanupOff   = -1
+	defaultLogMaxSize = 10000000
 
-	AppLoggingAccessPrefix  = "access"
-	AppLoggingErrorPrefix   = "error"
-	AppLoggingNameFormatter = "2006-0102-150405"
-	AppLoggingNameSep       = "."
-	AppLoggingPathPerm      = os.FileMode(0774)
-	AppLoggingFilePerm      = os.FileMode(0664)
+	logAccessPrefix = "access"
+	logErrorPrefix  = "error"
+
+	logNameFormatter = "2006-0102-150405"
+	logNameSep       = "."
+	logFilePerm      = 0644
 )
 
-type appLogging interface {
+type appLoggingIntf interface {
 	WriteAccessLog(s string)
 	WriteErrorLog(s string)
 }
 
-// AppLoggingToFile is the logging to file implementation.
-
-type AppLoggingToFile struct {
-	logPath        string
-	logFileMaxSize int64
-	logPathMaxSize int64
-	// Auto Cleanup
-	autoCleanup bool
-	// Error Handler
-	errHandler func(*Error)
+type appLogging struct {
+	logPath    string
+	logMaxSize int
 
 	// Because Atomos Logging is thread-safe, so no lock is needed.
 
 	curAccessLogName string
 	curAccessLog     *os.File
-	curAccessSize    int64
+	curAccessSize    int
 
 	curErrorLogName string
 	curErrorLog     *os.File
-	curErrorSize    int64
+	curErrorSize    int
 }
 
-// NewAppLoggingToFile creates a new AppLoggingToFile instance.
-// logPath: the path to store log files.
-// logFileMaxSize: the max size of a log file. If it is 0, then it is 10MB.
-// logPathMaxRatio: the max size of the log path. If it is 0, then it is 30 times of logFileMaxSize. If it is -1, then auto cleanup is off. Use a number more than 2 is recommended.
-// errHandler: the error handler. If it is nil, then the error will be ignored.
-func NewAppLoggingToFile(logPath string, logFileMaxSize, logPathMaxRatio int64, errHandler func(*Error)) (*AppLoggingToFile, *Error) {
-	if err := UtilFileEnsureDirectory(logPath, AppLoggingPathPerm, true); err != nil {
-		return nil, err.AddStack(nil)
+func NewAppLogging(logPath string, logMaxSize int) (*appLogging, *Error) {
+	stat, er := os.Stat(logPath)
+	if er != nil {
+		return nil, NewErrorf(ErrAppLoggingPathInvalid, "invalid log path. path=(%s),err=(%v)", logPath, er).AddStack(nil)
+	}
+	if !stat.IsDir() {
+		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path is not directory").AddStack(nil)
 	}
 
-	// Log File Max Size
-	if logFileMaxSize <= 0 {
-		logFileMaxSize = AppLoggingDefaultMaxSize
-	}
-	// Auto Cleanup
-	autoCleanup := true
-	logPathMaxSize := int64(0)
-	if logPathMaxRatio == AppLoggingAutoCleanupOff {
-		autoCleanup = false
-	} else if logPathMaxRatio == 0 {
-		logPathMaxSize = logFileMaxSize * AppLoggingAutoCleanupRatio
-	} else {
-		logPathMaxSize = logFileMaxSize * logPathMaxRatio
+	l := &appLogging{
+		logPath:    logPath,
+		logMaxSize: logMaxSize,
 	}
 
-	l := &AppLoggingToFile{
-		logPath:        logPath,
-		logFileMaxSize: logFileMaxSize,
-		logPathMaxSize: logPathMaxSize,
-		autoCleanup:    autoCleanup,
-		errHandler:     errHandler,
+	// Test Log File.
+	logTestPath := logPath + "/test"
+	if er = ioutil.WriteFile(logTestPath, []byte{}, 0644); er != nil {
+		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path cannot write, err=(%v)", er).AddStack(nil)
+	}
+	if er = os.Remove(logTestPath); er != nil {
+		return nil, NewErrorf(ErrAppLoggingPathInvalid, "log path test file cannot delete, err=(%v)", er).AddStack(nil)
 	}
 
 	// Open Log File.
-	l.curAccessLogName = l.logFileFormatter(AppLoggingAccessPrefix, "startup")
+	l.curAccessLogName = os.Getenv(GetEnvAccessLogKey())
+	if l.curAccessLogName == "" {
+		l.curAccessLogName = l.logFileFormatter(logAccessPrefix, "startup")
+	}
 	accessLogFile, err := l.openLogFile(l.curAccessLogName)
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
 	l.curAccessLog = accessLogFile
 
-	l.curErrorLogName = l.logFileFormatter(AppLoggingErrorPrefix, "startup")
+	l.curErrorLogName = os.Getenv(GetEnvErrorLogKey())
+	if l.curErrorLogName == "" {
+		l.curErrorLogName = l.logFileFormatter(logErrorPrefix, "startup")
+	}
 	errLogFile, err := l.openLogFile(l.curErrorLogName)
 	if err != nil {
-		_ = l.curAccessLog.Close()
+		l.curAccessLog.Close()
 		return nil, err.AddStack(nil)
 	}
 	l.curErrorLog = errLogFile
 
-	l.redirectStd()
-
 	return l, nil
 }
 
-func (l *AppLoggingToFile) openLogFile(path string) (*os.File, *Error) {
-	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, AppLoggingFilePerm)
+func (l *appLogging) Close() {
+	sharedCosmosProcess.logging.stop()
+	_ = l.curAccessLog.Close()
+	l.curAccessLog = nil
+	_ = l.curErrorLog.Close()
+	l.curErrorLog = nil
+}
+
+func (l *appLogging) openLogFile(path string) (*os.File, *Error) {
+	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, logFilePerm)
 	if er != nil {
-		return nil, NewErrorf(ErrAppEnvLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
+		return nil, NewErrorf(ErrAppLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
 	}
 	return f, nil
 }
 
-func (l *AppLoggingToFile) logFileFormatter(prefix, flag string) string {
+func (l *appLogging) logFileFormatter(prefix, flag string) string {
 	// {Name}-{DateTime}{-Flag}.log
-	datetime := time.Now().Format(AppLoggingNameFormatter)
+	datetime := time.Now().Format(logNameFormatter)
 
 	// Flag
 	if len(flag) > 0 {
-		flag = AppLoggingNameSep + flag
+		flag = logNameSep + flag
 	}
-	return fmt.Sprintf("%s/%s%s%s%s.log", l.logPath, prefix, AppLoggingNameSep, datetime, flag)
-}
-
-// redirectStd redirects the stdout and stderr to the current log file.
-// NOTICE: stdout and stderr cannot count the size of the log file.
-func (l *AppLoggingToFile) redirectStd() {
-	os.Stdout = l.curAccessLog
-	os.Stderr = l.curErrorLog
-
-	log.SetOutput(l.curAccessLog)
-}
-
-// checkLogPathSize checks the log path size and remove old log files if needed.
-func (l *AppLoggingToFile) checkLogPathSize() *Error {
-	if !l.autoCleanup {
-		return nil
-	}
-	pathSize, err := UtilFileGetDirectorySize(l.logPath)
-	if err != nil {
-		return err.AddStack(nil)
-	}
-	if pathSize <= l.logPathMaxSize {
-		return nil
-	}
-
-	// Remove old log files.
-	// Walk through the log path and sort by time.
-	sizeNeeded := pathSize - l.logPathMaxSize
-	fileInfoList := make([]os.FileInfo, 0)
-	er := filepath.Walk(l.logPath, func(path string, info os.FileInfo, er error) error {
-		if er != nil {
-			return er
-		}
-		if info.IsDir() {
-			return nil
-		}
-		fileInfoList = append(fileInfoList, info)
-		return nil
-	})
-	if er != nil {
-		return NewErrorf(ErrAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
-	}
-	sort.Slice(fileInfoList, func(i, j int) bool {
-		return fileInfoList[i].ModTime().Before(fileInfoList[j].ModTime())
-	})
-	for _, fileInfo := range fileInfoList {
-		if sizeNeeded <= 0 {
-			break
-		}
-		er := os.Remove(filepath.Join(l.logPath, fileInfo.Name()))
-		if er != nil {
-			return NewErrorf(ErrAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
-		}
-		sizeNeeded -= fileInfo.Size()
-	}
-	return nil
-}
-
-func (l *AppLoggingToFile) onError(err *Error) {
-	if l.errHandler != nil {
-		l.errHandler(err)
-	}
+	return fmt.Sprintf("%s/%s%s%s%s.log", l.logPath, prefix, logNameSep, datetime, flag)
 }
 
 // Log
 
-func (l *AppLoggingToFile) WriteAccessLog(s string) {
+func (l *appLogging) WriteAccessLog(s string) {
 	n, er := l.curAccessLog.WriteString(s)
 	if er != nil {
-		if err := l.checkLogPathSize(); err != nil {
-			l.onError(err.AddStack(nil))
-			return
-		} else {
-			if _, er := l.curAccessLog.WriteString(s); er != nil {
-				l.onError(NewErrorf(ErrAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write access log failed, err=(%v)", er).AddStack(nil))
-				return
-			}
-		}
+		// TODO: Write to System Error
+		return
 	}
-
-	// Check log file size.
-	l.curAccessSize += int64(n)
-	if l.curAccessSize >= l.logFileMaxSize {
-		newName := l.logFileFormatter(AppLoggingAccessPrefix, "")
-		newFile, err := l.openLogFile(newName)
+	l.curAccessSize += n
+	if l.curAccessSize >= l.logMaxSize {
+		newName := l.logFileFormatter(logAccessPrefix, "")
+		f, err := l.openLogFile(newName)
 		if err != nil {
-			l.onError(err.AddStack(nil))
-			return
+			// TODO
+		} else {
+			er := l.curAccessLog.Close()
+			if er != nil {
+				// TODO
+			}
+			l.curAccessLogName = newName
+			l.curAccessLog = f
 		}
-
-		// Close the old log file.
-		er := l.curAccessLog.Close()
-		if er != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close access log failed, err=(%v)", er).AddStack(nil))
-		}
-
-		// Switch to the new log file.
-		l.curAccessLogName = newName
-		l.curAccessLog = newFile
 		l.curAccessSize = 0
-
-		l.redirectStd()
-
-		if err := l.checkLogPathSize(); err != nil {
-			l.onError(err.AddStack(nil))
-			return
-		}
 	}
 }
 
-func (l *AppLoggingToFile) WriteErrorLog(s string) {
+func (l *appLogging) WriteErrorLog(s string) {
 	l.WriteAccessLog(s)
 
 	n, er := l.curErrorLog.WriteString(s)
 	if er != nil {
-		l.onError(NewErrorf(ErrAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write error log failed, err=(%v)", er).AddStack(nil))
+		// TODO: Write to System Error
 		return
 	}
-	l.curErrorSize += int64(n)
-	if l.curErrorSize >= l.logFileMaxSize {
-		newName := l.logFileFormatter(AppLoggingErrorPrefix, "")
-		newFile, err := l.openLogFile(newName)
+	l.curErrorSize += n
+	if l.curErrorSize >= l.logMaxSize {
+		newName := l.logFileFormatter(logErrorPrefix, "")
+		f, err := l.openLogFile(newName)
 		if err != nil {
-			l.onError(err.AddStack(nil))
-			return
+			// TODO
+		} else {
+			er := l.curErrorLog.Close()
+			if er != nil {
+				// TODO
+			}
+			l.curErrorLogName = newName
+			l.curErrorLog = f
 		}
-
-		// Close the old log file.
-		er := l.curErrorLog.Close()
-		if er != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close error log failed, err=(%v)", er).AddStack(nil))
-		}
-
-		// Switch to the new log file.
-		l.curErrorLogName = newName
-		l.curErrorLog = newFile
 		l.curErrorSize = 0
-
-		l.redirectStd()
 	}
 }
 
-// For Test
+func (l *appLogging) getCurAccessLogName() string {
+	return l.curAccessLogName
+}
+
+func (l *appLogging) getCurErrorLogName() string {
+	return l.curErrorLogName
+}
 
 type appLoggingForTest struct {
 	t *testing.T
-
-	ignoreError bool
 }
 
 func (l *appLoggingForTest) WriteAccessLog(s string) {
-	l.t.Log(strings.TrimSuffix(s, "\n"))
+	l.t.Log(s)
 }
 
 func (l *appLoggingForTest) WriteErrorLog(s string) {
-	if l.ignoreError {
-		l.t.Log(strings.TrimSuffix(s, "\n"))
-	} else {
-		l.t.Error(strings.TrimSuffix(s, "\n"))
-	}
+	l.t.Error(s)
 }
 
-// For Test to string
-
-type appLoggingForTestToString struct {
-	access bytes.Buffer
-	error  bytes.Buffer
+func (l *appLoggingForTest) Close() {
 }
 
-func (l *appLoggingForTestToString) WriteAccessLog(s string) {
-	l.access.WriteString(s)
+func (l *appLoggingForTest) getCurAccessLogName() string {
+	return ""
 }
 
-func (l *appLoggingForTestToString) WriteErrorLog(s string) {
-	l.error.WriteString(s)
-}
-
-// For Benchmark
-
-type appLoggingForBenchmark struct {
-	b *testing.B
-}
-
-func (l *appLoggingForBenchmark) WriteAccessLog(s string) {
-	l.b.Log(strings.TrimSuffix(s, "\n"))
-}
-
-func (l *appLoggingForBenchmark) WriteErrorLog(s string) {
-	l.b.Error(strings.TrimSuffix(s, "\n"))
-}
-
-// For Benchmark to string
-
-type appLoggingForBenchmarkToString struct {
-	access bytes.Buffer
-	error  bytes.Buffer
-}
-
-func (l *appLoggingForBenchmarkToString) WriteAccessLog(s string) {
-	l.access.WriteString(s)
-}
-
-func (l *appLoggingForBenchmarkToString) WriteErrorLog(s string) {
-	l.error.WriteString(s)
+func (l *appLoggingForTest) getCurErrorLogName() string {
+	return ""
 }
