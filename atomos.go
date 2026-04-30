@@ -12,7 +12,7 @@ type Atomos interface {
 
 	// Halt 关闭
 	// Halt
-	Halt(from ID, cancelled []uint64, args ...any) (save bool, data proto.Message)
+	Halt(from ID, cancelled []uint64) (save bool, data proto.Message)
 }
 
 // AtomosUtilities Atomos的实用工具集。

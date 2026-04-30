@@ -41,18 +41,6 @@ func (i *atomosIDTracker) addIDTracker(rt *IDTrackerInfo, localOrRemote bool) *I
 	return tracker
 }
 
-// addScaleIDTracker is used to add IDTracker for scale.
-func (i *atomosIDTracker) addScaleIDTracker(tracker *IDTracker) *IDTracker {
-	i.mutex.Lock()
-	i.counter += 1
-	tracker.id = i.counter
-	i.idMap[tracker.id] = tracker
-	i.mutex.Unlock()
-
-	tracker.manager = i
-	return tracker
-}
-
 // refCount is used to get the number of IDTracker.
 func (i *atomosIDTracker) refCount() int {
 	i.mutex.Lock()
@@ -112,10 +100,6 @@ func (i *IDTracker) Release() {
 	}
 }
 
-func (i *IDTracker) GetTracker() *IDTracker {
-	return i
-}
-
 // IDTrackerInfo is used to create IDTracker in local.
 
 func NewIDTrackerInfoFromLocalGoroutine(skip int) *IDTrackerInfo {
@@ -129,14 +113,4 @@ func NewIDTrackerInfoFromLocalGoroutine(skip int) *IDTrackerInfo {
 		}
 	}
 	return tracker
-}
-
-func (x *IDTrackerInfo) newScaleIDTracker() *IDTracker {
-	return &IDTracker{
-		id:      0,
-		manager: nil,
-		file:    x.File,
-		line:    int(x.Line),
-		name:    x.Name,
-	}
 }

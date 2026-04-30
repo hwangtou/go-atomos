@@ -1,8 +1,9 @@
 package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // 开发者按需实现的接口
@@ -52,12 +53,11 @@ type AutoData interface {
 	ElementAutoData() ElementAutoData
 }
 
-// DevLoader
-// AutoDataLoader -> DevLoader
+// AutoDataLoader
 // 自动数据持久化的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
 // Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
-type DevLoader interface {
-	Load(self ElementSelfID, config map[string][]byte, args ...any) *Error
+type AutoDataLoader interface {
+	Load(self ElementSelfID, config map[string][]byte) *Error
 	Unload() *Error
 }
 
@@ -69,12 +69,12 @@ type AtomAutoData interface {
 	// GetAtomData
 	// Atom数据的Getter，没有数据时error应该返回nil。
 	// Getter of Atom data, if no data, error should return nil.
-	GetAtomData(name string, args ...any) (proto.Message, *Error)
+	GetAtomData(name string) (proto.Message, *Error)
 
 	// SetAtomData
 	// Atom数据的Setter，保存Atom。
 	// Setter of Atom data, save Atom.
-	SetAtomData(name string, data proto.Message, args ...any) *Error
+	SetAtomData(name string, data proto.Message) *Error
 }
 
 // ElementAutoData
@@ -84,12 +84,12 @@ type ElementAutoData interface {
 	// GetElementData
 	// Element数据的Getter，没有数据时error应该返回nil。
 	// Getter of Element data, if no data, error should return nil.
-	GetElementData(args ...any) (proto.Message, *Error)
+	GetElementData() (proto.Message, *Error)
 
 	// SetElementData
 	// Element数据的Setter。
 	// Setter of Element data.
-	SetElementData(data proto.Message, args ...any) *Error
+	SetElementData(data proto.Message) *Error
 }
 
 // 按需实现的接口：生命周期相关
@@ -157,7 +157,7 @@ type ElementLogLevel interface {
 // 接收虫洞中的内容，如果不实现，则无法正常使用ID中的SendWormhole方法。
 // Accept object from wormhole, if not implemented, SendWormhole method of ID will not work properly.
 type AtomosAcceptWormhole interface {
-	AcceptWormhole(fromID ID, wormhole AtomosWormhole) *Error
+	AcceptWormhole(fromID ID, wormhole BaseAtomosWormhole) *Error
 }
 
 // 按需实现的接口：Atomos - 各种崩溃恢复的处理
@@ -170,7 +170,6 @@ type AtomosRecover interface {
 	ParallelRecover(err *Error)
 	SpawnRecover(arg proto.Message, err *Error)
 	MessageRecover(name string, arg proto.Message, err *Error)
-	ScaleRecover(name string, arg proto.Message, err *Error)
 	TaskRecover(taskID uint64, name string, arg proto.Message, err *Error)
 	StopRecover(err *Error)
 }

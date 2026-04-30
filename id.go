@@ -1,20 +1,17 @@
 package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // ID 是对Atomos的标识符，类似指针和句柄的概念。
 // ID, an instance that similar to file descriptor of the Atom.
 type ID interface {
-	// GetIDContext
-	// 获取ID上下文。
-	GetIDContext() IDContext
 	// GetIDInfo
 	// 获取ID信息。
 	GetIDInfo() *IDInfo
-
 	// String
 	// 获取ID的字符串表示。
 	String() string
@@ -25,17 +22,25 @@ type ID interface {
 
 	// State 当前运行状态
 	// Current running state
-	State() AtomosState
+	State() BaseAtomosState
 	// IdleTime 空闲的时长
 	// Idle time
 	IdleTime() time.Duration
 
 	// SyncMessagingByName 同步调用
 	// Sync call
-	SyncMessagingByName(callerID SelfID, name string, in proto.Message, args ...any) (out proto.Message, err *Error)
+	SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error)
+
 	// AsyncMessagingByName 异步调用
 	// Async call
-	AsyncMessagingByName(callerID SelfID, name string, in proto.Message, callback func(out proto.Message, err *Error), args ...any)
+	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error)
+
+	// asyncSet
+	// Internal use only
+	asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64)
+	// asyncCallback
+	// Internal use only
+	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error)
 
 	// DecoderByName 获得某个消息的解码器
 	// Get decoder of a message
@@ -43,12 +48,12 @@ type ID interface {
 
 	// Kill 从其它Atom或者main发送Kill消息。
 	// Send Kill message from other Atom or main.
-	Kill(callerID SelfID, timeout time.Duration) *Error
+	Kill(callerID ID, ext []ArgsForBaseAtomos) *Error
 
 	// SendWormhole
 	// 发送Wormhole消息。
 	// Send Wormhole message.
-	SendWormhole(callerID SelfID, wormhole AtomosWormhole, args ...any) *Error
+	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error
 
 	// Internal
 
@@ -56,11 +61,8 @@ type ID interface {
 	// GoID of the mailbox of current ID.
 	getGoID() uint64
 
-	asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error))
-}
-
-type IDContext interface {
-	FromCallChain() []string
+	//pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
+	//asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error))
 }
 
 // ReleasableID 可以释放的ID，每当我们成功获得一个ID之后，都应该defer Release。
@@ -68,7 +70,6 @@ type IDContext interface {
 type ReleasableID interface {
 	ID
 	Release()
-	GetTracker() *IDTracker
 }
 
 // SelfID 是让Atomos对象内部访问的ID的概念。
@@ -94,10 +95,6 @@ type SelfID interface {
 	// Config 获取自定义的配置
 	// Get customized config
 	Config() map[string][]byte
-
-	// Internal
-
-	getAtomos() *BaseAtomos
 }
 
 // AtomSelfID 是Atom的SelfID。

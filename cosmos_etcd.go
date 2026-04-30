@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -105,7 +104,7 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 		}
 		// Load client's certificate and private key
 		clientCert, er = tls.X509KeyPair(serverCertPem, serverKeyPem)
-		if err != nil {
+		if er != nil {
 			return false, nil, nil, NewErrorf(ErrCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
 		}
 	}
@@ -163,11 +162,13 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	cosmosRemote, has := p.cluster.remoteCosmos[p.local.runnable.config.Node]
 	p.cluster.remoteMutex.Unlock()
 	if has {
-		// 如果节点已经是活跃的，直接退出并等待响应。
-		// If the node is already active, exit directly and wait response.
-		if err := cosmosRemote.tryKillingRemote(); err != nil {
-			return err.AddStack(nil)
-		}
+		//// 如果节点已经是活跃的，直接退出并等待响应。
+		//// If the node is already active, exit directly and wait response.
+		//if err := cosmosRemote.tryKillingRemote(); err != nil {
+		//	return err.AddStack(nil)
+		//}
+		p.local.Log().coreInfo("CosmosProcess: trySettingClusterToCurrentAndKeepalive has existed.")
+		_ = cosmosRemote
 	}
 
 	key, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
@@ -231,8 +232,10 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				if !muteKeepaliveLog {
 					p.local.Log().coreInfo("etcd: Watcher keepalive.")
 				}
-				state := CosmosProcessState(atomic.LoadInt32(&p.state))
-				if state >= CosmosProcessStateShuttingDown {
+				p.mutex.Lock()
+				state := p.state
+				p.mutex.Unlock()
+				if state >= CosmosProcessStateShutdown {
 					p.local.Log().coreInfo("etcd: Watcher keepalive stopped. state=(%v)", state)
 					return
 				}
@@ -289,7 +292,7 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
-		defer p.local.Log().coreInfo("etcd: Watcher stopped.")
+		p.local.Log().coreInfo("etcd: Watcher stopped.")
 		for {
 			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
 			for watchResp := range watchCh {

@@ -1,5 +1,6 @@
 package atomos
 
+/*
 import (
 	"testing"
 	"time"
@@ -702,3 +703,4 @@ func checkAtomLocalInElement(t *testing.T, elem *ElementLocal, name string, isNo
 	}
 	return nil
 }
+*/

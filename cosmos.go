@@ -1,8 +1,9 @@
 package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Cosmos生命周期
@@ -26,29 +27,21 @@ type CosmosNode interface {
 
 	// CosmosGetElementID 通过Element名称，获取一个Element的ID。
 	// Get the ID of an Element by Element name.
-	CosmosGetElementID(elem string, args ...any) (ID, *Error)
+	CosmosGetElementID(elem string, args ...go_atomos.ArgsForGet) (ID, *Error)
 
 	// CosmosGetAtomID 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the reference of an Atom by Element and Atom name.
-	CosmosGetAtomID(elem, name string, args ...any) (ID, *IDTracker, *Error)
-
-	// CosmosGetScaleAtomID 通过Element和Atom的名称获得一个负载均衡的Atom类型的Atom的引用。
-	// Get the reference of a load balancing Atom by Element and Atom name.
-	CosmosGetScaleAtomID(callerID SelfID, elem, message string, arg proto.Message, args ...any) (ID ID, tracker *IDTracker, err *Error)
+	CosmosGetAtomID(elem, name string, args ...go_atomos.ArgsForGet) (ID, *IDTracker, *Error)
 
 	// CosmosSpawnAtom 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
-	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...any) (ID, *IDTracker, *Error)
+	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...go_atomos.ArgsForSpawn) (ID, *IDTracker, *Error)
 
 	// ElementBroadcast 对节点下所有的Element进行广播
 	// Broadcast to all Elements under the node
-	ElementBroadcast(callerID SelfID, key, contentType string, contentBuffer []byte) (err *Error)
+	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error)
 }
-
-type ArgTimeout time.Duration
-
-type ArgSpawnForbidDuplicated bool
 
 // CosmosRunnable 是Cosmos的可运行实例，每个Atomos的可执行文件，都需要实现和提供这个对象。
 // CosmosRunnable is the runnable instance of Cosmos, each executable file of Atomos needs to implement and provide this object.
@@ -59,13 +52,10 @@ type CosmosRunnable struct {
 	implements   map[string]*ElementImplementation
 	spawnElement map[string]bool
 	spawnOrder   []string
+	mainScript   CosmosMainScript
 	mainRouter   CosmosMainGlobalRouter
 
 	// hooks
-	// lifecycle
-	onBoot     func(local *CosmosProcess) *Error
-	onStartUp  func(local *CosmosProcess) *Error
-	onShutdown func() *Error
 	// hook cycle
 	spawningHook func(id *IDInfo)
 	spawnHook    func(id *IDInfo)
@@ -90,6 +80,10 @@ func (r *CosmosRunnable) Check() *Error {
 	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
+	}
+	// MainScript
+	if r.mainScript == nil {
+		return NewError(ErrRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
 	}
 	return nil
 }
@@ -136,9 +130,7 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 // SetMainScript CosmosRunnable构造器方法，用于设置MainScript。
 // Construct method of CosmosRunnable, uses to set MainScript.
 func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable {
-	r.onBoot = script.OnBoot
-	r.onStartUp = script.OnStartUp
-	r.onShutdown = script.OnShutdown
+	r.mainScript = script
 	return r
 }
 

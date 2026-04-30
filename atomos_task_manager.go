@@ -2,11 +2,12 @@ package atomos
 
 import (
 	"fmt"
-	"github.com/robfig/cron/v3"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 //
@@ -14,14 +15,42 @@ import (
 //
 
 type TaskFn func(taskID uint64)
+type TaskFnWithCallback func(taskID uint64) (callback func())
 
 type Task interface {
-	Add(fn TaskFn, ext ...interface{}) (id uint64, err *Error)
-	AddAfter(d time.Duration, fn TaskFn, ext ...interface{}) (id uint64, err *Error)
-	AddCrontab(spec string, fn TaskFn, ext ...interface{}) (entryID uint64, err *Error)
+	TaskDeprecated
+	TaskQueue
+}
+
+type TaskDeprecated interface {
+	Add(fn TaskFn) (id uint64, err *Error)
+	AddAfter(d time.Duration, fn TaskFn) (id uint64, err *Error)
+	AddCrontab(spec string, fn TaskFn) (entryID uint64, err *Error)
 
 	Cancel(id uint64) *Error
 	CancelCrontab(entryID uint64) (err *Error)
+}
+
+type TaskQueue interface {
+	// AddToAtomosQueue
+	// 添加任务到Atomos的任务队列，并返回一个取消函数。和Task.Add类似，但不返回任务ID。
+	// Append task to Atomos task queue, and return a cancel function.
+	AddToAtomosQueue(task TaskFn, ext ...ArgsForTask) (cancel func(reason string) *Error)
+
+	// AddToSerialQueue
+	// 添加任务到指定名称的串行任务队列，并返回一个取消函数。如果该队列不存在，则创建一个新的队列；当队列为空时，删除该队列。
+	// Append task to a named serial task queue, and return a cancel function. If the queue does not exist, create a new one; when the queue is empty, delete the queue.
+	AddToSerialQueue(queueName string, workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error)
+
+	// AddToConcurrentQueue
+	// 添加任务到并行任务队列，并返回一个取消函数。每一个并行任务都是独立的一个goroutine。
+	// Append task to a concurrent task queue, and return a cancel function. Each concurrent task is an independent goroutine.
+	AddToConcurrentQueue(workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error)
+
+	// HasMarking
+	// 检查任务队列中是否存在指定标记的任务。
+	// Check whether a task with the specified marking exists in the task queue.
+	HasMarking(mark string) bool
 }
 
 // 测试思路：
@@ -40,32 +69,30 @@ const (
 	// TaskScheduling
 	// 任务正在排程，还未加入到Atomos邮箱，目前仅定时任务会使用这种状态。
 	// Task is scheduling, and has not been sent to Atomos mailbox yet, only timer task will use this state.
-	TaskScheduling TaskState = 0
+	TaskScheduling TaskState = 1
 
 	// TaskCancelled
 	// 任务被取消。
 	// Task is cancelled.
-	TaskCancelled TaskState = 1
+	TaskCancelled TaskState = 2
 
 	// TaskMailing
 	// 任务已经被发送到Atomos邮箱，普通任务会被马上加到Atomos邮箱尾部，定时任务会在指定时间被加入到Atomos邮箱头部。
 	// Task has been sent to Atomos Mailbox, common task will be sent to the tail of Atomos Mail immediately,
 	// timer task will be sent to the head of Atomos Mail after the timer times up.
-	TaskMailing TaskState = 2
+	TaskMailing TaskState = 3
 
 	// TaskExecuting
 	// 任务正在被执行。
-	// （暂时不会用到这种状态，因为这时atomosTask已经不再存在。）
 	// Task is executing.
-	// (Such a state has not been used yet.)
-	TaskExecuting TaskState = 3
+	TaskExecuting TaskState = 4
 
 	// TaskDone
 	// 任务已经被执行。
 	// （暂时不会用到这种状态，因为这时atomosTask已经不再存在。）
 	// Task has been done.
 	// (Such a state has not been used yet.)
-	TaskDone TaskState = 4
+	TaskDone TaskState = 5
 )
 
 // 默认的任务队列长度
@@ -80,11 +107,14 @@ type atomosTask struct {
 
 	// 发去Atomos邮箱的Atomos邮件。
 	// Atomos mail that send to Atomos mailbox.
-	mail *atomosMail
+	atomosMail *baseAtomosMail
+
+	helper *taskHelper
 
 	// Atomos任务的定时器，决定了多久之后把邮件发送到Atomos的邮箱。
 	// Timer of atomos task, which determines when to send Atomos mail to Atomos mailbox.
-	timer *time.Timer
+	timer   *time.Timer
+	cronEID cron.EntryID
 
 	// Atomos任务的状态。
 	// State of Atomos task.
@@ -131,6 +161,8 @@ type atomosTaskManager struct {
 	tasks map[uint64]*atomosTask
 
 	cron *cron.Cron
+
+	queueMap map[string]*taskMailbox
 }
 
 // 初始化atomosTasksManager的内容。
@@ -138,14 +170,15 @@ type atomosTaskManager struct {
 //
 // Initialization of atomosTaskManager.
 // No New and Delete function because atomosTaskManager is struct inner BaseAtomos.
-func initAtomosTasksManager(log LoggingService, at *atomosTaskManager, a *BaseAtomos) {
+func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAtomos) {
 	at.log = log
 	at.atomos = a
 	at.curID = 0
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
+	at.queueMap = make(map[string]*taskMailbox)
 }
 
-func releaseAtomosTasksManager(_ *atomosTaskManager) {
+func releaseAtomosTasksManager(at *atomosTaskManager) {
 }
 
 // 在Atomos开始退出的时候上锁，以避免新的任务请求。
@@ -163,7 +196,7 @@ func (at *atomosTaskManager) stopUnlock() {
 // Add
 // 添加任务，并返回可以用于取消的任务id。
 // Append task, and return a cancellable task id.
-func (at *atomosTaskManager) Add(taskClosure TaskFn, ext ...interface{}) (taskID uint64, err *Error) {
+func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -181,8 +214,8 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn, ext ...interface{}) (taskID
 	at.curID += 1
 
 	// Load the Atomos mail.
-	am := allocAtomosMail()
-	initTaskClosureMail(am, at.closureInfo(), at.curID, taskClosure)
+	am := allocBaseAtomosMail()
+	initTaskClosureMail(am, at.closureInfo(0), at.curID, taskClosure)
 
 	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
@@ -195,7 +228,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn, ext ...interface{}) (taskID
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return a cancellable task id.
-func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn, ext ...interface{}) (id uint64, err *Error) {
+func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (id uint64, err *Error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -214,14 +247,14 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn, e
 	curID := at.curID
 
 	// Load the Atomos mail.
-	am := allocAtomosMail()
-	initTaskClosureMail(am, at.closureInfo(), at.curID, taskClosure)
+	am := allocBaseAtomosMail()
+	initTaskClosureMail(am, at.closureInfo(0), at.curID, taskClosure)
 
 	// But not append to the mailbox, now is to create a timer task.
 	t := &atomosTask{}
 	at.tasks[curID] = t
 	t.id = curID
-	t.mail = am
+	t.atomosMail = am
 	// Set the task to state TaskScheduling, and try to add mail to mailbox after duration.
 	t.timerState = TaskScheduling
 	t.timer = time.AfterFunc(after, func() {
@@ -242,7 +275,8 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn, e
 		case TaskCancelled:
 			if ta, has := at.tasks[it.id]; has {
 				delete(at.tasks, it.id)
-				deallocAtomosMail(ta.mail)
+				//deallocAtomosMail(ta.baseAtomosMail)
+				_ = ta
 				// FRAMEWORK LEVEL ERROR
 				// Because it should not happen, once a TimerTask has been cancelled,
 				// it will be removed, thread-safely, immediately.
@@ -271,7 +305,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn, e
 	return curID, nil
 }
 
-func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn, ext ...interface{}) (entryID uint64, err *Error) {
+func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err *Error) {
 	c := func() *cron.Cron {
 		at.mutex.Lock()
 		defer at.mutex.Unlock()
@@ -300,7 +334,7 @@ func (at *atomosTaskManager) Cancel(id uint64) *Error {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	err := at.cancelTask(id, nil)
+	err := at.cancelTask(id, false, nil)
 	if err != nil {
 		return err.AddStack(nil)
 	}
@@ -328,7 +362,7 @@ func (at *atomosTaskManager) cancelAllSchedulingTasks() []uint64 {
 	}
 	cancels := make([]uint64, len(at.tasks))
 	for id, t := range at.tasks {
-		if err := at.cancelTask(id, t); err == nil {
+		if err := at.cancelTask(id, true, t); err == nil {
 			cancels = append(cancels, id)
 		}
 	}
@@ -346,10 +380,13 @@ func (at *atomosTaskManager) cancelAllSchedulingTasks() []uint64 {
 // Delete two kinds of tasks:
 // 1. delete append atomosTask
 // 2. delete timer atomosTask
-func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
+func (at *atomosTaskManager) cancelTask(id uint64, mailboxExit bool, t *atomosTask) (err *Error) {
 	if t == nil {
 		ta := at.tasks[id]
 		t = ta
+	}
+	if t != nil && t.helper != nil {
+		return at.cancelTaskQueue(t, mailboxExit, "Cancel due to exit")
 	}
 	// If it has a timer, it's a timer task.
 	if t != nil && t.timer != nil {
@@ -360,7 +397,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 		// This switch-case is unreachable unless framework has bug.
 		case TaskCancelled:
 			delete(at.tasks, id)
-			deallocAtomosMail(t.mail)
+			//deallocAtomosMail(t.baseAtomosMail)
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
 			err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Delete a not exists task timer. task=(%+v)", t).AddStack(nil)
@@ -375,7 +412,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 			ok := t.timer.Stop()
 			t.timerState = TaskCancelled
 			delete(at.tasks, id)
-			deallocAtomosMail(t.mail)
+			//deallocAtomosMail(t.baseAtomosMail)
 			if !ok {
 				// Might only happen on the edge of scheduled time has reached,
 				// the period between time.AfterFunc has executed the function,
@@ -392,6 +429,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 				err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
 				return err
 			}
+			releaseMail(m)
 			return nil
 		default:
 			// FRAMEWORK LEVEL ERROR
@@ -405,12 +443,13 @@ func (at *atomosTaskManager) cancelTask(id uint64, t *atomosTask) (err *Error) {
 		err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
 		return err
 	}
+	releaseMail(m)
 	return nil
 }
 
 // Atomos正式开始处理任务。
 // Atomos is beginning to handle a task.
-func (at *atomosTaskManager) handleTask(am *atomosMail) {
+func (at *atomosTaskManager) handleTask(am *baseAtomosMail) {
 	var err *Error
 	defer func() {
 		if r := recover(); r != nil {
@@ -426,7 +465,7 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 			}
 			// Hook or Log
 			if ar, ok := at.atomos.instance.(AtomosRecover); ok {
-				ar.TaskRecover(am.id, am.name, am.arg, err)
+				ar.TaskRecover(am.mail.id, am.name, am.arg, err)
 			} else {
 				at.atomos.log.Fatal("AtomosTask: Task recovers from panic. err=(%v)", err)
 			}
@@ -435,16 +474,22 @@ func (at *atomosTaskManager) handleTask(am *atomosMail) {
 		}
 	}()
 
-	am.taskClosure(am.mail.id)
+	if am.taskClosure != nil {
+		am.taskClosure(am.mail.id)
+		return
+	}
+	at.handleTaskQueue(am)
 }
 
-func (at *atomosTaskManager) closureInfo() string {
-	_, file, line, ok := runtime.Caller(2)
+func (at *atomosTaskManager) closureInfo(add int) string {
+	_, file, line, ok := runtime.Caller(2 + add)
 	if !ok {
 		file, line = "???", 0
 	}
-	if buildPath := at.atomos.process.local.runnable.config.BuildPath; buildPath != "" {
-		file = strings.TrimPrefix(file, buildPath)
+	if at.atomos.process.local.runnable != nil {
+		if buildPath := at.atomos.process.local.runnable.config.BuildPath; buildPath != "" {
+			file = strings.TrimPrefix(file, buildPath)
+		}
 	}
 	return fmt.Sprintf("%s:%d", file, line)
 }

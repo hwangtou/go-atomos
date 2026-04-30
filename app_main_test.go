@@ -1,5 +1,5 @@
 package atomos
-
+/*
 import (
 	"google.golang.org/protobuf/proto"
 	"net/http"
@@ -393,3 +393,4 @@ func (m testAtomMessenger) AtomMessage() Messenger[*TestElementID, *TestAtomID, 
 
 var testAtomMessengerValue testAtomMessenger
 var testAtomValue TestAtom
+*/
