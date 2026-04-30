@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"testing"
@@ -40,6 +40,6 @@ func TestAllMultiNodes(t *testing.T) {
 	<-time.After(time.Second * 1)
 
 	clearTest()
-	TestSimulateTwoCosmosNode_IDContextLoopDectect(t)
+	TestSimulateTwoCosmosNode_IDContextLoopDetect(t)
 	<-time.After(time.Second * 1)
 }

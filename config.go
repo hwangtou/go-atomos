@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"gopkg.in/yaml.v2"
