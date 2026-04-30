@@ -288,7 +288,7 @@ func (c *CosmosRemote) CosmosIsLocal() bool {
 	return false
 }
 
-func (c *CosmosRemote) CosmosGetElementID(elem string) (ID, *Error) {
+func (c *CosmosRemote) CosmosGetElementID(elem string, args ...ArgsForGet) (ID, *Error) {
 	id, err := c.getElement(elem)
 	if err != nil {
 		return nil, err.AddStack(nil)
@@ -296,7 +296,7 @@ func (c *CosmosRemote) CosmosGetElementID(elem string) (ID, *Error) {
 	return id, nil
 }
 
-func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...ArgsForGet) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -308,7 +308,7 @@ func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Erro
 	return id, tracker, nil
 }
 
-func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForSpawn) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err

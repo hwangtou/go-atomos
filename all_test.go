@@ -1,5 +1,7 @@
 package atomos
 
+import "testing"
+
 //import (
 //	"testing"
 //	"time"
@@ -48,3 +50,7 @@ package atomos
 //	TestSimulateTwoCosmosNode_FirstSyncCall(t)
 //	<-time.After(time.Second * 1)
 //}
+
+func TestIt(t *testing.T) {
+
+}
