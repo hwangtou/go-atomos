@@ -149,7 +149,7 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 }
 func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(ForTestAtomosName, dev)
-	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message) *Error {
+	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForSpawn) *Error {
 		dataT, _ := data.(*ForTestData)
 		elem, ok := a.(ForTestAtomosElement)
 		if !ok {
@@ -157,7 +157,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 		}
 		return elem.Spawn(s, dataT)
 	}
-	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error {
+	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForSpawn) *Error {
 		argT, _ := arg.(*ForTestSpawnArg)
 		dataT, _ := data.(*ForTestData)
 		atom, ok := a.(ForTestAtomosAtom)

@@ -27,16 +27,16 @@ type CosmosNode interface {
 
 	// CosmosGetElementID 通过Element名称，获取一个Element的ID。
 	// Get the ID of an Element by Element name.
-	CosmosGetElementID(elem string, args ...go_atomos.ArgsForGet) (ID, *Error)
+	CosmosGetElementID(elem string, args ...ArgsForGet) (ID, *Error)
 
 	// CosmosGetAtomID 通过Element和Atom的名称获得某个Atom类型的Atom的引用。
 	// Get the reference of an Atom by Element and Atom name.
-	CosmosGetAtomID(elem, name string, args ...go_atomos.ArgsForGet) (ID, *IDTracker, *Error)
+	CosmosGetAtomID(elem, name string, args ...ArgsForGet) (ID, *IDTracker, *Error)
 
 	// CosmosSpawnAtom 启动某个Atom类型并命名和传入参数。
 	// Spawn an Atom with a naming and argument.
 	// TODO: 如果已经存在，是否应该返回，应该如何返回？
-	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...go_atomos.ArgsForSpawn) (ID, *IDTracker, *Error)
+	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForSpawn) (ID, *IDTracker, *Error)
 
 	// ElementBroadcast 对节点下所有的Element进行广播
 	// Broadcast to all Elements under the node
