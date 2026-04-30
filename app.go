@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"fmt"
@@ -13,13 +13,17 @@ const (
 	pidPerm = 0444
 
 	//UDSSocketPath = "/app.socket"
+	DefaultWorkingDirectoryPerm = 0664
 )
 
 type App struct {
 	config *Config
 
 	env     *appEnv
-	logging appLoggingIntf
+	logging appLogging
+}
+
+func NewCosmosNodeForEmbedded() {
 }
 
 func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, *Error) {
@@ -27,25 +31,24 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		return nil, NewErrorf(ErrRunnableConfigInvalid, "App: Args is invalid.").AddStack(nil)
 	}
 	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
-	if err := ensureDirectory(wd); err != nil {
+	if err := UtilFileEnsureDirectory(wd, DefaultWorkingDirectoryPerm, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Join log, run, etc path with os separator.
 	logPath := path.Join(wd, "log")
 	runPath := path.Join(wd, "run")
 	etcPath := path.Join(wd, "etc")
-	if err := ensureDirectory(logPath); err != nil {
+	if err := UtilFileEnsureDirectory(logPath, DefaultWorkingDirectoryPerm, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := ensureDirectory(runPath); err != nil {
+	if err := UtilFileEnsureDirectory(runPath, DefaultWorkingDirectoryPerm, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := ensureDirectory(etcPath); err != nil {
+	if err := UtilFileEnsureDirectory(etcPath, DefaultWorkingDirectoryPerm, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Open Log.
-	logMaxSize := defaultLogMaxSize
-	logging, err := NewAppLogging(logPath, logMaxSize)
+	logging, err := NewAppLoggingToFile(logPath, 0, AppLoggingAutoCleanupOff, nil)
 	if err != nil {
 		err = err.AddStack(nil)
 		return nil, err.AddStack(nil)
@@ -59,7 +62,7 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		Node:           node,
 		LogLevel:       logLevel,
 		LogPath:        logPath,
-		LogMaxSize:     int64(logMaxSize),
+		LogMaxSize:     logging.logFileMaxSize,
 		WorkingPath:    wd,
 		BuildPath:      "",
 		BinPath:        os.Args[0],
@@ -93,9 +96,9 @@ func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable)
 	// Open Log.
 	logSize := int(conf.LogMaxSize)
 	if logSize == 0 {
-		logSize = defaultLogMaxSize
+		logSize = AppLoggingDefaultMaxSize
 	}
-	logging, err := NewAppLogging(conf.LogPath, logSize)
+	logging, err := NewAppLoggingToFile(conf.LogPath, 0, AppLoggingAutoCleanupOff, nil)
 	if err != nil {
 		err = err.AddStack(nil)
 		return nil, err.AddStack(nil)
@@ -185,8 +188,8 @@ func (a *App) ForkAppProcess() *Error {
 
 	a.env.env = os.Environ()
 	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAppKey(), "1"))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.getCurAccessLogName()))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.getCurErrorLogName()))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey())) //, a.logging.getCurAccessLogName()))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey()))  //, a.logging.getCurErrorLogName()))
 
 	// Fork Process
 	attr := &os.ProcAttr{
@@ -231,20 +234,4 @@ func (a *App) ExitApp() {
 
 func (a *App) WaitExitApp() <-chan bool {
 	return a.env.exitCh
-}
-
-// Utils
-
-func ensureDirectory(path string) *Error {
-	pathStat, er := os.Stat(path)
-	if os.IsNotExist(er) {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Create working directory failed. err=(%v)", err).AddStack(nil)
-		}
-	} else {
-		if !pathStat.IsDir() {
-			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Working directory is not a directory. path=(%s)", path).AddStack(nil)
-		}
-	}
-	return nil
 }

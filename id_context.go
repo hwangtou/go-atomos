@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"strings"
@@ -29,6 +29,12 @@ func (f *atomosIDContextLocal) FromCallChain() []string {
 	return f.context.IdChain
 }
 
+// isLoop
+// 检测调用链是否存在死锁
+// 1. 如果是spawn调用，直接返回
+// 2. 如果是call调用，检查调用链是否存在死锁
+// 2.1 交叉调用，检查调用链是否存在死锁
+// 2.2 自调用，检查调用链是否存在死锁
 func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, isSpawn bool) (gID uint64, err *Error) {
 	f.atomos.mailbox.mutex.Lock()
 	defer f.atomos.mailbox.mutex.Unlock()
@@ -40,9 +46,17 @@ func (f *atomosIDContextLocal) isLoop(fromChain []string, callerID SelfID, isSpa
 		}
 	}
 	self := f.atomos.id.Info()
+	// 检查自调用
+	selfChain := f.context.GetIdChain()
 	for _, chain := range fromChain {
 		if chain == self {
 			return gID, NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", self, strings.Join(fromChain, "->")).AddStack(nil)
+		}
+		// 检查交叉调用
+		for _, selfChainID := range selfChain {
+			if chain == selfChainID {
+				return gID, NewErrorf(ErrAtomosIDCallLoop, "AtomosIDContext: Loop call detected. target=(%s),chain=(%s)", self, strings.Join(fromChain, "->")).AddStack(nil)
+			}
 		}
 	}
 	return gID, nil

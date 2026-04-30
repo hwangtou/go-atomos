@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"context"
@@ -74,16 +74,16 @@ const (
 
 // newCosmosProcess 创建进程
 // 该函数只能被InitCosmosProcess调用。
-func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging) (*CosmosProcess, *Error) {
+func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ...any) (*CosmosProcess, *Error) {
 	process := &CosmosProcess{}
-	if err := process.init(cosmosName, cosmosNode, logging); err != nil {
+	if err := process.init(cosmosName, cosmosNode, logging, args...); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	return process, nil
 }
 
 // init 初始化进程
-func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging) *Error {
+func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, args ...any) *Error {
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}
 
@@ -99,6 +99,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging) 
 	p.local = &CosmosLocal{
 		process:  p,
 		runnable: nil,
+		args:     args,
 		atomos:   nil,
 		mutex:    sync.RWMutex{},
 		elements: map[string]*ElementLocal{},
@@ -656,8 +657,9 @@ func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTrack
 	haltedHook := runnable.haltedHook
 
 	// For less log.
-	if state := atomic.LoadInt32(&p.state); CosmosProcessState(state) != CosmosProcessStateStartup {
-		p.local.Log().coreError("Tracker: Halted. id=(%s),err=(%v)", id.Info(), err)
+	state := atomic.LoadInt32(&p.state)
+	if CosmosProcessState(state) == CosmosProcessStatePrepare || CosmosProcessState(state) == CosmosProcessStateHalted {
+		p.local.Log().coreError("Tracker: ID Halted but process is not running. id=(%s),err=(%v)", id.Info(), err)
 	}
 	if haltedHook != nil {
 		exporter := mt.Export()

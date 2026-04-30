@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 
 func TestCosmosMain(t *testing.T) {
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+	if _, err := SharedCosmosProcess().start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}

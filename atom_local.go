@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"container/list"
@@ -108,8 +108,9 @@ func (a *AtomLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, name, false, timeout, in)
+func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, in proto.Message, args ...any) (out proto.Message, err *Error) {
+	cosmosArgs := handleArgs(a.element.cosmosLocal, args)
+	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, name, false, time.Duration(cosmosArgs.TimeoutInNano), in)
 	if err != nil {
 		err = err.AddStack(a)
 	}
@@ -118,8 +119,9 @@ func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout ti
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(proto.Message, *Error)) {
-	a.atomos.PushAsyncMessageMail(callerID, a, name, timeout, in, callback)
+func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, in proto.Message, callback func(proto.Message, *Error), args ...any) {
+	cosmosArgs := handleArgs(a.element.cosmosLocal, args)
+	a.atomos.PushAsyncMessageMail(callerID, a, name, time.Duration(cosmosArgs.TimeoutInNano), in, callback)
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -149,8 +151,9 @@ func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 	return nil
 }
 
-func (a *AtomLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	if err := a.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole); err != nil {
+func (a *AtomLocal) SendWormhole(callerID SelfID, wormhole AtomosWormhole, args ...any) *Error {
+	cosmosArgs := handleArgs(a.element.cosmosLocal, args)
+	if err := a.atomos.PushWormholeMailAndWaitReply(callerID, time.Duration(cosmosArgs.TimeoutInNano), wormhole); err != nil {
 		return err.AddStack(a)
 	}
 	return nil
@@ -363,7 +366,7 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
-func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (a *AtomLocal) OnStopping(from ID, cancelled []uint64, args ...any) (err *Error) {
 	var save bool
 	var data proto.Message
 	defer func() {
@@ -389,7 +392,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		}
 		a.element.elementAtomStopping(a)
 	}()
-	save, data = a.atomos.GetInstance().Halt(from, cancelled)
+	save, data = a.atomos.GetInstance().Halt(from, cancelled, args...)
 	if !save {
 		return nil
 	}
@@ -413,7 +416,7 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
-	if err = atomPersistence.SetAtomData(a.atomos.id.Atom, data); err != nil {
+	if err = atomPersistence.SetAtomData(a.atomos.id.Atom, data, args...); err != nil {
 		a.Log().Fatal("Atom: Stopping save data error. id=(%s),element=(%+v),data=(%v),err=(%v)", a.atomos.GetIDInfo().Info(), a.element, data, err)
 		return err.AddStack(a, data)
 	}
@@ -427,7 +430,7 @@ func (a *AtomLocal) OnIDsReleased() {
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message, args ...any) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -460,7 +463,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 		atomPersistence := persistence.AtomAutoData()
 		if atomPersistence != nil {
 			name := a.atomos.id.Atom
-			data, err = atomPersistence.GetAtomData(name)
+			data, err = atomPersistence.GetAtomData(name, args...)
 			if err != nil {
 				return err.AddStack(a)
 			}
@@ -469,7 +472,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 			}
 		}
 	}
-	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
+	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...); err != nil {
 		return err.AddStack(a)
 	}
 	return nil

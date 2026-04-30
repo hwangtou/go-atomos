@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"context"
@@ -158,6 +158,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			} else {
 				if oldElem, has := c.elements[elemName]; has {
 					oldElem.setDisable()
+					// TODO: Notified the element is removed.
 				} else {
 					c.elements[elemName] = newElementRemote(c, newInfo, e.Interface, version)
 				}
@@ -276,7 +277,7 @@ func (c *CosmosRemote) IdleTime() time.Duration {
 	return time.Duration(rsp.IdleTime)
 }
 
-func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
+func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, in proto.Message, args ...any) (out proto.Message, err *Error) {
 	if callerID == nil {
 		return nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: SyncMessagingByName without fromID.").AddStack(nil)
 	}
@@ -290,7 +291,9 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		}
 	}
 
-	client, ctx, cancel, err := c.getCurrentClientWithTimeout(timeout)
+	cosmosArgs := handleArgs(c.process.local, args)
+
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(time.Duration(cosmosArgs.TimeoutInNano))
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
@@ -304,10 +307,10 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:      toIDInfo,
-		Timeout: int64(timeout),
-		Message: name,
-		Args:    arg,
+		To:         toIDInfo,
+		CosmosArgs: cosmosArgs,
+		Message:    name,
+		Args:       arg,
 	})
 	if er != nil {
 		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -324,7 +327,7 @@ func (c *CosmosRemote) SyncMessagingByName(callerID SelfID, name string, timeout
 	return out, err
 }
 
-func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
+func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, in proto.Message, callback func(out proto.Message, err *Error), args ...any) {
 	if callerID == nil {
 		if callback != nil {
 			callback(nil, NewError(ErrFrameworkIncorrectUsage, "CosmosRemote: AsyncMessagingByName without fromID.").AddStack(nil))
@@ -346,7 +349,9 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 		}
 	}
 
-	client, ctx, cancel, err := c.getCurrentClientWithTimeout(timeout)
+	cosmosArgs := handleArgs(c.process.local, args)
+
+	client, ctx, cancel, err := c.getCurrentClientWithTimeout(time.Duration(cosmosArgs.TimeoutInNano))
 	if err != nil {
 		if callback != nil {
 			callback(nil, err.AddStack(nil))
@@ -368,11 +373,11 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID SelfID, name string, timeou
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
 				},
-				To:        toIDInfo,
-				Timeout:   int64(timeout),
-				NeedReply: needReply,
-				Message:   name,
-				Args:      arg,
+				To:         toIDInfo,
+				CosmosArgs: cosmosArgs,
+				NeedReply:  needReply,
+				Message:    name,
+				Args:       arg,
 			})
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "CosmosRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -406,7 +411,7 @@ func (c *CosmosRemote) Kill(_ SelfID, _ time.Duration) *Error {
 	return NewError(ErrCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
+func (c *CosmosRemote) SendWormhole(_ SelfID, _ AtomosWormhole, _ ...any) *Error {
 	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosRemote: Cannot send wormhole to remote.").AddStack(nil)
 }
 
@@ -432,7 +437,7 @@ func (c *CosmosRemote) CosmosIsLocal() bool {
 	return false
 }
 
-func (c *CosmosRemote) CosmosGetElementID(elem string) (ID, *Error) {
+func (c *CosmosRemote) CosmosGetElementID(elem string, args ...any) (ID, *Error) {
 	id, err := c.getElement(elem)
 	if err != nil {
 		return nil, err.AddStack(nil)
@@ -440,24 +445,24 @@ func (c *CosmosRemote) CosmosGetElementID(elem string) (ID, *Error) {
 	return id, nil
 }
 
-func (c *CosmosRemote) CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...any) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	id, tracker, err := element.GetAtomID(name, nil, false)
+	id, tracker, err := element.GetAtomID(name, nil, false, args...)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
 	return id, tracker, nil
 }
 
-func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message string, timeout time.Duration, args proto.Message) (id ID, tracker *IDTracker, err *Error) {
+func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message string, arg proto.Message, args ...any) (id ID, tracker *IDTracker, err *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	id, tracker, err = element.ScaleGetAtomID(callerID, message, timeout, args, nil, false)
+	id, tracker, err = element.ScaleGetAtomID(callerID, message, arg, nil, false, args...)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
@@ -467,12 +472,12 @@ func (c *CosmosRemote) CosmosGetScaleAtomID(callerID SelfID, elem, message strin
 	return id, tracker, nil
 }
 
-func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...any) (ID, *IDTracker, *Error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err
 	}
-	id, tracker, err := element.SpawnAtom(callerID, name, arg, nil, false)
+	id, tracker, err := element.SpawnAtom(callerID, name, arg, nil, false, args...)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}

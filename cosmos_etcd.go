@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -230,10 +231,8 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				if !muteKeepaliveLog {
 					p.local.Log().coreInfo("etcd: Watcher keepalive.")
 				}
-				p.mutex.Lock()
-				state := p.state
-				p.mutex.Unlock()
-				if state >= CosmosProcessStateShutdown {
+				state := CosmosProcessState(atomic.LoadInt32(&p.state))
+				if state >= CosmosProcessStateShuttingDown {
 					p.local.Log().coreInfo("etcd: Watcher keepalive stopped. state=(%v)", state)
 					return
 				}
@@ -290,7 +289,7 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
-		p.local.Log().coreInfo("etcd: Watcher stopped.")
+		defer p.local.Log().coreInfo("etcd: Watcher stopped.")
 		for {
 			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
 			for watchResp := range watchCh {

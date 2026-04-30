@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"sync"
@@ -12,7 +12,7 @@ func TestElementLocalBase(t *testing.T) {
 	var messages int
 
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+	if _, err := SharedCosmosProcess().start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}
@@ -166,7 +166,7 @@ func TestElementLocalBase(t *testing.T) {
 
 func TestElementLocal_SpawnConditions(t *testing.T) {
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+	if _, err := SharedCosmosProcess().start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}
@@ -232,7 +232,7 @@ func TestElementLocal_SpawnConditions(t *testing.T) {
 
 func TestElementLocalScaleID(t *testing.T) {
 	initTestFakeCosmosProcess(t)
-	if err := SharedCosmosProcess().Start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
+	if _, err := SharedCosmosProcess().start(newTestFakeRunnable(t, sharedCosmosProcess, false)); err != nil {
 		t.Errorf("CosmosLocal: Start failed. err=(%v)", err)
 		return
 	}

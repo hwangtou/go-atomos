@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -32,10 +32,10 @@ type ID interface {
 
 	// SyncMessagingByName 同步调用
 	// Sync call
-	SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error)
+	SyncMessagingByName(callerID SelfID, name string, in proto.Message, args ...any) (out proto.Message, err *Error)
 	// AsyncMessagingByName 异步调用
 	// Async call
-	AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error))
+	AsyncMessagingByName(callerID SelfID, name string, in proto.Message, callback func(out proto.Message, err *Error), args ...any)
 
 	// DecoderByName 获得某个消息的解码器
 	// Get decoder of a message
@@ -48,7 +48,7 @@ type ID interface {
 	// SendWormhole
 	// 发送Wormhole消息。
 	// Send Wormhole message.
-	SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error
+	SendWormhole(callerID SelfID, wormhole AtomosWormhole, args ...any) *Error
 
 	// Internal
 

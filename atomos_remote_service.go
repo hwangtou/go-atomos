@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"context"
@@ -61,6 +61,8 @@ func (a *atomosRemoteService) ScaleGetAtomID(_ context.Context, req *CosmosRemot
 			}
 		}
 
+		cosmosArgs := parseArgs(req.CosmosArgs)
+
 		// Get element.
 		elem, err := a.process.local.getLocalElement(req.To.Element)
 		if err != nil {
@@ -69,7 +71,7 @@ func (a *atomosRemoteService) ScaleGetAtomID(_ context.Context, req *CosmosRemot
 		}
 
 		// Get atom.
-		atom, _, err := elem.ScaleGetAtomID(callerID, req.Message, time.Duration(req.Timeout), in, nil, false)
+		atom, _, err := elem.ScaleGetAtomID(callerID, req.Message, in, nil, false, cosmosArgs...)
 		if err != nil {
 			rsp.Error = err.AddStack(a.process.local)
 			return rsp, nil
@@ -92,6 +94,9 @@ func (a *atomosRemoteService) GetAtomID(_ context.Context, req *CosmosRemoteGetA
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteGetAtomIDRsp{}
+
+	cosmosArgs := parseArgs(req.CosmosArgs)
+
 	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Element)
 	if err != nil {
@@ -99,7 +104,7 @@ func (a *atomosRemoteService) GetAtomID(_ context.Context, req *CosmosRemoteGetA
 		return rsp, nil
 	}
 	// Get atom.
-	atom, _, err := elem.GetAtomID(req.Atom, nil, false)
+	atom, _, err := elem.GetAtomID(req.Atom, nil, false, cosmosArgs...)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
@@ -202,7 +207,9 @@ func (a *atomosRemoteService) SpawnAtom(_ context.Context, req *CosmosRemoteSpaw
 		}
 	}
 
-	atom, _, err := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
+	cosmosArgs := parseArgs(req.CosmosArgs)
+
+	atom, _, err := elem.SpawnAtom(callerID, req.Atom, in, nil, false, cosmosArgs...)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
@@ -268,7 +275,7 @@ func (a *atomosRemoteService) SyncMessagingByName(_ context.Context, req *Cosmos
 		}
 
 		// Sync messaging.
-		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, false, time.Duration(req.Timeout), in)
+		out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, false, time.Duration(req.CosmosArgs.TimeoutInNano), in)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -332,7 +339,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 
 		// Async messaging.
 		if req.NeedReply {
-			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, true, time.Duration(req.Timeout), in)
+			out, err := id.getAtomos().PushMessageMailAndWaitReply(callerID, req.Message, true, time.Duration(req.CosmosArgs.TimeoutInNano), in)
 			if out != nil {
 				rsp.Reply, _ = anypb.New(out)
 			}
@@ -340,7 +347,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 				rsp.Error = err.AddStack(a.process.local)
 			}
 		} else {
-			id.getAtomos().PushAsyncMessageMail(callerID, id, req.Message, time.Duration(req.Timeout), in, nil)
+			id.getAtomos().PushAsyncMessageMail(callerID, id, req.Message, time.Duration(req.CosmosArgs.TimeoutInNano), in, nil)
 		}
 		return rsp, nil
 	default:
@@ -366,14 +373,17 @@ func (a *atomosRemoteService) KillAtom(_ context.Context, req *CosmosRemoteKillA
 	if callerID != nil {
 		defer callerID.callerCounterRelease()
 	}
+
+	cosmosArgs := parseArgs(req.CosmosArgs)
+
 	// Get atom.
-	atom, _, err := elem.GetAtomID(req.Id.Atom, nil, false)
+	atom, _, err := elem.GetAtomID(req.Id.Atom, nil, false, cosmosArgs...)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 		return rsp, nil
 	}
 	// Kill atom.
-	err = atom.Kill(callerID, time.Duration(req.Timeout))
+	err = atom.Kill(callerID, time.Duration(req.CosmosArgs.TimeoutInNano))
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
 	}

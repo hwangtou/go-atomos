@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -30,7 +30,7 @@ type AtomosHolder interface {
 
 	// OnStopping
 	// 停止中
-	OnStopping(from ID, cancelled []uint64) *Error
+	OnStopping(from ID, cancelled []uint64, args ...any) *Error
 
 	// OnIDsReleased
 	// 释放了所有ID
@@ -557,7 +557,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 		return
 	}
 	if state != AtomosWaiting {
-		a.log.logging.pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. atomos=(%v)", a)
+		a.log.logging.pushFrameworkErrorLog("Atomos: onStop meets non-waiting status. state=(%v)", state)
 	}
 
 	a.setStopping(killMail.mail().fromCallChain)
@@ -607,7 +607,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 				// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 				// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 				// but it's impossible to add task after locking.
-				a.log.Fatal("Atomos: Stopping task mails have been sent after start closing. id=(%s),mail=(%+v)", a.String(), remainMail)
+				a.log.Warn("Atomos: Stopping task mails have been sent after start closing. id=(%s),mail=(%+v)", a.String(), remainMail)
 				if err := a.task.cancelTask(remainMail.id, nil); err == nil {
 					cancels = append(cancels, remainMail.id)
 				}
@@ -625,8 +625,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 		}(remainMail)
 	}
 
+	// Halting argument.
+	args := a.process.local.getArgs()
+
 	// Handle Kill and Reply Kill.
-	err = a.holder.OnStopping(killMail.mail().from, cancels)
+	err = a.holder.OnStopping(killMail.mail().from, cancels, args...)
 	if err != nil {
 		err = err.AddStack(nil)
 	}

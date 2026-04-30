@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -77,5 +77,5 @@ type IOMessageDecoder struct {
 	OutDec MessageDecoder
 }
 type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
-type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *Error
-type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...any) *Error
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...any) *Error

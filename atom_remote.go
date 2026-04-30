@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -77,7 +77,7 @@ func (a *AtomRemote) IdleTime() time.Duration {
 	return time.Duration(rsp.IdleTime)
 }
 
-func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
+func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, in proto.Message, args ...any) (out proto.Message, err *Error) {
 	if callerID == nil {
 		return nil, NewError(ErrFrameworkIncorrectUsage, "AtomRemote: SyncMessagingByName without fromID.").AddStack(nil)
 	}
@@ -91,7 +91,9 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		}
 	}
 
-	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(timeout)
+	cosmosArgs := handleArgs(a.element.cosmos.process.local, args)
+
+	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(time.Duration(cosmosArgs.TimeoutInNano))
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
@@ -105,10 +107,10 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		To:      toIDInfo,
-		Timeout: int64(timeout),
-		Message: name,
-		Args:    arg,
+		To:         toIDInfo,
+		CosmosArgs: cosmosArgs,
+		Message:    name,
+		Args:       arg,
 	}
 	rsp, er := client.SyncMessagingByName(ctx, req)
 	if er != nil {
@@ -126,7 +128,7 @@ func (a *AtomRemote) SyncMessagingByName(callerID SelfID, name string, timeout t
 	return out, err
 }
 
-func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(out proto.Message, err *Error)) {
+func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, in proto.Message, callback func(out proto.Message, err *Error), args ...any) {
 	if callerID == nil {
 		if callback != nil {
 			callback(nil, NewError(ErrFrameworkIncorrectUsage, "AtomRemote: AsyncMessagingByName without fromID.").AddStack(nil))
@@ -148,7 +150,9 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 		}
 	}
 
-	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(timeout)
+	cosmosArgs := handleArgs(a.element.cosmos.process.local, args)
+
+	client, ctx, cancel, err := a.element.cosmos.getCurrentClientWithTimeout(time.Duration(cosmosArgs.TimeoutInNano))
 	if err != nil {
 		if callback != nil {
 			callback(nil, err.AddStack(nil))
@@ -170,11 +174,11 @@ func (a *AtomRemote) AsyncMessagingByName(callerID SelfID, name string, timeout 
 				CallerContext: &IDContextInfo{
 					IdChain: []string{},
 				},
-				To:        toIDInfo,
-				Timeout:   int64(timeout),
-				NeedReply: needReply,
-				Message:   name,
-				Args:      arg,
+				To:         toIDInfo,
+				CosmosArgs: cosmosArgs,
+				NeedReply:  needReply,
+				Message:    name,
+				Args:       arg,
 			})
 			if er != nil {
 				return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SyncMessagingByName reply error. rsp=(%v),err=(%v)", rsp, er).AddStack(nil)
@@ -222,13 +226,15 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 	}
 	defer cancel()
 
+	cosmosArgs := handleArgs(a.element.cosmos.process.local, []any{ArgTimeout(timeout)})
+
 	rsp, er := client.KillAtom(ctx, &CosmosRemoteKillAtomReq{
 		CallerId: callerID.GetIDInfo(),
 		CallerContext: &IDContextInfo{
 			IdChain: append(callerID.GetIDContext().FromCallChain(), callerID.GetIDInfo().Info()),
 		},
-		Id:      a.context.info,
-		Timeout: int64(timeout),
+		Id:         a.context.info,
+		CosmosArgs: cosmosArgs,
 	})
 	if er != nil {
 		return NewError(ErrCosmosRemoteResponseInvalid, "AtomRemote: KillAtom response error.").AddStack(nil)
@@ -240,7 +246,7 @@ func (a *AtomRemote) Kill(callerID SelfID, timeout time.Duration) *Error {
 	return nil
 }
 
-func (a *AtomRemote) SendWormhole(_ SelfID, _ time.Duration, _ AtomosWormhole) *Error {
+func (a *AtomRemote) SendWormhole(_ SelfID, _ AtomosWormhole, _ ...any) *Error {
 	return NewErrorf(ErrAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 

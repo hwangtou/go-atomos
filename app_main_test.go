@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -34,7 +34,7 @@ var self SelfID
 func testInitWebSocketConnsManager(t *testing.T) {
 	testRunnable := CosmosRunnable{}
 	testRunnable.
-		AddElementImplementation(GetTestImplement(&tDev{})).SetElementSpawn(TestName).
+		AddElementImplementation(GetTestImplement(&tDev{}), true).SetElementSpawn(TestName).
 		SetConfig(&Config{Cosmos: testCosmos, Node: testNode1, LogLevel: LogLevel_Debug}).
 		SetMainScript(&s)
 	MainForTest(testRunnable, t)
@@ -88,12 +88,12 @@ func (t *tElem) String() string {
 	return t.self.String()
 }
 
-func (t *tElem) Spawn(self ElementSelfID, data *Nil) *Error {
+func (t *tElem) Spawn(self ElementSelfID, data *Nil, args ...any) *Error {
 	t.self = self
 	return nil
 }
 
-func (t *tElem) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+func (t *tElem) Halt(from ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	return false, nil
 }
 
@@ -117,12 +117,12 @@ func (t *tAtom) String() string {
 	return t.self.String()
 }
 
-func (t *tAtom) Spawn(self AtomSelfID, arg *Nil, data *Nil) *Error {
+func (t *tAtom) Spawn(self AtomSelfID, arg *Nil, data *Nil, args ...any) *Error {
 	t.self = self
 	return nil
 }
 
-func (t *tAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+func (t *tAtom) Halt(from ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	return false, nil
 }
 
@@ -147,7 +147,7 @@ const TestName = "Test"
 
 type TestElement interface {
 	Atomos
-	Spawn(self ElementSelfID, data *Nil) *Error
+	Spawn(self ElementSelfID, data *Nil, args ...any) *Error
 
 	Message(from ID, in *String) (out *Strings, err *Error)
 
@@ -163,7 +163,7 @@ type TestAtom interface {
 	Atomos
 
 	// Atom
-	Spawn(self AtomSelfID, arg *Nil, data *Nil) *Error
+	Spawn(self AtomSelfID, arg *Nil, data *Nil, args ...any) *Error
 
 	AtomMessage(from ID, in *String) (out *Strings, err *Error)
 
@@ -336,22 +336,22 @@ func GetTestImplement(dev ElementDeveloper) *ElementImplementation {
 }
 func GetTestInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(TestName, dev)
-	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message) *Error {
+	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...any) *Error {
 		dataT, _ := data.(*Nil)
 		elem, ok := a.(TestElement)
 		if !ok {
 			return NewErrorf(ErrElementNotImplemented, "Element not implemented, type=(TestElement)")
 		}
-		return elem.Spawn(s, dataT)
+		return elem.Spawn(s, dataT, args...)
 	}
-	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error {
+	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...any) *Error {
 		argT, _ := arg.(*Nil)
 		dataT, _ := data.(*Nil)
 		atom, ok := a.(TestAtom)
 		if !ok {
 			return NewErrorf(ErrAtomNotImplemented, "Atom not implemented, type=(TestAtom)")
 		}
-		return atom.Spawn(s, argT, dataT)
+		return atom.Spawn(s, argT, dataT, args...)
 	}
 	elem.ElementDecoders = map[string]*IOMessageDecoder{
 		"Message":      testElementMessengerValue.Message().Decoder(&String{}, &Strings{}),

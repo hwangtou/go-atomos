@@ -19,13 +19,13 @@ func (e *element) String() string {
 	return e.self.String()
 }
 
-func (e *element) Spawn(self atomos.ElementSelfID, data *api.HAEData) *atomos.Error {
+func (e *element) Spawn(self atomos.ElementSelfID, data *api.HAEData, args ...any) *atomos.Error {
 	e.self = self
 	e.data = data
 	return nil
 }
 
-func (e *element) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.Message) {
+func (e *element) Halt(from atomos.ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	return false, nil
 }
 

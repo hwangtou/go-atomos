@@ -1,13 +1,12 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/grpc/connectivity"
-	"strings"
 	"testing"
 	"time"
 )
 
-func TestSimulateTwoCosmosNode_IDContextLoopDectect(t *testing.T) {
+func TestSimulateTwoCosmosNode_IDContextLoopDetect(t *testing.T) {
 	// 两个节点的模拟
 	// Simulate two nodes
 
@@ -333,10 +332,10 @@ func TestSimulateUpgradeCosmosNode(t *testing.T) {
 		<-time.After(1 * time.Second)
 	}()
 	<-time.After(5 * time.Millisecond)
-	if c1Old.state != CosmosProcessStateOff {
+	if CosmosProcessState(c1Old.state) != CosmosProcessStateHalted {
 		t.Fatal("c1Old.state != CosmosProcessStateOff")
 	}
-	if c1New.state != CosmosProcessStateRunning {
+	if CosmosProcessState(c1New.state) != CosmosProcessStateRunning {
 		t.Fatal("c1New.state != CosmosProcessStateOn")
 	}
 
@@ -586,24 +585,20 @@ func TestSimulateTwoCosmosNodeRPC(t *testing.T) {
 	}
 }
 
-func simulateCosmosNode(t *testing.T, cosmosName, cosmosNode string) *CosmosProcess {
-	al, el := getLogger(t)
-	process, err := newCosmosProcess(cosmosName, cosmosNode, al, el)
+func simulateCosmosNode(t *testing.T, cosmosName, cosmosNode string, args ...any) *CosmosProcess {
+	args = append(args, t)
+	process, err := newCosmosProcess(cosmosName, cosmosNode, getLogger(t), args...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := process.Start(getRunnable(t, process, cosmosName, cosmosNode)); err != nil {
+	if _, err := process.start(getRunnable(t, process, cosmosName, cosmosNode)); err != nil {
 		t.Fatal(err)
 	}
 	return process
 }
 
-func getLogger(t *testing.T) (loggingFn, loggingFn) {
-	return func(s string) {
-			t.Log(strings.TrimSuffix(s, "\n"))
-		}, func(s string) {
-			t.Error(strings.TrimSuffix(s, "\n"))
-		}
+func getLogger(t *testing.T) appLogging {
+	return &appLoggingForTest{t: t}
 }
 
 func getRunnable(t *testing.T, process *CosmosProcess, cosmosName, cosmosNode string) *CosmosRunnable {
@@ -627,8 +622,8 @@ func getRunnable(t *testing.T, process *CosmosProcess, cosmosName, cosmosNode st
 			},
 			Customize: nil,
 		}).
-		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, process, false)).
+		//SetMainScript(&testMainScript{t: t}).
+		AddElementImplementation(newTestFakeElement(t, process, false), true).
 		SetElementSpawn("testElement")
 	return runnable
 }

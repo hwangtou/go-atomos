@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -52,11 +52,12 @@ type AutoData interface {
 	ElementAutoData() ElementAutoData
 }
 
-// AutoDataLoader
+// DevLoader
+// AutoDataLoader -> DevLoader
 // 自动数据持久化的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
 // Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
-type AutoDataLoader interface {
-	Load(self ElementSelfID, config map[string][]byte) *Error
+type DevLoader interface {
+	Load(self ElementSelfID, config map[string][]byte, args ...any) *Error
 	Unload() *Error
 }
 
@@ -68,12 +69,12 @@ type AtomAutoData interface {
 	// GetAtomData
 	// Atom数据的Getter，没有数据时error应该返回nil。
 	// Getter of Atom data, if no data, error should return nil.
-	GetAtomData(name string) (proto.Message, *Error)
+	GetAtomData(name string, args ...any) (proto.Message, *Error)
 
 	// SetAtomData
 	// Atom数据的Setter，保存Atom。
 	// Setter of Atom data, save Atom.
-	SetAtomData(name string, data proto.Message) *Error
+	SetAtomData(name string, data proto.Message, args ...any) *Error
 }
 
 // ElementAutoData
@@ -83,12 +84,12 @@ type ElementAutoData interface {
 	// GetElementData
 	// Element数据的Getter，没有数据时error应该返回nil。
 	// Getter of Element data, if no data, error should return nil.
-	GetElementData() (proto.Message, *Error)
+	GetElementData(args ...any) (proto.Message, *Error)
 
 	// SetElementData
 	// Element数据的Setter。
 	// Setter of Element data.
-	SetElementData(data proto.Message) *Error
+	SetElementData(data proto.Message, args ...any) *Error
 }
 
 // 按需实现的接口：生命周期相关

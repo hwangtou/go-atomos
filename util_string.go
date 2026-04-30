@@ -1,8 +1,9 @@
-package go_atomos
+package atomos
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"hash"
 	"math/rand"
 	"sync"
@@ -59,4 +60,12 @@ func (u *UtilStringHashGenerator) Gen(content string) (string, *Error) {
 	hashString := hex.EncodeToString(hashBytes)
 	u.hash.Reset()
 	return hashString, nil
+}
+
+func (u *UtilStringHashGenerator) GenAny(content any) (string, *Error) {
+	buf, er := json.Marshal(content)
+	if er != nil {
+		return "", NewErrorf(ErrUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to marshal content. err=(%v)", er).AddStack(nil)
+	}
+	return u.Gen(string(buf))
 }

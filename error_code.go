@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 const (
 	OK = iota
@@ -23,6 +23,9 @@ const (
 	ErrAppEnvLoggingPathInvalid        = 18
 	ErrAppEnvLoggingFileOpenFailed     = 19
 	ErrAppEnvCreateWorkDirFailed       = 20
+	ErrAppEnvLoggingFileWriteFailed    = 21
+	ErrAppEnvLoggingFileCloseFailed    = 22
+	ErrAppEnvLoggingRedirectFailed     = 23
 
 	// Cosmos Runnable 31-40
 
@@ -46,8 +49,8 @@ const (
 
 	// Cosmos Process Life Cycle 61-80
 
-	ErrCosmosProcessHasNotInitialized       = 61
-	ErrCosmosProcessHasBeenStarted          = 62
+	ErrCosmosProcessIsNotInPrepareState     = 61
+	ErrCosmosProcessIsNotInStartUpState     = 62
 	ErrCosmosProcessOnStartupPanic          = 63
 	ErrCosmosProcessOnShutdownPanic         = 64
 	ErrCosmosProcessCannotStopPrepareState  = 65
@@ -128,4 +131,8 @@ const (
 	ErrUtilFileChangeOwnerAndModeFailed     = 210
 	ErrUtilFileConfirmOwnerAndModeFailed    = 211
 	ErrUtilCreateFileFailed                 = 212
+	ErrUtilFileEnsureDirectoryFailed        = 213
+	ErrUtilFileFileExistFailed              = 214
+	ErrUtilFileGetDirectorySizeFailed       = 215
+	ErrUtilStringHashSHA256Failed           = 216
 )

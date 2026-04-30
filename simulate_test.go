@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -35,23 +35,19 @@ func clearTest() {
 }
 
 func initTestFakeCosmosProcess(t *testing.T) {
-	accessLog := func(s string) { t.Logf(s) }
-	errorLog := func(s string) { t.Logf(s) }
-	InitCosmosProcess("testNode", "testElement", accessLog, errorLog)
+	InitCosmosProcess("testNode", "testElement", &appLoggingForTest{t: t}, t)
 }
 
 func initTestFakeCosmosProcessBenchmark(b *testing.B) {
-	accessLog := func(s string) { b.Logf(s) }
-	errorLog := func(s string) { b.Logf(s) }
-	InitCosmosProcess("", "", accessLog, errorLog)
+	InitCosmosProcess("", "", &appLoggingForBenchmark{b: b}, b)
 }
 
 func newTestFakeRunnable(t *testing.T, process *CosmosProcess, autoData bool) *CosmosRunnable {
 	runnable := &CosmosRunnable{}
 	runnable.
 		SetConfig(newTestFakeCosmosMainConfig()).
-		SetMainScript(&testMainScript{t: t}).
-		AddElementImplementation(newTestFakeElement(t, process, autoData)).
+		//SetMainScript(&testMainScript{t: t}).
+		AddElementImplementation(newTestFakeElement(t, process, autoData), true).
 		SetElementSpawn("testElement")
 	return runnable
 }
@@ -76,15 +72,6 @@ func newTestFakeCosmosMainConfig() *Config {
 	}
 }
 
-func newTestAppLogging(t *testing.T) *appLogging {
-	logging, err := NewAppLogging("/tmp/test_atomos_app_logging", testLogMaxSize)
-	if err != nil {
-		t.Errorf("AppLogging: err=(%v)", err)
-		panic(err)
-	}
-	return logging
-}
-
 func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *ElementImplementation {
 	var dev ElementDeveloper
 	if autoData {
@@ -100,14 +87,14 @@ func newTestFakeElement(t *testing.T, process *CosmosProcess, autoData bool) *El
 				Version:  0,
 				Messages: nil,
 			},
-			ElementSpawner: func(s ElementSelfID, a Atomos, data proto.Message) *Error {
+			ElementSpawner: func(s ElementSelfID, a Atomos, data proto.Message, args ...any) *Error {
 				ta := a.(*testElement)
 				ta.t = t
 				ta.self = s
 				//t.Logf("ElementSpawner. data=(%v)", data)
 				return nil
 			},
-			AtomSpawner: func(self AtomSelfID, a Atomos, arg, data proto.Message) *Error {
+			AtomSpawner: func(self AtomSelfID, a Atomos, arg, data proto.Message, args ...any) *Error {
 				ta := a.(*testAtom)
 				ta.t = t
 				ta.self = self
@@ -771,7 +758,7 @@ func (t *testElementDev) ElementConstructor() Atomos {
 	return &testElement{}
 }
 
-func (t *testElementDev) Load(self ElementSelfID, config map[string][]byte) *Error {
+func (t *testElementDev) Load(self ElementSelfID, config map[string][]byte, args ...any) *Error {
 	if testElementLoadPanic {
 		panic("Test Element Load Panic")
 	}
@@ -800,7 +787,7 @@ func (t *testElementAutoDataDev) AtomAutoData() AtomAutoData {
 	return t
 }
 
-func (t *testElementAutoDataDev) GetAtomData(name string) (proto.Message, *Error) {
+func (t *testElementAutoDataDev) GetAtomData(name string, args ...any) (proto.Message, *Error) {
 	switch name {
 	case "get_data_error":
 		return nil, NewError(ErrFrameworkRecoverFromPanic, "").AddStack(nil)
@@ -810,7 +797,7 @@ func (t *testElementAutoDataDev) GetAtomData(name string) (proto.Message, *Error
 	return &String{S: name}, nil
 }
 
-func (t *testElementAutoDataDev) SetAtomData(name string, data proto.Message) *Error {
+func (t *testElementAutoDataDev) SetAtomData(name string, data proto.Message, args ...any) *Error {
 	switch name {
 	case "set_data_error":
 		return NewError(ErrFrameworkRecoverFromPanic, "").AddStack(nil)
@@ -827,7 +814,7 @@ func (t *testElementAutoDataDev) ElementAutoData() ElementAutoData {
 	return t
 }
 
-func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
+func (t *testElementAutoDataDev) GetElementData(args ...any) (proto.Message, *Error) {
 	if testElementGetDataError {
 		return nil, NewError(ErrFrameworkRecoverFromPanic, "Get Element Data Error").AddStack(nil)
 	}
@@ -837,7 +824,7 @@ func (t *testElementAutoDataDev) GetElementData() (proto.Message, *Error) {
 	return &String{S: "ElementData"}, nil
 }
 
-func (t *testElementAutoDataDev) SetElementData(data proto.Message) *Error {
+func (t *testElementAutoDataDev) SetElementData(data proto.Message, args ...any) *Error {
 	if testElementSetDataError {
 		return NewError(ErrFrameworkRecoverFromPanic, "Set Element Data Error").AddStack(nil).AddStack(nil)
 	}
@@ -895,7 +882,7 @@ func (t *testAtom) String() string {
 	return "testAtom"
 }
 
-func (t *testAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+func (t *testAtom) Halt(from ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
 	if t.self.GetIDInfo().Atom == "stopping_panic" {
 		panic("Halt panic")
@@ -959,7 +946,7 @@ func (t *testElement) String() string {
 	return "testElement"
 }
 
-func (t *testElement) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+func (t *testElement) Halt(from ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	//t.t.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
 	if testElementHaltPanic {
 		panic("Element Halt Panic")
