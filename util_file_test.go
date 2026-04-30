@@ -1,13 +1,75 @@
 package atomos
 
 import (
+	"io"
 	"os"
 	"path"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestUtilFileCreateFileThenCreateFileTruncate(t *testing.T) {
+	now := time.Now()
+	tmpTestFilepath := path.Join(os.TempDir(), "go-atomos-test-"+now.Format("20060102150405"))
+
+	defer func() {
+		// Clean up
+		if er := os.Remove(tmpTestFilepath); er != nil {
+			t.Fatalf("UtilFileCreateFile() cleanup = %v, want %v", er, nil)
+		}
+	}()
+
+	// Test create file truncate
+	f, er := os.OpenFile(tmpTestFilepath, os.O_CREATE|os.O_WRONLY, 0664)
+	if er != nil {
+		t.Fatalf("UtilFileCreateFile() setup = %v, want %v", er, nil)
+	}
+	f.Write([]byte("testdata"))
+	f.Close()
+
+	fTruncate, er := os.OpenFile(tmpTestFilepath, os.O_TRUNC, 0664)
+	if er != nil {
+		t.Fatalf("UtilFileCreateFile() = %v, want %v", er, nil)
+	}
+	bufTruncate, er := io.ReadAll(fTruncate)
+	if er != nil {
+		t.Fatalf("UtilFileCreateFile() = %v, want %v", er, nil)
+	}
+	if len(bufTruncate) != 0 {
+		t.Errorf("UtilFileCreateFile() = %v, want %v", string(bufTruncate), "")
+	}
+	fTruncate.Close()
+}
+
+func TestUtilFileCreateFileThenCreateFileExclusiveFailed(t *testing.T) {
+	now := time.Now()
+	tmpTestFilepath := path.Join(os.TempDir(), "go-atomos-test-"+now.Format("20060102150405"))
+
+	defer func() {
+		// Clean up
+		if er := os.Remove(tmpTestFilepath); er != nil {
+			t.Fatalf("UtilFileCreateFile() cleanup = %v, want %v", er, nil)
+		}
+	}()
+
+	// Test create file exclusive failed
+	f, er := os.OpenFile(tmpTestFilepath, os.O_CREATE|os.O_EXCL, 0664)
+	if er != nil {
+		t.Fatalf("UtilFileCreateFile() setup = %v, want %v", er, nil)
+	}
+	f.Close()
+
+	fExcl, er := os.OpenFile(tmpTestFilepath, os.O_CREATE|os.O_EXCL, 0664)
+	if er == nil {
+		t.Errorf("UtilFileCreateFile() = %v, want %v", er, "error")
+	}
+	if fExcl != nil {
+		t.Errorf("UtilFileCreateFile() = %v, want %v", fExcl, "error")
+	}
+}
 
 func TestUtilFileEnsureDirectory(t *testing.T) {
 	type args struct {

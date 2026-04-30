@@ -1,3 +1,5 @@
+//go:build !windows
+
 package atomos
 
 import (
@@ -13,6 +15,14 @@ import (
 const (
 	UtilFileEnsureDirectoryFilePerm = os.FileMode(0664)
 )
+
+type UtilFileMode struct {
+	Read, Write, Execute bool
+}
+
+//func UtilFileAccess(filepath string, perm os.FileMode) (err *Error) {
+//	panic("")
+//}
 
 func UtilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) *Error {
 	pathStat, er := os.Stat(dir)

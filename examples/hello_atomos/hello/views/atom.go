@@ -31,7 +31,7 @@ func (a *atom) String() string {
 	panic("implement me")
 }
 
-func (a *atom) Spawn(self atomos.AtomSelfID, arg *api.HASpawnArg, data *api.HAData) *atomos.Error {
+func (a *atom) Spawn(self atomos.AtomSelfID, arg *api.HASpawnArg, data *api.HAData, args ...any) *atomos.Error {
 	a.self = self
 	a.arg = arg
 	a.data = data
@@ -68,7 +68,7 @@ func (a *atom) Spawn(self atomos.AtomSelfID, arg *api.HASpawnArg, data *api.HADa
 	return nil
 }
 
-func (a *atom) Halt(from atomos.ID, cancelled []uint64) (save bool, data proto.Message) {
+func (a *atom) Halt(from atomos.ID, cancelled []uint64, args ...any) (save bool, data proto.Message) {
 	return false, nil
 }
 
@@ -234,7 +234,7 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			return nil, err.AddStack(a.self)
 		}
 		defer gotSelfID.Release()
-		err = gotSelfID.SendWormhole(a.self, 0, "WormholeSelfCallDeadlock")
+		err = gotSelfID.SendWormhole(a.self, "WormholeSelfCallDeadlock")
 		if err == nil || err.Code != atomos.ErrAtomosIDCallLoop {
 			return nil, atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
 		}
@@ -250,7 +250,7 @@ func (a *atom) DoTest(fromID atomos.ID, in *api.HADoTestI) (out *api.HADoTestO, 
 			return nil, err.AddStack(a.self)
 		}
 		defer gotSelfID.Release()
-		err = gotSelfID.SendWormhole(a.self, 0, "WormholeRingCallDeadlock")
+		err = gotSelfID.SendWormhole(a.self, "WormholeRingCallDeadlock")
 		if err != nil {
 			return nil, err.AddStack(a.self)
 		}
@@ -793,7 +793,7 @@ func (a *atom) AcceptWormhole(fromID atomos.ID, wormhole atomos.AtomosWormhole) 
 				return err.AddStack(a.self)
 			}
 			defer gotSelfID.Release()
-			err = gotSelfID.SendWormhole(a.self, 0, "WormholeRingCallDeadlock")
+			err = gotSelfID.SendWormhole(a.self, "WormholeRingCallDeadlock")
 			if err == nil || err.Code != atomos.ErrAtomosIDCallLoop {
 				return atomos.NewError(atomos.ErrAtomosIDCallLoop, "expect first sync call deadlock")
 			}

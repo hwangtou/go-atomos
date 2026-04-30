@@ -1,28 +1,47 @@
-package go_atomos
+package atomos
 
 import "google.golang.org/protobuf/proto"
 
-// 开发者需要实现的Atom的接口定义。
-// Atom Interface Definition that developers have to implement.
-
-// Atomos
-// Atomos类型
+// Atomos is the interface that every actor (both Element and Atom) must implement.
+// It defines the core lifecycle contract: an actor can be halted and must provide
+// a human-readable identity via String.
+//
+// Implementing Atomos
+//
+// Both Element and Atom developers must provide an implementation. The framework
+// calls String for logging/debugging and Halt when the actor is being stopped.
+//
+// Halt Semantics
+//
+// When an actor is halted, it receives the ID of the caller that initiated the halt
+// and a list of task IDs that were cancelled during shutdown. The actor should:
+//   - Return save=true and its serializable state if it wants data persisted.
+//   - Return save=false if there is nothing to persist.
+//   - The returned proto.Message is passed to AtomAutoData.SetAtomData (if configured).
 type Atomos interface {
+	// String returns a human-readable identifier for this actor.
 	String() string
 
-	// Halt 关闭
-	// Halt
+	// Halt is called when the actor is being stopped. The from parameter identifies
+	// who requested the halt. cancelled lists all task IDs that were cancelled during
+	// the shutdown process.
+	//
+	// Return save=true and your state as data to persist it via AutoData.
+	// Return save=false to skip persistence.
 	Halt(from ID, cancelled []uint64) (save bool, data proto.Message)
 }
 
-// AtomosUtilities Atomos的实用工具集。
-// Atomos Utilities.
+// AtomosUtilities provides access to framework services from within an actor.
+// Every actor receives these utilities via its SelfID during spawn.
 type AtomosUtilities interface {
-	// Log 日志。
-	// Logging.
+	// Log returns the structured logger for this actor. All log messages are
+	// automatically tagged with the actor's ID and routed through the logging
+	// mailbox for serialized output.
 	Log() Logging
 
-	// Task 任务，用于把任务放到Atomos的任务队列中。这是同步串行的执行逻辑。
-	// Task is used to put tasks into the Atomos task queue. This is a synchronous serial execution logic.
+	// Task returns the task scheduler for this actor. Tasks are executed
+	// serially on the actor's mailbox goroutine — no concurrency concerns
+	// within a single actor. Use Task for deferred work, recurring jobs,
+	// and named serial/concurrent queues.
 	Task() Task
 }

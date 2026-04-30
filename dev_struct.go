@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
@@ -43,11 +43,9 @@ type ElementImplementation struct {
 
 	ElementHandlers map[string]MessageHandler
 	AtomHandlers    map[string]MessageHandler
-	ScaleHandlers   map[string]ScaleHandler
 }
 
 type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error)
-type ScaleHandler func(from ID, e Atomos, message string, in proto.Message) (id ID, err *Error)
 
 // ElementInterface
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
@@ -77,5 +75,5 @@ type IOMessageDecoder struct {
 	OutDec MessageDecoder
 }
 type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
-type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message) *Error
-type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message) *Error
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error

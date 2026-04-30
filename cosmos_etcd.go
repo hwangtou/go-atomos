@@ -1,4 +1,4 @@
-package go_atomos
+package atomos
 
 import (
 	"bytes"
@@ -104,7 +104,7 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 		}
 		// Load client's certificate and private key
 		clientCert, er = tls.X509KeyPair(serverCertPem, serverKeyPem)
-		if err != nil {
+		if er != nil {
 			return false, nil, nil, NewErrorf(ErrCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
 		}
 	}
@@ -162,11 +162,13 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	cosmosRemote, has := p.cluster.remoteCosmos[p.local.runnable.config.Node]
 	p.cluster.remoteMutex.Unlock()
 	if has {
-		// 如果节点已经是活跃的，直接退出并等待响应。
-		// If the node is already active, exit directly and wait response.
-		if err := cosmosRemote.tryKillingRemote(); err != nil {
-			return err.AddStack(nil)
-		}
+		//// 如果节点已经是活跃的，直接退出并等待响应。
+		//// If the node is already active, exit directly and wait response.
+		//if err := cosmosRemote.tryKillingRemote(); err != nil {
+		//	return err.AddStack(nil)
+		//}
+		p.local.Log().coreInfo("CosmosProcess: trySettingClusterToCurrentAndKeepalive has existed.")
+		_ = cosmosRemote
 	}
 
 	key, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
@@ -227,7 +229,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			// Keepalive
 			//case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
 			case keepAlive := <-keepAliveCh:
-				if !muteKeepaliveLog {
+				if !p.muteKeepaliveLog {
 					p.local.Log().coreInfo("etcd: Watcher keepalive.")
 				}
 				p.mutex.Lock()

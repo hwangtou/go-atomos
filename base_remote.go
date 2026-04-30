@@ -1,0 +1,227 @@
+package atomos
+
+import (
+	"context"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+)
+
+type BaseRemote struct {
+	cosmos *CosmosRemote
+	info   *IDInfo
+}
+
+func newBaseRemote(cosmos *CosmosRemote, info *IDInfo) BaseRemote {
+	return BaseRemote{
+		cosmos: cosmos,
+		info:   info,
+	}
+}
+
+func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {
+	cli := a.cosmos.getCurrentClient()
+	if cli == nil {
+		return nil, nil, nil, NewError(ErrCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
+	}
+
+	client := NewAtomosRemoteServiceClient(cli)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
+	return client, ctx, cancel, nil
+}
+
+func (a *BaseRemote) State() BaseAtomosState {
+	cli, ctx, cancel, err := a.getCli(atomosClientTimeout)
+	if err != nil {
+		return BaseAtomosInvalidState
+	}
+	defer cancel()
+
+	rsp, er := cli.GetIDState(ctx, &CosmosRemoteGetIDStateReq{Id: a.info})
+	if er != nil {
+		return BaseAtomosInvalidState
+	}
+
+	return BaseAtomosState(rsp.State)
+}
+
+func (a *BaseRemote) IdleTime() time.Duration {
+	cli, ctx, cancel, err := a.getCli(atomosClientTimeout)
+	if err != nil {
+		return 0
+	}
+	defer cancel()
+
+	rsp, er := cli.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{Id: a.info})
+	if er != nil {
+		return 0
+	}
+
+	return time.Duration(rsp.IdleTime)
+}
+
+func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err *Error) {
+	helper := createBaseAtomosHelper(BaseAtomosMailSync, ext)
+	if helper.hasErrors() {
+		return nil, helper.getError()
+	}
+
+	client, ctx, cancel, err := a.getCli(helper.timeout)
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	defer cancel()
+
+	var er error
+	var arg *anypb.Any
+	if in != nil {
+		arg, er = anypb.New(in)
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "BaseRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
+		}
+	}
+	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId:   from.GetIDInfo(),
+		To:         a.info,
+		CosmosArgs: helper.getRemoteArg(),
+		Message:    name,
+		Args:       arg,
+	})
+	if er != nil {
+		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+	}
+	if rsp.Reply != nil {
+		reply, er = rsp.Reply.UnmarshalNew()
+		if er != nil {
+			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+		}
+	}
+	if rsp.Error != nil {
+		err = rsp.Error.AddStack(nil)
+	}
+	return reply, err
+}
+
+func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
+	if helper.hasErrors() {
+		if callback != nil {
+			callback(nil, helper.getError())
+		}
+		return helper.getError()
+	}
+
+	var er error
+	var arg *anypb.Any
+	if in != nil {
+		arg, er = anypb.New(in)
+		if er != nil {
+			if callback != nil {
+				callback(nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
+			}
+			return nil
+		}
+	}
+
+	client, ctx, cancel, err := a.getCli(helper.timeout)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	defer cancel()
+
+	var startupID, asyncID uint64
+	if callback != nil {
+		startupID, asyncID = callerID.asyncSet(callback)
+		if startupID != a.cosmos.process.startupID {
+			// This should never happen, just in case.
+			a.cosmos.process.logging.pushFrameworkFatalLog("BaseRemote: AsyncMessagingByName asyncSet returned unexpected startupID. expected=(%d) actual=(%d)", a.cosmos.process.startupID, startupID)
+		}
+	}
+
+	//a.cosmos.process.logging.PushLogging(callerID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 1: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callerID, a.info.Info(), startupID, asyncID, name, in))
+	rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
+		CallerId:   callerID.GetIDInfo(),
+		ToId:       a.info,
+		CosmosArgs: helper.getRemoteArg(),
+		StartupId:  startupID,
+		AsyncId:    asyncID,
+		Message:    name,
+		Args:       arg,
+	})
+	if er != nil {
+		return NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+	}
+	if rsp.Error != nil {
+		return rsp.Error.AddStack(nil)
+	}
+	return nil
+}
+
+func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+	if asyncID == 0 {
+		//a.cosmos.process.logging.pushFrameworkInfoLog("PushAsyncMessageCallback called with empty asyncID. from=(%v),to=(%v),name=(%s),reply=(%v),err=(%v)", callbackID, toID, name, reply, err)
+		return
+	}
+	//a.cosmos.process.logging.PushLogging(callbackID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 3: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callbackID, toID, startupID, asyncID, name, reply))
+	cli, ctx, cancel, err := a.getCli(atomosClientTimeout)
+	if err != nil {
+		// TODO: need retry?
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback getCli error. name=(%s),reply=(%v),err=(%v),cliErr=(%v)", name, reply, err, err)
+		return
+	}
+	defer cancel()
+
+	var anyReply *anypb.Any
+	var er error
+	if reply != nil {
+		anyReply, er = anypb.New(reply)
+		if er != nil {
+			a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback marshal reply error. name=(%s),reply=(%v),err=(%v),marshalErr=(%v)", name, reply, err, er)
+			return
+		}
+	}
+	rsp, er := cli.AsyncOnMessageCallback(ctx, &CosmosRemoteAsyncOnMessageCallbackReq{
+		ToId:       toID.GetIDInfo(),
+		CallbackId: callbackID.GetIDInfo(),
+		StartupId:  startupID,
+		AsyncId:    asyncID,
+		Message:    name,
+		Args:       anyReply,
+		Error:      err,
+	})
+	if er != nil {
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response error. name=(%s),reply=(%v),err=(%v),respErr=(%v)", name, reply, err, er)
+		return
+	}
+	if rsp != nil && rsp.Error != nil {
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response returned error. name=(%s),reply=(%v),err=(%v),respErr=(%v)", name, reply, err, rsp.Error)
+	}
+}
+
+func (a *BaseRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+	helper := createBaseAtomosHelper(BaseAtomosMailKill, ext)
+	if helper.hasErrors() {
+		return helper.getError()
+	}
+
+	cli, ctx, cancel, err := a.getCli(helper.timeout)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	defer cancel()
+
+	rsp, er := cli.KillAtom(ctx, &CosmosRemoteKillAtomReq{
+		CallerId:   callerID.GetIDInfo(),
+		Id:         a.info,
+		CosmosArgs: helper.getRemoteArg(),
+	})
+	if er != nil {
+		return NewError(ErrCosmosRemoteResponseInvalid, "BaseRemote: KillAtom response error.").AddStack(nil)
+	}
+
+	if rsp.Error != nil {
+		return rsp.Error.AddStack(nil)
+	}
+	return nil
+}

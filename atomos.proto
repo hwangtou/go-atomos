@@ -22,9 +22,9 @@ message IDInfo {
   uint64 version = 6;
 }
 
-message IDContextInfo {
-  repeated string id_chain = 1;
-}
+//message IDContextInfo {
+//  repeated string id_chain = 1;
+//}
 
 enum LogLevel {
   Debug = 0;
@@ -133,20 +133,19 @@ message Config {
   string log_path = 4;
   int64 log_max_size = 5;
 
-  string working_path = 6;
-  string build_path = 7;
-  string bin_path = 8;
-  string run_path = 9;
-  string etc_path = 10;
+  string build_path = 6;
+  string bin_path = 7;
+  string run_path = 8;
+  string etc_path = 9;
 
   // 节点通讯
-  CosmosClusterConfig enable_cluster = 11;
+  CosmosClusterConfig enable_cluster = 10;
 
   // 启动元素
-  repeated string enable_elements = 12;
+  repeated string enable_elements = 11;
 
   // 自定义配置
-  map<string, bytes> customize = 13;
+  map<string, bytes> customize = 12;
 }
 
 message CosmosClusterConfig{
@@ -235,8 +234,6 @@ message CosmosNodeVersionLock {
 service AtomosRemoteService {
   rpc TryKilling(CosmosRemoteTryKillingReq) returns (CosmosRemoteTryKillingRsp) {}
 
-  rpc ScaleGetAtomID(CosmosRemoteScaleGetAtomIDReq) returns (CosmosRemoteScaleGetAtomIDRsp) {}
-
   rpc GetAtomID(CosmosRemoteGetAtomIDReq) returns (CosmosRemoteGetAtomIDRsp) {}
   rpc GetIDState(CosmosRemoteGetIDStateReq) returns (CosmosRemoteGetIDStateRsp) {}
   rpc GetIDIdleTime(CosmosRemoteGetIDIdleTimeReq) returns (CosmosRemoteGetIDIdleTimeRsp) {}
@@ -245,6 +242,7 @@ service AtomosRemoteService {
   rpc SpawnAtom(CosmosRemoteSpawnAtomReq) returns (CosmosRemoteSpawnAtomRsp) {}
   rpc SyncMessagingByName(CosmosRemoteSyncMessagingByNameReq) returns (CosmosRemoteSyncMessagingByNameRsp) {}
   rpc AsyncMessagingByName(CosmosRemoteAsyncMessagingByNameReq) returns (CosmosRemoteAsyncMessagingByNameRsp) {}
+  rpc AsyncOnMessageCallback(CosmosRemoteAsyncOnMessageCallbackReq) returns (CosmosRemoteAsyncOnMessageCallbackRsp) {}
   rpc KillAtom(CosmosRemoteKillAtomReq) returns (CosmosRemoteKillAtomRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
@@ -256,24 +254,11 @@ message CosmosRemoteTryKillingRsp {
   Error error = 1;
 }
 
-// Scale Get Atom ID
-message CosmosRemoteScaleGetAtomIDReq {
-  IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
-  IDInfo to = 4;
-  int64 timeout = 5;
-  string message = 6;
-  google.protobuf.Any args = 7;
-}
-message CosmosRemoteScaleGetAtomIDRsp {
-  IDInfo id = 1;
-  Error error = 2;
-}
-
 // Get Atom ID
 message CosmosRemoteGetAtomIDReq {
-  string element = 2;
-  string atom = 3;
+  string element = 1;
+  string atom = 2;
+//  CosmosArgs cosmos_args = 3;
 }
 message CosmosRemoteGetAtomIDRsp {
   IDInfo id = 1;
@@ -310,10 +295,11 @@ message CosmosRemoteGetElementInfoRsp {
 // Spawn Atom
 message CosmosRemoteSpawnAtomReq {
   IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
+//  IDContextInfo caller_context = 2;
   string element = 3;
   string atom = 4;
   google.protobuf.Any args = 5;
+  CosmosArgs cosmos_args = 6;
 }
 message CosmosRemoteSpawnAtomRsp {
   IDInfo id = 1;
@@ -323,9 +309,9 @@ message CosmosRemoteSpawnAtomRsp {
 // Sync Messaging
 message CosmosRemoteSyncMessagingByNameReq {
   IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
+//  IDContextInfo caller_context = 2;
   IDInfo to = 3;
-  int64 timeout = 4;
+  CosmosArgs cosmos_args = 4;
   string message = 5;
   google.protobuf.Any args = 6;
 }
@@ -334,26 +320,40 @@ message CosmosRemoteSyncMessagingByNameRsp {
   Error error = 2;
 }
 
+// Async Messaging
 message CosmosRemoteAsyncMessagingByNameReq {
   IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
-  IDInfo to = 3;
-  int64 timeout = 4;
-  bool need_reply = 5;
+  IDInfo to_id = 2;
+  CosmosArgs cosmos_args = 3;
+  uint64 startup_id = 4;
+  uint64 async_id = 5;
   string message = 6;
   google.protobuf.Any args = 7;
 }
 message CosmosRemoteAsyncMessagingByNameRsp {
-  google.protobuf.Any reply = 1;
-  Error error = 2;
+  Error error = 1;
+}
+
+// Async On Message Callback
+message CosmosRemoteAsyncOnMessageCallbackReq {
+  IDInfo to_id = 1;
+  IDInfo callback_id = 2;
+  uint64 startup_id = 3;
+  uint64 async_id = 4;
+  string message = 5;
+  google.protobuf.Any args = 6;
+  Error error = 7;
+}
+message CosmosRemoteAsyncOnMessageCallbackRsp {
+  Error error = 1;
 }
 
 // Kill Atom
 message CosmosRemoteKillAtomReq {
   IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
+//  IDContextInfo caller_context = 2;
   IDInfo id = 3;
-  int64 timeout = 5;
+  CosmosArgs cosmos_args = 4;
 }
 message CosmosRemoteKillAtomRsp {
   Error error = 1;
@@ -362,11 +362,19 @@ message CosmosRemoteKillAtomRsp {
 // Element Broadcast
 message CosmosRemoteElementBroadcastReq {
   IDInfo caller_id = 1;
-  IDContextInfo caller_context = 2;
+//  IDContextInfo caller_context = 2;
   string key = 3;
   string content_type = 4;
   bytes content_buffer = 5;
 }
 message CosmosRemoteElementBroadcastRsp {
   Error error = 1;
+}
+
+message CosmosArgs {
+  repeated int32 types = 1;
+//  bool forbid_duplicated = 1;
+  int64 base_atomos_timeout_in_nano = 2;
+  bool base_atomos_append_to_head = 3;
+  bool base_atomos_wait_killed = 4;
 }

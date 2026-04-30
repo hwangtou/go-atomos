@@ -21,7 +21,7 @@ type HelloAtomosElement interface {
 	// Element的创建（自旋）方法
 	// Element creation (spin) method
 	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self go_atomos.ElementSelfID, data *HAEData) *go_atomos.Error
+	Spawn(self go_atomos.ElementSelfID, data *HAEData, args ...any) *go_atomos.Error
 
 	// 向Element发送SayHello消息
 	// Send SayHello message to Element
@@ -54,7 +54,7 @@ type HelloAtomosAtom interface {
 	// Atom的创建（自旋）方法
 	// Atom creation (spin) method
 	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self go_atomos.AtomSelfID, arg *HASpawnArg, data *HAData) *go_atomos.Error
+	Spawn(self go_atomos.AtomSelfID, arg *HASpawnArg, data *HAData, args ...any) *go_atomos.Error
 
 	// 向Atom发送Greeting消息
 	// Send Greeting message to Atom
@@ -344,22 +344,22 @@ func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 }
 func GetHelloAtomosInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(HelloAtomosName, dev)
-	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message) *go_atomos.Error {
+	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...any) *go_atomos.Error {
 		dataT, _ := data.(*HAEData)
 		elem, ok := a.(HelloAtomosElement)
 		if !ok {
 			return go_atomos.NewErrorf(go_atomos.ErrElementNotImplemented, "Element not implemented, type=(HelloAtomosElement)")
 		}
-		return elem.Spawn(s, dataT)
+		return elem.Spawn(s, dataT, args...)
 	}
-	elem.AtomSpawner = func(s go_atomos.AtomSelfID, a go_atomos.Atomos, arg, data proto.Message) *go_atomos.Error {
+	elem.AtomSpawner = func(s go_atomos.AtomSelfID, a go_atomos.Atomos, arg, data proto.Message, args ...any) *go_atomos.Error {
 		argT, _ := arg.(*HASpawnArg)
 		dataT, _ := data.(*HAData)
 		atom, ok := a.(HelloAtomosAtom)
 		if !ok {
 			return go_atomos.NewErrorf(go_atomos.ErrAtomNotImplemented, "Atom not implemented, type=(HelloAtomosAtom)")
 		}
-		return atom.Spawn(s, argT, dataT)
+		return atom.Spawn(s, argT, dataT, args...)
 	}
 	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"SayHello":     helloAtomosElementMessengerValue.SayHello().Decoder(&HAEHelloI{}, &HAEHelloO{}),

@@ -3,4 +3,8 @@ go build -o protoc-gen-go-atomos/protoc-gen-go-atomos protoc-gen-go-atomos/atomo
 GOPATH="/Users/hwangtou/Developer/go"
 
 cp protoc-gen-go-atomos/protoc-gen-go-atomos "$GOPATH"/bin/protoc-gen-go-atomos
-protoc --go_out=. --go-atomos_out=. examples/hello_atomos/api/hello.proto
+
+## Test
+#protoc --go_out=. --go-atomos_out=. examples/go_atomos/for_test.proto
+#cp examples/go_atomos/for_test.pb.go .
+#cp examples/go_atomos/for_test_atomos.pb.go .

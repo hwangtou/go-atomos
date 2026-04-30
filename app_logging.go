@@ -14,7 +14,7 @@ import (
 
 const (
 	// AppLoggingDefaultMaxSize Default log max size is 10MB.
-	AppLoggingDefaultMaxSize = 10 * 1024 * 1024
+	AppLoggingDefaultMaxSize = int64(10 * 1024 * 1024)
 	// AppLoggingAutoCleanupRatio Default auto cleanup size is 300MB.
 	AppLoggingAutoCleanupRatio = int64(30)
 	AppLoggingAutoCleanupOff   = -1

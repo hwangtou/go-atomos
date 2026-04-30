@@ -17,22 +17,11 @@ const HelloAtomosName = "HelloAtomos"
 // HelloAtomosElement is the atomos implements of HelloAtomos element.
 
 type HelloAtomosElement interface {
-	go_atomos.Atomos
 	// Element的创建（自旋）方法
 	// Element creation (spin) method
 	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self go_atomos.ElementSelfID, data *HAEData) *go_atomos.Error
-
-	// 向Element发送SayHello消息
-	// Send SayHello message to Element
-	// I = Input
-	// O = Output
-	SayHello(from go_atomos.ID, in *HAEHelloI) (out *HAEHelloO, err *go_atomos.Error)
-	// Atomos Special Implements
-	// Atomos的特殊实现
-	//
-	// 支持广播通知（类似MQ机制）
-	Broadcast(from go_atomos.ID, in *go_atomos.ElementBroadcastI) (out *go_atomos.ElementBroadcastO, err *go_atomos.Error)
+	Spawn(self go_atomos.ElementSelfID, data *HAEData, args ...any) *go_atomos.Error
+	go_atomos.Atomos
 
 	// Scale Methods
 
@@ -43,25 +32,37 @@ type HelloAtomosElement interface {
 	// 负载均衡的测试
 	// Load balancing test
 	ScaleDoTest(from go_atomos.ID, in *HADoTestI) (*HelloAtomosAtomID, *go_atomos.Error)
+
+	// Element Methods
+	// 向Element发送SayHello消息
+	// Send SayHello message to Element
+	// I = Input
+	// O = Output
+	SayHello(from go_atomos.ID, in *HAEHelloI) (out *HAEHelloO, err *go_atomos.Error)
+	// Atomos Special Implements
+	// Atomos的特殊实现
+	//
+	// 支持广播通知（类似MQ机制）
+	Broadcast(from go_atomos.ID, in *go_atomos.ElementBroadcastI) (out *go_atomos.ElementBroadcastO, err *go_atomos.Error)
 }
+
+const (
+	HelloAtomosElementSayHello  = "SayHello"
+	HelloAtomosElementBroadcast = "Broadcast"
+
+	HelloAtomosElementScaleBonjour = "ScaleBonjour"
+	HelloAtomosElementScaleDoTest  = "ScaleDoTest"
+)
 
 // HelloAtomosAtom is the atomos implements of HelloAtomos atom.
 
 type HelloAtomosAtom interface {
-	go_atomos.Atomos
-
 	// Spawn
 	// Atom的创建（自旋）方法
 	// Atom creation (spin) method
 	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self go_atomos.AtomSelfID, arg *HASpawnArg, data *HAData) *go_atomos.Error
-
-	// 向Atom发送Greeting消息
-	// Send Greeting message to Atom
-	Greeting(from go_atomos.ID, in *HAGreetingI) (out *HAGreetingO, err *go_atomos.Error)
-	// DoTest
-	// 测试方法
-	DoTest(from go_atomos.ID, in *HADoTestI) (out *HADoTestO, err *go_atomos.Error)
+	Spawn(self go_atomos.AtomSelfID, arg *HASpawnArg, data *HAData, args ...any) *go_atomos.Error
+	go_atomos.Atomos
 
 	// Scale Methods
 
@@ -72,7 +73,22 @@ type HelloAtomosAtom interface {
 	// 负载均衡的测试
 	// Load balancing test
 	ScaleDoTest(from go_atomos.ID, in *HADoTestI) (out *HADoTestO, err *go_atomos.Error)
+
+	// Atom Methods
+	// 向Atom发送Greeting消息
+	// Send Greeting message to Atom
+	Greeting(from go_atomos.ID, in *HAGreetingI) (out *HAGreetingO, err *go_atomos.Error)
+	// DoTest
+	// 测试方法
+	DoTest(from go_atomos.ID, in *HADoTestI) (out *HADoTestO, err *go_atomos.Error)
 }
+
+const (
+	HelloAtomosAtomScaleBonjour = "ScaleBonjour"
+	HelloAtomosAtomScaleDoTest  = "ScaleDoTest"
+	HelloAtomosAtomGreeting     = "Greeting"
+	HelloAtomosAtomDoTest       = "DoTest"
+)
 
 ////////////////////////////////////
 /////////////// 识别符 //////////////
@@ -207,8 +223,8 @@ type HelloAtomosAtomID struct {
 
 // 创建（自旋）某节点中的一个Atom，并返回AtomID
 // Create (spin) an atom in a node and return the AtomID
-func SpawnHelloAtomosAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *HASpawnArg) (*HelloAtomosAtomID, *go_atomos.Error) {
-	id, tracker, err := c.CosmosSpawnAtom(caller, HelloAtomosName, name, arg)
+func SpawnHelloAtomosAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *HASpawnArg, args ...any) (*HelloAtomosAtomID, *go_atomos.Error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, HelloAtomosName, name, arg, args...)
 	if id == nil {
 		return nil, err.AddStack(nil)
 	}
@@ -344,22 +360,22 @@ func GetHelloAtomosImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementI
 }
 func GetHelloAtomosInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(HelloAtomosName, dev)
-	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message) *go_atomos.Error {
+	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...any) *go_atomos.Error {
 		dataT, _ := data.(*HAEData)
 		elem, ok := a.(HelloAtomosElement)
 		if !ok {
 			return go_atomos.NewErrorf(go_atomos.ErrElementNotImplemented, "Element not implemented, type=(HelloAtomosElement)")
 		}
-		return elem.Spawn(s, dataT)
+		return elem.Spawn(s, dataT, args...)
 	}
-	elem.AtomSpawner = func(s go_atomos.AtomSelfID, a go_atomos.Atomos, arg, data proto.Message) *go_atomos.Error {
+	elem.AtomSpawner = func(s go_atomos.AtomSelfID, a go_atomos.Atomos, arg, data proto.Message, args ...any) *go_atomos.Error {
 		argT, _ := arg.(*HASpawnArg)
 		dataT, _ := data.(*HAData)
 		atom, ok := a.(HelloAtomosAtom)
 		if !ok {
 			return go_atomos.NewErrorf(go_atomos.ErrAtomNotImplemented, "Atom not implemented, type=(HelloAtomosAtom)")
 		}
-		return atom.Spawn(s, argT, dataT)
+		return atom.Spawn(s, argT, dataT, args...)
 	}
 	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"SayHello":     helloAtomosElementMessengerValue.SayHello().Decoder(&HAEHelloI{}, &HAEHelloO{}),
@@ -419,4 +435,4 @@ var helloAtomosAtomMessengerValue helloAtomosAtomMessenger
 var helloAtomosAtomValue HelloAtomosAtom
 
 // PATH: hello_atomos/api/hello_atomos.pb.go
-// HASH: 1a2197185f0e728803e73c0a9117886ccb49ff6dd469fba8894ccd253e3dee23
+// HASH: 5fa776a2974ba36a817455e2731134b08bef8c383028773ff290a68d58aa409f

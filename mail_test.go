@@ -1,678 +1,1377 @@
 package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
-	"runtime"
-	"strconv"
-	"strings"
+	"log"
 	"sync"
 	"testing"
 	"time"
 )
 
-// Test
+// Test for mailbox
 
-type testMailHandler struct {
+func clearAllocMailDebugMap() {
+	if !allocMailDebug {
+		return
+	}
+	allocMailDebugMap = sync.Map{}
+}
+
+func getAllocMailDebugNum() int {
+	if !allocMailDebug {
+		return 0
+	}
+	num := 0
+	allocMailDebugMap.Range(func(key, value any) bool {
+		num++
+		return true
+	})
+	return num
+}
+
+func getAllAllocMailDebugInfo() map[*mail]string {
+	if !allocMailDebug {
+		return nil
+	}
+	info := make(map[*mail]string)
+	allocMailDebugMap.Range(func(key, value any) bool {
+		m := key.(*mail)
+		s := value.(string)
+		info[m] = s
+		return true
+	})
+	return info
+}
+
+// Smoke Test for Mailbox Life Cycle
+// It is a simple test to verify the mailbox life cycle.
+// Also test for:
+// #1 isRunning
+// #2 start / startLoop / loop
+// #3 pushTail
+// #4 pushHead
+// #5 mailboxOnReceive
+// #6 mailboxOnStop
+func TestMailbox_LifeCycle(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	var wg sync.WaitGroup
+	h := &testMailboxHandler{
+		t:  t,
+		mb: nil,
+		recv: func(mail *mail) {
+			t.Log("TestMailbox_Smoke: Mail received.")
+			wg.Done()
+		},
+		stop: func(killMail, remainMails *mail, num uint32) *Error {
+			wg.Done()
+			t.Log("TestMailbox_Smoke: Mail box stopped.")
+			return nil
+		},
+	}
+	h.mb = newMailBox("testMailbox", h, newTestLoggingAtomos(t))
+	if err := h.mb.start(func() *Error {
+		return nil
+	}); err != nil {
+		t.Fatalf("TestMailbox_Smoke: Start failed. err=(%v)", err.AddStack(nil))
+	}
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Send mails
+	count := 10
+	wg.Add(count)
+	for i := 0; i < count; i++ {
+		m := allocMail()
+		if getAllocMailDebugNum() != i+1 {
+			t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
+		}
+		initMail(m, DefaultMailID, nil)
+		h.mb.pushTail(m)
+	}
+	wg.Wait()
+
+	// Kill
+	wg.Add(1)
+	m := allocMail()
+	if getAllocMailDebugNum() != 1 {
+		t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
+	}
+	initKillMail(m, DefaultMailID, nil, nil)
+	h.mb.pushHead(m)
+	if !h.mb.running {
+		t.Fatal("TestMailbox_Smoke: Mailbox is not running after sending exit mail.")
+	}
+	wg.Wait()
+	if h.mb.running {
+		t.Fatal("TestMailbox_Smoke: Mailbox is still running after stopped.")
+	}
+
+	// Check memory leak
+	<-time.After(time.Millisecond)
+	if getAllocMailDebugNum() > 0 {
+		t.Fatal("TestMailbox_Smoke: Memory leak detected, some mails are not released.", allocMailDebugMap)
+	}
+
+	<-time.After(time.Millisecond)
+}
+
+// Push 100 mails into mailbox, use a sentWait to wait all mails sent.
+// After each mail sent, check the mailbox num is correct.
+// Push 100 more mails to test push kill mails after all mails sent.
+// #1 getNum
+func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	var sendWait, wg sync.WaitGroup
+	var h *testMailboxHandler
+	count := uint64(100)
+	h = &testMailboxHandler{
+		t:  t,
+		mb: nil,
+		recv: func(mail *mail) {
+			t.Log("TestMailBox_GetNum: Mail received.", mail)
+			if n := mail.data.(uint64); n == 0 {
+				t.Log("TestMailBox_GetNum: A waiting mail received, wait for all mails sent.")
+				sendWait.Wait()
+			} else if num := int32(n) + int32(h.mb.getNum()); num < int32(count-2) || num > int32(count-1) {
+				t.Fatalf("TestMailBox_GetNum: GetNum returned wrong value during receiving mails. expect=(%d or %d) got=(%d)", n-1, n, h.mb.getNum())
+			}
+			wg.Done()
+		},
+		stop: func(killMail, remainMails *mail, num uint32) *Error {
+			t.Log("TestMailBox_GetNum: Mail stopping.")
+			if killMail == nil {
+				t.Fatal("TestMailBox_GetNum: Stop received nil killMail.")
+			}
+			if _, ok := killMail.data.(*mailExitCommand); !ok {
+				t.Fatalf("TestMailBox_GetNum: Stop received wrong killMail action. expect=(*mailExitCommand) got=(%T)", killMail.data)
+			}
+			if num != uint32(count-1) { // one mail is being processed
+				t.Fatalf("TestMailBox_GetNum: Stop received wrong num. expect=(%d) got=(%d)", count, num)
+			}
+			cur := 1
+			for curMail := remainMails; curMail != nil; curMail = curMail.next {
+				if curMail.data.(uint64) != uint64(cur) {
+					t.Fatalf("TestMailBox_GetNum: Remaining mail has wrong data. expect=(%d) got=(%d)", cur, curMail.id)
+				}
+				cur++
+				t.Log("TestMailBox_GetNum: Remaining mail:", curMail)
+				wg.Done()
+			}
+			return nil
+		},
+	}
+	h.mb = newMailBox("testMailboxGetNum", h, newTestLoggingAtomos(t))
+	if err := h.mb.start(func() *Error {
+		return nil
+	}); err != nil {
+		t.Fatalf("TestMailBox_GetNum: Start failed. err=(%v)", err.AddStack(nil))
+	}
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	wg.Add(int(count))
+	sendWait.Add(int(count))
+	for i := uint64(0); i < count; i++ {
+		t.Log("TestMailBox_GetNum: Mail send.", i)
+		m := allocMail()
+		if getAllocMailDebugNum() == 0 {
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+		}
+		initMail(m, DefaultMailID, i)
+		h.mb.pushTail(m)
+		sendWait.Done()
+		if gap := int32(i+1) - int32(h.mb.getNum()); gap < 0 || gap > 1 {
+			t.Fatalf("TestMailBox_GetNum: GetNum returned wrong value. expect=(%d or %d) got=(%d)", i, i+1, h.mb.getNum())
+		}
+	}
+	wg.Wait()
+	if h.mb.getNum() != 0 {
+		t.Fatalf("TestMailBox_GetNum: GetNum returned wrong value after all mails received. expect=(0) got=(%d)", h.mb.getNum())
+	}
+
+	// Kill
+	count = uint64(100)
+	wg.Add(int(count))
+	sendWait.Add(int(count))
+	for i := uint64(0); i < count; i++ {
+		m := allocMail()
+		if getAllocMailDebugNum() == 0 {
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+		}
+		initMail(m, DefaultMailID, i)
+		h.mb.pushTail(m)
+		sendWait.Done()
+	}
+
+	// kill mail
+	m := allocMail()
+	if getAllocMailDebugNum() == 0 {
+		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+	}
+	initKillMail(m, DefaultMailID, nil, nil)
+	h.mb.pushHead(m)
+	wg.Wait()
+
+	// Check memory leak
+	<-time.After(time.Millisecond)
+	if getAllocMailDebugNum() > 0 {
+		t.Fatal("TestMailBox_GetNum: Memory leak detected, some mails are not released.", allocMailDebugMap)
+	}
+
+	<-time.After(time.Millisecond)
+}
+
+// Test for list correction in mailbox
+// #1 getByID
+// #2 pushHead
+// #3 pushTail / Push
+// #4 popByID
+func TestMailBox_ListCorrection(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	mb := newMailBox("testMailbox", &testMailboxHandler{}, newTestLoggingAtomos(t))
+	mb.running = true
+	// No mail
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for no mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for no mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// 1 mail case
+
+	// Push one mail to head
+	mail1Head := allocMail()
+	initMail(mail1Head, 1, uint64(1))
+	if !mb.pushHead(mail1Head) {
+		t.Fatalf("TestMailBox_ListCorrection: PushHead failed for one mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for one mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail1Head || mb.tail != mail1Head {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for one mail. expect=(%v/%v) got=(head:%v tail:%v)", mail1Head, mail1Head, mb.head, mb.tail)
+	}
+	if mb.head.next != nil || mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail next is wrong for one mail. expect=(nil) got=(head.next:%v tail.next:%v)", mb.head.next, mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for one mail.")
+	}
+	// Get not found mail
+	notFoundMail := mb.getByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	notFoundMail = mb.popByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after get/pop not found mail.")
+	}
+	// Get found mail and pop
+	foundMail := mb.getByID(mail1Head.id)
+	if foundMail != mail1Head {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail1Head, foundMail)
+	}
+	foundMail = mb.popByID(mail1Head.id)
+	if foundMail != mail1Head {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail1Head, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if foundMail.id != mail1Head.id {
+		t.Fatalf("TestMailBox_ListCorrection: Popped mail has wrong id. expect=(%d) got=(%d)", mail1Head.id, foundMail.id)
+	}
+	if foundMail.data != uint64(1) {
+		t.Fatalf("TestMailBox_ListCorrection: Popped mail has wrong data. expect=(%d) got=(%d)", 1, foundMail.data)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	t.Log("TestMailBox_ListCorrection: One mail push head case passed.")
+
+	// Push one mail to tail
+	mail1Tail := allocMail()
+	initMail(mail1Tail, 2, uint64(2))
+	if !mb.pushTail(mail1Tail) {
+		t.Fatalf("TestMailBox_ListCorrection: PushTail failed for one mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for one mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail1Tail || mb.tail != mail1Tail {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for one mail. expect=(%v/%v) got=(head:%v tail:%v)", mail1Tail, mail1Tail, mb.head, mb.tail)
+	}
+	if mb.head.next != nil || mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail next is wrong for one mail. expect=(nil) got=(head.next:%v tail.next:%v)", mb.head.next, mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for one mail.")
+	}
+	// Get not found mail
+	notFoundMail = mb.getByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	notFoundMail = mb.popByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	// Get found mail and pop
+	foundMail = mb.getByID(mail1Tail.id)
+	if foundMail != mail1Tail {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail1Tail, foundMail)
+	}
+	foundMail = mb.popByID(mail1Tail.id)
+	if foundMail != mail1Tail {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail1Tail, foundMail)
+	}
+	releaseMail(mail1Tail)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if foundMail.id != mail1Tail.id {
+		t.Fatalf("TestMailBox_ListCorrection: Popped mail has wrong id. expect=(%d) got=(%d)", mail1Tail.id, foundMail.id)
+	}
+	if foundMail.data != uint64(2) {
+		t.Fatalf("TestMailBox_ListCorrection: Popped mail has wrong data. expect=(%d) got=(%d)", 2, foundMail.data)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	t.Log("TestMailBox_ListCorrection: One mail push tail case passed.")
+
+	// Check no mail
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for no mail before three mails. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for no mail before three mails. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+
+	// Multiple mails case
+	mail3Head1 := allocMail()
+	initMail(mail3Head1, 11, uint64(11))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	mail3Head2 := allocMail()
+	initMail(mail3Head2, 12, uint64(12))
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	mail3Head3 := allocMail()
+	initMail(mail3Head3, 13, uint64(13))
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	// Push first mail to head
+	if !mb.pushHead(mail3Head1) {
+		t.Fatalf("TestMailBox_ListCorrection: PushHead failed for three mails.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for one mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Head1 || mb.tail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for one mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Head1, mail3Head1, mb.head, mb.tail)
+	}
+	if mb.head.next != nil || mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail next is wrong for one mail. expect=(nil) got=(head.next:%v tail.next:%v)", mb.head.next, mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	// Push second mail to head
+	// mail order: mail3Head2 -> mail3Head1
+	if !mb.pushHead(mail3Head2) {
+		t.Fatalf("TestMailBox_ListCorrection: PushHead failed for three mails.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for two mails. expect=(2) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Head2 || mb.tail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for two mails. expect=(%v/%v) got=(head:%v tail:%v)", mail3Head2, mail3Head1, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong for two mails. expect=(%v) got=(%v)", mail3Head1, mb.head.next)
+	}
+	if mb.head.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next next is wrong for two mails. expect=(nil) got=(%v)", mb.head.next.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong for two mails. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	// Push third mail to head
+	// mail order: mail3Head3 -> mail3Head2 -> mail3Head1
+	if !mb.pushHead(mail3Head3) {
+		t.Fatalf("TestMailBox_ListCorrection: PushHead failed for three mails.")
+	}
+	if mb.num != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for three mails. expect=(3) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Head3 || mb.tail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for three mails. expect=(%v/%v) got=(head:%v tail:%v)", mail3Head3, mail3Head1, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Head2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong for three mails. expect=(%v) got=(%v)", mail3Head2, mb.head.next)
+	}
+	if mb.head.next.next != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox second mail next is wrong for three mails. expect=(%v) got=(%v)", mail3Head1, mb.head.next.next)
+	}
+	if mb.head.next.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next next is wrong for three mails. expect=(nil) got=(%v)", mb.head.next.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong for three mails. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	t.Log("TestMailBox_ListCorrection: Multiple mails push head case passed.")
+
+	// Pop mails one by one and check
+	// Pop not found mail
+	notFoundMail = mb.popByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	// Get and pop mail3Head2
+	// mail order: mail3Head3 -> mail3Head1
+	foundMail = mb.getByID(mail3Head2.id)
+	if foundMail != mail3Head2 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head2, foundMail)
+	}
+	foundMail = mb.popByID(mail3Head2.id)
+	if foundMail != mail3Head2 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head2, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(2) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Head3 || mb.tail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Head3, mail3Head1, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong after pop mail. expect=(%v) got=(%v)", mail3Head1, mb.head.next)
+	}
+	if mb.head.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next is wrong after pop mail. expect=(nil) got=(%v)", mb.head.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong after pop mail. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	// Get and pop mail3Head1
+	// mail order: mail3Head3
+	foundMail = mb.getByID(mail3Head1.id)
+	if foundMail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head1, foundMail)
+	}
+	foundMail = mb.popByID(mail3Head1.id)
+	if foundMail != mail3Head1 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head1, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Head3 || mb.tail != mail3Head3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Head3, mail3Head3, mb.head, mb.tail)
+	}
+	if mb.head.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong after pop mail. expect=(nil) got=(%v)", mb.head.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong after pop mail. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	// Get and pop mail3Head3
+	foundMail = mb.getByID(mail3Head3.id)
+	if foundMail != mail3Head3 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head3, foundMail)
+	}
+	foundMail = mb.popByID(mail3Head3.id)
+	if foundMail != mail3Head3 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Head3, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	t.Log("TestMailBox_ListCorrection: Multiple mails pop case passed.")
+
+	// Push multiple mails to tail
+	mail3Tail1 := allocMail()
+	initMail(mail3Tail1, 21, uint64(21))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	mail3Tail2 := allocMail()
+	initMail(mail3Tail2, 22, uint64(22))
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	mail3Tail3 := allocMail()
+	initMail(mail3Tail3, 23, uint64(23))
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+
+	// Push first mail to tail
+	if !mb.pushTail(mail3Tail1) {
+		t.Fatalf("TestMailBox_ListCorrection: PushTail failed for three mails.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for one mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Tail1 || mb.tail != mail3Tail1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for one mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Tail1, mail3Tail1, mb.head, mb.tail)
+	}
+	if mb.head.next != nil || mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail next is wrong for one mail. expect=(nil) got=(head.next:%v tail.next:%v)", mb.head.next, mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	// Push second mail to tail
+	if !mb.pushTail(mail3Tail2) {
+		t.Fatalf("TestMailBox_ListCorrection: PushTail failed for three mails.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for two mails. expect=(2) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Tail1 || mb.tail != mail3Tail2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for two mails. expect=(%v/%v) got=(head:%v tail:%v)", mail3Tail1, mail3Tail2, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Tail2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong for two mails. expect=(%v) got=(%v)", mail3Tail2, mb.head.next)
+	}
+	if mb.head.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next is wrong for two mails. expect=(nil) got=(%v)", mb.head.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong for two mails. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	// Push third mail to tail
+	if !mb.pushTail(mail3Tail3) {
+		t.Fatalf("TestMailBox_ListCorrection: PushTail failed for three mails.")
+	}
+	if mb.num != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong for three mails. expect=(3) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Tail1 || mb.tail != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong for three mails. expect=(%v/%v) got=(head:%v tail:%v)", mail3Tail1, mail3Tail3, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Tail2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong for three mails. expect=(%v) got=(%v)", mail3Tail2, mb.head.next)
+	}
+	if mb.head.next.next != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox second mail next is wrong for three mails. expect=(%v) got=(%v)", mail3Tail3, mb.head.next.next)
+	}
+	if mb.head.next.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next next is wrong for three mails. expect=(nil) got=(%v)", mb.head.next.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong for three mails. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed for three mails.")
+	}
+	t.Log("TestMailBox_ListCorrection: Multiple mails push tail case passed.")
+
+	// Pop mails one by one and check
+	// Pop not found mail
+	notFoundMail = mb.popByID(0)
+	if notFoundMail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for not found. expect=(nil) got=(%v)", notFoundMail)
+	}
+	// Get and pop mail3Tail2
+	// mail order: mail3Tail1 -> mail3Tail3
+	foundMail = mb.getByID(mail3Tail2.id)
+	if foundMail != mail3Tail2 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail2, foundMail)
+	}
+	foundMail = mb.popByID(mail3Tail2.id)
+	if foundMail != mail3Tail2 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail2, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(2) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Tail1 || mb.tail != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Tail1, mail3Tail3, mb.head, mb.tail)
+	}
+	if mb.head.next != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong after pop mail. expect=(%v) got=(%v)", mail3Tail3, mb.head.next)
+	}
+	if mb.head.next.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next next is wrong after pop mail. expect=(nil) got=(%v)", mb.head.next.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong after pop mail. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	// Get and pop mail3Tail1
+	// mail order: mail3Tail3
+	foundMail = mb.getByID(mail3Tail1.id)
+	if foundMail != mail3Tail1 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail1, foundMail)
+	}
+	foundMail = mb.popByID(mail3Tail1.id)
+	if foundMail != mail3Tail1 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail1, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail3Tail3 || mb.tail != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(%v/%v) got=(head:%v tail:%v)", mail3Tail3, mail3Tail3, mb.head, mb.tail)
+	}
+	if mb.head.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head next is wrong after pop mail. expect=(nil) got=(%v)", mb.head.next)
+	}
+	if mb.tail.next != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox tail next is wrong after pop mail. expect=(nil) got=(%v)", mb.tail.next)
+	}
+	// Get and pop mail3Tail3
+	foundMail = mb.getByID(mail3Tail3.id)
+	if foundMail != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: GetByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail3, foundMail)
+	}
+	foundMail = mb.popByID(mail3Tail3.id)
+	if foundMail != mail3Tail3 {
+		t.Fatalf("TestMailBox_ListCorrection: PopByID returned wrong mail for found. expect=(%v) got=(%v)", mail3Tail3, foundMail)
+	}
+	releaseMail(foundMail)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mail allocation tracking failed after pop found mail.")
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox num is wrong after pop mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_ListCorrection: Mailbox head/tail is wrong after pop mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	t.Log("TestMailBox_ListCorrection: Multiple mails pop case passed.")
+
+	<-time.After(time.Millisecond)
+}
+
+// Test for waitPop and popAll in mailbox
+// #1 waitPop
+// #2 popAll
+func TestMailBox_WaitPopAndPopAll(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	mb := newMailBox("testMailboxWaitPop", &testMailboxHandler{}, newTestLoggingAtomos(t))
+	mb.running = true
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox num is wrong for no mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head/tail is wrong for no mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Push one mail and wait pop
+	mail1 := allocMail()
+	initMail(mail1, 1, uint64(1))
+	if !mb.pushTail(mail1) {
+		t.Fatalf("TestMailBox_WaitPop: PushTail failed for one mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox num is wrong after push mail. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail1 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head is wrong after push mail. expect=(%v) got=(%v)", mail1, mb.head)
+	}
+	if mb.tail != mail1 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox tail is wrong after push mail. expect=(%v) got=(%v)", mail1, mb.tail)
+	}
+	if mb.head.next != nil {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head next is wrong after push mail. expect=(nil) got=(%v)", mb.head.next)
+	}
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed for one mail.")
+	}
+
+	popMail1 := mb.waitPop()
+	if popMail1 != mail1 {
+		t.Fatalf("TestMailBox_WaitPop: WaitPop returned wrong mail. expect=(%v) got=(%v)", mail1, popMail1)
+	}
+	releaseMail(popMail1)
+	if popMail1.next != nil {
+		t.Fatalf("TestMailBox_WaitPop: Popped mail next is wrong after wait pop mail. expect=(nil) got=(%v)", popMail1.next)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox num is wrong after wait pop mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head/tail is wrong after wait pop mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed after wait pop mail.")
+	}
+	t.Log("TestMailBox_WaitPop: WaitPop returned correct mail.", popMail1)
+
+	// Push two mail and wait pop
+	mail2 := allocMail()
+	initMail(mail2, 2, uint64(2))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed for two mails.")
+	}
+
+	mail3 := allocMail()
+	initMail(mail3, 3, uint64(3))
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed for two mails.")
+	}
+
+	if !mb.pushTail(mail2) {
+		t.Fatalf("TestMailBox_WaitPop: PushTail failed for mail2.")
+	}
+	if !mb.pushTail(mail3) {
+		t.Fatalf("TestMailBox_WaitPop: PushTail failed for mail3.")
+	}
+
+	popMail2 := mb.waitPop()
+	if popMail2 != mail2 {
+		t.Fatalf("TestMailBox_WaitPop: WaitPop returned wrong mail for mail2. expect=(%v) got=(%v)", mail2, popMail2)
+	}
+	releaseMail(popMail2)
+	if popMail2.next != nil {
+		t.Fatalf("TestMailBox_WaitPop: Popped mail2 next is wrong after wait pop mail. expect=(nil) got=(%v)", popMail2.next)
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox num is wrong after wait pop mail2. expect=(1) got=(%d)", mb.num)
+	}
+	if mb.head != mail3 || mb.tail != mail3 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head/tail is wrong after wait pop mail2. expect=(%v/%v) got=(head:%v tail:%v)", mail3, mail3, mb.head, mb.tail)
+	}
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed after wait pop mail2.")
+	}
+	t.Log("TestMailBox_WaitPop: WaitPop returned correct mail for mail2.", popMail2)
+
+	popMail3 := mb.waitPop()
+	if popMail3 != mail3 {
+		t.Fatalf("TestMailBox_WaitPop: WaitPop returned wrong mail for mail3. expect=(%v) got=(%v)", mail3, popMail3)
+	}
+	releaseMail(popMail3)
+	if popMail3.next != nil {
+		t.Fatalf("TestMailBox_WaitPop: Popped mail3 next is wrong after wait pop mail. expect=(nil) got=(%v)", popMail3.next)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox num is wrong after wait pop mail3. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_WaitPop: Mailbox head/tail is wrong after wait pop mail3. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_WaitPop: Mail allocation tracking failed after wait pop mail3.")
+	}
+	t.Log("TestMailBox_WaitPop: WaitPop returned correct mail for mail3.", popMail3)
+
+	if !mb.mutex.TryLock() {
+		t.Fatal("TestMailBox_WaitPop: Mailbox mutex is not released after wait pop.")
+	}
+	mb.mutex.Unlock()
+
+	// Push one mail and pop all
+	mail4 := allocMail()
+	initMail(mail4, 4, uint64(4))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_PopAll: Mail allocation tracking failed for one mail.")
+	}
+
+	if !mb.pushTail(mail4) {
+		t.Fatalf("TestMailBox_PopAll: PushTail failed for one mail.")
+	}
+	if mb.num != 1 {
+		t.Fatalf("TestMailBox_PopAll: Mailbox num is wrong after push mail. expect=(1) got=(%d)", mb.num)
+	}
+	popMails, popNum := mb.popAll()
+	if popNum != 1 {
+		t.Fatalf("TestMailBox_PopAll: PopAll returned wrong num. expect=(1) got=(%d)", popNum)
+	}
+	if popMails != mail4 {
+		t.Fatalf("TestMailBox_PopAll: PopAll returned wrong mail. expect=(%v) got=(%v)", mail4, popMails)
+	}
+	releaseMail(popMails)
+	if popMails.next != nil {
+		t.Fatalf("TestMailBox_PopAll: Popped mail next is wrong after pop all mail. expect=(nil) got=(%v)", popMails.next)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_PopAll: Mailbox num is wrong after pop all mail. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_PopAll: Mailbox head/tail is wrong after pop all mail. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_PopAll: Mail allocation tracking failed after pop all mail.")
+	}
+	t.Log("TestMailBox_PopAll: PopAll returned correct mail for one mail.", popMails)
+
+	// Push multiple mails and pop all
+	mail5 := allocMail()
+	initMail(mail5, 5, uint64(5))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_PopAll: Mail allocation tracking failed for two mails.")
+	}
+
+	mail6 := allocMail()
+	initMail(mail6, 6, uint64(6))
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_PopAll: Mail allocation tracking failed for two mails.")
+	}
+
+	if !mb.pushTail(mail5) {
+		t.Fatalf("TestMailBox_PopAll: PushTail failed for mail5.")
+	}
+	if !mb.pushTail(mail6) {
+		t.Fatalf("TestMailBox_PopAll: PushTail failed for mail6.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_PopAll: Mailbox num is wrong after push mails. expect=(2) got=(%d)", mb.num)
+	}
+	popMails, popNum = mb.popAll()
+	if popNum != 2 {
+		t.Fatalf("TestMailBox_PopAll: PopAll returned wrong num. expect=(2) got=(%d)", popNum)
+	}
+	if popMails != mail5 {
+		t.Fatalf("TestMailBox_PopAll: PopAll returned wrong first mail. expect=(%v) got=(%v)", mail5, popMails)
+	}
+	if popMails.next != mail6 {
+		t.Fatalf("TestMailBox_PopAll: PopAll returned wrong second mail. expect=(%v) got=(%v)", mail6, popMails.next)
+	}
+	if popMails.next.next != nil {
+		t.Fatalf("TestMailBox_PopAll: Popped mails next next is wrong after pop all mails. expect=(nil) got=(%v)", popMails.next.next)
+	}
+	if mb.num != 0 {
+		t.Fatalf("TestMailBox_PopAll: Mailbox num is wrong after pop all mails. expect=(0) got=(%d)", mb.num)
+	}
+	if mb.head != nil || mb.tail != nil {
+		t.Fatalf("TestMailBox_PopAll: Mailbox head/tail is wrong after pop all mails. expect=(nil) got=(head:%v tail:%v)", mb.head, mb.tail)
+	}
+	for ; popMails != nil; popMails = popMails.next {
+		releaseMail(popMails)
+	}
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_PopAll: Mail allocation tracking failed after pop all mails.")
+	}
+	t.Log("TestMailBox_PopAll: PopAll returned correct mails for multiple mails.", popMails)
+
+	if !mb.mutex.TryLock() {
+		t.Fatal("TestMailBox_PopAll: Mailbox mutex is not released after pop all.")
+	}
+	mb.mutex.Unlock()
+	t.Log("TestMailBox_WaitPopAndPopAll: All cases passed.")
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_RemoveMail(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	mb := newMailBox("testMailboxRemoveMail", &testMailboxHandler{}, newTestLoggingAtomos(t))
+	mb.running = true
+
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Push multiple mails
+	mail1 := allocMail()
+	initMail(mail1, 1, uint64(1))
+	if getAllocMailDebugNum() != 1 {
+		t.Fatalf("TestMailBox_RemoveMail: Mail allocation tracking failed for three mails.")
+	}
+
+	mail2 := allocMail()
+	initMail(mail2, 2, uint64(2))
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_RemoveMail: Mail allocation tracking failed for three mails.")
+	}
+
+	mail3 := allocMail()
+	initMail(mail3, 3, uint64(3))
+	if getAllocMailDebugNum() != 3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mail allocation tracking failed for three mails.")
+	}
+
+	if !mb.pushTail(mail1) {
+		t.Fatalf("TestMailBox_RemoveMail: PushTail failed for mail1.")
+	}
+	if !mb.pushTail(mail2) {
+		t.Fatalf("TestMailBox_RemoveMail: PushTail failed for mail2.")
+	}
+	if !mb.pushTail(mail3) {
+		t.Fatalf("TestMailBox_RemoveMail: PushTail failed for mail3.")
+	}
+	if mb.num != 3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox num is wrong after push mails. expect=(3) got=(%d)", mb.num)
+	}
+	if mb.head != mail1 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head is wrong after push mails. expect=(%v) got=(%v)", mail1, mb.head)
+	}
+	if mb.head.next != mail2 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head next is wrong after push mails. expect=(%v) got=(%v)", mail2, mb.head.next)
+	}
+	if mb.head.next.next != mail3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head next next is wrong after push mails. expect=(%v) got=(%v)", mail3, mb.head.next.next)
+	}
+	if mb.head.next.next.next != nil {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head next next next is wrong after push mails. expect=(nil) got=(%v)", mb.head.next.next.next)
+	}
+	if mb.tail != mail3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox tail is wrong after push mails. expect=(%v) got=(%v)", mail3, mb.tail)
+	}
+
+	// Remove mail2
+	if !mb.removeMail(mail2) {
+		t.Fatalf("TestMailBox_RemoveMail: RemoveMail failed for mail2.")
+	} else {
+		releaseMail(mail2)
+	}
+	if getAllocMailDebugNum() != 2 {
+		t.Fatalf("TestMailBox_RemoveMail: Mail allocation tracking failed after remove mail2.")
+	}
+	if mb.num != 2 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox num is wrong after remove mail2. expect=(2) got=(%d)", mb.num)
+	}
+	if mb.head != mail1 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head is wrong after remove mail2. expect=(%v) got=(%v)", mail1, mb.head)
+	}
+	if mb.head.next != mail3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head next is wrong after remove mail2. expect=(%v) got=(%v)", mail3, mb.head.next)
+	}
+	if mb.head.next.next != nil {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox head next next is wrong after remove mail2. expect=(nil) got=(%v)", mb.head.next.next)
+	}
+	if mb.tail != mail3 {
+		t.Fatalf("TestMailBox_RemoveMail: Mailbox tail is wrong after remove mail2. expect=(%v) got=(%v)", mail3, mb.tail)
+	}
+
+	t.Log("TestMailBox_RemoveMail: Mail allocation tracking complete.")
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_StopIfNoMail(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	letItRun := make(chan struct{})
+	stopped := make(chan struct{})
+	h := &testMailboxHandler{
+		t:  t,
+		mb: nil,
+		recv: func(mail *mail) {
+			<-letItRun
+		},
+		stop: func(killMail, remainMails *mail, num uint32) *Error {
+			<-stopped
+			return nil
+		},
+	}
+	h.mb = newMailBox("testMailbox", h, newTestLoggingAtomos(t))
+	if err := h.mb.start(func() *Error {
+		return nil
+	}); err != nil {
+		t.Fatalf("TestMailbox_Smoke: Start failed. err=(%v)", err.AddStack(nil))
+	}
+
+	// Wait loggingAtomos logs popped
+	for {
+		if num := getAllocMailDebugNum(); num != 0 {
+			t.Log("TestMailBox_StopIfNoMail: Waiting for mail logs to be popped. allocMailDebugNum=", num)
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Push a mail to mailbox
+	m := allocMail()
+	initMail(m, DefaultMailID, nil)
+	h.mb.pushTail(m)
+	if killed := h.mb.stopIfNoMail(nil); killed {
+		t.Fatalf("TestMailBox_StopIfNoMail: StopIfNoMail returned killed=true but there is a mail.")
+	}
+	letItRun <- struct{}{}
+	time.After(time.Millisecond)
+	if killed := h.mb.stopIfNoMail(nil); !killed {
+		t.Fatalf("TestMailBox_StopIfNoMail: StopIfNoMail returned killed=false but there is no mail.")
+	}
+	stopped <- struct{}{}
+
+	// Wait a moment to ensure mailbox is stopped
+	time.After(time.Millisecond)
+	if h.mb.running {
+		t.Fatalf("TestMailBox_StopIfNoMail: Mailbox is still running after StopIfNoMail.")
+	}
+
+	if h.mb.num != 0 {
+		t.Fatalf("TestMailBox_StopIfNoMail: Mailbox num is wrong after stopped. expect=(0) got=(%d)", h.mb.num)
+	}
+	<-time.After(time.Millisecond)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_StopIfNoMail: Mail allocation tracking failed after mailbox stopped.")
+	}
+	t.Log("TestMailBox_StopIfNoMail: StopIfNoMail cases passed.")
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_StartLoop(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	h := &testMailboxHandler{
+		t:    t,
+		mb:   nil,
+		recv: func(mail *mail) {},
+		stop: func(killMail, remainMails *mail, num uint32) *Error { return nil },
+	}
+	h.mb = newMailBox("testMailboxStartLoop", h, newTestLoggingAtomos(t))
+
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Test for starting failed
+	if err := h.mb.start(func() *Error {
+		return NewErrorf(1, "test error in mailboxOnStartUp")
+	}); err == nil {
+		t.Fatalf("TestMailBox_StartLoop: Start did not return error for mailboxOnStartUp failure.")
+	} else if err.Code == 1 && err.Message == "test error in mailboxOnStartUp" {
+		t.Logf("TestMailBox_StartLoop: Start returned expected error for mailboxOnStartUp failure. err=(%v)", err.AddStack(nil))
+	} else {
+		t.Fatalf("TestMailBox_StartLoop: Start returned wrong error for mailboxOnStartUp failure. expect=(code:1 message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", err.Code, err.Message)
+	}
+	if h.mb.running {
+		t.Fatalf("TestMailBox_StartLoop: Mailbox is running after Start failed.")
+	}
+	if h.mb.goID == 0 {
+		t.Fatalf("TestMailBox_StartLoop: Mailbox goID is not zero after Start failed.")
+	}
+	t.Log("TestMailBox_StartLoop: Start failed cases passed.")
+
+	// Test for starting again
+	if err := h.mb.start(func() *Error {
+		return nil
+	}); err != nil {
+		t.Fatalf("TestMailBox_StartLoop: Start failed. err=(%v)", err.AddStack(nil))
+	}
+	if !h.mb.running {
+		t.Fatalf("TestMailBox_StartLoop: Mailbox is not running after Start.")
+	}
+	if h.mb.goID == 0 {
+		t.Fatalf("TestMailBox_StartLoop: Mailbox goID is zero after Start.")
+	} else if h.mb.goID == getGoID() {
+		t.Fatalf("TestMailBox_StartLoop: Mailbox goID is current goroutine ID after Start.")
+	}
+	t.Log("TestMailBox_StartLoop: Start succeeded cases passed.")
+
+	// Test for double Start
+	if err := h.mb.start(func() *Error {
+		return nil
+	}); err == nil {
+		t.Fatalf("TestMailBox_StartLoop: Double Start did not return error.")
+	} else if err.Code == ErrFrameworkRecoverFromPanic && err.Message == "Mailbox: Has already run." {
+		t.Logf("TestMailBox_StartLoop: Double Start returned expected error. err=(%v)", err.AddStack(nil))
+	} else {
+		t.Fatalf("TestMailBox_StartLoop: Double Start returned wrong error. expect=(code:%d message:'%s') got=(code:%d message:'%s')", ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.", err.Code, err.Message)
+	}
+	t.Log("TestMailBox_StartLoop: Start double failed cases passed.")
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_Loop(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	h := &testMailboxHandler{
+		t:    t,
+		mb:   nil,
+		recv: func(mail *mail) {},
+		stop: func(killMail, remainMails *mail, num uint32) *Error { return nil },
+	}
+	h.mb = newMailBox("testMailboxLoop", h, newTestLoggingAtomos(t))
+	h.mb.running = true
+	h.mb.goID = getGoID()
+
+	// Wait loggingAtomos logs popped
+	for {
+		if getAllocMailDebugNum() != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	// Test for loop with exit due to mailboxOnStartUp error
+	wait := make(chan *Error, 1)
+	h.mb.loop(wait, func() *Error {
+		return NewErrorf(1, "test error in mailboxOnStartUp")
+	})
+	err := <-wait
+	if err == nil {
+		t.Fatalf("TestMailBox_Loop: Loop did not return error from mailboxOnStartUp.")
+	}
+	if err.Code != 1 || err.Message != "test error in mailboxOnStartUp" {
+		t.Fatalf("TestMailBox_Loop: Loop returned wrong error from mailboxOnStartUp. expect=(code:1 message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", err.Code, err.Message)
+	}
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_MailPool_ReleaseTwice(t *testing.T) {
+	allocMailUsingPool = true
+	allocMailInitCheck = false
+	allocMailDebug = false
+
+	m := allocMail()
+	releaseMail(m)
+	releaseMail(m)
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_MailPool_CheckRelease(t *testing.T) {
+	allocMailUsingPool = false
+	allocMailInitCheck = false
+	allocMailDebug = true
+	clearAllocMailDebugMap()
+
+	n := 1000
+	waiters := 128
+	testMailBoxHelper(t, n, waiters)
+
+	<-time.After(time.Millisecond)
+}
+
+func TestMailBox_MailPool_CheckPool(t *testing.T) {
+	allocMailUsingPool = true
+	allocMailInitCheck = true
+	allocMailDebug = false
+
+	n := 1000
+	waiters := 128
+	testMailBoxHelper(t, n, waiters)
+
+	<-time.After(time.Millisecond)
+}
+
+func testMailBoxHelper(t *testing.T, n, waiters int) {
+	var wg sync.WaitGroup
+	h := &testMailboxHandler{
+		t:  t,
+		mb: nil,
+		recv: func(mail *mail) {
+			wg.Done()
+		},
+		stop: func(killMail, remainMails *mail, num uint32) *Error {
+			wg.Done()
+			return nil
+		},
+	}
+	h.mb = newMailBox("testMailbox", h, newTestLoggingAtomos(t))
+	if err := h.mb.start(func() *Error { return nil }); err != nil {
+		t.Fatalf("TestMailBox_MailPool: Start failed. err=(%v)", err.AddStack(nil))
+		return
+	}
+
+	// Wait loggingAtomos logs popped
+	for {
+		if num := getAllocMailDebugNum(); num != 0 {
+			<-time.After(time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	t.Log("TestMailBox_MailPool: Start sending mails.")
+	for routine := 0; routine < waiters; routine++ {
+		wg.Add(n)
+		go func() {
+			for i := 0; i < n; i++ {
+				m := allocMail()
+				initMail(m, DefaultMailID, nil)
+				h.mb.pushTail(m)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Send exit mail
+	wg.Add(1)
+	killMail := allocMail()
+	initKillMail(killMail, DefaultMailID, nil, nil)
+	killMail.data = &mailExitCommand{}
+	h.mb.pushHead(killMail)
+	wg.Wait()
+	if h.mb.running {
+		t.Fatalf("TestMailBox_MailPool: Mailbox is still running after sending exit mail.")
+	}
+	<-time.After(time.Millisecond)
+	if getAllocMailDebugNum() != 0 {
+		t.Fatalf("TestMailBox_MailPool: Mail allocation tracking failed after mailbox stopped.")
+	}
+}
+
+// Handler
+
+type testMailboxHandler struct {
 	t    *testing.T
 	mb   *mailBox
-	done chan bool
-
-	sendNum    int
-	receiveNum int
-	mailPool   sync.Pool
-	hash       *UtilStringHashGenerator
-
-	testType int
-	testInt  int64
-	testMap  map[int][]bool
+	recv func(mail *mail)
+	stop func(killMail, remainMails *mail, num uint32) *Error
 }
 
-type testMail struct {
-	i        int
-	str      string
-	waitCh   chan struct{}
-	duration time.Duration
-}
-
-func (m *testMail) sendReply(reply proto.Message, err *Error) {
-	m.waitCh <- struct{}{}
-}
-
-const (
-	testMailHandlerTestTypeSequence1Million = 1
-	testMailHandlerTestTypeConcurrent100K   = 2
-	testMailHandlerTestTypeClose            = 3
-	testMailHandlerTestTypeRunningPanic     = 4
-	testMailHandlerTestTypeCloseReturnsErr  = 5
-	testMailHandlerTestTypeCloseRemainMails = 6
-	testMailHandlerTestTypeMailsOrder       = 7
-
-	testMailMillion = 1000000
-	testMail100K    = 100000
-)
-
-var cpuNum = runtime.NumCPU()
-
-func (h *testMailHandler) mailboxOnStartUp(fn func() *Error) *Error {
-	if fn != nil {
-		return fn()
+func (h *testMailboxHandler) mailboxOnStartUp(fn func() *Error) *Error {
+	if !h.mb.running {
+		h.t.Fatal("testMailboxHandler: mailboxOnStartUp called but mailbox is not running.")
+	}
+	if h.mb.goID == 0 {
+		h.t.Fatal("testMailboxHandler: mailboxOnStartUp called but mailbox goID is zero.")
+	} else if h.mb.goID != getGoID() {
+		h.t.Fatal("testMailboxHandler: mailboxOnStartUp called but mailbox goID is current goroutine ID.")
+	}
+	if err := fn(); err != nil {
+		return err.AddStack(nil)
 	}
 	return nil
 }
 
-func (h *testMailHandler) mailboxOnReceive(mail *mail) {
-	validateRunning(h, true)
-	switch h.testType {
-	case testMailHandlerTestTypeSequence1Million:
-		str := mail.content.(*testMail).str
-		strList := strings.Split(str, ":")
-		if len(strList) != 3 {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. str=(%s)", str)
-			return
-		}
-
-		// id:randStr:hash
-		id, er := strconv.ParseInt(strList[0], 10, 64)
-		if er != nil {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. str=(%s)", str)
-			return
-		}
-		if id != h.testInt+1 {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. id=(%d) testInt=(%d)", id, h.testInt)
-			return
-		}
-		h.testInt = id
-
-		hash, err := h.hash.Gen(strList[0] + ":" + strList[1])
-		if err != nil {
-			h.t.Errorf("mailboxOnReceive: Gen failed. err=(%v)", err.AddStack(nil))
-			return
-		}
-		if hash != strList[2] {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. hash=(%s) strList[2]=(%s)", hash, strList[2])
-			return
-		}
-
-		if id == testMailMillion-1 {
-			h.testType = 0
-			h.testInt = 0
-			h.testMap = nil
-			h.done <- true
-		}
-
-	case testMailHandlerTestTypeConcurrent100K:
-		str := mail.content.(*testMail).str
-		strList := strings.Split(str, ":")
-		if len(strList) != 4 {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. str=(%s)", str)
-			return
-		}
-
-		// cpu:id:randStr:hash
-		cpu, er := strconv.ParseInt(strList[0], 10, 64)
-		if er != nil {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. str=(%s)", str)
-			return
-		}
-		id, er := strconv.ParseInt(strList[1], 10, 64)
-		if er != nil {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. str=(%s)", str)
-			return
-		}
-		if id < 0 || id >= testMail100K {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. id=(%d)", id)
-			return
-		}
-		hash, err := h.hash.Gen(strList[0] + ":" + strList[1] + ":" + strList[2])
-		if err != nil {
-			h.t.Errorf("mailboxOnReceive: Gen failed. err=(%v)", err.AddStack(nil))
-			return
-		}
-		if hash != strList[3] {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. hash=(%s) strList[3]=(%s)", hash, strList[3])
-			return
-		}
-		if h.testMap[int(cpu)][id] {
-			h.t.Errorf("mailboxOnReceive: Invalid mail. cpu=(%d) id=(%d)", cpu, id)
-			return
-		}
-		h.testInt += 1
-		h.testMap[int(cpu)][id] = true
-
-		if h.testInt == testMail100K*int64(cpuNum) {
-			for _, boolList := range h.testMap {
-				for i, b := range boolList {
-					if !b {
-						h.t.Errorf("mailboxOnReceive: Invalid mail. cpu=(%d),i=(%v)", cpu, i)
-						continue
-					}
-				}
-			}
-			h.testType = 0
-			h.testInt = 0
-			h.testMap = nil
-			h.done <- true
-		}
-
-	case testMailHandlerTestTypeRunningPanic:
-		h.testType = 0
-		h.testInt = 0
-		h.testMap = nil
-		defer func() {
-			h.done <- true
-		}()
-		panic("Test: Panic")
-
-	case testMailHandlerTestTypeCloseRemainMails:
-		if mail.content.(*testMail).i != 0 {
-			h.t.Errorf("mailboxOnReceive: Invalid test. mail=(%v)", mail)
-			return
-		}
-		if d := mail.content.(*testMail).duration; d > 0 {
-			<-time.After(d)
-		}
-
-	case testMailHandlerTestTypeMailsOrder:
-		<-time.After(time.Millisecond * 100)
-
-	default:
-		h.t.Errorf("mailboxOnReceive: Invalid test type. testType=(%d)", h.testType)
+func (h *testMailboxHandler) mailboxOnReceive(mail *mail) {
+	if !h.mb.running {
+		h.t.Fatal("testMailboxHandler: mailboxOnReceive called but mailbox is not running.")
 	}
-	validateRunning(h, true)
+	if h.mb.goID == 0 {
+		h.t.Fatal("testMailboxHandler: mailboxOnReceive called but mailbox goID is zero.")
+	} else if h.mb.goID != getGoID() {
+		h.t.Fatal("testMailboxHandler: mailboxOnReceive called but mailbox goID is current goroutine ID.")
+	}
+	if h.recv != nil {
+		h.recv(mail)
+	}
 }
 
-func (h *testMailHandler) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
-	validateRunning(h, false)
-	switch h.testType {
-	case testMailHandlerTestTypeClose:
-		if killMail == nil || killMail.action != MailActionExit {
-			h.t.Errorf("mailboxOnStop: Invalid test. killMail=(%v)", killMail)
-			return nil
-		}
-		if killMail.content.(*testMail).str != "exit" {
-			h.t.Errorf("mailboxOnStop: Invalid test. killMail.content=(%v)", killMail.content)
-			return nil
-		}
-		if remainMails != nil || num != 0 {
-			h.t.Errorf("mailboxOnStop: Invalid test. remainMails=(%v) num=(%d)", remainMails, num)
-			return nil
-		}
-		h.done <- true
-
-	case testMailHandlerTestTypeCloseReturnsErr:
-		h.done <- true
-		return NewErrorf(ErrFrameworkIncorrectUsage, "Close error.").AddStack(nil)
-
-	case testMailHandlerTestTypeCloseRemainMails:
-		if killMail == nil || killMail.action != MailActionExit || killMail.content.(*testMail).i != -1 {
-			h.t.Errorf("mailboxOnStop: Invalid test. killMail=(%v)", killMail)
-			return nil
-		}
-		if remainMails == nil || num != 9 {
-			h.t.Errorf("mailboxOnStop: Invalid test. remainMails=(%v) num=(%d)", remainMails, num)
-			return nil
-		}
-		idx := 1
-		for curMail := remainMails; curMail != nil; curMail = curMail.next {
-			if curMail.content.(*testMail).i != idx {
-				h.t.Errorf("mailboxOnStop: Invalid test. curMail=(%v)", curMail)
-				return nil
-			}
-			idx += 1
-		}
-		if idx != 10 {
-			h.t.Errorf("mailboxOnStop: Invalid test. idx=(%d)", idx)
-			return nil
-		}
-		h.t.Logf("mailboxOnStop: Remain mails Done")
-		h.done <- true
-
-	case testMailHandlerTestTypeMailsOrder:
-
-	default:
-		h.t.Errorf("mailboxOnStop: Invalid test type. testType=(%d)", h.testType)
+func (h *testMailboxHandler) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
+	if h.mb.running {
+		h.t.Fatal("testMailboxHandler: mailboxOnStop called but mailbox is still running.")
 	}
-	validateRunning(h, false)
+	if h.mb.goID == 0 {
+		h.t.Fatal("testMailboxHandler: mailboxOnStop called but mailbox goID is not zero.")
+	} else if h.mb.goID != getGoID() {
+		h.t.Fatal("testMailboxHandler: mailboxOnStop called but mailbox goID is current goroutine ID.")
+	}
+	if h.stop != nil {
+		return h.stop(killMail, remainMails, num)
+	}
 	return nil
-}
-
-func TestMailboxSpawnAndExit(t *testing.T) {
-	h := testMailHandler{t: t, done: make(chan bool, 1), mailPool: sync.Pool{New: func() any { return &mail{} }}, hash: NewUtilStringHashSHA256Generator()}
-	ls := &loggingService{}
-	tt := &appLoggingForTest{t: t}
-	if err := ls.init(tt); err != nil {
-		t.Fatalf("Test: Init failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	mb := newMailBox("testMailbox", &h, ls)
-	h.mb = mb
-	validateRunning(&h, false)
-
-	// Start once.
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-	}
-	t.Log("Test: Start once Done")
-
-	// Start twice.
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err == nil {
-		t.Fatalf("Test: Start once should fail.")
-	} else if err.Code != ErrMailboxIsRunning {
-		t.Fatalf("Test: Start once failed. err=(%v)", err.AddStack(nil))
-	}
-	// Exit.
-	h.testType = testMailHandlerTestTypeClose
-	km := h.mailPool.Get().(*mail)
-	km.action = MailActionExit
-	km.content = &testMail{str: "exit", waitCh: make(chan struct{}, 1)}
-	mb.pushTail(km)
-	<-h.done
-	<-km.content.(*testMail).waitCh
-	// Check mailbox.
-	if mb.name != "testMailbox" {
-		t.Fatalf("Test: Invalid mailbox name. name=(%s)", mb.name)
-	}
-	validateRunning(&h, false)
-	if mb.handler != &h {
-		t.Fatalf("Test: Invalid mailbox handler.")
-	}
-	if mb.head != nil || mb.tail != nil || mb.num != 0 {
-		t.Fatalf("Test: Invalid mailbox mail.")
-	}
-	if mb.logging != ls {
-		t.Fatalf("Test: Invalid mailbox logging.")
-	}
-	t.Log("Test: Exit Done")
-
-	// Start again.
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-	}
-	// Exit.
-	h.testType = testMailHandlerTestTypeClose
-	km = h.mailPool.Get().(*mail)
-	km.action = MailActionExit
-	km.content = &testMail{str: "exit", waitCh: make(chan struct{}, 1)}
-	mb.pushTail(km)
-	<-h.done
-	<-km.content.(*testMail).waitCh
-	// Check mailbox.
-	if mb.name != "testMailbox" {
-		t.Fatalf("Test: Invalid mailbox name. name=(%s)", mb.name)
-	}
-	validateRunning(&h, false)
-	if mb.handler != &h {
-		t.Fatalf("Test: Invalid mailbox handler.")
-	}
-	if mb.head != nil || mb.tail != nil || mb.num != 0 {
-		t.Fatalf("Test: Invalid mailbox mail.")
-	}
-	if mb.logging != ls {
-		t.Fatalf("Test: Invalid mailbox logging.")
-	}
-	t.Log("Test: Start again Done")
-
-	// Start returns error.
-	tt.ignoreError = true
-	if err := mb.start(func() *Error {
-		return NewErrorf(ErrFrameworkIncorrectUsage, "Spawn error.").AddStack(nil)
-	}); err == nil {
-		t.Fatalf("Test: Start should fail.")
-	} else if err.Code != ErrFrameworkIncorrectUsage {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-	} else if err.Message != "Spawn error." {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-	}
-	<-time.After(time.Millisecond * 1) // Wait for error log. May be not accurate.
-	tt.ignoreError = false
-	validateRunning(&h, false)
-	// Check mailbox.
-	if mb.name != "testMailbox" {
-		t.Fatalf("Test: Invalid mailbox name. name=(%s)", mb.name)
-	}
-	validateRunning(&h, false)
-	if mb.handler != &h {
-		t.Fatalf("Test: Invalid mailbox handler.")
-	}
-	if mb.head != nil || mb.tail != nil || mb.num != 0 {
-		t.Fatalf("Test: Invalid mailbox mail.")
-	}
-	if mb.logging != ls {
-		t.Fatalf("Test: Invalid mailbox logging.")
-	}
-	t.Log("Test: Start returns error Done")
-
-	// Running panic.
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-	}
-	h.testType = testMailHandlerTestTypeRunningPanic
-	km = h.mailPool.Get().(*mail)
-	km.action = MailActionRun
-	km.content = &testMail{}
-	tt.ignoreError = true
-	mb.pushTail(km)
-	<-h.done
-	<-time.After(time.Millisecond * 1) // Wait for error log. May be not accurate.
-	tt.ignoreError = false
-	validateRunning(&h, true)
-	t.Log("Test: Running panic Done")
-
-	// Exit with errors.
-	h.testType = testMailHandlerTestTypeCloseReturnsErr
-	km = h.mailPool.Get().(*mail)
-	km.action = MailActionExit
-	km.content = &testMail{str: "exit", waitCh: make(chan struct{}, 1)}
-	tt.ignoreError = true
-	mb.pushTail(km)
-	<-h.done
-	<-km.content.(*testMail).waitCh
-	<-time.After(time.Millisecond * 1) // Wait for error log. May be not accurate.
-	tt.ignoreError = false
-	// Check mailbox.
-	if mb.name != "testMailbox" {
-		t.Fatalf("Test: Invalid mailbox name. name=(%s)", mb.name)
-	}
-	validateRunning(&h, false)
-	if mb.handler != &h {
-		t.Fatalf("Test: Invalid mailbox handler.")
-	}
-	if mb.head != nil || mb.tail != nil || mb.num != 0 {
-		t.Fatalf("Test: Invalid mailbox mail.")
-	}
-	if mb.logging != ls {
-		t.Fatalf("Test: Invalid mailbox logging.")
-	}
-	t.Log("Test: Start again Done")
-}
-
-func TestMailboxExitWithRemainMails(t *testing.T) {
-	h := testMailHandler{t: t, done: make(chan bool, 1), mailPool: sync.Pool{New: func() any { return &mail{} }}, hash: NewUtilStringHashSHA256Generator()}
-	ls := &loggingService{}
-	tt := &appLoggingForTest{t: t}
-	if err := ls.init(tt); err != nil {
-		t.Fatalf("Test: Init failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	mb := newMailBox("testMailbox", &h, ls)
-	h.mb = mb
-	validateRunning(&h, false)
-
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	validateRunning(&h, true)
-
-	// Test close with remain mails.
-	h.testType = testMailHandlerTestTypeCloseRemainMails
-	for i := 0; i < 10; i++ {
-		m := h.mailPool.Get().(*mail)
-		m.next = nil
-		m.id = DefaultMailID
-		m.action = MailActionRun
-		if i == 0 {
-			m.content = &testMail{i: i, duration: time.Millisecond * 10}
-		} else {
-			m.content = &testMail{i: i}
-		}
-		mb.pushTail(m)
-	}
-	<-time.After(time.Millisecond * 1) // Wait for mails.
-	km := h.mailPool.Get().(*mail)
-	km.next = nil
-	km.id = DefaultMailID
-	km.action = MailActionExit
-	km.content = &testMail{i: -1}
-	mb.pushHead(km)
-	<-h.done
-	validateRunning(&h, false)
-	t.Log("Test: Close with remain mails Done")
-}
-
-func TestMailboxMailsPop(t *testing.T) {
-	h := testMailHandler{t: t, done: make(chan bool, 1), mailPool: sync.Pool{New: func() any { return &mail{} }}, hash: NewUtilStringHashSHA256Generator()}
-	ls := &loggingService{}
-	if err := ls.init(&appLoggingForTest{t: t}); err != nil {
-		t.Fatalf("Test: Init failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	mb := newMailBox("testMailbox", &h, ls)
-	h.mb = mb
-	validateRunning(&h, false)
-
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	validateRunning(&h, true)
-
-	// Insert 10 mails.
-	h.testType = testMailHandlerTestTypeMailsOrder
-	for i := 0; i < 10; i++ {
-		m := h.mailPool.Get().(*mail)
-		m.next = nil
-		m.id = uint64(i)
-		m.action = MailActionRun
-		m.content = &testMail{i: i}
-		mb.pushTail(m)
-	}
-	<-time.After(time.Millisecond * 1) // Wait for mails. 0 has been popped.
-
-	// Check mails. Ignore thread-safe.
-	check := func(list []int) bool {
-		if mb.num != uint32(len(list)) {
-			return false
-		}
-		num := 0
-		for m := mb.head; m != nil; m = m.next {
-			if m.content.(*testMail).i != list[num] {
-				return false
-			}
-			if getByID := mb.getByID(uint64(list[num])); m != getByID {
-				return false
-			}
-			num += 1
-		}
-		return num == len(list)
-	}
-
-	// Order: 1, 2, 3, 4, 5, 6, 7, 8, 9
-	if !check([]int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	// Pop #5.
-	m5 := mb.popByID(5)
-	if m5 == nil || m5.content.(*testMail).i != 5 {
-		t.Fatalf("Test: Invalid pop mail.")
-	}
-	if !check([]int{1, 2, 3, 4, 6, 7, 8, 9}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-	// Pop #5 again.
-	if mb.removeMail(m5) {
-		t.Fatalf("Test: Invalid remove mail.")
-	}
-	if !check([]int{1, 2, 3, 4, 6, 7, 8, 9}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	// Get #6 and pop.
-	m6 := mb.getByID(6)
-	if m6 == nil || m6.content.(*testMail).i != 6 {
-		t.Fatalf("Test: Invalid get mail.")
-	}
-	if !mb.removeMail(m6) {
-		t.Fatalf("Test: Invalid remove mail.")
-	}
-	if !check([]int{1, 2, 3, 4, 7, 8, 9}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	// Push #5 to head.
-	mb.pushHead(m5)
-	if !check([]int{5, 1, 2, 3, 4, 7, 8, 9}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	// Push #6 to tail.
-	mb.pushTail(m6)
-	if !check([]int{5, 1, 2, 3, 4, 7, 8, 9, 6}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	// Pop all mails.
-	mailHead, num := mb.popAll()
-	if mailHead == nil || num != 9 {
-		t.Fatalf("Test: Invalid pop all mails.")
-	}
-	if !check([]int{}) {
-		t.Fatalf("Test: Invalid mails.")
-	}
-	idx := 0
-	should := []int{5, 1, 2, 3, 4, 7, 8, 9, 6}
-	for m := mailHead; m != nil; m = m.next {
-		if m.content.(*testMail).i != should[idx] {
-			t.Fatalf("Test: Invalid mails.")
-		}
-		idx += 1
-	}
-	if idx != 9 {
-		t.Fatalf("Test: Invalid mails.")
-	}
-
-	for m := mailHead; m != nil; m = m.next {
-		h.mailPool.Put(m)
-	}
-	t.Log("Test: Mails pop Done")
-}
-
-func TestMailboxCommon(t *testing.T) {
-	h := testMailHandler{t: t, done: make(chan bool, 1), mailPool: sync.Pool{New: func() any { return &mail{} }}, hash: NewUtilStringHashSHA256Generator()}
-	ls := &loggingService{}
-	if err := ls.init(&appLoggingForTest{t: t}); err != nil {
-		t.Fatalf("Test: Init failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	mb := newMailBox("testMailbox", &h, ls)
-	h.mb = mb
-	validateRunning(&h, false)
-
-	if err := mb.start(func() *Error {
-		validateRunning(&h, true)
-		return nil
-	}); err != nil {
-		t.Fatalf("Test: Start failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	validateRunning(&h, true)
-
-	// Test sequence 1M.
-	h.testType = testMailHandlerTestTypeSequence1Million
-	h.testInt = -1
-	randStrGen := NewUtilStringRandomStringGenerator()
-	hashGen := NewUtilStringHashSHA256Generator()
-	for i := 0; i < testMailMillion; i++ {
-		str := strconv.FormatInt(int64(i), 10) + ":" + randStrGen.RandomString(100)
-		hash, err := hashGen.Gen(str)
-		if err != nil {
-			t.Fatalf("Test: Gen failed. err=(%v)", err.AddStack(nil))
-			return
-		}
-		str = str + ":" + hash
-		testPushMail(&h, mb, str)
-	}
-	<-h.done
-	validateRunning(&h, true)
-	h.t.Logf("TestMailboxCommon: testMailHandlerTestTypeSequence1Million Done")
-
-	// Test concurrent 100K.
-	// Test correctness of concurrent processing, especially the mail pool.
-	h.testType = testMailHandlerTestTypeConcurrent100K
-	h.testInt = 0
-	h.testMap = make(map[int][]bool, cpuNum)
-	for c := 0; c < cpuNum; c++ {
-		h.testMap[c] = make([]bool, testMail100K)
-	}
-	for c := 0; c < cpuNum; c++ {
-		go func(c int) {
-			randStrGen := NewUtilStringRandomStringGenerator()
-			hashGen := NewUtilStringHashSHA256Generator()
-			for i := 0; i < testMail100K; i++ {
-				str := strconv.FormatInt(int64(c), 10) + ":" +
-					strconv.FormatInt(int64(i), 10) + ":" +
-					randStrGen.RandomString(100)
-				hash, err := hashGen.Gen(str)
-				if err != nil {
-					t.Fatalf("Test: Gen failed. err=(%v)", err.AddStack(nil))
-					return
-				}
-				str = str + ":" + hash
-				testPushMail(&h, mb, str)
-			}
-		}(c)
-	}
-	<-h.done
-	validateRunning(&h, true)
-	h.t.Logf("TestMailboxCommon: testMailHandlerTestTypeConcurrent100K Done")
-
-	// Test close.
-	h.testType = testMailHandlerTestTypeClose
-	km := h.mailPool.Get().(*mail)
-	km.next = nil
-	km.id = DefaultMailID
-	km.action = MailActionExit
-	km.content = &testMail{str: "exit", waitCh: make(chan struct{}, 1)}
-	mb.pushHead(km)
-	<-h.done
-	<-km.content.(*testMail).waitCh
-	validateRunning(&h, false)
-	h.t.Logf("TestMailboxCommon: testMailHandlerTestTypeClose Done")
-}
-
-func testPushMail(h *testMailHandler, mb *mailBox, str string) {
-	m := h.mailPool.Get().(*mail)
-	m.next = nil
-	m.id = DefaultMailID
-	m.action = MailActionRun
-	m.content = &testMail{str: str}
-	mb.pushTail(m)
-}
-
-func validateRunning(h *testMailHandler, shouldRun bool) {
-	if h.mb.isRunning() != shouldRun {
-		h.t.Fatalf("validateRunning: Invalid running. shouldRun=(%v)", shouldRun)
-	}
 }
 
 // Benchmark
 
 type benchmarkMailHandler struct {
-	b    *testing.B
-	done chan bool
-
-	sendNum    int
-	receiveNum int
-	mailPool   sync.Pool
+	b       *testing.B
+	wg      sync.WaitGroup
+	sendNum int
+	recvNum int
 }
 
 func (h *benchmarkMailHandler) mailboxOnStartUp(fn func() *Error) *Error {
@@ -680,59 +1379,54 @@ func (h *benchmarkMailHandler) mailboxOnStartUp(fn func() *Error) *Error {
 }
 
 func (h *benchmarkMailHandler) mailboxOnReceive(mail *mail) {
-	h.receiveNum += 1
-	if h.sendNum-h.receiveNum == 0 {
-		h.done <- true
-		h.b.Logf("Send=%d Recv=%d\n", h.sendNum, h.receiveNum)
+	h.recvNum += 1
+	if h.sendNum-h.recvNum == 0 {
+		log.Printf("Send=%d Recv=%d\n", h.sendNum, h.recvNum)
 	}
-	h.mailPool.Put(mail)
+	h.wg.Done()
 }
 
 func (h *benchmarkMailHandler) mailboxOnStop(killMail, remainMails *mail, num uint32) *Error {
-	if killMail == nil || killMail.action != MailActionExit {
-		h.b.Fatal("Benchmark mailbox has received invalid stop-mail.")
-	}
-	h.mailPool.Put(killMail)
-	if remainMails != nil {
-		h.b.Fatal("Benchmark mailbox has received invalid remain-mails.")
-	}
+	//log.Println("Benchmark mailbox has received stop-mail.")
+	//for ; remainMails != nil; remainMails = remainMails.next {
+	//}
+	h.wg.Done()
 	return nil
 }
 
 func benchmarkMailBox(b *testing.B, waiters int) {
-	h := benchmarkMailHandler{b: b, done: make(chan bool, 1), mailPool: sync.Pool{New: func() any { return &mail{} }}}
-	ls := &loggingService{}
-	if err := ls.init(&appLoggingForBenchmark{b: b}); err != nil {
-		b.Fatalf("Benchmark: Init failed. err=(%v)", err.AddStack(nil))
-		return
-	}
-	mb := newMailBox("benchmarkMailbox", &h, ls)
+	allocMailUsingPool = true
+	h := benchmarkMailHandler{b: b}
+	mb := newMailBox("benchmarkMailbox", &h, newBenchLoggingAtomos(b))
 	if err := mb.start(nil); err != nil {
-		b.Fatalf("Benchmark: Start failed. err=(%v)", err.AddStack(nil))
+		b.Errorf("Benchmark: Start failed. err=(%v)", err.AddStack(nil))
 		return
 	}
-
-	km := h.mailPool.Get().(*mail)
-	km.next = nil
-	km.id = DefaultMailID
-	km.action = MailActionExit
-	km.content = nil
-	defer mb.pushHead(km)
-
-	for routine := 0; routine < waiters+1; routine++ {
+	b.Log("add", b.N, "waiters", waiters)
+	for routine := 0; routine < waiters; routine++ {
+		h.wg.Add(b.N)
 		h.sendNum += b.N
 		go func() {
 			for i := 0; i < b.N; i++ {
-				m := h.mailPool.Get().(*mail)
-				m.next = nil
-				m.id = DefaultMailID
-				m.action = MailActionRun
-				m.content = nil
+				m := allocMail()
+				initMail(m, DefaultMailID, nil)
 				mb.pushTail(m)
 			}
 		}()
 	}
-	<-h.done
+	h.wg.Wait()
+	h.wg.Add(1)
+	killMail := allocMail()
+	initKillMail(killMail, DefaultMailID, nil, nil)
+	killMail.data = &mailExitCommand{}
+	mb.pushHead(killMail)
+	h.wg.Wait()
+	if mb.running {
+		b.Errorf("Benchmark: Mailbox is still running after sending exit mail.")
+	}
+	if h.recvNum != h.sendNum {
+		b.Errorf("Benchmark: Mailbox received wrong number of mails. expect=(%d) got=(%d)", h.sendNum, h.recvNum)
+	}
 }
 
 func BenchmarkMailbox1(b *testing.B) {
@@ -740,36 +1434,29 @@ func BenchmarkMailbox1(b *testing.B) {
 }
 
 func BenchmarkMailbox2(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 2)
 }
 
 func BenchmarkMailbox4(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 4)
 }
 
 func BenchmarkMailbox8(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 8)
 }
 
 func BenchmarkMailbox16(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 16)
 }
 
 func BenchmarkMailbox32(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 32)
 }
 
 func BenchmarkMailbox64(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 64)
 }
 
 func BenchmarkMailbox128(b *testing.B) {
-	initTestFakeCosmosProcessBenchmark(b)
 	benchmarkMailBox(b, 128)
 }

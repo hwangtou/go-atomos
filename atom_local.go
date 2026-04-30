@@ -1,9 +1,11 @@
-package go_atomos
+package atomos
 
 import (
 	"container/list"
-	"google.golang.org/protobuf/proto"
+	"runtime/debug"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Actual Atom
@@ -43,7 +45,6 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		Node:    e.atomos.id.Node,
 		Element: e.atomos.id.Element,
 		Atom:    name,
-		//GoId:    0,
 	}
 	a := &AtomLocal{
 		element:     e,
@@ -67,7 +68,7 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
-	a.atomos = NewBaseAtomos(id, lv, a, instance, e.cosmosLocal.process)
+	a.atomos = NewBaseAtomos(a, id, lv, a, instance, e.cosmosLocal.process)
 
 	return a, nil
 }
@@ -76,21 +77,11 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 // Implementation of ID
 //
 
-func (a *AtomLocal) GetIDContext() IDContext {
-	return &a.atomos.ctx
-}
-
 func (a *AtomLocal) GetIDInfo() *IDInfo {
-	if a == nil {
-		return nil
-	}
 	return a.atomos.GetIDInfo()
 }
 
 func (a *AtomLocal) String() string {
-	if a == nil {
-		return "nil"
-	}
 	return a.atomos.String()
 }
 
@@ -98,7 +89,7 @@ func (a *AtomLocal) Cosmos() CosmosNode {
 	return a.element.cosmosLocal
 }
 
-func (a *AtomLocal) State() AtomosState {
+func (a *AtomLocal) State() BaseAtomosState {
 	return a.atomos.GetState()
 }
 
@@ -108,18 +99,21 @@ func (a *AtomLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) SyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message) (out proto.Message, err *Error) {
-	out, err = a.atomos.PushMessageMailAndWaitReply(callerID, name, false, timeout, in)
-	if err != nil {
-		err = err.AddStack(a)
-	}
-	return
+func (a *AtomLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+	return a.atomos.PushSyncMessage(callerID, name, in, ext)
 }
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) AsyncMessagingByName(callerID SelfID, name string, timeout time.Duration, in proto.Message, callback func(proto.Message, *Error)) {
-	a.atomos.PushAsyncMessageMail(callerID, a, name, timeout, in, callback)
+func (a *AtomLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+	return a.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+}
+
+// asyncCallback
+// 内部使用，仅供ID实现调用。
+// Internal use only, for ID implementation only.
+func (a *AtomLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+	a.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
 }
 
 func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -134,7 +128,7 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
+func (a *AtomLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
 	dev := a.element.elemImpl.Developer
 	elemAuth, ok := dev.(ElementAuthorization)
 	if ok && elemAuth != nil {
@@ -143,25 +137,15 @@ func (a *AtomLocal) Kill(callerID SelfID, timeout time.Duration) *Error {
 		}
 	}
 
-	if err := a.atomos.PushKillMailAndWaitReply(callerID, true, timeout); err != nil {
-		return err.AddStack(a)
-	}
-	return nil
+	return a.atomos.PushKillMail(callerID, ext)
 }
 
-func (a *AtomLocal) SendWormhole(callerID SelfID, timeout time.Duration, wormhole AtomosWormhole) *Error {
-	if err := a.atomos.PushWormholeMailAndWaitReply(callerID, timeout, wormhole); err != nil {
-		return err.AddStack(a)
-	}
-	return nil
+func (a *AtomLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+	return a.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
 }
 
 func (a *AtomLocal) getGoID() uint64 {
 	return a.atomos.GetGoID()
-}
-
-func (a *AtomLocal) asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
-	a.atomos.PushAsyncMessageCallbackMailAndWaitReply(callerID, name, reply, err, callback)
 }
 
 // Implementation of AtomosUtilities
@@ -190,7 +174,7 @@ func (a *AtomLocal) CosmosMain() *CosmosLocal {
 // KillSelf
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
-	if err := a.atomos.PushKillMailAndWaitReply(a, false, 0); err != nil {
+	if err := a.atomos.PushKillMail(a, nil); err != nil {
 		a.Log().Error("Atom: KillSelf failed. err=(%v)", err.AddStack(a))
 		return
 	}
@@ -226,15 +210,15 @@ func (a *AtomLocal) Config() map[string][]byte {
 	return a.element.cosmosLocal.runnable.config.Customize
 }
 
-func (a *AtomLocal) getAtomos() *BaseAtomos {
-	return a.atomos
+func (a *AtomLocal) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+	return a.atomos.asyncSet(callback)
 }
 
 // Implementation of AtomSelfID
 
 func (a *AtomLocal) Persistence() AtomAutoData {
 	p, ok := a.element.atomos.instance.(AutoData)
-	if ok || p == nil {
+	if !ok || p == nil {
 		return nil
 	}
 	return p.AtomAutoData()
@@ -243,113 +227,47 @@ func (a *AtomLocal) Persistence() AtomAutoData {
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (a *AtomLocal) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
-	if fromID == nil {
-		return nil, NewError(ErrFrameworkInternalError, "Atom: OnMessaging without fromID.").AddStack(a)
-	}
-
+func (a *AtomLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
 			"Atom: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a)
 	}
-
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				defer func() {
-					if r2 := recover(); r2 != nil {
-						a.Log().Fatal("Atom: Messaging critical problem again. err=(%v)", err)
-					}
-				}()
-				if err == nil {
-					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Messaging recovers from panic.").AddPanicStack(a, 3, r)
-				} else {
-					err = err.AddPanicStack(a, 3, r)
-				}
-				// Hook or Log
-				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
-					ar.MessageRecover(name, in, err)
-				} else {
-					a.Log().Fatal("Atom: Messaging critical problem. err=(%v)", err)
-				}
-				// Global hook
-				a.element.cosmosLocal.process.onRecoverHook(a.atomos.id, err)
-			}
-		}()
-		out, err = handler(fromID, a.atomos.GetInstance(), in)
-		if err != nil {
-			err = err.AddStack(a)
-		}
-	}()
-	return
+	return a.atomos.OnSyncMessaging(fromID, name, handler, in)
 }
 
-func (a *AtomLocal) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
-	if fromID == nil {
-		if callback != nil {
-			callback(nil, NewError(ErrFrameworkInternalError, "Atom: OnAsyncMessaging without fromID.").AddStack(a))
-		}
-		a.Log().Error("Atom: OnAsyncMessaging without fromID.")
-		return
-	}
-
+func (a *AtomLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
-		if callback != nil {
-			callback(nil, NewErrorf(ErrAtomMessageHandlerNotExists,
-				"Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
-		}
-		a.Log().Error("Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in)
+		fromID.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
 		return
 	}
+	a.atomos.OnAsyncMessaging(fromID, a, name, handler, startupID, asyncID, in)
+}
 
-	var err *Error
-	var out proto.Message
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				defer func() {
-					if r2 := recover(); r2 != nil {
-						a.Log().Fatal("Atom: OnAsyncMessaging critical problem again. err=(%v)", err)
-					}
-				}()
-				if err == nil {
-					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: OnAsyncMessaging recovers from panic.").AddPanicStack(a, 3, r)
-				} else {
-					err = err.AddPanicStack(a, 3, r)
+func (a *AtomLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+	a.atomos.OnAsyncMessagingCallback(asyncID, in, err)
+}
+
+func (a *AtomLocal) OnFnCallback(callback *atomosCallback) {
+	defer func() {
+		if r := recover(); r != nil {
+			defer func() {
+				if r2 := recover(); r2 != nil {
+					a.atomos.log.Fatal("AtomLocal: Recover from panic again when handling task. reason=(%v), stack=(%s)\n", r2, string(debug.Stack()))
 				}
-				// Hook or Log
-				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
-					ar.MessageRecover(name, in, err)
-				} else {
-					a.Log().Fatal("Atom: OnAsyncMessaging critical problem. err=(%v)", err)
-				}
-				// Global hook
-				a.element.cosmosLocal.process.onRecoverHook(a.atomos.id, err)
+			}()
+			if f := callback.recoverFn; f != nil {
+				f(r)
+			} else {
+				a.atomos.log.Fatal("AtomLocal: Recover from panic when handling task. reason=(%v), stack=(%s)\n", r, string(debug.Stack()))
 			}
-		}()
-		out, err = handler(fromID, a.atomos.GetInstance(), in)
-		if err != nil {
-			err = err.AddStack(a)
-		}
-		if callback != nil {
-			fromID.asyncCallback(a, name, out, err, callback)
-		} else {
-			a.Log().Debug("Atom: OnAsyncMessaging without callback. from=(%s),name=(%s),in=(%v),out=(%v),err=(%v)", fromID, name, in, out, err)
 		}
 	}()
+	callback.callback()
 }
 
-func (a *AtomLocal) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
-	callback(in, err.AddStack(a))
-}
-
-func (a *AtomLocal) OnScaling(_ ID, _ string, _ proto.Message) (id ID, err *Error) {
-	return nil, NewError(ErrFrameworkInternalError, "Atom: Atom not supported scaling.").AddStack(a)
-}
-
-func (a *AtomLocal) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
+func (a *AtomLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
@@ -427,7 +345,7 @@ func (a *AtomLocal) OnIDsReleased() {
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message, args ...ArgsForBaseAtomos) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -469,7 +387,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 			}
 		}
 	}
-	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
+	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...); err != nil {
 		return err.AddStack(a)
 	}
 	return nil

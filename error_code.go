@@ -1,120 +1,159 @@
-package go_atomos
+package atomos
 
 const (
 	OK = iota
 
-	// Framework 1-10
+	ErrFrameworkInternalError
+	ErrFrameworkRecoverFromPanic
+	ErrFrameworkIncorrectUsage
 
-	ErrFrameworkInternalError    = 1
-	ErrFrameworkRecoverFromPanic = 2
-	ErrFrameworkIncorrectUsage   = 3
-	ErrMailboxIsRunning          = 4
-	ErrMailboxRuntimeError       = 5
+	// Cosmos Process
 
-	// App Env 11-30
+	ErrCosmosProcessHasNotInitialized
+	ErrCosmosProcessHasBeenStarted
+	ErrCosmosProcessOnStartupPanic
+	ErrCosmosProcessOnShutdownPanic
+	ErrCosmosProcessCannotStopPrepareState
+	ErrCosmosProcessCannotStopStartupState
+	ErrCosmosProcessCannotStopShutdownState
+	ErrCosmosProcessCannotStopOffState
+	ErrCosmosProcessInvalidState
 
-	ErrAppEnvGetExecutableFailed       = 11
-	ErrAppEnvLaunchedFailed            = 12
-	ErrAppEnvRunPathInvalid            = 13
-	ErrAppEnvRunPathPIDFileInvalid     = 14
-	ErrAppEnvRunPathPIDIsRunning       = 15
-	ErrAppEnvRunPathWritePIDFileFailed = 16
-	ErrAppEnvRunPathRemovePIDFailed    = 17
-	ErrAppEnvLoggingPathInvalid        = 18
-	ErrAppEnvLoggingFileOpenFailed     = 19
-	ErrAppEnvCreateWorkDirFailed       = 20
+	// Cosmos Main
 
-	// Cosmos Runnable 31-40
+	ErrMainLoadCertFailed
+	ErrMainElementNotFound
+	ErrMainStartRunningPanic
+	ErrMainCannotKill
+	ErrMainCannotSendWormhole
+	ErrMainCannotMessage
+	ErrMainRunnableNotFound
+	ErrRunnableConfigNotFound
+	ErrRunnableInterfaceInvalid
+	ErrRunnableImplementInvalid
+	ErrRunnableScriptNotFound
 
-	ErrRunnableConfigInvalid  = 31
-	ErrRunnableConfigNotFound = 32
-	ErrRunnableScriptNotFound = 33
+	// Cosmos Global
 
-	// Etcd 41-60
+	// Cosmos Remote
 
-	ErrCosmosEtcdConnectFailed              = 41
-	ErrCosmosEtcdClusterTLSInvalid          = 42
-	ErrCosmosEtcdClusterVersionsCheckFailed = 43
-	ErrCosmosEtcdClusterVersionLockFailed   = 44
-	ErrCosmosEtcdGRPCServerFailed           = 45
-	ErrCosmosEtcdKeepaliveFailed            = 46
-	ErrCosmosEtcdInvalidKey                 = 47
-	ErrCosmosEtcdUpdateFailed               = 48
-	ErrCosmosEtcdGetFailed                  = 49
-	ErrCosmosEtcdPutFailed                  = 50
-	ErrCosmosEtcdDeleteFailed               = 51
+	ErrCosmosRemoteElementNotFound
+	ErrCosmosRemoteListenFailed
+	ErrCosmosRemoteConnectFailed
+	ErrCosmosRemoteRequestInvalid
+	ErrCosmosRemoteResponseFailed
+	ErrCosmosRemoteResponseInvalid
+	ErrCosmosRemoteServerInvalidArgs
+	ErrCosmosRemoteServerInvalidFirstSyncCall
+	ErrCosmosRemoteInfoInvalid
+	ErrCosmosRemoteCannotMessage
+	ErrCosmosRemoteCannotSendWormhole
+	ErrCosmosRemoteCannotKill
+	ErrElementRemoteCannotKill
+	ErrElementRemoteCannotSendWormhole
 
-	// Cosmos Process Life Cycle 61-80
+	// Config
 
-	ErrCosmosProcessHasNotInitialized       = 61
-	ErrCosmosProcessHasBeenStarted          = 62
-	ErrCosmosProcessOnStartupPanic          = 63
-	ErrCosmosProcessOnShutdownPanic         = 64
-	ErrCosmosProcessCannotStopPrepareState  = 65
-	ErrCosmosProcessCannotStopStartupState  = 66
-	ErrCosmosProcessCannotStopShutdownState = 67
-	ErrCosmosProcessCannotStopOffState      = 68
-	ErrCosmosProcessInvalidState            = 69
+	ErrCosmosConfigInvalid
+	ErrCosmosEtcdConnectFailed
+	ErrCosmosEtcdClusterTLSInvalid
+	ErrCosmosEtcdClusterVersionsCheckFailed
+	ErrCosmosEtcdClusterVersionLockFailed
+	ErrCosmosEtcdGRPCServerFailed
+	ErrCosmosEtcdKeepaliveFailed
+	ErrCosmosEtcdInvalidKey
+	ErrCosmosEtcdUpdateFailed
+	ErrCosmosEtcdGetFailed
+	ErrCosmosEtcdPutFailed
+	ErrCosmosEtcdDeleteFailed
+	ErrCosmosConfigCertInvalid
+	ErrCosmosIsClosed
 
-	// Atomos 81-100
+	// App Env
 
-	ErrAtomosIsStopping              = 81
-	ErrAtomosIsNotRunning            = 82
-	ErrAtomosTaskInvalidFn           = 83
-	ErrAtomosTaskNotExists           = 84
-	ErrAtomosTaskAddCrontabFailed    = 85
-	ErrAtomosTaskRemoveCrontabFailed = 86
-	ErrAtomosNotSupportWormhole      = 87
-	ErrAtomosPushTimeoutHandling     = 88
-	ErrAtomosPushTimeoutReject       = 89
-	ErrAtomosIDCallLoop              = 90
+	ErrAppEnvGetExecutableFailed
+	ErrAppEnvLaunchedFailed
+	ErrAppEnvRunPathInvalid
+	ErrAppEnvRunPathPIDFileInvalid
+	ErrAppEnvRunPathPIDIsRunning
+	ErrAppEnvRunPathWritePIDFileFailed
+	ErrAppEnvRunPathRemovePIDFailed
+	ErrAppEnvLoggingFileOpenFailed
+	ErrAppEnvLoggingPathInvalid
+	ErrAppEnvLoggingFileWriteFailed
+	ErrAppEnvLoggingFileCloseFailed
 
-	// Cosmos 101-110
+	// Global
 
-	ErrCosmosElementNotFound    = 101
-	ErrCosmosStartRunningPanic  = 102
-	ErrCosmosCannotKill         = 103
-	ErrCosmosCannotSendWormhole = 104
-	ErrCosmosCannotMessage      = 105
-	ErrCosmosCannotScale        = 106
-	ErrCosmosRunnableNotFound   = 107
+	ErrCosmosGlobalNoEtcdFailed
+	ErrCosmosGlobalEtcdConnectFailed
 
-	// Cosmos Remote 111-120
+	// Unix Domain Socket
 
-	ErrCosmosRemoteElementNotFound     = 111
-	ErrCosmosRemoteListenFailed        = 112
-	ErrCosmosRemoteConnectFailed       = 113
-	ErrCosmosRemoteRequestInvalid      = 114
-	ErrCosmosRemoteResponseInvalid     = 115
-	ErrCosmosRemoteServerInvalidArgs   = 116
-	ErrCosmosRemoteCannotSendWormhole  = 117
-	ErrCosmosRemoteCannotKill          = 118
-	ErrElementRemoteCannotKill         = 119
-	ErrElementRemoteCannotSendWormhole = 120
+	ErrAppUnixDomainSocketFileInvalid
+	ErrAppUnixDomainSocketListenFailed
+	ErrAppUnixDomainSocketDialFailed
+	ErrAppUnixDomainSocketConnWriteFailed
 
-	// Element 121-130
+	// Logging
 
-	ErrElementLoaded                  = 121
-	ErrElementScaleHandlerNotExists   = 122
-	ErrElementMessageHandlerNotExists = 123
-	ErrElementNotImplemented          = 124
+	ErrAppLoggingPathInvalid
+	ErrAppLoggingFileOpenFailed
 
-	// Atom 131-150
+	// Atomos
 
-	ErrAtomMessageHandlerNotExists                    = 131
-	ErrAtomKillElementNoImplement                     = 132
-	ErrAtomKillElementNotImplementAutoDataPersistence = 133
-	ErrAtomFromIDInvalid                              = 134
-	ErrAtomDataNotFound                               = 135
-	ErrAtomNotExists                                  = 136
-	ErrAtomIsRunning                                  = 137
-	ErrAtomIsStopping                                 = 138
-	ErrAtomNotImplemented                             = 139
-	ErrAtomMessageAtomType                            = 140
-	ErrAtomMessageArgType                             = 141
-	ErrAtomMessageReplyType                           = 142
+	ErrAtomosInvalidArguments
+	ErrAtomosIsStopping
+	ErrAtomosIsNotRunning
+	ErrAtomosTaskInvalidFn
+	ErrAtomosTaskNotExists
+	ErrAtomosTaskAddCrontabFailed
+	ErrAtomosTaskRemoveCrontabFailed
+	ErrAtomosNotSupportWormhole
+	ErrAtomosPushTimeoutHandling
+	ErrAtomosPushTimeoutReject
 
-	// Util 201-250
+	ErrAtomosTaskCannotCancelCancelledTask
+	ErrAtomosTaskCannotCancelRunningTask
+	ErrAtomosTaskCannotCancelDoneTask
+
+	// idFirstSyncCall
+
+	ErrIDFirstSyncCallDeadlock
+
+	// Element
+
+	ErrElementLoaded
+	ErrElementMessageHandlerNotExists
+	ErrElementMessageDecoderNotExists
+	ErrElementMessageReplyType
+	ErrElementCannotKill
+	ErrElementNoFromID
+	ErrElementNotImplemented
+	ErrElementFromIDInvalid
+	ErrElementToIDInvalid
+	ErrElementMessageArgType
+
+	// Atom
+
+	ErrAtomMessageHandlerNotExists
+	ErrAtomMessageDecoderNotExists
+	ErrAtomKillElementNoImplement
+	ErrAtomKillElementNotImplementAutoDataPersistence
+	ErrAtomFromIDInvalid
+	ErrAtomToIDInvalid
+	ErrAtomDataNotFound
+	ErrAtomNotExists
+	ErrAtomIsRunning
+	ErrAtomIsStopping
+	ErrAtomNoFromID
+	ErrAtomNotImplemented
+	ErrAtomMessageAtomType
+	ErrAtomMessageArgType
+	ErrAtomMessageReplyType
+	ErrAtomSpawningAnExistedAtom
+
+	// Util File
 
 	ErrUtilOSStatError                      = 201
 	ErrUtilReadDirectoryFailed              = 202
@@ -128,4 +167,8 @@ const (
 	ErrUtilFileChangeOwnerAndModeFailed     = 210
 	ErrUtilFileConfirmOwnerAndModeFailed    = 211
 	ErrUtilCreateFileFailed                 = 212
+	ErrUtilFileEnsureDirectoryFailed        = 213
+	ErrUtilFileFileExistFailed              = 214
+	ErrUtilFileGetDirectorySizeFailed       = 215
+	ErrUtilStringHashSHA256Failed           = 216
 )

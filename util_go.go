@@ -2,10 +2,12 @@ package atomos
 
 import (
 	"bytes"
-	"google.golang.org/protobuf/proto"
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func IsNilProto(p proto.Message) bool {
@@ -33,4 +35,26 @@ func Recover(id SelfID) {
 		err := NewErrorf(ErrFrameworkRecoverFromPanic, "Recovered from panic.").AddPanicStack(id, 3, r)
 		id.Log().Error("Recover: %v", err)
 	}
+}
+
+func dumpAllGoID() map[uint64]bool {
+	m := map[uint64]bool{}
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	info := buf[:n]
+	lines := strings.Split(string(info), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "goroutine ") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				goIDStr := fields[1]
+				goID, er := strconv.ParseUint(goIDStr, 10, 64)
+				if er != nil {
+					panic(er)
+				}
+				m[goID] = true
+			}
+		}
+	}
+	return m
 }

@@ -1,10 +1,10 @@
-package go_atomos
+package atomos
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
-	"syscall"
 	"testing"
 )
 
@@ -19,33 +19,35 @@ type App struct {
 	config *Config
 
 	env     *appEnv
-	logging appLoggingIntf
+	logging appLogging
 }
 
 func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, *Error) {
 	if len(os.Args) < 1 {
-		return nil, NewErrorf(ErrRunnableConfigInvalid, "App: Args is invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
 	}
 	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
-	if err := ensureDirectory(wd); err != nil {
+	if err := UtilFileEnsureDirectory(wd, os.ModePerm|os.ModeDir, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Join log, run, etc path with os separator.
 	logPath := path.Join(wd, "log")
 	runPath := path.Join(wd, "run")
 	etcPath := path.Join(wd, "etc")
-	if err := ensureDirectory(logPath); err != nil {
+	if err := UtilFileEnsureDirectory(logPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := ensureDirectory(runPath); err != nil {
+	if err := UtilFileEnsureDirectory(runPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := ensureDirectory(etcPath); err != nil {
+	if err := UtilFileEnsureDirectory(etcPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Open Log.
-	logMaxSize := defaultLogMaxSize
-	logging, err := NewAppLogging(logPath, logMaxSize)
+	logMaxSize := AppLoggingDefaultMaxSize
+	logging, err := NewAppLoggingToFile(logPath, logMaxSize, 10, func(err *Error) {
+		log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+	})
 	if err != nil {
 		err = err.AddStack(nil)
 		return nil, err.AddStack(nil)
@@ -55,12 +57,12 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		customize = map[string][]byte{}
 	}
 	config := &Config{
-		Cosmos:         cosmos,
-		Node:           node,
-		LogLevel:       logLevel,
-		LogPath:        logPath,
-		LogMaxSize:     int64(logMaxSize),
-		WorkingPath:    wd,
+		Cosmos:     cosmos,
+		Node:       node,
+		LogLevel:   logLevel,
+		LogPath:    logPath,
+		LogMaxSize: logMaxSize,
+		//WorkingPath:    wd,
 		BuildPath:      "",
 		BinPath:        os.Args[0],
 		RunPath:        runPath,
@@ -91,11 +93,13 @@ func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable)
 		return nil, err.AddStack(nil)
 	}
 	// Open Log.
-	logSize := int(conf.LogMaxSize)
+	logSize := conf.LogMaxSize
 	if logSize == 0 {
-		logSize = defaultLogMaxSize
+		logSize = AppLoggingDefaultMaxSize
 	}
-	logging, err := NewAppLogging(conf.LogPath, logSize)
+	logging, err := NewAppLoggingToFile(conf.LogPath, logSize, 10, func(err *Error) {
+		log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+	})
 	if err != nil {
 		err = err.AddStack(nil)
 		return nil, err.AddStack(nil)
@@ -185,15 +189,15 @@ func (a *App) ForkAppProcess() *Error {
 
 	a.env.env = os.Environ()
 	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAppKey(), "1"))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.getCurAccessLogName()))
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.getCurErrorLogName()))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.getCurAccessLogName()))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.getCurErrorLogName()))
 
 	// Fork Process
 	attr := &os.ProcAttr{
 		Dir:   a.env.workPath,
 		Env:   a.env.env,
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Sys:   &syscall.SysProcAttr{Setsid: true},
+		Sys:   createSysProcAttr(),
 	}
 	proc, er = os.StartProcess(a.env.executablePath, a.env.args, attr)
 	if er != nil {
@@ -231,20 +235,4 @@ func (a *App) ExitApp() {
 
 func (a *App) WaitExitApp() <-chan bool {
 	return a.env.exitCh
-}
-
-// Utils
-
-func ensureDirectory(path string) *Error {
-	pathStat, er := os.Stat(path)
-	if os.IsNotExist(er) {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Create working directory failed. err=(%v)", err).AddStack(nil)
-		}
-	} else {
-		if !pathStat.IsDir() {
-			return NewErrorf(ErrAppEnvCreateWorkDirFailed, "App: Working directory is not a directory. path=(%s)", path).AddStack(nil)
-		}
-	}
-	return nil
 }

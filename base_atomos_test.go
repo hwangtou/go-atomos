@@ -1,198 +1,258 @@
-package go_atomos
+package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"testing"
+	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
-type testMainScript struct {
-	t *testing.T
-}
+// TestBaseAtomos_LifeCycle
 
-func (s *testMainScript) OnBoot(local *CosmosProcess) *Error {
-	return nil
-}
+func TestBaseAtomos_LifeCycle(t *testing.T) {
+	id := &IDInfo{
+		Type:    IDType_Atom,
+		Cosmos:  "test_cosmos",
+		Node:    "test_node",
+		Element: "test_element",
+		Atom:    "test_atomos",
+		Version: 0,
+	}
+	process := newTestCosmosProcessWithoutCluster(t, id.Cosmos, id.Node)
+	tba := newBaseAtomosForTest(t, id, process)
 
-func (s *testMainScript) OnStartUp(local *CosmosProcess) *Error {
-	//s.t.Log("testMainScript: LocalReady Begin")
-	//panic("startup panic")
-	//s.t.Log("testMainScript: LocalReady End")
-	return nil
-}
+	// Base test
+	if !proto.Equal(tba.GetIDInfo(), id) {
+		t.Fatalf("BaseAtomos IDInfo incorrect: %v", tba.GetIDInfo())
+	}
+	if tba.GetIDInfo().String() != id.String() {
+		t.Fatalf("BaseAtomos String incorrect: %v %v", tba.GetIDInfo().String(), id.String())
+	}
+	if tba.atomos.GetInstance() != tba.instance {
+		t.Fatalf("BaseAtomos instance incorrect: %v", tba.atomos.GetInstance())
+	}
+	if tba.atomos.GetGoID() == 0 {
+		t.Fatalf("BaseAtomos GoID incorrect: %v", tba.atomos.GetGoID())
+	}
+	t.Log("Base test passed")
 
-func (s *testMainScript) OnShutdown() *Error {
-	//s.t.Log("testMainScript: Shutdown Begin")
-	//panic("shutdown panic")
-	//s.t.Log("testMainScript: Shutdown End")
-	return nil
-}
+	tba.atomos.log.logging.PushLogging(id, LogLevel_Debug, "BaseAtomos test")
+	taskDone := make(chan bool)
+	tba.atomos.task.AddToAtomosQueue(func(taskID uint64) {
+		t.Log("BaseAtomos task executed:", taskID)
+		taskDone <- true
+	})
+	<-taskDone
+	t.Log("BaseAtomos task test passed")
 
-type TestAtomosHolder struct {
-	T *testing.T
-}
+	// Sync Messaging test
+	out, err := tba.SyncMessagingByName(process.local,
+		testCaseBaseAtomosSyncMessaging1Name,
+		&Strings{Ss: []string{testCaseBaseAtomosSyncMessaging1In}},
+		nil)
+	if err != nil {
+		t.Fatalf("Failed to start BaseAtomos: %v", err)
+	}
+	if out.(*Strings).Ss[0] != testCaseBaseAtomosSyncMessaging1Out {
+		t.Fatalf("Incorrect output from BaseAtomos: %v", out)
+	}
+	t.Log("Sync Messaging test passed")
 
-func (t *TestAtomosHolder) OnAsyncMessagingCallback(in proto.Message, err *Error, callback func(reply proto.Message, err *Error)) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (t *TestAtomosHolder) OnMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
-	t.T.Logf("OnMessage: from=(%v),state=(%v),name=(%s),args=(%v)", fromID, a.state, name, in)
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if err == nil {
-					err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Messaging recovers from panic.").AddPanicStack(nil, 1, r)
-				}
+	// Async Messaging test
+	asyncDone := make(chan bool)
+	err = tba.AsyncMessagingByName(process.local,
+		testCaseBaseAtomosAsyncMessaging1Name,
+		&Strings{Ss: []string{testCaseBaseAtomosAsyncMessaging1In}},
+		func(out proto.Message, err *Error) {
+			if err != nil {
+				t.Errorf("Async Messaging returned error: %v", err)
+			} else if out.(*Strings).Ss[0] != testCaseBaseAtomosAsyncMessaging1Out {
+				t.Errorf("Incorrect output from Async Messaging: %v", out)
+			} else {
+				t.Log("Async Messaging output correct")
 			}
-		}()
+			asyncDone <- true
+		},
+		nil)
+	if err != nil {
+		t.Fatalf("Failed to start Async Messaging: %v", err)
+	}
+	<-asyncDone
+	t.Log("Async Messaging test passed")
+
+	// Kill
+	if err := tba.Kill(process.local,
+		[]ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+		t.Fatalf("Failed to kill BaseAtomos: %v", err)
+	}
+	if tba.State() != BaseAtomosHalt {
+		t.Fatalf("BaseAtomos did not halt properly, current state: %v", tba.State())
+	}
+	t.Log("Kill test passed")
+}
+
+// BaseAtomos -> BaseAtomos
+
+func TestBaseAtomos_SyncToBaseAtomos(t *testing.T) {
+
+}
+
+// BaseAtomos -> BaseRemote
+
+// internal
+
+func newBaseAtomosForTest(t *testing.T, id *IDInfo, process *CosmosProcess) *testBaseAtomos {
+	tba := &testBaseAtomos{
+		t:       t,
+		process: process,
+	}
+	ti := &testInstance{}
+	ba := NewBaseAtomos(tba, id, LogLevel_Debug, tba, ti, process)
+	tba.atomos = ba
+	tba.instance = ti
+	if err := tba.atomos.start(func() *Error {
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to start BaseAtomos: %v", err)
+	}
+	return tba
+}
+
+type testBaseAtomos struct {
+	t        *testing.T
+	process  *CosmosProcess
+	atomos   *BaseAtomos
+	instance *testInstance
+}
+
+const (
+	testCaseBaseAtomosSyncMessaging1Name = "TestCaseBaseAtomos_SyncMessaging_1"
+	testCaseBaseAtomosSyncMessaging1In   = "TestCaseBaseAtomos_SyncMessaging_1: Hello to BaseAtomos!"
+	testCaseBaseAtomosSyncMessaging1Out  = "TestCaseBaseAtomos_SyncMessaging_1: Hello from BaseAtomos!"
+
+	testCaseBaseAtomosAsyncMessaging1Name = "TestCaseBaseAtomos_AsyncMessaging_1"
+	testCaseBaseAtomosAsyncMessaging1In   = "TestCaseBaseAtomos_AsyncMessaging_1: Hello to BaseAtomos!"
+	testCaseBaseAtomosAsyncMessaging1Out  = "TestCaseBaseAtomos_AsyncMessaging_1: Hello from BaseAtomos!"
+)
+
+func (t *testBaseAtomos) GetIDInfo() *IDInfo {
+	return t.atomos.GetIDInfo()
+}
+
+func (t *testBaseAtomos) String() string {
+	return t.atomos.String()
+}
+
+func (t *testBaseAtomos) Cosmos() CosmosNode {
+	return t.process.local
+}
+
+func (t *testBaseAtomos) State() BaseAtomosState {
+	return t.atomos.GetState()
+}
+
+func (t *testBaseAtomos) IdleTime() time.Duration {
+	return t.atomos.idleTime()
+}
+
+func (t *testBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+	return t.atomos.PushSyncMessage(callerID, name, in, ext)
+}
+
+func (t *testBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+	return t.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+}
+
+func (t *testBaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+	t.t.Log("asyncSet called")
+	return t.atomos.asyncSet(callback)
+}
+
+func (t *testBaseAtomos) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+	t.t.Log("asyncCallback called:", callerID, name, asyncID, reply, err)
+	t.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
+}
+
+func (t *testBaseAtomos) DecoderByName(name string) (in, out MessageDecoder) {
+	panic("not implemented")
+}
+
+func (t *testBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+	return t.atomos.PushKillMail(callerID, ext)
+}
+
+func (t *testBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+	return t.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
+}
+
+func (t *testBaseAtomos) getGoID() uint64 {
+	return t.atomos.GetGoID()
+}
+
+func (t *testBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+	t.t.Log("Sync Messaging test received:", fromID, name, in)
+	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 		switch name {
-		case "panic":
-			_ = (*TestAtomosHolder)(nil).T
+		case testCaseBaseAtomosSyncMessaging1Name:
+			if in.(*Strings).Ss[0] != testCaseBaseAtomosSyncMessaging1In {
+				panic("incorrect value")
+			}
+			return &Strings{Ss: []string{testCaseBaseAtomosSyncMessaging1Out}}, nil
+		default:
+			panic("not implemented" + name)
 		}
-	}()
-	return
+	}
+	return t.atomos.OnSyncMessaging(fromID, name, handler, in)
 }
 
-func (t *TestAtomosHolder) OnAsyncMessaging(fromID ID, name string, in proto.Message, callback func(reply proto.Message, err *Error)) {
+func (t *testBaseAtomos) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+	t.t.Log("Async Messaging test received:", fromID, name, asyncID, in)
+	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+		switch name {
+		case testCaseBaseAtomosAsyncMessaging1Name:
+			if in.(*Strings).Ss[0] != testCaseBaseAtomosAsyncMessaging1In {
+				panic("incorrect value")
+			}
+			return &Strings{Ss: []string{testCaseBaseAtomosAsyncMessaging1Out}}, nil
+		default:
+			panic("not implemented" + name)
+		}
+	}
+	t.atomos.OnAsyncMessaging(fromID, t, name, handler, startupID, asyncID, in)
 }
 
-func (t *TestAtomosHolder) OnScaling(from ID, name string, args proto.Message) (id ID, err *Error) {
-	panic("not supported")
+func (t *testBaseAtomos) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+	t.t.Log("Async Messaging test received:", asyncID, in)
 }
 
-func (t *TestAtomosHolder) OnWormhole(from ID, wormhole AtomosWormhole) *Error {
-	t.T.Logf("OnWormhole: wormhole=(%v)", wormhole)
-	return nil
-}
-
-func (t *TestAtomosHolder) OnStopping(from ID, cancelled []uint64) *Error {
-	t.T.Logf("OnStopping: from=(%v),state=(%v),cancelled=(%v)", from, a.state, cancelled)
-	return nil
-}
-
-func (t *TestAtomosHolder) OnIDsReleased() {
+func (t *testBaseAtomos) OnFnCallback(callback *atomosCallback) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *TestAtomosHolder) Spawn() {
-	t.T.Logf("Spawn")
+func (t *testBaseAtomos) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+	//TODO implement me
+	panic("implement me")
 }
 
-func (t *TestAtomosHolder) Set(message string) {
-	t.T.Logf("Set %s", message)
+func (t *testBaseAtomos) OnStopping(from ID, cancelled []uint64) *Error {
+	return nil
 }
 
-func (t *TestAtomosHolder) Unset(message string) {
-	t.T.Logf("Unset %s", message)
+func (t *testBaseAtomos) OnIDsReleased() {
+	//TODO implement me
+	panic("implement me")
 }
 
-func (t *TestAtomosHolder) Stopping() {
-	t.T.Logf("Stopping")
+type testInstance struct {
 }
 
-func (t *TestAtomosHolder) Halted() {
-	t.T.Logf("Halted")
+func (t *testInstance) String() string {
+	//TODO implement me
+	panic("implement me")
 }
 
-type TestAtomosInstance struct {
-	T      *testing.T
-	reload int
-}
-
-func (t *TestAtomosInstance) String() string {
-	return "Description"
-}
-
-func (t *TestAtomosInstance) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
-	t.T.Logf("Stopping: from=(%v),cancelled=(%v)", from, cancelled)
-	return true, nil
-}
-
-func (t *TestAtomosInstance) Reload(oldInstance Atomos) {
-	t.T.Logf("Reload: state=(%v),reload=(%v)", a.state, oldInstance)
-}
-
-func (t *TestAtomosInstance) TestTask(taskID uint64, data proto.Message) {
-	t.T.Logf("TestTask: state=(%v),taskID=(%d),data=(%v),reload=(%v)", a.state, taskID, data, t.reload)
-}
-
-var a *BaseAtomos
-
-//func TestBaseAtomos(t *testing.T) {
-//	id := &IDInfo{
-//		Type:    IDType_Atom,
-//		Cosmos:  "cosmos",
-//		Element: "element",
-//		Atom:    "atomos",
-//	}
-//	initTestFakeCosmosProcess(t)
-//	time.Sleep(10 * time.Millisecond)
-//	instance := &TestAtomosInstance{T: t, reload: 1}
-//	holder := &TestAtomosHolder{T: t}
-//	atom := NewBaseAtomos(id, LogLevel_Debug, holder, instance)
-//	_ = atom.start(nil)
-//	a = atom
-//	// Push Message
-//	reply, err := a.PushMessageMailAndWaitReply(nil, "", "message", 0, nil)
-//	if err != nil {
-//		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
-//		return
-//	}
-//	// Push Task
-//	taskID, err := a.Task().AddAfter(0, func(taskID uint64) {
-//		instance.TestTask(taskID, nil)
-//	})
-//	if err != nil {
-//		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
-//		return
-//	}
-//	// Push Task
-//	taskID, err = a.Task().AddAfter(1*time.Second, func(taskID uint64) {
-//		instance.TestTask(taskID, nil)
-//	})
-//	if err != nil {
-//		t.Errorf("TaskAddAfter: taskID=(%v),state=(%d),err=(%v)", taskID, a.GetState(), err)
-//		return
-//	}
-//	// Push Wormhole
-//	err = a.PushWormholeMailAndWaitReply(nil, "", 0, "wormhole_message")
-//	if err != nil {
-//		t.Errorf("PushWormholeMailAndWaitReply: err=(%v)", err)
-//		return
-//	}
-//	// Push Message
-//	reply, err = a.PushMessageMailAndWaitReply(nil, "", "message", 0, nil)
-//	if err != nil {
-//		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
-//		return
-//	}
-//	// Push Message Panic
-//	reply, err = a.PushMessageMailAndWaitReply(nil, "", "panic", 0, nil)
-//	if err == nil || len(err.CallStacks) == 0 || err.CallStacks[0].PanicStack == "" {
-//		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
-//		return
-//	}
-//	// Push Kill
-//	err = a.PushKillMailAndWaitReply(nil, "", true, true, 0)
-//	if err != nil {
-//		t.Errorf("PushKillMailAndWaitReply: state=(%d),err=(%v)", a.GetState(), err)
-//		return
-//	}
-//	// Push Message
-//	reply, err = a.PushMessageMailAndWaitReply(nil, "", "send_after_halt", 0, nil)
-//	if err == nil || err.Code != ErrAtomosIsNotRunning {
-//		t.Errorf("PushMessageMailAndWaitReply: reply=(%v),state=(%d),err=(%v)", reply, a.GetState(), err)
-//		return
-//	}
-//	time.Sleep(10 * time.Millisecond)
-//}
-
-// TODO
-func TestBaseAtomosReferenceCount(t *testing.T) {
-}
-
-// TODO
-func TestBaseAtomosTask(t *testing.T) {
+func (t *testInstance) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
+	//TODO implement me
+	panic("implement me")
 }

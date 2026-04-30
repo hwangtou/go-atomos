@@ -7,3 +7,11 @@ func BenchmarkBaseAtomos_GetGoID(b *testing.B) {
 		getGoID()
 	}
 }
+
+//goos: darwin
+//goarch: arm64
+//pkg: github.com/hwangtou/go-atomos
+//cpu: Apple M2 Max
+//BenchmarkBaseAtomos_GetGoID
+//BenchmarkBaseAtomos_GetGoID-12    	  645013	      1717 ns/op
+//PASS

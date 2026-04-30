@@ -4,29 +4,24 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
 )
 
-// Config
-
 func (x *Config) Check() *Error {
 	if x == nil {
-		return NewError(ErrRunnableConfigInvalid, "Config is nil").AddStack(nil)
+		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}
 	if x.Cosmos == "" {
-		return NewError(ErrRunnableConfigInvalid, "Cosmos is empty").AddStack(nil)
+		return NewError(ErrCosmosConfigInvalid, "Cosmos is empty").AddStack(nil)
 	}
 	if x.Node == "" {
-		return NewError(ErrRunnableConfigInvalid, "Node is empty").AddStack(nil)
+		return NewError(ErrCosmosConfigInvalid, "Node is empty").AddStack(nil)
 	}
 	return nil
 }
-
-// IDInfo
 
 func (x *IDInfo) Info() string {
 	if x == nil {
@@ -34,11 +29,15 @@ func (x *IDInfo) Info() string {
 	}
 	switch x.Type {
 	case IDType_Atom:
-		return x.Node + "::" + x.Element + "::" + x.Atom
+		return fmt.Sprintf("%s::%s::%s", x.Node, x.Element, x.Atom)
 	case IDType_Element:
-		return x.Node + "::" + x.Element
+		return fmt.Sprintf("%s::%s", x.Node, x.Element)
 	case IDType_Cosmos:
 		return x.Node
+	//case IDType_AppLoader:
+	//	return "AppLoader"
+	//case IDType_App:
+	//	return "App"
 	default:
 		return x.Node
 	}
@@ -57,13 +56,6 @@ func SelfID2IDInfo(id SelfID) *IDInfo {
 	}
 	return nil
 }
-
-// LogMail
-
-func (x *LogMail) sendReply(reply proto.Message, err *Error) {
-}
-
-// Error
 
 func NewError(code int64, message string) *Error {
 	return &Error{

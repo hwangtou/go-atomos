@@ -1,175 +1,179 @@
-package go_atomos
+package atomos
 
 import (
-	"google.golang.org/protobuf/proto"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
-// 开发者按需实现的接口
-// Interfaces that developer implements as needed.
+// This file defines the interfaces that developers implement to customize actor behavior.
+// Interfaces are organized by category:
+//
+//   Required — Must be implemented for the framework to function.
+//     CosmosMainScript, ElementDeveloper, ElementLoader
+//
+//   Data Persistence — Automatic state save/load on spawn/halt.
+//     AutoData, AtomAutoData, ElementAutoData
+//
+//   Lifecycle — Hooks into actor start, stop, and runtime behavior.
+//     ElementStartRunning, ElementAtomExit, ElementAuthorization
+//
+//   Metadata — Version, capacity, and log level configuration.
+//     ElementVersion, ElementAtomInitNum, ElementLogLevel
+//
+//   Communication — Wormhole messaging and panic recovery.
+//     AtomosAcceptWormhole, AtomosRecover
 
-// 必须实现的接口
-// Interfaces that must be implemented.
+// ━━━ Required Interfaces ━━━
 
-// CosmosMainScript
-// Cosmos的Main脚本，由用户实现，用于在进程启动和关闭时执行一些操作。
-// Main script of Cosmos, which is implemented by developer, will execute some operations when process starts and closes.
+// CosmosMainScript defines the process-level lifecycle hooks.
+// Every application must provide one implementation, set via CosmosRunnable.SetMainScript.
+//
+// Lifecycle order:
+//  1. OnBoot    — called once before any elements are spawned. Use for
+//                 database connections, config validation, etc.
+//  2. OnStartUp — called after all elements are spawned and the cluster is ready.
+//                 Use for initial Atoms, scheduled jobs, etc.
+//  3. OnShutdown — called when the process is stopping. Use for graceful cleanup.
 type CosmosMainScript interface {
 	OnBoot(local *CosmosProcess) *Error
 	OnStartUp(local *CosmosProcess) *Error
 	OnShutdown() *Error
 }
 
-// ElementDeveloper
-// 开发者实现的Element的构造器，将具体的Element对象和Atom的具体Atom对象构造出来，并在启动时传入到Atomos中。
-// Element Constructor of developer implements. It will construct Element object and Atom object, and pass them to Atomos when starts.
+// ElementDeveloper is the factory interface for creating actor instances.
+// Every Element type must provide one implementation, registered via
+// CosmosRunnable.AddElementImplementation.
+//
+// ElementConstructor is called once when the Element spawns.
+// AtomConstructor is called each time an Atom of this Element is spawned.
 type ElementDeveloper interface {
-	// ElementConstructor Element构造器
-	// Element构造器的函数类型，由用户定义，只会构建本地Element。
-	// Element Constructor.
-	// Constructor Function Type of Element, which is defined by developer, will construct local Element only.
+	// ElementConstructor returns the Atomos implementation for this Element.
+	// Called once per Element at spawn time.
 	ElementConstructor() Atomos
 
-	// AtomConstructor Atom构造器
-	// Atom构造器的函数类型，由用户定义，只会构建本地Atom。
-	// Atom Constructor.
-	// Constructor Function Type of Atom, which is defined by developer, will construct local Atom only.
+	// AtomConstructor returns the Atomos implementation for a new Atom.
+	// Called each time an Atom of this Element is spawned. The name is
+	// the caller-chosen unique name for this Atom instance.
 	AtomConstructor(name string) Atomos
 }
 
-// 按需实现的接口：自动数据持久化
-// Interfaces that developer implements as needed: Auto Data Persistence.
+// ElementLoader provides database resource lifecycle hooks.
+// Implement this on your ElementDeveloper when you need to load/unload
+// external resources (database connections, file handles, caches) that
+// outlive individual Atoms.
+//
+// Load is called before the Element's data is fetched via AutoData.
+// Unload is called after the Element halts and its data has been saved.
+type ElementLoader interface {
+	Load(self ElementSelfID, config map[string][]byte, args ...ArgsForBaseAtomos) *Error
+	Unload() *Error
+}
 
-// AutoData
-// 自动数据持久化的构造器，将具体的Atom自动数据持久化对象和Element自动数据持久化对象构造出来。
-// Auto Data Persistence Constructor, it will construct Atom Auto Data Persistence object and Element Auto Data Persistence object.
+// ━━━ Data Persistence Interfaces ━━━
+
+// AutoData enables automatic state persistence for Elements and Atoms.
+// Implement this on your ElementDeveloper to have the framework automatically:
+//   - Load Element data before ElementSpawner runs
+//   - Save Element data after Halt returns save=true
+//   - Load Atom data before AtomSpawner runs (auto-spawn on GetAtomID miss)
+//   - Save Atom data after Halt returns save=true
+//
+// Return nil from AtomAutoData or ElementAutoData to opt out of persistence
+// for that level while keeping it for the other.
 type AutoData interface {
-	// AtomAutoData
-	// 数据持久化助手
-	// Data Persistence Helper
-	// If returns nil, that means the element is not under control of helper.
 	AtomAutoData() AtomAutoData
 	ElementAutoData() ElementAutoData
 }
 
-// AutoDataLoader
-// 自动数据持久化的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
-// Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
-type AutoDataLoader interface {
-	Load(self ElementSelfID, config map[string][]byte) *Error
-	Unload() *Error
-}
-
-// AtomAutoData
-// Atom的自动持久化对象，要提供Atom数据的Getter和Setter。在Element Spawn时，会调用Getter获取数据；在Element Halt时，会调用Setter保存数据。
-// Atom Auto Data Persistence object, it should provide Getter and Setter of Atom data.
-// When Element Spawn, it will call Getter to get data; when Element Halt, it will call Setter to save data.
+// AtomAutoData reads and writes individual Atom state.
+// GetAtomData is called before AtomSpawner. Return nil,nil if there is no
+// previously saved state (first spawn).
+// SetAtomData is called after a stateful Halt.
 type AtomAutoData interface {
-	// GetAtomData
-	// Atom数据的Getter，没有数据时error应该返回nil。
-	// Getter of Atom data, if no data, error should return nil.
 	GetAtomData(name string) (proto.Message, *Error)
-
-	// SetAtomData
-	// Atom数据的Setter，保存Atom。
-	// Setter of Atom data, save Atom.
 	SetAtomData(name string, data proto.Message) *Error
 }
 
-// ElementAutoData
-// Element的自动持久化对象，要提供Element数据的Getter和Setter。
-// Element Auto Data Persistence object, it should provide Getter and Setter of Element data.
+// ElementAutoData reads and writes Element-level state.
+// GetElementData is called before ElementSpawner. Return nil,nil if there
+// is no previously saved state.
+// SetElementData is called after a stateful Element Halt.
 type ElementAutoData interface {
-	// GetElementData
-	// Element数据的Getter，没有数据时error应该返回nil。
-	// Getter of Element data, if no data, error should return nil.
 	GetElementData() (proto.Message, *Error)
-
-	// SetElementData
-	// Element数据的Setter。
-	// Setter of Element data.
 	SetElementData(data proto.Message) *Error
 }
 
-// 按需实现的接口：生命周期相关
-// Interfaces that developer implements as needed: Lifecycle.
+// ━━━ Lifecycle Interfaces ━━━
 
-// ElementStartRunning
-// Element的自定义启动函数，当Element启动时，启动一个新的goroutine调用该函数。
-// Element Start Running Function, when Element starts, it will start a new goroutine to call this function.
+// ElementStartRunning is called in a new goroutine after the Element spawns.
+// Use it for background work that should run for the lifetime of the Element.
+// The goroutine is protected by panic recovery.
 type ElementStartRunning interface {
 	StartRunning()
 }
 
-// ElementAtomExit
-// Element中Atom的自定义退出超时时间和退出间隔时间，用于控制退出。
-// Element Customize Exit, used for controlling Atom kill.
+// ElementAtomExit controls how Atoms within this Element are killed during
+// Element shutdown. Atoms are killed concurrently with a bounded goroutine pool.
+//
+// StopTimeout is the per-Atom deadline for graceful shutdown.
+// StopGap is the pause inserted between starting each Atom's kill sequence,
+// which can reduce load spikes on external systems during mass shutdown.
 type ElementAtomExit interface {
-	// StopTimeout
-	// Element中Atom的自定义退出超时时间，用于控制退出。
 	StopTimeout() time.Duration
-	// StopGap
-	// Element中Atom的自定义退出间隔时间，用于控制退出。
 	StopGap() time.Duration
 }
 
-// ElementAuthorization
-// Element的鉴权，用于检查操作是否满足权限。
-// Element Authorization, used for checking whether the operation meets the permission.
+// ElementAuthorization gates cross-actor kill operations.
+// When implemented, Atom.Kill will call AtomCanKill before proceeding.
+// Return nil to allow the kill, or an *Error to deny it.
 type ElementAuthorization interface {
-	// AtomCanKill
-	// Atom是否可以被该ID的Atom终止。
-	// Atom保存函数的函数类型，只有有状态的Atom会被保存。
-	// Whether the Atom can be killed by the ID or not.
-	// Saver Function Type of Atom, only stateful Atom will be saved.
 	AtomCanKill(ID) *Error
 }
 
-// 按需实现的接口：描述信息相关
-// Interfaces that developer implements as needed: Description.
+// ━━━ Metadata Interfaces ━━━
 
-// ElementVersion
-// Element的自定义版本号，用于版本控制。
-// Element Customize Version, used for version control.
+// ElementVersion declares the version of this Element implementation.
+// This is a single uint64 used for hot-upgrade compatibility detection in
+// the etcd cluster layer: nodes with the same version number are treated
+// as compatible and can replace each other. It is NOT a semver.
 type ElementVersion interface {
 	GetElementVersion() uint64
 }
 
-// ElementAtomInitNum
-// Element的自定义Atom初始数量，用于初始化Atom的数量。
-// Element Customize Atom Initial Number, used for initializing Atom number.
+// ElementAtomInitNum pre-sizes the Atom container map to the expected number
+// of Atoms, reducing allocation during startup. If not implemented, the map
+// starts with Go's default capacity.
 type ElementAtomInitNum interface {
 	GetElementAtomsInitNum() int
 }
 
-// ElementLogLevel
-// Element的自定义日志级别，用于控制日志输出。
-// Element Customize Log Level, used for controlling log output.
+// ElementLogLevel overrides the process-wide log level for this Element.
+// All Atoms within the Element inherit this level.
 type ElementLogLevel interface {
 	GetElementLogLevel() LogLevel
 }
 
-// 按需实现的接口：Atomos - 发送和接收虫洞
-// Interfaces that developer implements as needed: Atomos - Send to and Accept from wormhole
+// ━━━ Communication Interfaces ━━━
 
-// AtomosAcceptWormhole
-// 接收虫洞中的内容，如果不实现，则无法正常使用ID中的SendWormhole方法。
-// Accept object from wormhole, if not implemented, SendWormhole method of ID will not work properly.
+// AtomosAcceptWormhole enables an actor to receive wormhole messages.
+// Wormholes carry arbitrary typed data (implementing BaseAtomosWormhole)
+// between actors. If not implemented, SendWormhole to this actor returns
+// ErrAtomosNotSupportWormhole.
 type AtomosAcceptWormhole interface {
-	AcceptWormhole(fromID ID, wormhole AtomosWormhole) *Error
+	AcceptWormhole(fromID ID, wormhole BaseAtomosWormhole) *Error
 }
 
-// 按需实现的接口：Atomos - 各种崩溃恢复的处理
-// Interfaces that developer implements as needed: Atomos - Recover from various crashes
-
-// AtomosRecover
-// Atomos的各种崩溃恢复的处理，如果不实现，将使用默认的处理。
-// Recover from various crashes of Atomos, if not implemented, default processing will be used.
+// AtomosRecover gives an actor visibility into panics that occur during
+// its lifecycle. When implemented, the corresponding method is called
+// instead of the default Fatal-log-and-continue behavior.
+//
+// Each method receives the *Error that captures the panic stack and reason.
+// Use this to implement custom alerting, metrics, or graceful degradation.
 type AtomosRecover interface {
 	ParallelRecover(err *Error)
 	SpawnRecover(arg proto.Message, err *Error)
 	MessageRecover(name string, arg proto.Message, err *Error)
-	ScaleRecover(name string, arg proto.Message, err *Error)
 	TaskRecover(taskID uint64, name string, arg proto.Message, err *Error)
 	StopRecover(err *Error)
 }

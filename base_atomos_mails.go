@@ -16,77 +16,66 @@ import (
 // #3 Go的Channel是单向的，没有系统的办法去处理回调问题。
 //
 
-const DefaultMailID = 0
-
 // 邮件类型
 
-type MailType int
+type BaseAtomosMailType int
 
 const (
-	// MailHalt
+	// BaseAtomosMailKill
 	// 终止邮件，用于停止Atomos的运行。
 	// Stopping Mail, for stopping an atomos from running.
-	MailHalt MailType = 0
+	BaseAtomosMailKill BaseAtomosMailType = 0
 
-	// MailMessage
+	// BaseAtomosMailSync
 	// 信息邮件，用于外部给运行中的Atomos传递信息。
 	// Message Mail, for messaging to a running atomos from outer.
-	MailMessage MailType = 1
+	BaseAtomosMailSync BaseAtomosMailType = 1
 
-	// MailAsyncMessage
-	// 异步信息邮件，用于外部给运行中的Atomos传递信息。
-	// Async Message Mail, for messaging to a running atomos from outer.
-	MailAsyncMessage MailType = 2
+	// BaseAtomosMailAsync
+	// 异步信息邮件
+	// Async Message Mail without callback.
+	BaseAtomosMailAsync BaseAtomosMailType = 2
 
-	// MailAsyncMessageCallback
+	// BaseAtomosMailOnAsyncCallback
 	// 异步信息回调邮件。
-	MailAsyncMessageCallback MailType = 3
+	BaseAtomosMailOnAsyncCallback BaseAtomosMailType = 3
 
-	// MailTask
-	// 任务邮件，用于内部给运行中的Atomos新增任务。
-	// Task Mail, for adding task to a running atomos from inner.
-	MailTask MailType = 4
-
-	// MailWormhole
+	// BaseAtomosMailWormhole
 	// 虫洞邮件，用于传递不属于"Atomos宇宙"概念的对象。
 	// Wormhole Mail, for transporting non-"Atomos Cosmos" object.
-	MailWormhole MailType = 5
+	BaseAtomosMailWormhole BaseAtomosMailType = 4
 
-	// MailScale
-	// Scale邮件。
-	MailScale MailType = 6
+	// BaseAtomosMailTask
+	// 任务邮件，用于内部给运行中的Atomos新增任务。
+	// Task Mail, for adding task to a running atomos from inner.
+	BaseAtomosMailTask BaseAtomosMailType = 5
+
+	// BaseAtomosMailTaskCallback
+	// 回调邮件。
+	BaseAtomosMailTaskCallback BaseAtomosMailType = 6
 )
 
 // Atomos邮件
 // Atomos Mail
 
-type atomosMail struct {
+type baseAtomosMail struct {
 	// 具体的Mail实例
 	// Concrete Mail instance.
-	*mail
+	mail *mail
 
 	// Atomos邮件类型
 	// Atomos mail type.
 	//
 	// Stopping, Message, Task, Reload
-	mailType MailType
+	mailType BaseAtomosMailType
 
 	// 从哪个ID发来的邮件。
 	// Mail send from which ID.
-	from SelfID
-
-	// 发送到哪个ID的邮件。
-	// Mail send to which ID.
-	to SelfID
+	from ID
 
 	// Message和Task邮件会使用到的，调用的目标对象的名称。
 	// Mail target name, used by Message mail and Task mail.
-	name          string
-	fromCallChain []string
-
-	// 超时时间
-	// Timeout
-	timeout time.Duration
+	name string
 
 	// Message和Task邮件的参数。
 	// Argument that pass to target, used by Message mail and Task mail.
@@ -95,11 +84,15 @@ type atomosMail struct {
 
 	tracker *IDTracker
 
-	wormhole AtomosWormhole
+	wormhole BaseAtomosWormhole
 
 	taskClosure func(uint64)
 
-	asyncMessageCallbackClosure func(proto.Message, *Error)
+	atomosTask     *atomosTask
+	atomosCallback *atomosCallback
+
+	startupID uint64
+	asyncID   uint64
 
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
@@ -109,32 +102,55 @@ type atomosMail struct {
 	mutex sync.Mutex
 }
 
+type atomosCallback struct {
+	callback  func()
+	recoverFn func(any)
+}
+
 // Construct and destruct of Mail may be in different part of code.
 
-func allocAtomosMail() *atomosMail {
-	am := &atomosMail{}
-	am.mail = &mail{content: am}
+func allocBaseAtomosMail() *baseAtomosMail {
+	am := &baseAtomosMail{}
+	am.mail = allocMail()
+	initMail(am.mail, DefaultMailID, am)
 	return am
 }
 
-func deallocAtomosMail(_ *atomosMail) {
+func allocBaseAtomosKillMail() (*mailExitCommand, *baseAtomosMail, *mail) {
+	am := &baseAtomosMail{}
+	am.mail = allocMail()
+	em := initKillMail(am.mail, DefaultMailID, am, nil)
+	return em, am, am.mail
 }
 
-// 消息邮件
-// Message Mail
-func initMessageMail(am *atomosMail, from SelfID, fromCallChain []string, name string, arg proto.Message) {
-	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailMessage
+func releaseBaseAtomosMail(am *baseAtomosMail) {
+}
+
+func unwrapBaseAtomosMail(m *mail) *baseAtomosMail {
+	return m.data.(*baseAtomosMail)
+}
+
+func unwrapBaseAtomosKillMail(m *mail) (*mailExitCommand, *baseAtomosMail) {
+	em := m.data.(*mailExitCommand)
+	return em, em.data.(*baseAtomosMail)
+}
+
+func unwrapBaseAtomosFromKillMail(em *mailExitCommand) *baseAtomosMail {
+	return em.data.(*baseAtomosMail)
+}
+
+// 初始化同步消息邮件
+// Init Synchronous Message Mail
+func initBaseAtomosMailSync(am *baseAtomosMail, from ID, name string, arg proto.Message) {
+	am.mailType = BaseAtomosMailSync
 	am.from = from
-	am.fromCallChain = fromCallChain
 	am.name = name
 	// I think it has to be cloned, because argument is passing between atomos.
 	if arg != nil {
 		if ShouldArgumentClone {
 			am.arg = proto.Clone(arg)
 		} else {
-			am.arg = arg
+			am.arg = proto.Clone(arg)
 		}
 	} else {
 		am.arg = nil
@@ -142,17 +158,10 @@ func initMessageMail(am *atomosMail, from SelfID, fromCallChain []string, name s
 	am.waitCh = make(chan *mailReply, 1)
 }
 
-// 异步消息邮件
-func initAsyncMessageMail(am *atomosMail, from, to SelfID, name string, timeout time.Duration, callback func(proto.Message, *Error), arg proto.Message) {
-	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailAsyncMessage
+func initBaseAtomosMailAsync(am *baseAtomosMail, from ID, name string, startupID, asyncID uint64, arg proto.Message) {
+	am.mailType = BaseAtomosMailAsync
 	am.from = from
-	am.to = to
 	am.name = name
-	am.timeout = timeout
-	am.asyncMessageCallbackClosure = callback
-	// I think it has to be cloned, because argument is passing between atomos.
 	if arg != nil {
 		if ShouldArgumentClone {
 			am.arg = proto.Clone(arg)
@@ -162,69 +171,63 @@ func initAsyncMessageMail(am *atomosMail, from, to SelfID, name string, timeout 
 	} else {
 		am.arg = nil
 	}
+	am.startupID = startupID
+	am.asyncID = asyncID
 }
 
 // AsyncMessageCallback邮件
 // Async Message Callback Mail
-func initAsyncMessageCallbackMail(am *atomosMail, from SelfID, name string, callback func(proto.Message, *Error), arg proto.Message, err *Error) {
-	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailAsyncMessageCallback
+func initAsyncMessageCallbackMail(am *baseAtomosMail, from ID, name string, startupID, asyncID uint64, arg proto.Message, err *Error) {
+	am.mailType = BaseAtomosMailOnAsyncCallback
 	am.from = from
-	am.fromCallChain = nil
 	am.name = name
 	am.arg = arg
 	am.err = err
-	am.asyncMessageCallbackClosure = callback
-	am.waitCh = make(chan *mailReply, 1)
-}
-
-// Scale邮件
-// Scale Mail
-func initScaleMail(am *atomosMail, from SelfID, fromCallChain []string, name string, arg proto.Message) {
-	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailScale
-	am.from = from
-	am.fromCallChain = fromCallChain
-	am.name = name
-	// I think it has to be cloned, because argument is passing between atomos.
-	if arg != nil {
-		if ShouldArgumentClone {
-			am.arg = proto.Clone(arg)
-		} else {
-			am.arg = arg
-		}
-	} else {
-		am.arg = nil
-	}
-	am.tracker = nil
-	am.wormhole = nil
-	am.mailReply = mailReply{}
-	am.waitCh = make(chan *mailReply, 1)
+	am.startupID = startupID
+	am.asyncID = asyncID
 }
 
 // 任务闭包邮件
 // Task Closure Mail
 // name中记录调用的闭包代码定位信息。
-func initTaskClosureMail(am *atomosMail, name string, taskID uint64, closure func(uint64)) {
+func initTaskClosureMail(am *baseAtomosMail, name string, taskID uint64, closure func(uint64)) {
 	am.mail.id = taskID
-	am.mail.action = MailActionRun
-	am.mailType = MailTask
+	am.mailType = BaseAtomosMailTask
 
 	am.name = name
 	am.taskClosure = closure
 	am.waitCh = make(chan *mailReply, 1)
 }
 
+func initTaskQueueMail(am *baseAtomosMail, name string, helper *taskHelper) {
+	am.mail.id = helper.atomosTask.id
+	am.mailType = BaseAtomosMailTask
+
+	am.name = name
+	am.atomosTask = helper.atomosTask
+	am.atomosTask.atomosMail = am
+	am.atomosTask.helper = helper
+	am.waitCh = make(chan *mailReply, 1)
+}
+
+func initCallbackMail(am *baseAtomosMail, name string, callback func(), recoverFn func(any)) {
+	am.mail.id = DefaultMailID
+	am.mailType = BaseAtomosMailTaskCallback
+
+	am.name = name
+	am.atomosCallback = &atomosCallback{
+		callback:  callback,
+		recoverFn: recoverFn,
+	}
+	am.waitCh = make(chan *mailReply, 1)
+}
+
 // 虫洞邮件
 // Reload Mail
-func initWormholeMail(am *atomosMail, from SelfID, fromCallChain []string, wormhole AtomosWormhole) {
+func initWormholeMail(am *baseAtomosMail, from ID, wormhole BaseAtomosWormhole) {
 	am.mail.id = DefaultMailID
-	am.mail.action = MailActionRun
-	am.mailType = MailWormhole
+	am.mailType = BaseAtomosMailWormhole
 	am.from = from
-	am.fromCallChain = fromCallChain
 	am.name = ""
 	am.arg = nil
 	am.tracker = nil
@@ -235,12 +238,10 @@ func initWormholeMail(am *atomosMail, from SelfID, fromCallChain []string, wormh
 
 // 终止邮件
 // Stopping Mail
-func initKillMail(am *atomosMail, from SelfID, fromCallChain []string) {
+func initAtomosKillMail(am *baseAtomosMail, from ID) {
 	am.mail.id = DefaultMailID
-	am.mail.action = MailActionExit
-	am.mailType = MailHalt
+	am.mailType = BaseAtomosMailKill
 	am.from = from
-	am.fromCallChain = fromCallChain
 	am.name = ""
 	am.tracker = nil
 	am.wormhole = nil
@@ -258,8 +259,8 @@ type mailReply struct {
 
 // Method sendReply() will only be called in for-loop of MailBox, it's safe to do so, because while an atomos is
 // waiting for replying, the atomos must still be running. Or if the atomos is not waiting for replying, after mailReply
-// has been sent to waitCh, there will have no reference to the waitCh, waitCh will be collected.
-func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
+// has been sent to waitCh, there will has no reference to the waitCh, waitCh will be collected.
+func (m *baseAtomosMail) sendReply(resp proto.Message, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	//m.waitCh = nil
@@ -277,7 +278,7 @@ func (m *atomosMail) sendReply(resp proto.Message, err *Error) {
 	//waitCh = nil
 }
 
-func (m *atomosMail) sendReplyID(id ID, err *Error) {
+func (m *baseAtomosMail) sendReplyID(id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	//m.waitCh = nil
@@ -291,16 +292,10 @@ func (m *atomosMail) sendReplyID(id ID, err *Error) {
 	waitCh <- &m.mailReply
 }
 
-func (m *atomosMail) asyncReply(resp proto.Message, err *Error) {
-	if m.asyncMessageCallbackClosure == nil {
-		// No callback, no reply.
-		return
-	}
-	m.from.asyncCallback(m.from, m.name, resp, err, m.asyncMessageCallbackClosure)
-}
-
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto.Message, err *Error) {
+func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (resp proto.Message, err *Error) {
+	timeout := helper.timeout
+
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
@@ -310,12 +305,13 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 	}
 	var reply *mailReply
 	if timeout == 0 {
-		timeout = messageDeadlineDefault
+		timeout = 10 * time.Second
 	}
 	select {
 	case reply = <-waitCh:
 	case <-time.After(timeout):
 		if a.mailbox.removeMail(m.mail) {
+			releaseMail(m.mail)
 			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		} else {
 			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
@@ -331,7 +327,7 @@ func (m *atomosMail) waitReply(a *BaseAtomos, timeout time.Duration) (resp proto
 }
 
 // TODO: Think about waitReplyID() is still waiting when cosmos runnable is exiting.
-func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, err *Error) {
+func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, err *Error) {
 	m.mutex.Lock()
 	waitCh := m.waitCh
 	m.mutex.Unlock()
@@ -343,12 +339,13 @@ func (m *atomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id ID, e
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	var reply *mailReply
 	if timeout == 0 {
-		timeout = messageDeadlineDefault
+		timeout = 10 * time.Second
 	}
 	select {
 	case reply = <-waitCh:
 	case <-time.After(timeout):
 		if a.mailbox.removeMail(m.mail) {
+			releaseMail(m.mail)
 			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		} else {
 			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
