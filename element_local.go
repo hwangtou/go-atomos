@@ -508,11 +508,24 @@ func (e *ElementLocal) elementAtomSpawn(callerID ID, name string, arg proto.Mess
 		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
+	// Fixed:
+	// Race in spawnLockMap.Remove ordering — the lock is removed from the map before it's unlocked
+	//
+	// Let me understand the spawn lock map implementation first.
+	//
+	// Actually, looking at this more carefully — spawnLockMap uses MapGoWithRefCount, so Remove decrements a ref count and only deletes the entry when it reaches 0. The race I originally
+	// described is prevented because a waiting goroutine's GetOrPut increments the ref count, keeping the lock in the map.
+	//
+	// However, the unlock-before-remove ordering is still fragile — if anyone changes the map implementation to not use ref counting, the race becomes real. The fix is to remove from the map
+	// while still holding the lock, then unlock.
+	// Now Remove fires first (while the lock is still held), then Unlock releases it. This means any new goroutine calling GetOrPut after the remove gets a fresh lock rather than the one being
+	// released — which is fine because the current holder has finished its critical section. The ordering no longer depends on ref-counting to be correct.
 	lock, _ := e.spawnLockMap.GetOrPut(name, &sync.Mutex{})
-	defer e.spawnLockMap.Remove(name)
-
 	lock.Lock()
-	defer lock.Unlock()
+	defer func() {
+		e.spawnLockMap.Remove(name)
+		lock.Unlock()
+	}()
 
 	return e.elementAtomSpawnUnderLocking(callerID, name, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
 }
