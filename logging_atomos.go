@@ -24,14 +24,14 @@ const (
 // Logging service of the whole process.
 
 type loggingAtomos struct {
-	logging appLoggingIntf
+	logging appLogging
 	// Logging service is thread-safe due to the mailbox.
 	logBox *mailBox
 
 	buf bytes.Buffer
 }
 
-func (c *loggingAtomos) init(logging appLoggingIntf) *Error {
+func (c *loggingAtomos) init(logging appLogging) *Error {
 	c.logging = logging
 	c.logBox = newMailBox(LoggingServiceDefaultMailboxName, c, c)
 	return c.logBox.start(func() *Error { return nil })

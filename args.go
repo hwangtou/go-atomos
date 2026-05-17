@@ -30,6 +30,14 @@ func ArgBaseAtomosWaitKilled() ArgsForBaseAtomos {
 	return argBaseAtomosWaitKilled{}
 }
 
+// NewArgBaseAtomosWithAny creates an argument that holds any arbitrary data to be passed along with the BaseAtomos operation.
+// 创建一个参数，包含任何任意数据，以便与BaseAtomos操作一起传递。
+// Example usage:
+// toID.SyncMessagingByName(callerID, "message_name", inMessage, []atomos.ArgsForBaseAtomos{atomos.NewArgBaseAtomosWithAny(myData)})
+func NewArgBaseAtomosWithAny(any any) ArgsForBaseAtomos {
+	return ArgBaseAtomosWithAny{Any: any}
+}
+
 // Task
 
 // ArgTaskMark creates an argument that specifies a marking string for the task.

@@ -12,6 +12,7 @@ const (
 	ArgTypeBaseAtomosTimeout      ArgType = 2
 	ArgTypeBaseAtomosAppendToHead ArgType = 3
 	ArgTypeBaseAtomosWaitKilled   ArgType = 4
+	ArgTypeBaseAtomosWithAny      ArgType = 5
 
 	// ArgsForTask
 
@@ -72,6 +73,17 @@ func (argBaseAtomosWaitKilled) getArgType() ArgType {
 	return ArgTypeBaseAtomosWaitKilled
 }
 func (argBaseAtomosWaitKilled) argForBaseAtomos() {}
+
+// BaseAtomosWithAny
+
+type ArgBaseAtomosWithAny struct {
+	Any any
+}
+
+func (ArgBaseAtomosWithAny) getArgType() ArgType {
+	return ArgTypeBaseAtomosWithAny
+}
+func (ArgBaseAtomosWithAny) argForBaseAtomos() {}
 
 // For Task
 
@@ -144,16 +156,16 @@ func (argTaskRecoverFunc) getArgType() ArgType {
 }
 func (argTaskRecoverFunc) argForTask() {}
 
-// ArgsForSpawn
-
-type ArgsForSpawn interface {
-	ArgsInterfaces
-	argForSpawn()
-}
-
-// ArgsForGet
-
-type ArgsForGet interface {
-	ArgsInterfaces
-	argForGet()
-}
+//// ArgsForSpawn
+//
+//type ArgsForSpawn interface {
+//	ArgsInterfaces
+//	argForSpawn()
+//}
+//
+//// ArgsForGet
+//
+//type ArgsForGet interface {
+//	ArgsInterfaces
+//	argForGet()
+//}

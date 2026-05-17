@@ -77,7 +77,7 @@ const (
 
 // newCosmosProcess 创建进程
 // 该函数只能被InitCosmosProcess调用。
-func newCosmosProcess(cosmosName, cosmosNode string, logging appLoggingIntf, args ...any) (*CosmosProcess, *Error) {
+func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ...any) (*CosmosProcess, *Error) {
 	process := &CosmosProcess{}
 	if err := process.init(cosmosName, cosmosNode, logging, args...); err != nil {
 		return nil, err.AddStack(nil)
@@ -86,7 +86,7 @@ func newCosmosProcess(cosmosName, cosmosNode string, logging appLoggingIntf, arg
 }
 
 // init 初始化进程
-func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLoggingIntf, args ...any) *Error {
+func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, args ...any) *Error {
 	p.startupID = uint64(time.Now().UnixNano())
 
 	// Init Info.

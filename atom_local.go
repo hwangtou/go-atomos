@@ -2,9 +2,10 @@ package atomos
 
 import (
 	"container/list"
-	"google.golang.org/protobuf/proto"
 	"runtime/debug"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Actual Atom
@@ -344,7 +345,7 @@ func (a *AtomLocal) OnIDsReleased() {
 // 内部实现
 // INTERNAL
 
-func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message) (err *Error) {
+func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence AutoData, arg proto.Message, args ...ArgsForBaseAtomos) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -386,7 +387,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 			}
 		}
 	}
-	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data); err != nil {
+	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...); err != nil {
 		return err.AddStack(a)
 	}
 	return nil

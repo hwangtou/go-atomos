@@ -38,6 +38,14 @@ type ElementDeveloper interface {
 	AtomConstructor(name string) Atomos
 }
 
+// ElementLoader
+// Element的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
+// Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
+type ElementLoader interface {
+	Load(self ElementSelfID, config map[string][]byte, args ...ArgsForBaseAtomos) *Error
+	Unload() *Error
+}
+
 // 按需实现的接口：自动数据持久化
 // Interfaces that developer implements as needed: Auto Data Persistence.
 
@@ -51,14 +59,6 @@ type AutoData interface {
 	// If returns nil, that means the element is not under control of helper.
 	AtomAutoData() AtomAutoData
 	ElementAutoData() ElementAutoData
-}
-
-// AutoDataLoader
-// 自动数据持久化的加载器的加载方法和卸载方法，用于加载和卸载数据库的资源。
-// Auto Data Persistence Loader's Load and Unload method, used to load and unload database resource.
-type AutoDataLoader interface {
-	Load(self ElementSelfID, config map[string][]byte) *Error
-	Unload() *Error
 }
 
 // AtomAutoData

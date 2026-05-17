@@ -144,7 +144,7 @@ func (c *CosmosLocal) CosmosIsLocal() bool {
 	return true
 }
 
-func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForGet) (ID, *Error) {
+func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForBaseAtomos) (ID, *Error) {
 	e, err := c.getGlobalElement(elemName, "")
 	if err != nil {
 		return nil, err.AddStack(c)
@@ -152,7 +152,7 @@ func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForGet) (I
 	return e, nil
 }
 
-func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForGet) (id ID, tracker *IDTracker, err *Error) {
+func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBaseAtomos) (id ID, tracker *IDTracker, err *Error) {
 	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
@@ -164,7 +164,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForGet)
 	return id, tracker, nil
 }
 
-func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message, args ...ArgsForSpawn) (ID, *IDTracker, *Error) {
+func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
 	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)

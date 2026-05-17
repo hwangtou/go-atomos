@@ -78,6 +78,10 @@ const (
 	ErrAppEnvRunPathPIDIsRunning
 	ErrAppEnvRunPathWritePIDFileFailed
 	ErrAppEnvRunPathRemovePIDFailed
+	ErrAppEnvLoggingFileOpenFailed
+	ErrAppEnvLoggingPathInvalid
+	ErrAppEnvLoggingFileWriteFailed
+	ErrAppEnvLoggingFileCloseFailed
 
 	// Global
 

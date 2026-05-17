@@ -20,9 +20,9 @@ type UtilFileMode struct {
 	Read, Write, Execute bool
 }
 
-func UtilFileAccess(filepath string, perm os.FileMode) (err *Error) {
-	panic("")
-}
+//func UtilFileAccess(filepath string, perm os.FileMode) (err *Error) {
+//	panic("")
+//}
 
 func UtilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) *Error {
 	pathStat, er := os.Stat(dir)

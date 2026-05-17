@@ -484,7 +484,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 autoLoad:
 
 	// Auto Load
-	pa, ok := e.elemImpl.Developer.(AutoDataLoader)
+	pa, ok := e.elemImpl.Developer.(ElementLoader)
 	if !ok || pa == nil {
 		return nil
 	}
@@ -527,13 +527,13 @@ func (e *ElementLocal) elementAtomSpawnUnderLocking(callerID ID, name string, ar
 	// If exists and running, release new and return error.
 	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
 	if has {
-		return e.elementAtomSpawnMeetsExistAtom(name, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
+		return e.elementAtomSpawnMeetsExistAtom(name, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
 	} else {
 		return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
 	}
 }
 
-func (e *ElementLocal) elementAtomSpawnMeetsExistAtom(name string, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawnMeetsExistAtom(name string, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	oldLock := &oldAtom.atomos.mailbox.mutex
 	oldLock.Lock()
 	switch oldAtom.atomos.state {
@@ -566,7 +566,7 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock
 	}
 }
 
-func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool) (toReturn *AtomLocal, idTracker *IDTracker, err *Error) {
+func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (toReturn *AtomLocal, idTracker *IDTracker, err *Error) {
 	if oldLock != nil {
 		oldLock.Unlock()
 	}
@@ -578,10 +578,10 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLoc
 	case <-time.After(time.Second * 10):
 		e.Log().Warn("Element: AtomSpawn meets an atom in stopping state, and it seems that the atom is stuck in stopping. name=(%s)", name)
 	}
-	return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
+	return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
 }
 
-func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
+func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	if oldLock != nil {
 		oldLock.Unlock()
 	}
@@ -620,7 +620,7 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex,
 
 	// Atom的Spawn逻辑。
 	if err = atom.atomos.start(func() *Error {
-		if err := atom.elementAtomSpawn(current, persistence, arg); err != nil {
+		if err := atom.elementAtomSpawn(current, persistence, arg, args...); err != nil {
 			return err.AddStack(nil)
 		}
 		return nil
@@ -688,7 +688,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	}
 }
 
-func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnable, current *ElementImplementation) (err *Error) {
+func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnable, current *ElementImplementation, args ...ArgsForBaseAtomos) (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -717,9 +717,9 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
-	pa, ok := current.Developer.(AutoDataLoader)
+	pa, ok := current.Developer.(ElementLoader)
 	if ok && pa != nil {
-		if err = pa.Load(e, runnable.config.Customize); err != nil {
+		if err = pa.Load(e, runnable.config.Customize, args...); err != nil {
 			return err.AddStack(e)
 		}
 	}
@@ -733,7 +733,7 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 			}
 		}
 	}
-	if err := current.Interface.ElementSpawner(e, e.atomos.instance, data); err != nil {
+	if err := current.Interface.ElementSpawner(e, e.atomos.instance, data, args...); err != nil {
 		return err.AddStack(e)
 	}
 	return nil

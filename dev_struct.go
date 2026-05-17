@@ -75,5 +75,5 @@ type IOMessageDecoder struct {
 	OutDec MessageDecoder
 }
 type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
-type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForSpawn) *Error
-type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForSpawn) *Error
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error
