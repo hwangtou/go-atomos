@@ -77,7 +77,7 @@ const (
 func (as BaseAtomosState) String() string {
 	switch as {
 	case BaseAtomosHalt:
-		return "Stopping"
+		return "Halted"
 	case BaseAtomosSpawning:
 		return "Spawning"
 	case BaseAtomosWaiting:
