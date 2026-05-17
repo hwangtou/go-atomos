@@ -214,7 +214,7 @@ func (c *CosmosLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) 
 }
 
 func (c *CosmosLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
-	panic("Cosmos: Cannot send cosmos async message.")
+	fromID.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
 }
 
 func (c *CosmosLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {

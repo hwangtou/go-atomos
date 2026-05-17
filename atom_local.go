@@ -218,7 +218,7 @@ func (a *AtomLocal) asyncSet(callback func(out proto.Message, err *Error)) (star
 
 func (a *AtomLocal) Persistence() AtomAutoData {
 	p, ok := a.element.atomos.instance.(AutoData)
-	if ok || p == nil {
+	if !ok || p == nil {
 		return nil
 	}
 	return p.AtomAutoData()
