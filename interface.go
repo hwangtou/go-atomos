@@ -132,6 +132,10 @@ type ElementAuthorization interface {
 // ElementVersion
 // Element的自定义版本号，用于版本控制。
 // Element Customize Version, used for version control.
+//
+// BUG: This is a single uint64, not a semver. It is used for hot-upgrade compatibility
+// detection in the etcd cluster layer: nodes with the same version number are treated
+// as compatible and can replace each other.
 type ElementVersion interface {
 	GetElementVersion() uint64
 }

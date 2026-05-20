@@ -29,7 +29,10 @@ func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterfa
 }
 
 func (e *ElementRemoteFromSource) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
-	panic("not supported, should not be called")
+	// BUG: asyncSet should never be called on a source-process remote ID.
+	// It exists only to satisfy the ID interface. Returning zeros so callers
+	// get a safe no-op rather than a process crash.
+	return 0, 0
 }
 
 func (e *ElementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {

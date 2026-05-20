@@ -286,6 +286,11 @@ func (p *CosmosProcess) stopFromOtherNodeAfterResponse() {
 // Stop 停止进程
 // 检查进程状态，如果是运行中，则调用OnShutdown，然后关闭网络监听。
 func (p *CosmosProcess) Stop() *Error {
+	// BUG: Guard against nil receiver — if sharedCosmosProcess was never initialized,
+	// calling Stop would panic. Return an error instead.
+	if p == nil {
+		return NewError(ErrCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
+	}
 	if err := func() *Error {
 		p.mutex.Lock()
 		defer p.mutex.Unlock()
@@ -386,6 +391,11 @@ func (p *CosmosProcess) mainScriptOnShutdownProtect() (err *Error) {
 }
 
 func (p *CosmosProcess) Self() *CosmosLocal {
+	// BUG: Guard against nil receiver — callers may hold a nil *CosmosProcess
+	// if sharedCosmosProcess was never initialized.
+	if p == nil {
+		return nil
+	}
 	return p.local
 }
 
@@ -394,7 +404,8 @@ func RecoveryMiddleware() grpc.UnaryServerInterceptor {
 		defer func() {
 			if r := recover(); r != nil {
 				if sharedCosmosProcess != nil {
-					sharedCosmosProcess.local.Log().coreFatal("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
+					// BUG: Recover() needs a SelfID; use the local cosmos as the ID for consistent logging.
+					Recover(sharedCosmosProcess.Self())
 				} else {
 					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -254,7 +255,10 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.M
 }
 
 func (c *CosmosRemote) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
-	panic("CosmosRemote: asyncSet not implemented. Use AsyncMessagingByName instead.")
+	// BUG: asyncSet should never be called on a CosmosRemote.
+	// It exists only to satisfy the ID interface. Returning zeros so callers
+	// get a safe no-op rather than a process crash.
+	return 0, 0
 }
 
 func (c *CosmosRemote) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
@@ -376,7 +380,7 @@ func (c *cosmosRemoteVersion) check() bool {
 	var er error
 	var client *grpc.ClientConn
 	if c.process.cluster.grpcDialOption == nil {
-		client, er = grpc.DialContext(ctx, c.info.Address, grpc.WithInsecure(), grpc.WithBlock())
+		client, er = grpc.DialContext(ctx, c.info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	} else {
 		client, er = grpc.DialContext(ctx, c.info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
 	}

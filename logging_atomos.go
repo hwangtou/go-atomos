@@ -28,11 +28,12 @@ type loggingAtomos struct {
 	// Logging service is thread-safe due to the mailbox.
 	logBox *mailBox
 
-	buf bytes.Buffer
+	buf *bytes.Buffer
 }
 
 func (c *loggingAtomos) init(logging appLogging) *Error {
 	c.logging = logging
+	c.buf = &bytes.Buffer{}
 	c.logBox = newMailBox(LoggingServiceDefaultMailboxName, c, c)
 	return c.logBox.start(func() *Error { return nil })
 }
@@ -92,11 +93,14 @@ func (c *loggingAtomos) mailboxOnStop(killMail, remainMails *mail, num uint32) *
 }
 
 func (c *loggingAtomos) mailboxWriteLog(lm *LogMail, fromMailboxGoroutine bool) {
+	// BUG: buf is a pointer to avoid subtle value-copy behavior of bytes.Buffer.
+	// When called from outside the mailbox goroutine (!fromMailboxGoroutine),
+	// we allocate a fresh buffer to avoid racing on c.buf.
 	buf := c.buf
 	if fromMailboxGoroutine {
 		buf.Reset()
 	} else {
-		buf = bytes.Buffer{}
+		buf = &bytes.Buffer{}
 	}
 
 	// Time
