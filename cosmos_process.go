@@ -17,25 +17,23 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CosmosProcess
-// 这个才是进程的主循环。
-
+// CosmosProcess is the main process runtime. It owns all mutable configuration
+// that was previously package-level global state, enabling isolated instances
+// for testing and multi-tenant scenarios.
 type CosmosProcess struct {
 	mutex sync.RWMutex
 	state CosmosProcessState
 
 	startupID uint64
 
-	// 进程的日志工具
-	// Logging tool of process
+	// Per-process mutable settings (formerly package-level vars).
+	messageTimeoutTracer  bool
+	messageTimeoutDefault time.Duration
+	muteKeepaliveLog      bool
+
 	logging *loggingAtomos
+	local   *CosmosLocal
 
-	// 本地Cosmos节点
-	// Local Cosmos Node
-	local *CosmosLocal
-
-	// 全局的Cosmos节点
-	// Global Cosmos Node
 	cluster struct {
 		enable bool
 		// ETCD
@@ -88,6 +86,11 @@ func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ..
 // init 初始化进程
 func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, args ...any) *Error {
 	p.startupID = uint64(time.Now().UnixNano())
+
+	// Per-process mutable defaults.
+	p.messageTimeoutTracer = true
+	p.messageTimeoutDefault = 2 * time.Second
+	p.muteKeepaliveLog = true
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}

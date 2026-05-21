@@ -229,7 +229,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			// Keepalive
 			//case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
 			case keepAlive := <-keepAliveCh:
-				if !muteKeepaliveLog {
+				if !p.muteKeepaliveLog {
 					p.local.Log().coreInfo("etcd: Watcher keepalive.")
 				}
 				p.mutex.Lock()

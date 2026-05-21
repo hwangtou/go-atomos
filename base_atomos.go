@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-var detectDeadlock = true
-
 // BaseAtomosHolder Atomos持有者
 // Base Atomos Holder
 type BaseAtomosHolder interface {
@@ -90,10 +88,12 @@ func (as BaseAtomosState) String() string {
 	return "Unknown"
 }
 
-// BaseAtomosWormhole
-// 虫洞传送的对象
-// Object of Wormhole.
-type BaseAtomosWormhole interface{}
+// BaseAtomosWormhole is the interface that values passed through a wormhole must implement.
+// Wormholes carry arbitrary data between actors; implementing this interface explicitly
+// marks a type as wormhole-safe and prevents accidentally passing untyped values.
+type BaseAtomosWormhole interface {
+	isWormhole()
+}
 
 // BaseAtomos 基础Atomos
 // Base Atomos

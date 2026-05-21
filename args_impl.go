@@ -30,13 +30,7 @@ type ArgsInterfaces interface {
 	getArgType() ArgType
 }
 
-//// GetOrSpawnAtomIfNotFound
-//
-//type argGetOrSpawnAtomIfNotFound struct{}
-//
-//func (argGetOrSpawnAtomIfNotFound) getArgType() ArgType {
-//	return ArgTypeGetOrSpawnAtomIfNotFound
-//}
+// TODO: ArgsForSpawn and ArgsForGet are reserved for future use.
 
 // For Base Atomos
 
@@ -156,16 +150,3 @@ func (argTaskRecoverFunc) getArgType() ArgType {
 }
 func (argTaskRecoverFunc) argForTask() {}
 
-//// ArgsForSpawn
-//
-//type ArgsForSpawn interface {
-//	ArgsInterfaces
-//	argForSpawn()
-//}
-//
-//// ArgsForGet
-//
-//type ArgsForGet interface {
-//	ArgsInterfaces
-//	argForGet()
-//}

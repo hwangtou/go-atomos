@@ -511,15 +511,3 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 		}
 	}
 }
-
-//goos: darwin
-//goarch: amd64
-//BenchmarkMailbox1-12             3222063               380 ns/op
-//BenchmarkMailbox2-12             2005591               574 ns/op
-//BenchmarkMailbox4-12             1000000              1028 ns/op
-//BenchmarkMailbox8-12              784436              1928 ns/op
-//BenchmarkMailbox16-12             418808              3561 ns/op
-//BenchmarkMailbox32-12             181590              6990 ns/op
-//BenchmarkMailbox64-12             105127             14608 ns/op
-//BenchmarkMailbox128-12             46101             27612 ns/op
-//PASS
