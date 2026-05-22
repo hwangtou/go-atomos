@@ -402,6 +402,25 @@ func (p *CosmosProcess) Self() *CosmosLocal {
 	return p.local
 }
 
+// IsRunning returns true if the process has completed startup and is in the
+// Running state. Safe for concurrent use.
+// Returns false if the process is nil, not yet started, or shutting down.
+func (p *CosmosProcess) IsRunning() bool {
+	if p == nil {
+		return false
+	}
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.state == CosmosProcessStateRunning
+}
+
+// IsHealthy returns true if the process is in the Running state. This is
+// suitable for Docker HEALTHCHECK and Kubernetes liveness probes.
+// Future versions may add element-level health checks.
+func (p *CosmosProcess) IsHealthy() bool {
+	return p.IsRunning()
+}
+
 func RecoveryMiddleware() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		defer func() {

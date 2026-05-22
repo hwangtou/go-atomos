@@ -32,6 +32,37 @@ type appLogging interface {
 	WriteErrorLog(s string)
 }
 
+// AppLoggingToConsole writes all log output directly to stdout/stderr
+// without file rotation or redirection. This is the logging backend for
+// Docker deployments where the container runtime captures stdout/stderr
+// (docker logs, kubectl logs, systemd journal).
+type AppLoggingToConsole struct{}
+
+// NewAppLoggingToConsole creates a new AppLoggingToConsole instance.
+func NewAppLoggingToConsole() *AppLoggingToConsole {
+	return &AppLoggingToConsole{}
+}
+
+func (l *AppLoggingToConsole) WriteAccessLog(s string) {
+	os.Stdout.WriteString(s)
+}
+
+func (l *AppLoggingToConsole) WriteErrorLog(s string) {
+	os.Stderr.WriteString(s)
+}
+
+// shouldLogToStdout returns true when the runtime configuration or container
+// environment indicates that logs should go to stdout/stderr instead of files.
+func shouldLogToStdout(conf *Config) bool {
+	if v, ok := conf.Customize[ConfigKeyLogStdout]; ok && string(v) == "1" {
+		return true
+	}
+	if isRunningInDocker() {
+		return true
+	}
+	return false
+}
+
 // AppLoggingToFile is the logging to file implementation.
 
 type AppLoggingToFile struct {

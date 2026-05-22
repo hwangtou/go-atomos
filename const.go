@@ -7,45 +7,24 @@ const (
 	logTestErr = true
 )
 
-//var (
-//	LogStdout = false
-//	LogStderr = false
-//)
-//
-//func SetLogStdout(b bool) {
-//	LogStdout = b
-//}
-//
-//func SetLogStderr(b bool) {
-//	LogStderr = b
-//}
-
 const (
-	udsConnReadBufSize = 1024
-)
-
-const (
+	udsConnReadBufSize  = 1024
 	ShouldArgumentClone = false
-)
 
-const (
 	ElementBroadcastName = "Broadcast"
-)
 
-var muteKeepaliveLog = true
+	// ConfigKeyLogStdout is a key in Config.Customize that, when set to "1",
+	// forces all logging to stdout/stderr instead of files. Set via
+	// ATOMOS_LOG_STDOUT env var, YAML log-std field, or Docker auto-detection.
+	ConfigKeyLogStdout = "_log_stdout"
 
-func MuteKeepaliveLog(b bool) {
-	muteKeepaliveLog = b
-}
+	GRPCServerInitialWindowSize     = 1024 * 128      // 128K
+	GRPCServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M
+	GRPCServerWriteBufferSize       = 1024 * 32       // 32K
+	GRPCServerReadBufferSize        = 1024 * 32       // 32K
 
-const (
-	GRPCServerInitialWindowSize     = 1024 * 128      // 128K	默认 64K
-	GRPCServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M	默认 64K
-	GRPCServerWriteBufferSize       = 1024 * 32       // 32K	默认 32KB
-	GRPCServerReadBufferSize        = 1024 * 32       // 32K	默认 32KB
-
-	GRPCClientInitialWindowSize     = 1024 * 128      // 128K	默认 64K
-	GRPCClientInitialConnWindowSize = 1024 * 1024 * 1 // 1M	默认 64K
-	GRPCClientWriteBufferSize       = 1024 * 32       // 32K	默认 32KB
-	GRPCClientReadBufferSize        = 1024 * 32       // 32K	默认 32KB
+	GRPCClientInitialWindowSize     = 1024 * 128      // 128K
+	GRPCClientInitialConnWindowSize = 1024 * 1024 * 1 // 1M
+	GRPCClientWriteBufferSize       = 1024 * 32       // 32K
+	GRPCClientReadBufferSize        = 1024 * 32       // 32K
 )

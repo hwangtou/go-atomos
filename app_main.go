@@ -24,6 +24,12 @@ func Main(runnable CosmosRunnable) {
 	)
 	flag.Parse()
 
+	// Auto-detect Docker: force standalone mode (skip forking).
+	// ATOMOS_STANDALONE env var provides explicit override without flags.
+	if isRunningInDocker() || os.Getenv("ATOMOS_STANDALONE") == "true" {
+		log.Printf("App: Running in container/standalone mode, fork skipped.")
+	}
+
 	var err *Error
 	if configPath == nil {
 		log.Println("App: No config path specified.", os.Getpid())
@@ -38,7 +44,7 @@ func Main(runnable CosmosRunnable) {
 
 	initAndCheckApp()
 
-	if IsParentProcess() && !boolFlag(standalone) {
+	if IsParentProcess() && !boolFlag(standalone) && !isRunningInDocker() && os.Getenv("ATOMOS_STANDALONE") != "true" {
 		if err = app.ForkAppProcess(); err != nil {
 			logAndExit("App: Fork app failed. err=(%v)", err)
 		}
@@ -134,6 +140,12 @@ func initAndCheckApp() {
 	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging); err != nil {
 		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
+	}
+
+	// In Docker, skip PID-based duplicate-instance detection.
+	// Container runtime guarantees single-instance-per-container.
+	if isRunningInDocker() {
+		return
 	}
 
 	isRunning, processID, err := app.Check()
