@@ -43,16 +43,7 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 	if err := UtilFileEnsureDirectory(etcPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	// Open Log.
 	logMaxSize := AppLoggingDefaultMaxSize
-	logging, err := NewAppLoggingToFile(logPath, logMaxSize, 10, func(err *Error) {
-		log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
-	})
-	if err != nil {
-		err = err.AddStack(nil)
-		return nil, err.AddStack(nil)
-	}
-	// Create App instance.
 	if customize == nil {
 		customize = map[string][]byte{}
 	}
@@ -62,14 +53,31 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		LogLevel:   logLevel,
 		LogPath:    logPath,
 		LogMaxSize: logMaxSize,
-		//WorkingPath:    wd,
-		BuildPath:      "",
-		BinPath:        os.Args[0],
-		RunPath:        runPath,
-		EtcPath:        etcPath,
-		EnableCluster:  nil,
-		EnableElements: nil,
-		Customize:      customize,
+		BuildPath:  "",
+		BinPath:    os.Args[0],
+		RunPath:    runPath,
+		EtcPath:    etcPath,
+		Customize:  customize,
+	}
+	// Apply env var overrides so ATOMOS_LOG_STDOUT and Docker detection work.
+	applyEnvOverrides(config)
+
+	// Choose logging backend: console for Docker/env-var-opt-in, file otherwise.
+	var logging appLogging
+	var err *Error
+	if shouldLogToStdout(config) {
+		logging = NewAppLoggingToConsole()
+	} else {
+		logMaxSize := config.LogMaxSize
+		if logMaxSize == 0 {
+			logMaxSize = AppLoggingDefaultMaxSize
+		}
+		logging, err = NewAppLoggingToFile(config.LogPath, logMaxSize, 10, func(err *Error) {
+			log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+		})
+		if err != nil {
+			return nil, err.AddStack(nil)
+		}
 	}
 	return &App{
 		config: config,
@@ -92,17 +100,21 @@ func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable)
 	if err != nil {
 		return nil, err.AddStack(nil)
 	}
-	// Open Log.
-	logSize := conf.LogMaxSize
-	if logSize == 0 {
-		logSize = AppLoggingDefaultMaxSize
-	}
-	logging, err := NewAppLoggingToFile(conf.LogPath, logSize, 10, func(err *Error) {
-		log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
-	})
-	if err != nil {
-		err = err.AddStack(nil)
-		return nil, err.AddStack(nil)
+	// Choose logging backend: console for Docker/env-var-opt-in, file otherwise.
+	var logging appLogging
+	if shouldLogToStdout(conf) {
+		logging = NewAppLoggingToConsole()
+	} else {
+		logSize := conf.LogMaxSize
+		if logSize == 0 {
+			logSize = AppLoggingDefaultMaxSize
+		}
+		logging, err = NewAppLoggingToFile(conf.LogPath, logSize, 10, func(err *Error) {
+			log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+		})
+		if err != nil {
+			return nil, err.AddStack(nil)
+		}
 	}
 	return &App{
 		config: conf,

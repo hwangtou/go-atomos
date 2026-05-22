@@ -97,10 +97,12 @@ removePID:
 }
 
 func (a *appEnv) daemon() *Error {
-	runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
-	pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
-	if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
-		return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
+	if !isRunningInDocker() {
+		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
+		pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
+		if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
+			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
+		}
 	}
 	go a.daemonNotify()
 	return nil
@@ -108,14 +110,18 @@ func (a *appEnv) daemon() *Error {
 
 func (a *appEnv) daemonNotify() {
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch)
+	// Catch only graceful-shutdown signals. SIGKILL cannot be caught.
+	// We intentionally exclude SIGWINCH, SIGURG, and other runtime signals
+	// to avoid goroutine scheduling overhead from the signal channel.
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	defer signal.Stop(ch)
 	for {
 		select {
 		case s := <-ch:
 			switch s {
-			case os.Interrupt, os.Kill:
-				// TODO
+			case syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT:
+				// Trigger graceful shutdown: launchAndRun() will receive on
+				// exitCh, call CosmosProcess.Stop(), and exit cleanly.
 				a.exitCh <- true
 				return
 			}
@@ -124,9 +130,15 @@ func (a *appEnv) daemonNotify() {
 }
 
 func (a *appEnv) close() {
-	runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
-	er := os.Remove(runPIDPath)
-	if er != nil {
-		// TODO
+	if !isRunningInDocker() {
+		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
+		_ = os.Remove(runPIDPath)
 	}
+}
+
+// isRunningInDocker returns true if this process is running inside a Docker
+// container. Docker creates the /.dockerenv marker file in every container.
+func isRunningInDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
 }

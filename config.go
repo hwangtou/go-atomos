@@ -47,10 +47,9 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 		EnableElements: nil,
 		Customize:      map[string][]byte{},
 	}
-	//if strings.ToLower(y.LogSTD) == "true" {
-	//	LogStdout = true
-	//	LogStderr = true
-	//}
+	if strings.ToLower(y.LogSTD) == "true" {
+		conf.Customize[ConfigKeyLogStdout] = []byte("1")
+	}
 	if cluster := y.EnableCluster; cluster != nil {
 		conf.EnableCluster = &CosmosClusterConfig{
 			Enable:        cluster.Enable,
@@ -78,6 +77,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 			conf.Customize[key] = []byte(value)
 		}
 	}
+	applyEnvOverrides(conf)
 	return conf, nil
 }
 
@@ -150,4 +150,42 @@ type CertYAMLConfig struct {
 	CertPath string `yaml:"cert-path"`
 	KeyPath  string `yaml:"key-path"`
 	Insecure bool   `yaml:"insecure"`
+}
+
+// applyEnvOverrides overlays environment variables onto the Config struct.
+// Environment variables take precedence over YAML values.
+// This is a no-op when no ATOMOS_* env vars are set.
+func applyEnvOverrides(conf *Config) {
+	if v := os.Getenv("ATOMOS_COSMOS"); v != "" {
+		conf.Cosmos = v
+	}
+	if v := os.Getenv("ATOMOS_NODE"); v != "" {
+		conf.Node = v
+	}
+	if v := os.Getenv("ATOMOS_LOG_LEVEL"); v != "" {
+		switch strings.ToLower(v) {
+		case "debug":
+			conf.LogLevel = LogLevel_Debug
+		case "info", "inf":
+			conf.LogLevel = LogLevel_Info
+		case "warn":
+			conf.LogLevel = LogLevel_Warn
+		case "error", "err":
+			conf.LogLevel = LogLevel_Err
+		case "fatal":
+			conf.LogLevel = LogLevel_Fatal
+		}
+	}
+	if v := os.Getenv("ATOMOS_LOG_PATH"); v != "" {
+		conf.LogPath = v
+	}
+	if v := os.Getenv("ATOMOS_LOG_STDOUT"); v == "true" || v == "1" {
+		conf.Customize[ConfigKeyLogStdout] = []byte("1")
+	}
+	if v := os.Getenv("ATOMOS_ETCD_ENDPOINTS"); v != "" {
+		if conf.EnableCluster == nil {
+			conf.EnableCluster = &CosmosClusterConfig{}
+		}
+		conf.EnableCluster.EtcdEndpoints = strings.Split(v, ",")
+	}
 }
