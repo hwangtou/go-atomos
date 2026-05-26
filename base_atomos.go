@@ -2,10 +2,11 @@ package atomos
 
 import (
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"strings"
 	"sync"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // BaseAtomosHolder Atomos持有者
@@ -92,7 +93,7 @@ func (as BaseAtomosState) String() string {
 // Wormholes carry arbitrary data between actors; implementing this interface explicitly
 // marks a type as wormhole-safe and prevents accidentally passing untyped values.
 type BaseAtomosWormhole interface {
-	isWormhole()
+	IsWormhole()
 }
 
 // BaseAtomos 基础Atomos
