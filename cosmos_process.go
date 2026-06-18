@@ -158,54 +158,56 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		// 检查runnable是否合法。
 		// Check if runnable is valid.
 		if err = runnable.Check(); err != nil {
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=runnable_check err=(%s)", err.Message)
 			return err.AddStack(p.local)
 		}
 		p.local.runnable = runnable
 
 		// 启动时初始化脚本。
 		if err := p.mainScriptOnBootProtect(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%s)", err.Message)
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=main_script_boot err=(%s)", err.Message)
 			return err.AddStack(p.local)
 		}
+		p.local.Log().coreInfo("CosmosProcess: Checkpoint. stage=main_script_boot")
 
 		// 如果是集群进程，尝试通过etcd加载网络配置，再尝试监听。
 		// If it is a cluster process, try to load networking configuration via etcd, then try to listen.
 		if err = p.prepareCluster(runnable); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Prepare cluster failed. err=(%s)", err.Message)
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=prepare_cluster err=(%s)", err.Message)
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
-		p.local.Log().coreInfo("CosmosProcess: Checkpoint - prepareCluster")
+		p.local.Log().coreInfo("CosmosProcess: Checkpoint. stage=prepare_cluster")
 
 		// 已经准备好集群的本地节点环境，尝试启动元素（Elements）。
 		// The local node environment of the cluster is ready, try to start the elements.
 		if err = p.local.trySpawningElements(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Spawn elements failed. err=(%s)", err.Message)
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=spawn_elements err=(%s)", err.Message)
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
-		p.local.Log().coreInfo("CosmosProcess: Checkpoint - trySpawningElements.")
+		p.local.Log().coreInfo("CosmosProcess: Checkpoint. stage=spawn_elements")
 
 		// 尝试将自己设置为current并保持心跳。首先，如果有其它节点的话，将其退出，退出失败也会导致本程序退出。然后把当前进程信息设置到etcd中，并keepalive 。
 		// Try to set yourself as current and keepalive. First, if there are other nodes, exit them, and if the exit fails, the program will exit.
 		// Then set the current process information to etcd and keepalive.
 		if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Set cluster to current and keepalive failed. err=(%s)", err.Message)
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=cluster_keepalive err=(%s)", err.Message)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
-		p.local.Log().coreInfo("CosmosProcess: Checkpoint - trySettingClusterToCurrentAndKeepalive")
+		p.local.Log().coreInfo("CosmosProcess: Checkpoint. stage=cluster_keepalive")
 
 		// 启动主脚本。
 		// Start the main script.
 		if err = p.mainScriptOnStartUpProtect(); err != nil {
-			p.local.Log().coreFatal("CosmosProcess: Main script startup failed. err=(%s)", err.Message)
+			p.local.Log().coreFatal("CosmosProcess: Startup failed. stage=main_script_startup err=(%s)", err.Message)
 			p.handleStartUpFailedLocalCleanUp()
 			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
-		p.local.Log().coreInfo("CosmosProcess: Checkpoint - mainScriptOnStartUpProtect")
+		p.local.Log().coreInfo("CosmosProcess: Checkpoint. stage=main_script_startup")
 
 		return nil
 	}(); err != nil {

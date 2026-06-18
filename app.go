@@ -248,3 +248,10 @@ func (a *App) ExitApp() {
 func (a *App) WaitExitApp() <-chan bool {
 	return a.env.exitCh
 }
+
+// ShutdownSignal returns the OS signal that triggered graceful shutdown, or
+// nil if shutdown was initiated by ExitApp(). Useful for logging/diagnostics
+// during the shutdown sequence.
+func (a *App) ShutdownSignal() os.Signal {
+	return a.env.ShutdownSignal()
+}

@@ -182,6 +182,14 @@ func launchAndRun(runnable *CosmosRunnable) {
 	}
 	SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
 	<-app.WaitExitApp()
+	// Log which signal (if any) triggered the shutdown, to aid ops diagnosis
+	// of "why did the process stop?". Common cases: SIGTERM from container
+	// orchestrator, SIGINT from Ctrl+C, SIGHUP/SIGQUIT from admin tooling.
+	if sig := app.ShutdownSignal(); sig != nil {
+		SharedCosmosProcess().Self().Log().coreInfo("App: Shutdown triggered by signal=(%v).", sig)
+	} else {
+		SharedCosmosProcess().Self().Log().coreInfo("App: Shutdown triggered by ExitApp().")
+	}
 	if err := SharedCosmosProcess().Stop(); err != nil {
 		SharedCosmosProcess().Self().Log().coreFatal("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
 	}
