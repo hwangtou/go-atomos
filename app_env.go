@@ -39,15 +39,15 @@ func (a *appEnv) checkRunPath() *Error {
 		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Invalid run path. path=(%s),err=(%v)", runPath, er).AddStack(nil)
 	}
 	if !stat.IsDir() {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path is not a directory. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path is not a directory. path=(%s)", runPath).AddStack(nil)
 	}
 
 	runTestPath := runPath + "/test"
 	if er = ioutil.WriteFile(runTestPath, []byte{}, 0644); er != nil {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path cannot writ. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path cannot write. path=(%s),err=(%v)", runTestPath, er).AddStack(nil)
 	}
 	if er = os.Remove(runTestPath); er != nil {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path test file cannot delete. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path test file cannot delete. path=(%s),err=(%v)", runTestPath, er).AddStack(nil)
 	}
 	return nil
 }
@@ -99,9 +99,13 @@ removePID:
 func (a *appEnv) daemon() *Error {
 	if !isRunningInDocker() {
 		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
+		// Remove any existing PID file first. The user owns this directory (verified
+		// by checkRunPath), so they can delete any file within it even if the file
+		// itself is owned by a different user (e.g., root from a prior run).
+		_ = os.Remove(runPIDPath)
 		pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
 		if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
-			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
+			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
 		}
 	}
 	go a.daemonNotify()

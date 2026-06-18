@@ -10,7 +10,7 @@ import (
 
 const (
 	//pidPath = "/app.pid"
-	pidPerm = 0444
+	pidPerm = 0644
 
 	//UDSSocketPath = "/app.socket"
 )
