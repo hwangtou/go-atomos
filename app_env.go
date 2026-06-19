@@ -94,7 +94,8 @@ func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 func (a *appEnv) daemon() *Error {
 	if !isRunningInDocker() {
 		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
-		pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
+		selfPID := os.Getpid()
+		pidBuf := strconv.FormatInt(int64(selfPID), 10)
 		// Acquire the PID file atomically with O_EXCL|O_CREATE. This is the
 		// lock: whoever successfully creates the file owns the singleton slot.
 		// Unlike the previous "Remove then WriteFile" sequence, there is no
@@ -102,25 +103,36 @@ func (a *appEnv) daemon() *Error {
 		// the only instance.
 		f, er := os.OpenFile(runPIDPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, pidPerm)
 		if er != nil {
-			if os.IsExist(er) {
-				// File already exists. It's either a live instance (in which case
-				// we must NOT start) or a stale leftover from a crashed process
-				// (safe to reclaim). Probe the recorded PID to decide.
-				if live, pid, probeErr := isPIDFileLive(runPIDPath); live {
-					return NewErrorf(ErrAppEnvRunPathPIDIsRunning, "App: Another instance is running. pid=(%d)", pid).AddStack(nil)
-				} else if probeErr != nil {
-					return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Existing pid file is unreadable. path=(%s),err=(%v)", runPIDPath, probeErr).AddStack(nil)
-				}
-				// Stale file: remove and retry once.
-				if er = os.Remove(runPIDPath); er != nil {
-					return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Stale pid file cannot be removed. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
-				}
-				f, er = os.OpenFile(runPIDPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, pidPerm)
-				if er != nil {
-					return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed after reclaim. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
-				}
-			} else {
+			if !os.IsExist(er) {
 				return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
+			}
+			// File already exists. Three possibilities:
+			//  (a) it records OUR OWN pid → daemon() was called again within the
+			//      same process (LaunchApp is invoked twice in MainForWorkingPath
+			//      / Main). Idempotent: nothing to do, the file is already ours.
+			//  (b) it records a live OTHER process → a real concurrent instance,
+			//      refuse to start.
+			//  (c) it records a dead process → stale leftover, reclaim it.
+			live, pid, probeErr := isPIDFileLive(runPIDPath)
+			if probeErr != nil {
+				return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Existing pid file is unreadable. path=(%s),err=(%v)", runPIDPath, probeErr).AddStack(nil)
+			}
+			if live && pid == selfPID {
+				// (a) Idempotent re-entry: file already holds our pid. Skip.
+				go a.daemonNotify()
+				return nil
+			}
+			if live {
+				// (b) Another live instance owns the slot.
+				return NewErrorf(ErrAppEnvRunPathPIDIsRunning, "App: Another instance is running. pid=(%d)", pid).AddStack(nil)
+			}
+			// (c) Stale file: remove and retry once.
+			if er = os.Remove(runPIDPath); er != nil {
+				return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Stale pid file cannot be removed. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
+			}
+			f, er = os.OpenFile(runPIDPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, pidPerm)
+			if er != nil {
+				return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed after reclaim. path=(%s),err=(%v)", runPIDPath, er).AddStack(nil)
 			}
 		}
 		// Write our PID and close. File is created with O_EXCL so we are the
