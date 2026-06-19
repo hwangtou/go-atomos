@@ -49,8 +49,6 @@ func TestTaskMailbox_SerialLifeCycle(t *testing.T) {
 				t.Log("OK, task executed:", taskID)
 			},
 			taskWithCallback: nil,
-			invalidArgs:      nil,
-			conflictArgs:     nil,
 			mark:             "",
 			delay:            0,
 			cronSchedule:     nil,
@@ -135,8 +133,6 @@ func TestTaskMailbox_SerialLifeCycleWithCallback(t *testing.T) {
 					t.Log("OK, task executed:", taskID)
 				}
 			},
-			invalidArgs:    nil,
-			conflictArgs:   nil,
 			mark:           "",
 			delay:          0,
 			cronSchedule:   nil,
@@ -237,8 +233,6 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 					callbackWg.Done()
 				}
 			},
-			invalidArgs:  nil,
-			conflictArgs: nil,
 			mark:         "",
 			delay:        0,
 			cronSchedule: nil,

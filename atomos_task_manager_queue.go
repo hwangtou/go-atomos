@@ -3,7 +3,6 @@ package atomos
 import (
 	"fmt"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -441,8 +440,7 @@ type taskHelper struct {
 	task             TaskFn
 	taskWithCallback TaskFnWithCallback
 
-	invalidArgs  []taskExtInvalidArg
-	conflictArgs []taskExtInvalidArg
+	issues argIssueList
 
 	mark           string
 	delay          time.Duration
@@ -456,11 +454,6 @@ type taskHelper struct {
 
 	// init after validation
 	atomosTask *atomosTask
-}
-type taskExtInvalidArg struct {
-	idx    int
-	task   ArgsForTask
-	reason string
 }
 
 // TODO
@@ -490,20 +483,17 @@ func createTaskHelper(manager *atomosTaskManager, mailbox *mailBox, t TaskFn, tC
 				helper.mark = v.(argTaskMark).mark
 			}
 		case ArgTypeTaskDelay:
-			if helper.delay != 0 {
-				if helper.delay < 0 {
-					helper.addInvalidArg(i, v, "Invalid delay argument")
-				} else {
-					helper.addConflictArg(i, v, "Duplicate TaskDelay argument")
-				}
-			} else if helper.cronSchedule != nil {
-				helper.addConflictArg(i, v, "Duplicate TaskCron argument")
+			// delay/cron 互斥:同一任务只能指定其一。
+			// 负数检查只在首次赋值时做——已赋值的 delay 必然 >=0
+			// (赋值前经过下方 duration<0 校验),故重复的 TaskDelay 一律算冲突。
+			if helper.cronSchedule != nil {
+				helper.addConflictArg(i, v, "TaskDelay conflicts with already-set TaskCrontab")
+			} else if helper.delay != 0 {
+				helper.addConflictArg(i, v, "Duplicate TaskDelay argument")
+			} else if v.(argTaskDelay).duration < 0 {
+				helper.addInvalidArg(i, v, "Invalid delay argument")
 			} else {
-				if v.(argTaskDelay).duration < 0 {
-					helper.addInvalidArg(i, v, "Invalid delay argument")
-				} else {
-					helper.delay = v.(argTaskDelay).duration
-				}
+				helper.delay = v.(argTaskDelay).duration
 			}
 		case ArgTypeTaskLikeCrontab:
 			if helper.cronSchedule != nil {
@@ -551,43 +541,20 @@ func createTaskHelper(manager *atomosTaskManager, mailbox *mailBox, t TaskFn, tC
 	return helper
 }
 
-func (h *taskHelper) addInvalidArg(index int, arg ArgsForTask, reason string) {
-	h.invalidArgs = append(h.invalidArgs, taskExtInvalidArg{
-		idx:    index,
-		task:   arg,
-		reason: reason,
-	})
+func (h *taskHelper) addInvalidArg(index int, _ ArgsForTask, reason string) {
+	h.issues.addInvalid(index, reason)
 }
 
-func (h *taskHelper) addConflictArg(index int, arg ArgsForTask, reason string) {
-	h.conflictArgs = append(h.conflictArgs, taskExtInvalidArg{
-		idx:    index,
-		task:   arg,
-		reason: reason,
-	})
+func (h *taskHelper) addConflictArg(index int, _ ArgsForTask, reason string) {
+	h.issues.addConflict(index, reason)
 }
 
 func (h *taskHelper) hasErrors() bool {
-	return len(h.invalidArgs) > 0 || len(h.conflictArgs) > 0
+	return h.issues.hasAny()
 }
 
 func (h *taskHelper) getErrorReason() string {
-	var builder strings.Builder
-	if len(h.invalidArgs) > 0 {
-		builder.WriteString("Invalid Arguments:")
-		for _, ia := range h.invalidArgs {
-			builder.WriteString(fmt.Sprintf("\nAt index %d is invalid: %s.", ia.idx, ia.reason))
-		}
-		builder.WriteString("\n")
-	}
-	if len(h.conflictArgs) > 0 {
-		builder.WriteString("Conflicting Arguments:")
-		for _, ca := range h.conflictArgs {
-			builder.WriteString(fmt.Sprintf("\nAt index %d is conflicting: %s.", ca.idx, ca.reason))
-		}
-		builder.WriteString("\n")
-	}
-	return builder.String()
+	return h.issues.render("Invalid Arguments:", "Conflicting Arguments:")
 }
 
 func (h *taskHelper) getCancelCallback() func(reason string) {

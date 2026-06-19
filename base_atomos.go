@@ -1,8 +1,6 @@
 package atomos
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -785,20 +783,13 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 type baseAtomosHelper struct {
 	ext []ArgsForBaseAtomos
 
-	invalidArgs  []baseAtomosExtInvalidArg
-	conflictArgs []baseAtomosExtInvalidArg
+	issues argIssueList
 
 	fields []int32
 
 	timeout      time.Duration
 	appendToHead bool
 	waitKilled   bool
-}
-
-type baseAtomosExtInvalidArg struct {
-	idx    int
-	arg    ArgsForBaseAtomos
-	reason string
 }
 
 func createBaseAtomosHelper(mailType BaseAtomosMailType, ext []ArgsForBaseAtomos) *baseAtomosHelper {
@@ -811,6 +802,13 @@ func createBaseAtomosHelper(mailType BaseAtomosMailType, ext []ArgsForBaseAtomos
 			continue
 		}
 		switch v.getArgType() {
+		case ArgTypeBaseAtomosWithAny:
+			// WithAny is a spawn-path arg (ArgsForSpawn), not a mail option.
+			// It reaches here only when a caller mistakenly passes it to a
+			// mail operation (Sync/Async/Kill/Wormhole). Report it explicitly
+			// instead of falling through to the generic "invalid type".
+			helper.addInvalidArg(i, v, "WithAny is a spawn-only argument, not valid for mail operations")
+			continue
 		case ArgTypeBaseAtomosTimeout:
 			if !helper.checkMailTypeIn(mailType, []BaseAtomosMailType{BaseAtomosMailKill, BaseAtomosMailSync, BaseAtomosMailWormhole}) {
 				helper.addInvalidArg(i, v, "Timeout argument is only valid for Sync and Wormhole mails")
@@ -894,45 +892,22 @@ func (h *baseAtomosHelper) checkMailTypeIn(mailType BaseAtomosMailType, inTypes 
 	return false
 }
 
-func (h *baseAtomosHelper) addInvalidArg(idx int, arg ArgsForBaseAtomos, reason string) {
-	h.invalidArgs = append(h.invalidArgs, baseAtomosExtInvalidArg{
-		idx:    idx,
-		arg:    arg,
-		reason: reason,
-	})
+func (h *baseAtomosHelper) addInvalidArg(idx int, _ ArgsForBaseAtomos, reason string) {
+	h.issues.addInvalid(idx, reason)
 }
 
-func (h *baseAtomosHelper) addConflictArg(idx int, arg ArgsForBaseAtomos, reason string) {
-	h.conflictArgs = append(h.conflictArgs, baseAtomosExtInvalidArg{
-		idx:    idx,
-		arg:    arg,
-		reason: reason,
-	})
+func (h *baseAtomosHelper) addConflictArg(idx int, _ ArgsForBaseAtomos, reason string) {
+	h.issues.addConflict(idx, reason)
 }
 
 func (h *baseAtomosHelper) hasErrors() bool {
-	return len(h.invalidArgs) > 0 || len(h.conflictArgs) > 0
+	return h.issues.hasAny()
 }
 
 func (h *baseAtomosHelper) getError() *Error {
-	var builder strings.Builder
-	if len(h.invalidArgs) > 0 {
-		builder.WriteString("Invalid Arguments:")
-		for _, ia := range h.invalidArgs {
-			builder.WriteString(fmt.Sprintf("\nAt index %d is invalid: %s.", ia.idx, ia.reason))
-		}
-		builder.WriteString("\n")
-	}
-	if len(h.conflictArgs) > 0 {
-		builder.WriteString("Conflict Arguments:")
-		for _, ca := range h.conflictArgs {
-			builder.WriteString(fmt.Sprintf("\nAt index %d is conflict: %s.", ca.idx, ca.reason))
-		}
-		builder.WriteString("\n")
-	}
-	errReason := builder.String()
-	if errReason != "" {
-		return NewErrorf(ErrAtomosInvalidArguments, "BaseAtomos: Arguments Error. %s", errReason)
+	reason := h.issues.render("Invalid Arguments:", "Conflict Arguments:")
+	if reason != "" {
+		return NewErrorf(ErrAtomosInvalidArguments, "BaseAtomos: Arguments Error. %s", reason)
 	}
 	return nil
 }

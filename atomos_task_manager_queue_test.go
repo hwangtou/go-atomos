@@ -1081,14 +1081,14 @@ func TestTaskHelper_CreateTaskHelper(t *testing.T) {
 	helper1 := createTaskHelper(at, at.atomos.mailbox, nil, nil, nil)
 	if !helper1.hasErrors() {
 		t.Fatal("Expected error when creating TaskHelper with nil task function.")
-	} else if len(helper1.invalidArgs) != 1 || helper1.invalidArgs[0].idx != -1 || helper1.invalidArgs[0].reason != "Task is nil" {
+	} else if len(helper1.issues.invalid) != 1 || helper1.issues.invalid[0].idx != -1 || helper1.issues.invalid[0].reason != "Task is nil" {
 		t.Fatal("Expected invalidArgs to contain one entry for nil task function.")
 	}
 
 	helper2 := createTaskHelper(at, at.atomos.mailbox, func(taskID uint64) {}, func(taskID uint64) func() { return nil }, nil)
 	if !helper2.hasErrors() {
 		t.Fatal("Did not expect error when creating TaskHelper with valid task and callback functions.")
-	} else if len(helper2.invalidArgs) != 1 || helper2.invalidArgs[0].idx != -1 || helper2.invalidArgs[0].reason != "Both TaskFn and TaskFnWithCallback are provided" {
+	} else if len(helper2.issues.invalid) != 1 || helper2.issues.invalid[0].idx != -1 || helper2.issues.invalid[0].reason != "Both TaskFn and TaskFnWithCallback are provided" {
 		t.Fatal("Expected invalidArgs to contain one entry for nil callback function.")
 	}
 
@@ -1097,7 +1097,7 @@ func TestTaskHelper_CreateTaskHelper(t *testing.T) {
 	})
 	if !helper3.hasErrors() {
 		t.Fatal("Expected error when creating TaskHelper with negative delay.")
-	} else if len(helper3.invalidArgs) != 1 || helper3.invalidArgs[0].idx != 0 || helper3.invalidArgs[0].reason != "Invalid delay argument" {
+	} else if len(helper3.issues.invalid) != 1 || helper3.issues.invalid[0].idx != 0 || helper3.issues.invalid[0].reason != "Invalid delay argument" {
 		t.Fatal("Expected invalidArgs to contain one entry for negative delay.")
 	}
 
@@ -1106,7 +1106,7 @@ func TestTaskHelper_CreateTaskHelper(t *testing.T) {
 	})
 	if !helper4.hasErrors() {
 		t.Fatal("Expected error when creating TaskHelper with invalid cron expression.")
-	} else if len(helper4.invalidArgs) != 1 || helper4.invalidArgs[0].idx != 0 || !strings.HasPrefix(helper4.invalidArgs[0].reason, "Invalid crontab format:") {
+	} else if len(helper4.issues.invalid) != 1 || helper4.issues.invalid[0].idx != 0 || !strings.HasPrefix(helper4.issues.invalid[0].reason, "Invalid crontab format:") {
 		t.Fatal("Expected invalidArgs to contain one entry for invalid cron expression.")
 	}
 
@@ -1133,7 +1133,7 @@ func TestTaskHelper_CreateTaskHelper(t *testing.T) {
 	})
 	if !helper7.hasErrors() {
 		t.Fatal("Did not expect error when creating TaskHelper with nil cancel callback argument.")
-	} else if len(helper7.invalidArgs) != 1 || helper7.invalidArgs[0].idx != 0 || helper7.invalidArgs[0].reason != "Nil TaskCancelCallback argument" {
+	} else if len(helper7.issues.invalid) != 1 || helper7.issues.invalid[0].idx != 0 || helper7.issues.invalid[0].reason != "Nil TaskCancelCallback argument" {
 		t.Fatal("Expected invalidArgs to contain one entry for nil cancel callback.")
 	}
 	helper7OK := createTaskHelper(at, at.atomos.mailbox, func(taskID uint64) {}, nil, []ArgsForTask{
@@ -1148,7 +1148,7 @@ func TestTaskHelper_CreateTaskHelper(t *testing.T) {
 	})
 	if !helper8.hasErrors() {
 		t.Fatal("Did not expect error when creating TaskHelper with nil recover function argument.")
-	} else if len(helper8.invalidArgs) != 1 || helper8.invalidArgs[0].idx != 0 || helper8.invalidArgs[0].reason != "Nil TaskRecoverFunc argument" {
+	} else if len(helper8.issues.invalid) != 1 || helper8.issues.invalid[0].idx != 0 || helper8.issues.invalid[0].reason != "Nil TaskRecoverFunc argument" {
 		t.Fatal("Expected invalidArgs to contain one entry for nil recover function.")
 	}
 	helper8OK := createTaskHelper(at, at.atomos.mailbox, func(taskID uint64) {}, nil, []ArgsForTask{

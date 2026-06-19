@@ -7,14 +7,14 @@ type ArgType int32
 const (
 	ArgTypeInvalid ArgType = 0
 
-	// ArgsForBaseAtomos
+	// ArgsForBaseAtomos — Mail 选项,被 baseAtomosHelper 消费
 
-	ArgTypeBaseAtomosTimeout      ArgType = 2
-	ArgTypeBaseAtomosAppendToHead ArgType = 3
-	ArgTypeBaseAtomosWaitKilled   ArgType = 4
-	ArgTypeBaseAtomosWithAny      ArgType = 5
+	ArgTypeBaseAtomosTimeout      ArgType = 1
+	ArgTypeBaseAtomosAppendToHead ArgType = 2
+	ArgTypeBaseAtomosWaitKilled   ArgType = 3
+	ArgTypeBaseAtomosWithAny      ArgType = 4 // 详见 ArgsForSpawn
 
-	// ArgsForTask
+	// ArgsForTask — 任务调度选项,被 taskHelper 消费
 
 	ArgTypeTaskMark           ArgType = 10
 	ArgTypeTaskDelay          ArgType = 11
@@ -23,14 +23,30 @@ const (
 	ArgTypeTaskCancelCallback ArgType = 14
 	ArgTypeTaskRecoverFunc    ArgType = 15
 
-	// ArgsForSpawn
+	// ArgsForSpawn — Spawn 参数,被用户 Load/AtomConstructor 消费
+	// (ArgTypeBaseAtomosWithAny 历史上归在此语义,见问题2后归位)
 )
 
 type ArgsInterfaces interface {
 	getArgType() ArgType
 }
 
-// TODO: ArgsForSpawn and ArgsForGet are reserved for future use.
+// ArgsForSpawn marks arguments intended for the spawn path (Load/Spawner),
+// where they are consumed by USER code rather than the framework. The only
+// current member is ArgBaseAtomosWithAny. These args still physically travel
+// through the spawn chain as ArgsForBaseAtomos (for backward compatibility),
+// but are NOT consumed by baseAtomosHelper — they are passed straight through
+// to ElementLoader.Load / ElementSpawner / AtomSpawner.
+//
+// Design note: a full type-level split (a separate ArgsForSpawn variadic param
+// on every spawn API) would be a breaking API change touching the code
+// generator and all generated *_atomos.pb.go. We instead keep ArgsForBaseAtomos
+// as the transport type and let the framework recognize WithAny explicitly so
+// it is never misreported as an invalid mail option.
+type ArgsForSpawn interface {
+	ArgsForBaseAtomos
+	argForSpawn()
+}
 
 // For Base Atomos
 
@@ -68,7 +84,9 @@ func (argBaseAtomosWaitKilled) getArgType() ArgType {
 }
 func (argBaseAtomosWaitKilled) argForBaseAtomos() {}
 
-// BaseAtomosWithAny
+// BaseAtomosWithAny — a spawn-path argument that carries arbitrary context
+// (e.g. *testing.T) to be consumed by user Load/Spawner code. It implements
+// ArgsForSpawn to mark its intent, but is transported as ArgsForBaseAtomos.
 
 type ArgBaseAtomosWithAny struct {
 	Any any
@@ -78,6 +96,7 @@ func (ArgBaseAtomosWithAny) getArgType() ArgType {
 	return ArgTypeBaseAtomosWithAny
 }
 func (ArgBaseAtomosWithAny) argForBaseAtomos() {}
+func (ArgBaseAtomosWithAny) argForSpawn() {}
 
 // For Task
 
