@@ -28,8 +28,8 @@ func newTestAtomosTaskManager(t *testing.T) *atomosTaskManager {
 }
 
 func TestAtomosTaskManager_LifeCycle(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -123,8 +123,8 @@ func TestAtomosTaskManager_LifeCycle(t *testing.T) {
 	}
 	helper.buildAtomosTask()
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails before adding to queue, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails before adding to queue, got ", n)
 	}
 
 	am := allocBaseAtomosMail()
@@ -137,8 +137,8 @@ func TestAtomosTaskManager_LifeCycle(t *testing.T) {
 	at.addToQueue(stMb.mailbox, helper.atomosTask)
 	<-wait
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task, got ", n)
 	}
 
 	if stMb.mailbox.isRunning() {
@@ -198,8 +198,8 @@ func TestAtomosTaskManager_LifeCycle(t *testing.T) {
 }
 
 func TestAtomosTaskManager_HasMarking(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -244,8 +244,8 @@ func TestAtomosTaskManager_HasMarking(t *testing.T) {
 }
 
 func TestAtomosTaskManager_AddToAtomos_SmokeTest(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -297,8 +297,8 @@ func TestAtomosTaskManager_AddToAtomos_SmokeTest(t *testing.T) {
 }
 
 func TestAtomosTaskManager_DelayAddToQueue(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -380,8 +380,8 @@ func TestAtomosTaskManager_DelayAddToQueue(t *testing.T) {
 }
 
 func TestAtomosTaskManager_AddToQueue(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -423,8 +423,8 @@ func TestAtomosTaskManager_AddToQueue(t *testing.T) {
 			t.Fatalf("Expected done task ID to be %d, got %d", expectedID, taskID)
 		}
 	}
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing all tasks, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing all tasks, got ", n)
 	}
 
 	// Test pushToHead task
@@ -492,8 +492,8 @@ func TestAtomosTaskManager_AddToQueue(t *testing.T) {
 }
 
 func TestAtomosTaskManager_AddToQueue_KillInMid(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -580,16 +580,16 @@ func TestAtomosTaskManager_AddToQueue_KillInMid(t *testing.T) {
 	wait.Wait()
 	timerWg.Wait()
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing all tasks and kill mail, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing all tasks and kill mail, got ", n)
 	}
 
 	<-time.After(time.Millisecond)
 }
 
 func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -618,8 +618,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	if at.tasks[task1.id] != nil {
 		t.Fatal("Expected task1 to be removed from AtomosTaskManager tasks map after execution.")
 	}
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task1, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task1, got ", n)
 	}
 
 	// Task2 is a normal task with a callback that should execute successfully.
@@ -651,8 +651,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	if at.tasks[task2.id] != nil {
 		t.Fatal("Expected task2 to be removed from AtomosTaskManager tasks map after execution.")
 	}
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task2, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task2, got ", n)
 	}
 
 	// Task3 is a normal task with a nil callback that should execute successfully.
@@ -682,8 +682,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	if at.tasks[task3.id] != nil {
 		t.Fatal("Expected task3 to be removed from AtomosTaskManager tasks map after execution.")
 	}
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task3, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task3, got ", n)
 	}
 
 	// Task4 is a task that panics during execution.
@@ -714,8 +714,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	at.addToQueue(at.atomos.mailbox, task4)
 	<-wait
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task4, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task4, got ", n)
 	}
 
 	// Task5 is a task that callback panics during execution.
@@ -745,8 +745,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	at.addToQueue(at.atomos.mailbox, task5)
 	<-wait
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after processing task5, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing task5, got ", n)
 	}
 
 	<-time.After(time.Millisecond)
@@ -755,8 +755,8 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 }
 
 func TestAtomosTaskManager_CancelTaskQueue_CancelSchedulingTask(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -834,16 +834,16 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelSchedulingTask(t *testing.T) {
 	if state != 1 {
 		t.Fatalf("Expected state to be 1 after cancel callback, got %d", state)
 	}
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 0 allocated mails after cancellation and callback, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after cancellation and callback, got ", n)
 	}
 
 	<-time.After(time.Millisecond)
 }
 
 func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	at := newTestAtomosTaskManager(t)
@@ -980,8 +980,8 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 		t.Fatalf("Expected ErrAtomosTaskCannotCancelDoneTask when canceling done task, got: %v", err)
 	}
 
-	if getAllocMailDebugNum() != 0 {
-		t.Fatal("Expected 1 allocated mail after canceling second mailing task, got ", getAllocMailDebugNum())
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 1 allocated mail after canceling second mailing task, got ", n)
 	}
 
 	<-time.After(time.Millisecond)

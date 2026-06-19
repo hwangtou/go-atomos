@@ -9,27 +9,16 @@ import (
 
 // Test for mailbox
 
-func clearAllocMailDebugMap() {
-	if !allocMailDebug {
-		return
-	}
-	allocMailDebugMap = sync.Map{}
-}
-
-func getAllocMailDebugNum() int {
-	if !allocMailDebug {
-		return 0
-	}
-	num := 0
-	allocMailDebugMap.Range(func(key, value any) bool {
-		num++
-		return true
-	})
-	return num
-}
+// NOTE: clearAllocMailDebugMap / getAllocMailDebugNum now live in mail.go
+// behind allocMailMutex, so test goroutines flipping the debug flag cannot
+// race mailbox goroutines reading it. getAllAllocMailDebugInfo stays here
+// (test-only, no concurrent writer expected during its use).
 
 func getAllAllocMailDebugInfo() map[*mail]string {
-	if !allocMailDebug {
+	allocMailMutex.RLock()
+	debug := allocMailDebug
+	allocMailMutex.RUnlock()
+	if !debug {
 		return nil
 	}
 	info := make(map[*mail]string)
@@ -52,8 +41,8 @@ func getAllAllocMailDebugInfo() map[*mail]string {
 // #5 mailboxOnReceive
 // #6 mailboxOnStop
 func TestMailbox_LifeCycle(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	var wg sync.WaitGroup
@@ -128,8 +117,8 @@ func TestMailbox_LifeCycle(t *testing.T) {
 // Push 100 more mails to test push kill mails after all mails sent.
 // #1 getNum
 func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	var sendWait, wg sync.WaitGroup
@@ -244,8 +233,8 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 // #3 pushTail / Push
 // #4 popByID
 func TestMailBox_ListCorrection(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailbox", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -728,8 +717,8 @@ func TestMailBox_ListCorrection(t *testing.T) {
 // #1 waitPop
 // #2 popAll
 func TestMailBox_WaitPopAndPopAll(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailboxWaitPop", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -947,8 +936,8 @@ func TestMailBox_WaitPopAndPopAll(t *testing.T) {
 }
 
 func TestMailBox_RemoveMail(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailboxRemoveMail", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -1041,8 +1030,8 @@ func TestMailBox_RemoveMail(t *testing.T) {
 }
 
 func TestMailBox_StopIfNoMail(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	letItRun := make(chan struct{})
@@ -1108,8 +1097,8 @@ func TestMailBox_StopIfNoMail(t *testing.T) {
 }
 
 func TestMailBox_StartLoop(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	h := &testMailboxHandler{
@@ -1179,8 +1168,8 @@ func TestMailBox_StartLoop(t *testing.T) {
 }
 
 func TestMailBox_Loop(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	h := &testMailboxHandler{
@@ -1219,9 +1208,9 @@ func TestMailBox_Loop(t *testing.T) {
 }
 
 func TestMailBox_MailPool_ReleaseTwice(t *testing.T) {
-	allocMailUsingPool = true
-	allocMailInitCheck = false
-	allocMailDebug = false
+	setAllocMailUsingPool(true)
+	setAllocMailInitCheck(false)
+	setAllocMailDebug(false)
 
 	m := allocMail()
 	releaseMail(m)
@@ -1231,9 +1220,9 @@ func TestMailBox_MailPool_ReleaseTwice(t *testing.T) {
 }
 
 func TestMailBox_MailPool_CheckRelease(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailInitCheck = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailInitCheck(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	n := 1000
@@ -1244,9 +1233,9 @@ func TestMailBox_MailPool_CheckRelease(t *testing.T) {
 }
 
 func TestMailBox_MailPool_CheckPool(t *testing.T) {
-	allocMailUsingPool = true
-	allocMailInitCheck = true
-	allocMailDebug = false
+	setAllocMailUsingPool(true)
+	setAllocMailInitCheck(true)
+	setAllocMailDebug(false)
 
 	n := 1000
 	waiters := 128
@@ -1395,7 +1384,7 @@ func (h *benchmarkMailHandler) mailboxOnStop(killMail, remainMails *mail, num ui
 }
 
 func benchmarkMailBox(b *testing.B, waiters int) {
-	allocMailUsingPool = true
+	setAllocMailUsingPool(true)
 	h := benchmarkMailHandler{b: b}
 	mb := newMailBox("benchmarkMailbox", &h, newBenchLoggingAtomos(b))
 	if err := mb.start(nil); err != nil {

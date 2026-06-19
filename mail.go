@@ -5,6 +5,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Mail
@@ -26,20 +27,41 @@ var mailPool = sync.Pool{
 	New: func() any { return &mail{} },
 }
 
-var allocMailUsingPool = false
-var allocMailInitCheck = false
-var allocMailDebug = false
-var allocMailDebugMap = sync.Map{}
+// The four flags/map below govern mail allocation diagnostics. They are read
+// on the hot path (allocMail/releaseMail/initMail/initKillMail, which run on
+// each mailbox goroutine) and written by tests when switching diagnostic
+// modes. Without synchronization this is a data race: a test flips
+// allocMailDebug while a leftover mailbox goroutine is mid-releaseMail,
+// causing "mail not in debug map" panics and flaky allocation-count checks.
+//
+// allocMailMutex guards consistency between the flags and the map: readers
+// take RLock (cheap, allows concurrent mailbox goroutines), writers (tests)
+// take Lock. sync.Map ops are performed inside the lock so the map never
+// appears half-updated relative to allocMailDebug.
+var (
+	allocMailUsingPool = false
+	allocMailInitCheck = false
+	allocMailDebug     = false
+	allocMailDebugMap  = sync.Map{}
+
+	allocMailMutex sync.RWMutex
+)
 
 // allocMail 分配邮件对象
 // Allocate mail object
 func allocMail() *mail {
-	if allocMailUsingPool {
+	allocMailMutex.RLock()
+	usingPool := allocMailUsingPool
+	debug := allocMailDebug
+	allocMailMutex.RUnlock()
+	if usingPool {
 		return mailPool.Get().(*mail)
-	} else if allocMailDebug {
+	} else if debug {
 		m := &mail{}
 		_, file, line, _ := runtime.Caller(1)
+		allocMailMutex.Lock()
 		allocMailDebugMap.Store(m, file+":"+strconv.Itoa(line))
+		allocMailMutex.Unlock()
 		return m
 	} else {
 		return &mail{}
@@ -49,7 +71,10 @@ func allocMail() *mail {
 // initMail 初始化邮件对象
 // Initialize mail object
 func initMail(m *mail, mailID uint64, data any) {
-	if allocMailInitCheck {
+	allocMailMutex.RLock()
+	initCheck := allocMailInitCheck
+	allocMailMutex.RUnlock()
+	if initCheck {
 		if m.next != nil {
 			panic("initMail: mail already allocated")
 		}
@@ -68,7 +93,10 @@ func initMail(m *mail, mailID uint64, data any) {
 // initKillMail 初始化退出邮件对象
 // Initialize kill mail object
 func initKillMail(m *mail, mailID uint64, data any, onDone func()) *mailExitCommand {
-	if allocMailInitCheck {
+	allocMailMutex.RLock()
+	initCheck := allocMailInitCheck
+	allocMailMutex.RUnlock()
+	if initCheck {
 		if m.next != nil {
 			panic("initKillMail: mail already allocated")
 		}
@@ -92,18 +120,100 @@ func initKillMail(m *mail, mailID uint64, data any, onDone func()) *mailExitComm
 // releaseMail 释放邮件对象
 // Release mail object
 func releaseMail(m *mail) {
-	if allocMailUsingPool {
+	allocMailMutex.RLock()
+	usingPool := allocMailUsingPool
+	debug := allocMailDebug
+	allocMailMutex.RUnlock()
+	if usingPool {
 		m.next = nil
 		m.id = 0
 		m.data = nil
 		mailPool.Put(m)
 	} else {
-		if allocMailDebug {
+		if debug {
+			allocMailMutex.Lock()
 			_, has := allocMailDebugMap.LoadAndDelete(m)
+			allocMailMutex.Unlock()
 			if !has {
 				panic("releaseMail: mail not in debug map")
 			}
 		}
+	}
+}
+
+// ━━━ Diagnostics setters (test-facing) ━━━
+//
+// Tests switch diagnostic modes between cases (e.g. allocMailDebug=true to
+// track leaks, allocMailUsingPool=true to exercise the pool). These setters
+// take the write lock so the flag flip is atomic w.r.t. mailbox goroutines
+// reading them in allocMail/releaseMail. Tests MUST use these instead of
+// assigning the package vars directly, which would race.
+
+func setAllocMailUsingPool(v bool) {
+	allocMailMutex.Lock()
+	allocMailUsingPool = v
+	allocMailMutex.Unlock()
+}
+
+func setAllocMailInitCheck(v bool) {
+	allocMailMutex.Lock()
+	allocMailInitCheck = v
+	allocMailMutex.Unlock()
+}
+
+func setAllocMailDebug(v bool) {
+	allocMailMutex.Lock()
+	allocMailDebug = v
+	allocMailMutex.Unlock()
+}
+
+// clearAllocMailDebugMap empties the debug map. Unlike a whole-map replace
+// (which would orphan the map object guarded by allocMailMutex), this deletes
+// entries in place under the write lock, so concurrent releaseMail callers
+// observe a consistent (empty) map.
+func clearAllocMailDebugMap() {
+	allocMailMutex.Lock()
+	allocMailDebugMap.Range(func(key, _ any) bool {
+		allocMailDebugMap.Delete(key)
+		return true
+	})
+	allocMailMutex.Unlock()
+}
+
+// getAllocMailDebugNum returns the number of currently allocated (unreleased)
+// mails recorded in the debug map. Returns 0 when debug tracking is off.
+func getAllocMailDebugNum() int {
+	allocMailMutex.RLock()
+	debug := allocMailDebug
+	allocMailMutex.RUnlock()
+	if !debug {
+		return 0
+	}
+	num := 0
+	allocMailDebugMap.Range(func(key, value any) bool {
+		num++
+		return true
+	})
+	return num
+}
+
+// waitAllocMailDebugZero polls until every allocated mail has been released
+// (debug map empties), or the timeout elapses. It bridges a timing gap: a test
+// is notified that a task's *callback* ran (via a channel), but releaseMail
+// runs on the mailbox goroutine AFTER mailboxOnReceive returns — so the debug
+// map may still contain the mail at the instant the callback unblocks the test.
+// Polling (instead of asserting immediately) removes that flakiness without
+// slowing the common path. Returns the final count (0 on success).
+func waitAllocMailDebugZero(timeout time.Duration) int {
+	deadline := time.Now().Add(timeout)
+	for {
+		if n := getAllocMailDebugNum(); n == 0 {
+			return 0
+		}
+		if time.Now().After(deadline) {
+			return getAllocMailDebugNum()
+		}
+		runtime.Gosched()
 	}
 }
 

@@ -6,8 +6,8 @@ import (
 )
 
 func TestLoggingAtomos_SmokeTest(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	setAllocMailUsingPool(false)
+	setAllocMailDebug(true)
 	clearAllocMailDebugMap()
 
 	logging := &loggingAtomos{}
