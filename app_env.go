@@ -100,6 +100,12 @@ func (a *appEnv) daemon() *Error {
 	if !isRunningInDocker() {
 		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
 		pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
+		// Remove any pre-existing (read-only, 0444) pid file before writing.
+		// MainForWorkingPath invokes LaunchApp() twice; the first call creates
+		// the pid file as read-only, so the second WriteFile would otherwise
+		// fail with EACCES and abort startup. Removing first makes daemon()
+		// idempotent across repeated calls within one process.
+		_ = os.Remove(runPIDPath)
 		if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
 			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
 		}

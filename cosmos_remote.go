@@ -202,15 +202,24 @@ func (c *CosmosRemote) etcdDeleteVersion(version string) {
 
 func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
 	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	if !c.enable {
+	if !c.enable || c.current == nil {
+		c.mutex.RUnlock()
 		return nil
 	}
-	if c.current == nil {
-		return nil
+	current := c.current
+	client := current.client
+	c.mutex.RUnlock()
+	// Lazily dial on first use. check() is guarded by sync.Once and runs without
+	// the CosmosRemote lock, so a slow dial cannot stall other cross-node calls.
+	if client == nil {
+		current.dialOnce.Do(func() { current.check() })
+		c.mutex.RLock()
+		if c.current == current {
+			client = current.client
+		}
+		c.mutex.RUnlock()
 	}
-	return c.current.client
+	return client
 }
 
 func (c *CosmosRemote) getElement(name string) (*ElementRemoteFromSource, *Error) {
@@ -355,6 +364,11 @@ type cosmosRemoteVersion struct {
 	avail   bool
 	client  *grpc.ClientConn
 	version string
+	// dialOnce guards the lazy dial so check() runs at most once even when many
+	// callers race through getCurrentClient. The dial itself happens *outside*
+	// the CosmosRemote mutex (which can be held by getCurrentClient callers),
+	// preventing a slow (~1s) grpc.DialContext from blocking all cross-node calls.
+	dialOnce sync.Once
 }
 
 func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *cosmosRemoteVersion {
@@ -364,7 +378,9 @@ func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo,
 		avail:   false,
 		client:  nil,
 	}
-	c.check()
+	// The gRPC dial is deferred to the first getCurrentClient call. Dialing here
+	// would block while the caller holds the CosmosRemote write lock, stalling
+	// every concurrent cross-node RPC for up to the dial timeout.
 	return c
 }
 

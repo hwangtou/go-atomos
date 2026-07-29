@@ -668,11 +668,13 @@ func (p *CosmosProcess) unloadClusterLocalNode() {
 			p.local.Log().coreError("CosmosProcess: Failed to delete etcd key while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err)
 		}
 
-		//// 关闭etcd客户端。
-		//if err := p.cluster.etcdClient.Close(); err != nil {
-		//	p.logging.PushLogging(p.local.atomos.id, LogLevel_Core, fmt.Sprintf("CosmosProcess: Failed to close etcd client while 'handleStartUpFailedClusterCleanUp'. err=(%v)", err))
-		//}
-		//p.cluster.etcdClient = nil
+		// 关闭etcd客户端。避免在正常 Stop 路径下泄漏 etcd 连接和 goroutine。
+		// Close the etcd client. Mirrors handleStartUpFailedClusterCleanUp to
+		// avoid leaking connections/goroutines on the normal Stop path.
+		if err := p.cluster.etcdClient.Close(); err != nil {
+			p.local.Log().coreError("CosmosProcess: Failed to close etcd client while 'unloadClusterLocalNode'. err=(%v)", err)
+		}
+		p.cluster.etcdClient = nil
 	}
 
 	// 关闭gRPC服务。

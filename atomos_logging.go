@@ -118,5 +118,5 @@ func (l *atomosLogging) coreFatal(format string, args ...interface{}) {
 	if l.level > LogLevel_CoreFatal {
 		return
 	}
-	l.pushAtomosLog(l.id, LogLevel_CoreErr, fmt.Sprintf(format, args...))
+	l.pushAtomosLog(l.id, LogLevel_CoreFatal, fmt.Sprintf(format, args...))
 }

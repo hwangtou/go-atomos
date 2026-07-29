@@ -11,6 +11,7 @@ import (
 	"go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -186,6 +187,8 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	lease, keepAliveCh, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
 	if err != nil {
 		for i := 0; i < 10; i++ {
+			// Back off before each retry; the previous attempt failed.
+			<-time.After(3 * time.Second)
 			lease, keepAliveCh, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
 			if err == nil {
 				break
@@ -194,7 +197,6 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 		if err != nil {
 			return err.AddStack(nil)
 		}
-		<-time.After(3 * time.Second)
 	}
 
 	// start a separate goroutine to keep the service registration alive, and to handle the case where the service is not able to renew the lease
@@ -292,6 +294,12 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	p.cluster.etcdCancelWatch = cancel
 	// Watch for changes
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				p.local.Log().coreError("etcd: Watcher recovered from panic. reason=(%v),stack=(%s)",
+					r, string(debug.Stack()))
+			}
+		}()
 		p.local.Log().coreInfo("etcd: Watcher stopped.")
 		for {
 			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())

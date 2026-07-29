@@ -97,7 +97,6 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		oldIt := atom.atomos.it
 		oldStopping := atom.atomos.stoppingChan
 		oldAsyncCallbackID := atom.atomos.asyncCallbackID
-		oldAsyncCallbackMap := atom.atomos.asyncCallbackMap
 
 		oldAtomInstance := atom.atomos.instance.(*testRunnableAtom)
 		oldAtomInstance.haltWait = 10 * time.Millisecond
@@ -178,8 +177,11 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if oldAsyncCallbackID != newAtom.atomos.asyncCallbackID {
 			t.Fatal("Expected new atom to have same async callback ID after killing previous one")
 		}
-		if len(oldAsyncCallbackMap) == len(newAtom.atomos.asyncCallbackMap) {
-			t.Fatal("Expected new atom to have same async callback map after killing previous one")
+		// The new atom must NOT reuse the old async callback map: it gets a fresh
+		// empty map. The old map's pending callbacks are failed and cleared during
+		// halt (see mailboxOnStop), so we only assert that the new map is empty.
+		if len(newAtom.atomos.asyncCallbackMap) != 0 {
+			t.Fatal("Expected new atom to have an empty async callback map after killing previous one")
 		}
 		if oldStopping == newAtom.atomos.stoppingChan {
 			t.Fatal("Expected new atom to have same stopping channel after killing previous one")

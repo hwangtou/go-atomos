@@ -54,9 +54,11 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 		}
 		// Check if the number of keys is equal or more than the maximum allowed
 		if len(lockInfo.Versions) >= maxNodes {
-			// TODO:
-			//return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. err=(%s)", er).AddStack(nil)
-			lockInfo.Versions = []int64{}
+			// Reject rather than silently clearing the version history. Clearing
+			// would let an arbitrary number of concurrent versions of the same
+			// node run at once, defeating the purpose of the version lock (which
+			// serializes hot upgrades to at most maxNodes coexisting versions).
+			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. versions=(%v),maxNodes=(%d)", lockInfo.Versions, maxNodes).AddStack(nil)
 		}
 		lockInfo.Versions = append(lockInfo.Versions, version)
 

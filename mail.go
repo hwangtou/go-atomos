@@ -184,7 +184,10 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 
 func (mb *mailBox) waitPop() *mail {
 	mb.mutex.Lock()
-	if mb.num == 0 {
+	// sync.Cond.Wait may return spuriously; loop until there is actually a
+	// mail to pop, otherwise mb.num would underflow (uint32) and corrupt the
+	// queue accounting.
+	for mb.num == 0 {
 		mb.cond.Wait()
 	}
 	mb.num -= 1
@@ -460,6 +463,13 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 				if r := recover(); r != nil {
 					mb.logging.pushFrameworkErrorLog("Mailbox: Recover from panic. reason=(%v),stack=(%s)",
 						r, string(debug.Stack()))
+					// curMail was already popped from the queue but never
+					// processed (the handler panicked before releaseMail ran).
+					// Release it to avoid leaking the mail object and to keep
+					// the pool/debug accounting consistent.
+					if curMail != nil {
+						releaseMail(curMail)
+					}
 				}
 			}()
 			for {

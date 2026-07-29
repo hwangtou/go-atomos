@@ -387,8 +387,18 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	sem := make(chan struct{}, runtime.NumCPU()) // 信号量，用于控制并发goroutine的数量。
 	exitWG := sync.WaitGroup{}
 
+	// Snapshot the atom names under the read lock before iterating. container/list
+	// is not safe for concurrent traversal while elementAtomStopping (running on a
+	// kill goroutine) removes nodes from e.names. Iterating a static slice avoids
+	// that data race.
+	e.lock.RLock()
+	names := make([]string, 0, len(e.atoms))
 	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
-		name := nameElem.Value.(string)
+		names = append(names, nameElem.Value.(string))
+	}
+	e.lock.RUnlock()
+
+	for _, name := range names {
 		e.lock.RLock()
 		atom, has := e.atoms[name]
 		e.lock.RUnlock()

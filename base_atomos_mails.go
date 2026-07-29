@@ -145,12 +145,15 @@ func initBaseAtomosMailSync(am *baseAtomosMail, from ID, name string, arg proto.
 	am.mailType = BaseAtomosMailSync
 	am.from = from
 	am.name = name
-	// I think it has to be cloned, because argument is passing between atomos.
+	// Sync messaging blocks the caller until the reply is received, so the
+	// argument is owned by the caller for the whole call. Still, the argument
+	// crosses goroutine boundaries (caller -> mailbox), so we clone it by
+	// default to prevent the handler from mutating the caller's message.
 	if arg != nil {
 		if ShouldArgumentClone {
 			am.arg = proto.Clone(arg)
 		} else {
-			am.arg = proto.Clone(arg)
+			am.arg = arg
 		}
 	} else {
 		am.arg = nil

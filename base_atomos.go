@@ -537,12 +537,22 @@ func (a *BaseAtomos) setStopping() {
 }
 
 func (a *BaseAtomos) setHalted(err *Error) {
+	// Only the state transition is guarded by the mailbox mutex. The user hook
+	// (onIDHalted) and the stoppingChan signal are invoked *after* releasing the
+	// lock, so that a slow/recursive hook or a full channel cannot deadlock the
+	// whole mailbox (which would block every subsequent push/waitPop).
 	a.mailbox.mutex.Lock()
-	defer a.mailbox.mutex.Unlock()
 	a.state = BaseAtomosHalt
 	a.mt.halted()
+	a.mailbox.mutex.Unlock()
+
 	a.process.onIDHalted(a.id, err, a.mt)
-	a.stoppingChan <- true
+	// stoppingChan is buffered (cap 1); use a non-blocking send so that a repeat
+	// halt path can never wedge here while holding no lock either.
+	select {
+	case a.stoppingChan <- true:
+	default:
+	}
 }
 
 // IDTracker
@@ -644,6 +654,26 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err *Error) {
 	defer releaseAtomosMessageTracker(&a.mt)
 	defer releaseAtomosTasksManager(&a.task)
+
+	// Fail any outstanding async callbacks. Once this atomos is halting it will
+	// never receive replies for them, so without this cleanup each entry (which
+	// captures the caller's closure) would leak forever. Invoke each callback
+	// with an "not running" error, then drop the entry.
+	a.asyncCallMutex.Lock()
+	for id, wrap := range a.asyncCallbackMap {
+		delete(a.asyncCallbackMap, id)
+		a.asyncCallMutex.Unlock()
+		if wrap.fn != nil {
+			func() {
+				defer func() {
+					_ = recover()
+				}()
+				wrap.fn(nil, NewError(ErrAtomosIsNotRunning, "Atomos: Halted before async reply received.").AddStack(nil))
+			}()
+		}
+		a.asyncCallMutex.Lock()
+	}
+	a.asyncCallMutex.Unlock()
 
 	a.task.stopLock()
 	defer a.task.stopUnlock()
