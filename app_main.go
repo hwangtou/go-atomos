@@ -98,19 +98,18 @@ func MainForTest(runnable CosmosRunnable, t *testing.T) {
 	var err *Error
 	app, err = NewCosmosNodeAppWithTest(runnable.config, t)
 	if err != nil {
-		log.Printf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
-		os.Exit(1)
+		// Fail this test instead of killing the whole process: os.Exit in a
+		// test context aborts every other test in the binary.
+		t.Fatalf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
 	}
 
 	if err := InitCosmosProcess(app.config.Cosmos, app.config.Node, app.logging); err != nil {
-		log.Printf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
-		os.Exit(1)
+		t.Fatalf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 	}
 
 	runnable.SetConfig(app.config)
 	if err = SharedCosmosProcess().Start(&runnable); err != nil {
-		SharedCosmosProcess().Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
-		return
+		t.Fatalf("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
 	}
 	SharedCosmosProcess().Self().Log().coreInfo("App: Started.")
 }

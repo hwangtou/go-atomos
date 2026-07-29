@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -79,7 +80,15 @@ type AppLoggingToFile struct {
 	// Error Handler
 	errHandler func(*Error)
 
-	// Because Atomos Logging is thread-safe, so no lock is needed.
+	// writeMu serializes all file writes and rotations.
+	//
+	// The normal path goes through the logging mailbox goroutine (serial), but
+	// when the mailbox is full or stopped, PushLogging falls back to calling
+	// WriteAccessLog/WriteErrorLog directly on the *caller's* goroutine. That
+	// means two goroutines can write/rotate concurrently: corrupting
+	// curAccessSize, leaking a file handle on a double-rotation, or writing to
+	// a just-Closed old file. The lock guards all mutable fields below.
+	writeMu sync.Mutex
 
 	curAccessLogName string
 	curAccessLog     *os.File
@@ -227,6 +236,14 @@ func (l *AppLoggingToFile) onError(err *Error) {
 // Log
 
 func (l *AppLoggingToFile) WriteAccessLog(s string) {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+	l.writeAccessLogLocked(s)
+}
+
+// writeAccessLogLocked writes to the access log and rotates if needed.
+// Caller must hold writeMu.
+func (l *AppLoggingToFile) writeAccessLogLocked(s string) {
 	n, er := l.curAccessLog.WriteString(s)
 	if er != nil {
 		if err := l.checkLogPathSize(); err != nil {
@@ -271,7 +288,10 @@ func (l *AppLoggingToFile) WriteAccessLog(s string) {
 }
 
 func (l *AppLoggingToFile) WriteErrorLog(s string) {
-	l.WriteAccessLog(s)
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+	// Errors are also mirrored to the access log.
+	l.writeAccessLogLocked(s)
 
 	n, er := l.curErrorLog.WriteString(s)
 	if er != nil {
@@ -306,6 +326,8 @@ func (l *AppLoggingToFile) WriteErrorLog(s string) {
 // from App.close() during process shutdown so that buffered data is flushed
 // before exit (Go's os.File does not guarantee a flush on process exit).
 func (l *AppLoggingToFile) Close() {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	if l.curAccessLog != nil {
 		if err := l.curAccessLog.Close(); err != nil {
 			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "Close access log failed. err=(%v)", err).AddStack(nil))

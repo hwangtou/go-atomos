@@ -35,8 +35,8 @@
 | B3 | 配置校验空实现 | config.go | ✅ 已修复 | ValidateSupervisor/CosmosNodeConfig 实现真实校验，Config.Check() 调用它们 |
 | B4 | MapGoWithRefCount.Put 语义错误 | util_sync_map.go | ✅ 已修复 | Put 改为覆盖语义，新 key 设 ref=1，已存在不自增 |
 | B5 | IDTracker.Release 二次调用无幂等保护 | atomos_id_tracker.go | ✅ 已修复 | Release 后置 nil manager，二次调用安全 no-op |
-| B6 | logging 并发：无锁写文件模型 | app_logging.go | ⚠️ 接受 | buf 竞态已修；多写者靠 mailbox 串行化兜住，模型属设计取舍 |
-| B7 | 三套启动入口行为分裂 | app_main.go | ⚠️ 接受 | MainForConfigFile 已合并；WorkingPath/Test 的差异属不同场景需要 |
+| B6 | logging 并发：无锁写文件模型 | app_logging.go | ✅ 已修复 | AppLoggingToFile 加 writeMu 串行化所有写/轮转/关闭，修复双路径（mailbox + 降级直写）并发 |
+| B7 | 三套启动入口行为分裂 | app_main.go | ✅ 已修复 | MainForTest 的 os.Exit 改为 t.Fatal（测试上下文不应杀进程）；其余差异属场景需要 |
 
 ---
 
@@ -82,5 +82,5 @@
 
 ## 结论
 
-所有可修复的 P2/P3 问题已处理（B1-B5、C1-C6）。剩余 B6/B7/D1-D3 属设计取舍或需独立大改，标记为接受。
+所有可修复的 P2/P3 问题已处理（B1-B7、C1-C6）。剩余 D1-D3 属设计取舍或需独立大改，标记为接受。
 P0/P1 的 13 项已在 commit 8abc6c9 修复。
