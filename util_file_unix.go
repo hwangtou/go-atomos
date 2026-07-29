@@ -3,7 +3,6 @@
 package atomos
 
 import (
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path"
@@ -240,7 +239,7 @@ func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) *Error {
 	if p.Exist() {
 		return nil
 	}
-	er := ioutil.WriteFile(p.path, buf, perm)
+	er := os.WriteFile(p.path, buf, perm)
 	if er != nil {
 		return NewErrorf(ErrUtilCreateFileFailed, "Path: Create file failed. err=(%v)", er).AddStack(nil)
 	}

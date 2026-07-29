@@ -622,9 +622,21 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex,
 		//oldLock := &oldAtom.atomos.mailbox.mutex
 		// 将旧的Atom的Name元素复制到新的Atom。
 		atom.nameElement = oldAtom.nameElement
-		// 将旧的Atom的IDTrackerManager复制到新的Atom，但AtomosRelease用新的。
-		atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it)   // TODO: 验证这种情况下，IDTrackerManager下面还有引用，引用Release的情况。
-		atom.atomos.asyncCallbackID = oldAtom.atomos.asyncCallbackID // TODO: 不复制asyncCallbackMap以防止回调数据出错，要实现的话方案再议。
+		// Hand the old atom's IDTracker map over to the new atom.
+		//
+		// This is intentional: external callers (remote nodes, other atoms) may
+		// still hold IDTracker references to the old atom. Because *oldAtom = *atom
+		// below reuses the pointer, those references must keep working. fromOld()
+		// rewires the old idMap's tracker manager to point at the new BaseAtomos,
+		// so a late Release() on an old tracker decrements the new atom's count
+		// instead of touching the (already-halted) old one.
+		//
+		// Safety relies on: (1) the old atom having fully halted before this point
+		// (the spawning flow waits on stoppingChan above); (2) IDTracker.Release
+		// being idempotent (it detaches after first use), so a double Release of a
+		// migrated tracker cannot spuriously drive the count to zero.
+		atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it)
+		atom.atomos.asyncCallbackID = oldAtom.atomos.asyncCallbackID // asyncCallbackMap is NOT copied: the old map was already drained (each pending callback failed with not-running) during the old atom's mailboxOnStop, so carrying stale entries would only risk delivering a reply to the wrong (new) atom.
 
 		// 将新的Atom内容替换到旧的Atom。
 		*oldAtom = *atom

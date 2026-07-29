@@ -10,7 +10,10 @@ import (
 
 const (
 	//pidPath = "/app.pid"
-	pidPerm = 0444
+	// pidPerm is the file mode for the PID file. It must be owner-writable so
+	// that repeated daemon() calls (e.g. MainForWorkingPath invokes LaunchApp
+	// twice) can overwrite the file without needing to remove it first.
+	pidPerm = 0644
 
 	//UDSSocketPath = "/app.socket"
 )
@@ -236,7 +239,7 @@ func (a *App) LaunchApp() *Error {
 func (a *App) close() {
 	//a.socket.close()
 	a.env.close()
-	//a.logging.Close()
+	a.logging.Close()
 }
 
 // Exit

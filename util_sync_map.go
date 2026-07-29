@@ -141,11 +141,19 @@ func (m *MapGoWithRefCount[K, V]) GetOrPut(key K, value V) (v V, put bool) {
 	return m.m[key], false
 }
 
+// Put sets value for key with overwrite semantics.
+//
+// Unlike GetOrPut (which increments the ref count on a hit), Put replaces the
+// value without touching the ref count — a "set" operation should not invent
+// extra references. A brand-new key is initialised with ref count 1 so that a
+// subsequent Remove actually removes it.
 func (m *MapGoWithRefCount[K, V]) Put(key K, value V) {
 	m.Lock()
 	defer m.Unlock()
+	if _, ok := m.r[key]; !ok {
+		m.r[key] = 1
+	}
 	m.m[key] = value
-	m.r[key]++
 }
 
 func (m *MapGoWithRefCount[K, V]) Remove(key K) {

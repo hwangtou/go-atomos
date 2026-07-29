@@ -35,6 +35,8 @@ func (t testLogging) WriteErrorLog(msg string) {
 	t.t.Error(msg)
 }
 
+func (t testLogging) Close() {}
+
 type benchLogging struct {
 	b *testing.B
 }
@@ -64,3 +66,5 @@ func (b benchLogging) WriteErrorLog(msg string) {
 	}
 	b.b.Error(msg)
 }
+
+func (b benchLogging) Close() {}

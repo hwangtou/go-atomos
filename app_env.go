@@ -1,7 +1,6 @@
 package atomos
 
 import (
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"path"
@@ -43,7 +42,7 @@ func (a *appEnv) checkRunPath() *Error {
 	}
 
 	runTestPath := runPath + "/test"
-	if er = ioutil.WriteFile(runTestPath, []byte{}, 0644); er != nil {
+	if er = os.WriteFile(runTestPath, []byte{}, 0644); er != nil {
 		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path cannot writ. err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Remove(runTestPath); er != nil {
@@ -54,7 +53,7 @@ func (a *appEnv) checkRunPath() *Error {
 
 func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 	runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
-	pidBuf, er := ioutil.ReadFile(runPIDPath)
+	pidBuf, er := os.ReadFile(runPIDPath)
 	if er != nil {
 		return false, 0, nil
 	}
@@ -106,7 +105,7 @@ func (a *appEnv) daemon() *Error {
 		// fail with EACCES and abort startup. Removing first makes daemon()
 		// idempotent across repeated calls within one process.
 		_ = os.Remove(runPIDPath)
-		if er := ioutil.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
+		if er := os.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
 			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
 		}
 	}

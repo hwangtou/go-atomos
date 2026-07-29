@@ -81,13 +81,32 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 	return conf, nil
 }
 
+// ValidateSupervisorConfig validates the supervisor (cluster) section of the
+// config. Returns nil when clustering is disabled.
 func (x *Config) ValidateSupervisorConfig() *Error {
-	// TODO
+	if x == nil {
+		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+	}
+	if x.EnableCluster == nil || !x.EnableCluster.Enable {
+		return nil
+	}
+	if len(x.EnableCluster.EtcdEndpoints) == 0 {
+		return NewError(ErrCosmosConfigInvalid, "Cluster enabled but no etcd endpoints configured").AddStack(nil)
+	}
 	return nil
 }
 
+// ValidateCosmosNodeConfig validates the node-level fields (names, paths).
 func (x *Config) ValidateCosmosNodeConfig() *Error {
-	// TODO
+	if x == nil {
+		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+	}
+	if !CheckCosmosName(x.Cosmos) {
+		return NewErrorf(ErrCosmosConfigInvalid, "Cosmos name invalid or empty. cosmos=(%s)", x.Cosmos).AddStack(nil)
+	}
+	if !CheckNodeName(x.Node) {
+		return NewErrorf(ErrCosmosConfigInvalid, "Node name invalid or empty. node=(%s)", x.Node).AddStack(nil)
+	}
 	return nil
 }
 

@@ -11,14 +11,11 @@ import (
 )
 
 func (x *Config) Check() *Error {
-	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+	if err := x.ValidateCosmosNodeConfig(); err != nil {
+		return err.AddStack(nil)
 	}
-	if x.Cosmos == "" {
-		return NewError(ErrCosmosConfigInvalid, "Cosmos is empty").AddStack(nil)
-	}
-	if x.Node == "" {
-		return NewError(ErrCosmosConfigInvalid, "Node is empty").AddStack(nil)
+	if err := x.ValidateSupervisorConfig(); err != nil {
+		return err.AddStack(nil)
 	}
 	return nil
 }
@@ -44,6 +41,9 @@ func (x *IDInfo) Info() string {
 }
 
 func (x *IDInfo) IsEqual(r *IDInfo) bool {
+	if x == nil || r == nil {
+		return x == r
+	}
 	if x.Type != r.Type {
 		return false
 	}
@@ -74,6 +74,9 @@ func NewErrorf(code int64, format string, args ...interface{}) *Error {
 }
 
 func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...interface{}) *Error {
+	if x == nil {
+		return nil
+	}
 	_, file, line, ok := runtime.Caller(skip)
 	if !ok {
 		file, line = "???", 0

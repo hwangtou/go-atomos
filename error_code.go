@@ -154,21 +154,26 @@ const (
 	ErrAtomSpawningAnExistedAtom
 
 	// Util File
+	//
+	// These continue the iota sequence from above (no separate numeric range).
+	// Previously they were hardcoded 201..216, which risked colliding with the
+	// iota block if new codes were inserted above. Keeping a single iota block
+	// makes the codes dense and collision-free regardless of insertion point.
 
-	ErrUtilOSStatError                      = 201
-	ErrUtilReadDirectoryFailed              = 202
-	ErrUtilNotSupportedOS                   = 203
-	ErrUtilPathShouldBeDirectory            = 204
-	ErrUtilDirectoryNotExist                = 205
-	ErrUtilGetUserGroupIDsFailed            = 206
-	ErrUtilUsersGroupsHaveNotOwnedDirectory = 207
-	ErrUtilFileModePermNotMatch             = 208
-	ErrUtilFileMakeDirectoryFailed          = 209
-	ErrUtilFileChangeOwnerAndModeFailed     = 210
-	ErrUtilFileConfirmOwnerAndModeFailed    = 211
-	ErrUtilCreateFileFailed                 = 212
-	ErrUtilFileEnsureDirectoryFailed        = 213
-	ErrUtilFileFileExistFailed              = 214
-	ErrUtilFileGetDirectorySizeFailed       = 215
-	ErrUtilStringHashSHA256Failed           = 216
+	ErrUtilOSStatError
+	ErrUtilReadDirectoryFailed
+	ErrUtilNotSupportedOS
+	ErrUtilPathShouldBeDirectory
+	ErrUtilDirectoryNotExist
+	ErrUtilGetUserGroupIDsFailed
+	ErrUtilUsersGroupsHaveNotOwnedDirectory
+	ErrUtilFileModePermNotMatch
+	ErrUtilFileMakeDirectoryFailed
+	ErrUtilFileChangeOwnerAndModeFailed
+	ErrUtilFileConfirmOwnerAndModeFailed
+	ErrUtilCreateFileFailed
+	ErrUtilFileEnsureDirectoryFailed
+	ErrUtilFileFileExistFailed
+	ErrUtilFileGetDirectorySizeFailed
+	ErrUtilStringHashSHA256Failed
 )

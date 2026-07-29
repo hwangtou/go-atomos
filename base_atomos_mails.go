@@ -123,6 +123,16 @@ func allocBaseAtomosKillMail() (*mailExitCommand, *baseAtomosMail, *mail) {
 	return em, am, am.mail
 }
 
+// releaseBaseAtomosMail is intentionally a no-op.
+//
+// baseAtomosMail holds a waitCh (buffered chan), a proto.Message arg, and
+// closures; correctly pooling it would require strict init/release pairing
+// across every mail type and careful reuse-ordering of waitCh (a reused chan
+// still holding a stale reply would corrupt the next caller). The GC already
+// reclaims these short-lived allocations, and no benchmark has shown this to
+// be an allocation bottleneck. Implementing a pool here would trade a
+// theoretical GC saving for a real use-after-reuse risk, so we deliberately
+// rely on GC until profiling proves otherwise.
 func releaseBaseAtomosMail(am *baseAtomosMail) {
 }
 

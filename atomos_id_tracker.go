@@ -88,15 +88,21 @@ func (i *IDTracker) Release() {
 	if i == nil {
 		return
 	}
-	if i.manager != nil {
-		i.manager.mutex.Lock()
-		delete(i.manager.idMap, i.id)
-		num := len(i.manager.idMap)
-		i.manager.mutex.Unlock()
+	// Detach from the manager under the lock so that a second Release() on the
+	// same tracker is a safe no-op instead of double-counting (which could
+	// spuriously drive the manager's idMap to 0 and re-trigger onIDReleased).
+	manager := i.manager
+	if manager == nil {
+		return
+	}
+	i.manager = nil
+	manager.mutex.Lock()
+	delete(manager.idMap, i.id)
+	num := len(manager.idMap)
+	manager.mutex.Unlock()
 
-		if num == 0 {
-			i.manager.atomos.onIDReleased()
-		}
+	if num == 0 {
+		manager.atomos.onIDReleased()
 	}
 }
 

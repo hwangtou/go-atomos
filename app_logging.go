@@ -30,6 +30,7 @@ const (
 type appLogging interface {
 	WriteAccessLog(s string)
 	WriteErrorLog(s string)
+	Close()
 }
 
 // AppLoggingToConsole writes all log output directly to stdout/stderr
@@ -50,6 +51,10 @@ func (l *AppLoggingToConsole) WriteAccessLog(s string) {
 func (l *AppLoggingToConsole) WriteErrorLog(s string) {
 	os.Stderr.WriteString(s)
 }
+
+// Close is a no-op for the console backend; stdout/stderr are owned by the
+// process (or the container runtime) and must not be closed.
+func (l *AppLoggingToConsole) Close() {}
 
 // shouldLogToStdout returns true when the runtime configuration or container
 // environment indicates that logs should go to stdout/stderr instead of files.
@@ -297,6 +302,24 @@ func (l *AppLoggingToFile) WriteErrorLog(s string) {
 	}
 }
 
+// Close flushes and closes the access/error log file handles. It is called
+// from App.close() during process shutdown so that buffered data is flushed
+// before exit (Go's os.File does not guarantee a flush on process exit).
+func (l *AppLoggingToFile) Close() {
+	if l.curAccessLog != nil {
+		if err := l.curAccessLog.Close(); err != nil {
+			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "Close access log failed. err=(%v)", err).AddStack(nil))
+		}
+		l.curAccessLog = nil
+	}
+	if l.curErrorLog != nil {
+		if err := l.curErrorLog.Close(); err != nil {
+			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "Close error log failed. err=(%v)", err).AddStack(nil))
+		}
+		l.curErrorLog = nil
+	}
+}
+
 // For Test
 
 type appLoggingForTest struct {
@@ -317,6 +340,8 @@ func (l *appLoggingForTest) WriteErrorLog(s string) {
 	}
 }
 
+func (l *appLoggingForTest) Close() {}
+
 // For Test to string
 
 type appLoggingForTestToString struct {
@@ -332,6 +357,8 @@ func (l *appLoggingForTestToString) WriteErrorLog(s string) {
 	l.error.WriteString(s)
 }
 
+func (l *appLoggingForTestToString) Close() {}
+
 // For Benchmark
 
 type appLoggingForBenchmark struct {
@@ -345,6 +372,8 @@ func (l *appLoggingForBenchmark) WriteAccessLog(s string) {
 func (l *appLoggingForBenchmark) WriteErrorLog(s string) {
 	l.b.Error(strings.TrimSuffix(s, "\n"))
 }
+
+func (l *appLoggingForBenchmark) Close() {}
 
 // For Benchmark to string
 
@@ -360,3 +389,5 @@ func (l *appLoggingForBenchmarkToString) WriteAccessLog(s string) {
 func (l *appLoggingForBenchmarkToString) WriteErrorLog(s string) {
 	l.error.WriteString(s)
 }
+
+func (l *appLoggingForBenchmarkToString) Close() {}
