@@ -2,6 +2,11 @@
 
 package atomos
 
+import (
+	"os"
+	"os/user"
+)
+
 func UtilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) *Error {
 	return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "UtilFileEnsureDirectory: Not implemented on windows platform. dir=(%s)", dir).AddStack(nil)
 }
@@ -40,7 +45,7 @@ func (p *Path) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) *Error
 	return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "Path: CheckDirectoryOwnerAndMode not implemented on windows platform. path=(%s)", p.path).AddStack(nil)
 }
 
-func (p *Path) Exits() bool {
+func (p *Path) Exist() bool {
 	return false
 }
 
@@ -54,6 +59,10 @@ func (p *Path) ListDirectory() ([]*Path, *Error) {
 
 func (p *Path) ChangeOwnerAndMode(u *user.User, group *user.Group, perm os.FileMode) *Error {
 	return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "Path: ChangeOwnerAndMode not implemented on windows platform. path=(%s)", p.path).AddStack(nil)
+}
+
+func (p *Path) ConfirmOwnerAndMode(group *user.Group, perm os.FileMode) *Error {
+	return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "Path: ConfirmOwnerAndMode not implemented on windows platform. path=(%s)", p.path).AddStack(nil)
 }
 
 func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) *Error {
