@@ -209,10 +209,11 @@ func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
 	current := c.current
 	client := current.client
 	c.mutex.RUnlock()
-	// Lazily dial on first use. check() is guarded by sync.Once and runs without
-	// the CosmosRemote lock, so a slow dial cannot stall other cross-node calls.
+	// Lazily dial on first use (or after a setDisable reset). check() guards
+	// itself with dialMu so concurrent callers don't redial, and runs without
+	// the CosmosRemote lock so a slow dial cannot stall other cross-node calls.
 	if client == nil {
-		current.dialOnce.Do(func() { current.check() })
+		current.check()
 		c.mutex.RLock()
 		if c.current == current {
 			client = current.client
@@ -364,11 +365,14 @@ type cosmosRemoteVersion struct {
 	avail   bool
 	client  *grpc.ClientConn
 	version string
-	// dialOnce guards the lazy dial so check() runs at most once even when many
-	// callers race through getCurrentClient. The dial itself happens *outside*
-	// the CosmosRemote mutex (which can be held by getCurrentClient callers),
-	// preventing a slow (~1s) grpc.DialContext from blocking all cross-node calls.
-	dialOnce sync.Once
+	// dialMu + dialed guard the lazy dial so check() runs at most once per
+	// "dial cycle". Unlike sync.Once, this can be reset by setDisable() to
+	// allow redial after a connection is closed. The dial itself happens
+	// *outside* the CosmosRemote mutex (which can be held by getCurrentClient
+	// callers), preventing a slow (~1s) grpc.DialContext from blocking all
+	// cross-node calls.
+	dialMu  sync.Mutex
+	dialed  bool
 }
 
 func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *cosmosRemoteVersion {
@@ -385,9 +389,18 @@ func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo,
 }
 
 func (c *cosmosRemoteVersion) check() bool {
-	//if c.avail {
+	//if c.avail //{
 	//	return true
 	//}
+
+	c.dialMu.Lock()
+	if c.dialed {
+		// Already dialed in this cycle (success or failure); return current state.
+		c.dialMu.Unlock()
+		return c.avail
+	}
+	c.dialed = true
+	c.dialMu.Unlock()
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
@@ -415,9 +428,15 @@ func (c *cosmosRemoteVersion) check() bool {
 }
 
 func (c *cosmosRemoteVersion) setDisable() {
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
 	if c.client != nil {
 		c.client.Close()
+		c.client = nil
 	}
+	c.avail = false
+	// Reset the dial guard so a subsequent getCurrentClient can redial.
+	c.dialed = false
 }
 
 func (c *CosmosRemote) tryKillingRemote() (err *Error) {
