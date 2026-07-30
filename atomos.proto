@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package atomos;
-option go_package = "github.com/hwangtou/go-atomos";
+option go_package = "github.com/hwangtou/go-atomos;atomos";
 
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
@@ -224,6 +224,7 @@ enum ClusterNodeState {
   Started = 2;
   Stopping = 3;
   Stopped = 4;
+  Draining = 5;
 }
 
 message CosmosNodeVersionLock {
@@ -233,6 +234,10 @@ message CosmosNodeVersionLock {
 
 service AtomosRemoteService {
   rpc TryKilling(CosmosRemoteTryKillingReq) returns (CosmosRemoteTryKillingRsp) {}
+
+  // DrainNode tells the target node to stop accepting new atoms (enter Draining
+  // state), keep serving existing atoms until they finish, then exit gracefully.
+  rpc DrainNode(CosmosRemoteDrainNodeReq) returns (CosmosRemoteDrainNodeRsp) {}
 
   rpc GetAtomID(CosmosRemoteGetAtomIDReq) returns (CosmosRemoteGetAtomIDRsp) {}
   rpc GetIDState(CosmosRemoteGetIDStateReq) returns (CosmosRemoteGetIDStateRsp) {}
@@ -251,6 +256,16 @@ service AtomosRemoteService {
 // Try Killing Remote
 message CosmosRemoteTryKillingReq {}
 message CosmosRemoteTryKillingRsp {
+  Error error = 1;
+}
+
+// Drain Node — request graceful drain (stop new atoms, finish existing, then exit)
+message CosmosRemoteDrainNodeReq {
+  // deadline_sec is the max seconds to wait for existing atoms to finish.
+  // 0 means use the node's default. After the deadline the node force-stops.
+  int64 deadline_sec = 1;
+}
+message CosmosRemoteDrainNodeRsp {
   Error error = 1;
 }
 

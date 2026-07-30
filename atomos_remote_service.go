@@ -33,6 +33,24 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 	return rsp, nil
 }
 
+// DrainNode handles a remote drain request: enter Draining state, stop
+// accepting new atoms, and exit once existing atoms finish (or deadline hits).
+func (a *atomosRemoteService) DrainNode(ctx context.Context, req *CosmosRemoteDrainNodeReq) (*CosmosRemoteDrainNodeRsp, error) {
+	defer func() {
+		Recover(a.process.local)
+	}()
+	rsp := &CosmosRemoteDrainNodeRsp{}
+	deadline := time.Duration(0)
+	if req.GetDeadlineSec() > 0 {
+		deadline = time.Duration(req.GetDeadlineSec()) * time.Second
+	}
+	if err := a.process.Drain(deadline); err != nil {
+		rsp.Error = err.AddStack(a.process.local)
+		return rsp, nil
+	}
+	return rsp, nil
+}
+
 func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
 	defer func() {
 		Recover(a.process.local)

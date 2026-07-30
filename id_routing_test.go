@@ -162,3 +162,69 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 		t.Logf("Call after failover succeeded (current conn still usable).")
 	}
 }
+
+// TestDrain_RefreshBypassesDrainingVersion 验证阶段4：refresh() 在 current 版本处于
+// Draining 状态时，路由会绕开它，优先选 Started 状态的版本。
+//
+// 场景：构造一个 CosmosRemote，lock.Current 指向 V1(Draining)，同时有 V2(Started)。
+// refresh() 后 current 应指向 V2（而非 V1）。
+func TestDrain_RefreshBypassesDrainingVersion(t *testing.T) {
+	p := newTestCosmosProcessWithoutCluster(t, "drain_cosmos", "drain_self")
+
+	// 构造 CosmosRemote
+	cr := newCosmosRemoteFromLockInfo(p, &CosmosNodeVersionLock{
+		Current:  100,
+		Versions: []int64{100, 200},
+	})
+	// newCosmosRemoteFromLockInfo 不设 lock，需手动设（正常由 etcdUpdateLock 设置）
+	cr.lock = &CosmosNodeVersionLock{
+		Current:  100,
+		Versions: []int64{100, 200},
+	}
+
+	// V1 (current=100): Draining
+	v1 := &cosmosRemoteVersion{
+		process: p,
+		info: &CosmosNodeVersionInfo{
+			Node:    "remote_node",
+			Address: "1.1.1.1:1234",
+			State:   ClusterNodeState_Draining,
+		},
+		version: "100",
+		client:  nil,
+	}
+	// V2: Started
+	v2 := &cosmosRemoteVersion{
+		process: p,
+		info: &CosmosNodeVersionInfo{
+			Node:    "remote_node",
+			Address: "2.2.2.2:1234",
+			State:   ClusterNodeState_Started,
+		},
+		version: "200",
+		client:  nil,
+	}
+	cr.mutex.Lock()
+	cr.version["100"] = v1
+	cr.version["200"] = v2
+	cr.mutex.Unlock()
+
+	// refresh: current 指向 V1(Draining)，应绕开选 V2(Started)
+	cr.refresh()
+
+	if !cr.enable {
+		t.Fatal("refresh should enable (found Started version)")
+	}
+	if cr.current != v2 {
+		t.Fatalf("refresh should pick V2 (Started), got current=%v expected v2", cr.current)
+	}
+	t.Logf("[验证] refresh bypassed Draining V1, picked Started V2. addr=(%s)", cr.current.info.Address)
+
+	// 反向验证：如果 V2 也 Draining，应保留 V1（不硬失败）
+	v2.info.State = ClusterNodeState_Draining
+	cr.refresh()
+	if !cr.enable || cr.current != v1 {
+		t.Fatalf("refresh should keep V1 (Draining) when no Started version exists, got enable=%v current=%v", cr.enable, cr.current)
+	}
+	t.Logf("[验证] refresh kept Draining V1 when no Started version available (graceful degradation).")
+}

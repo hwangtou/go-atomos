@@ -79,13 +79,36 @@ func (c *CosmosRemote) refresh() {
 		c.enable = false
 		return
 	}
-	version, has := c.version[strconv.FormatInt(c.lock.Current, 10)]
-	if !has {
-		c.enable = false
+	// Prefer a non-Draining version as the routing target. The lock.Current
+	// points at the "designated" version, but during a drain that version is
+	// Draining (stop accepting new atoms). In that case, fall back to any other
+	// version that is Started, so new traffic goes to the upgraded node instead.
+	// Existing calls are unaffected — they use pinned connections (see BaseRemote).
+	currentKey := strconv.FormatInt(c.lock.Current, 10)
+	currentVersion, has := c.version[currentKey]
+	if has && currentVersion.info.GetState() != ClusterNodeState_Draining {
+		c.current = currentVersion
+		c.enable = true
 		return
 	}
-	c.current = version
-	c.enable = true
+	// Current is Draining (or missing): look for any Started version.
+	for key, v := range c.version {
+		if v.info.GetState() == ClusterNodeState_Started {
+			c.current = v
+			c.enable = true
+			c.process.local.Log().coreInfo("CosmosRemote: refresh picked Started version=(%s) over Draining/Stopping current=(%s).", key, currentKey)
+			return
+		}
+	}
+	// No Started version available. If the current exists (even if Draining),
+	// keep using it so calls don't hard-fail — the caller will get errors from
+	// the draining node, which is better than no route at all.
+	if has {
+		c.current = currentVersion
+		c.enable = true
+		return
+	}
+	c.enable = false
 }
 
 func (c *CosmosRemote) etcdUpdateLock(lock *CosmosNodeVersionLock) {
