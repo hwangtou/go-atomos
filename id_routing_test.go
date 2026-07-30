@@ -83,14 +83,12 @@ func TestIDRouting_CurrentSwitchBreaksExistingCalls(t *testing.T) {
 	// 4. 用同一个 atomID 再调用 —— 这就是核心断言
 	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
 
-	// === 核心断言 ===
-	// 现状（未改造）：err != nil，因为请求被路由到新版本（source），那里没有 route_test_atom
-	// 改造后：err == nil，因为 AtomRemote 记住了 target 的定位，仍路由到 target
-	if err == nil {
-		t.Fatal("[预期失败] Call AFTER current switch succeeded — " +
-			"this means the fix works! AtomRemote correctly routed to the old version. " +
-			"If you see this before implementing the fix, the test setup is wrong.")
+	// === 核心断言（阶段1-2改造后：正向） ===
+	// 改造前（已删除）：err != nil，current 切换导致请求到错误节点（存量断裂）
+	// 改造后：err == nil，AtomRemote pin 了创建时的连接，current 切换不影响存量调用
+	if err != nil {
+		t.Fatalf("[回归] Call AFTER current switch should succeed (pinned conn fix), got err=%v", err)
 	}
-	t.Logf("[现状确认] Call after current switch FAILED as expected (bug exists): err=%v", err)
-	t.Logf("This proves: current switch reroutes existing atom ID calls to the wrong node (存量断裂).")
+	t.Logf("[修复验证] Call after current switch SUCCEEDED — AtomRemote correctly routed to the old version despite current change.")
+	t.Logf("This proves: pinned connection survives current switch (存量不断裂).")
 }

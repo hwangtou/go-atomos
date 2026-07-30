@@ -146,7 +146,9 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, fromLocalOrRemo
 		return nil, nil, rsp.Error.AddStack(nil)
 	}
 
-	return newAtomRemoteInSourceProcess(e, rsp.Id), nil, nil
+	// Pin the connection used for this call so the returned atom ID keeps
+	// targeting this version even after current switches (drain/hot-upgrade).
+	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, e.remote.getCliConn()), nil, nil
 }
 
 func (e *ElementRemote) GetAtomsNum() int {
@@ -216,7 +218,8 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 		return nil, nil, rsp.Error.AddStack(nil)
 	}
 
-	return newAtomRemoteInSourceProcess(e, rsp.Id), nil, nil
+	// Pin the connection used for this call (see GetAtomID for rationale).
+	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, e.remote.getCliConn()), nil, nil
 }
 
 // 内部实现

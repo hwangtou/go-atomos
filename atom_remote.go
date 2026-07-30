@@ -3,6 +3,7 @@ package atomos
 import (
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,6 +19,19 @@ func newAtomRemoteInSourceProcess(e *ElementRemote, info *IDInfo) ID {
 	return &AtomRemoteInSourceProcess{
 		AtomRemote: &AtomRemote{
 			remote:  newBaseRemote(e.cosmos, info),
+			element: e,
+		},
+	}
+}
+
+// newAtomRemoteInSourceProcessWithPinnedConn creates an AtomRemote that pins
+// the given connection, so calls to it keep targeting the same version even
+// after CosmosRemote.current switches. The conn should be the one the caller
+// used to resolve this atom (e.remote.getCliConn() at creation time).
+func newAtomRemoteInSourceProcessWithPinnedConn(e *ElementRemote, info *IDInfo, conn *grpc.ClientConn) ID {
+	return &AtomRemoteInSourceProcess{
+		AtomRemote: &AtomRemote{
+			remote:  newBaseRemoteWithPinnedConn(e.cosmos, info, conn),
 			element: e,
 		},
 	}

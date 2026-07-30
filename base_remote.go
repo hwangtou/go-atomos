@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -11,6 +12,19 @@ import (
 type BaseRemote struct {
 	cosmos *CosmosRemote
 	info   *IDInfo
+	// pinnedConn is the gRPC connection captured at ID-creation time.
+	//
+	// Without this, getCli would always ask cosmos.getCurrentClient(), whose
+	// answer changes when the node's "current" version switches (e.g. during a
+	// drain/hot-upgrade). That would silently reroute existing calls — which
+	// target an atom living on the *old* version — to the *new* version, where
+	// the atom does not exist, breaking in-flight stateful sessions.
+	//
+	// By pinning the connection at creation time, an ID keeps talking to the
+	// same version/instance for its entire lifetime, regardless of current
+	// changes. It may be nil (legacy/newBaseRemote path); in that case getCli
+	// falls back to getCurrentClient for backward compatibility.
+	pinnedConn *grpc.ClientConn
 }
 
 func newBaseRemote(cosmos *CosmosRemote, info *IDInfo) BaseRemote {
@@ -20,13 +34,40 @@ func newBaseRemote(cosmos *CosmosRemote, info *IDInfo) BaseRemote {
 	}
 }
 
+// newBaseRemoteWithPinnedConn creates a BaseRemote that pins the given
+// connection so subsequent getCli calls always use it, independent of
+// CosmosRemote.current changes. Pass the connection the caller used to resolve
+// the ID (typically cosmos.getCurrentClient() at that moment).
+func newBaseRemoteWithPinnedConn(cosmos *CosmosRemote, info *IDInfo, conn *grpc.ClientConn) BaseRemote {
+	return BaseRemote{
+		cosmos:     cosmos,
+		info:       info,
+		pinnedConn: conn,
+	}
+}
+
+// getCliConn returns the raw gRPC connection this BaseRemote would use.
+// Used by ElementRemote.GetAtomID/SpawnAtom to pin the connection into the
+// newly created AtomRemote, so the atom ID keeps talking to the same version.
+func (a *BaseRemote) getCliConn() *grpc.ClientConn {
+	if a.pinnedConn != nil {
+		return a.pinnedConn
+	}
+	return a.cosmos.getCurrentClient()
+}
+
 func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {
-	cli := a.cosmos.getCurrentClient()
-	if cli == nil {
+	// Prefer the pinned connection (captured at ID creation) so that a current
+	// switch does not reroute existing calls to the wrong version.
+	conn := a.pinnedConn
+	if conn == nil {
+		conn = a.cosmos.getCurrentClient()
+	}
+	if conn == nil {
 		return nil, nil, nil, NewError(ErrCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
 	}
 
-	client := NewAtomosRemoteServiceClient(cli)
+	client := NewAtomosRemoteServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
 	return client, ctx, cancel, nil
 }
