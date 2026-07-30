@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -50,16 +51,37 @@ func newBaseRemoteWithPinnedConn(cosmos *CosmosRemote, info *IDInfo, conn *grpc.
 // Used by ElementRemote.GetAtomID/SpawnAtom to pin the connection into the
 // newly created AtomRemote, so the atom ID keeps talking to the same version.
 func (a *BaseRemote) getCliConn() *grpc.ClientConn {
-	if a.pinnedConn != nil {
-		return a.pinnedConn
+	if c := a.validPinnedConn(); c != nil {
+		return c
 	}
 	return a.cosmos.getCurrentClient()
 }
 
+// validPinnedConn returns the pinned connection if it is still usable, or nil
+// if the pin is absent / has been closed (Shutdown). When the pin is dead it is
+// cleared so subsequent calls fall back to getCurrentClient and (eventually)
+// get re-pinned to the new version's connection.
+func (a *BaseRemote) validPinnedConn() *grpc.ClientConn {
+	c := a.pinnedConn
+	if c == nil {
+		return nil
+	}
+	// connectivity.Shutdown means the ClientConn was closed (e.g. the remote
+	// node restarted, or setDisable ran). TransientFailure/Connecting are
+	// temporary — we keep the pin and let the call retry on the live transport.
+	if st := c.GetState(); st == connectivity.Shutdown {
+		a.pinnedConn = nil
+		return nil
+	}
+	return c
+}
+
 func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {
 	// Prefer the pinned connection (captured at ID creation) so that a current
-	// switch does not reroute existing calls to the wrong version.
-	conn := a.pinnedConn
+	// switch does not reroute existing calls to the wrong version. If the pin
+	// is dead (node restarted), fall back to the current client so the call can
+	// reach the new version.
+	conn := a.validPinnedConn()
 	if conn == nil {
 		conn = a.cosmos.getCurrentClient()
 	}
