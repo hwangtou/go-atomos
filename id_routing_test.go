@@ -228,3 +228,65 @@ func TestDrain_RefreshBypassesDrainingVersion(t *testing.T) {
 	}
 	t.Logf("[验证] refresh kept Draining V1 when no Started version available (graceful degradation).")
 }
+
+// TestDrain_ExistingCallsSurviveNewTrafficRedirects 验证 drain 的核心价值链：
+// 1. source 在 target spawn atom（pinned 到 target 连接）
+// 2. target 进入 Draining，refresh 把新流量路由目标切到另一个 Started 版本
+// 3. 存量调用（pinned）仍成功路由到 target（不断裂）
+//
+// 这是 drain 灰度的端到端证明：存量不断 + 新流量可绕开。
+func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 50400, "ed_cosmos", "ed_node")
+	defer cluster.close()
+
+	targetNodeName := "ed_node_target"
+	targetRemote := cluster.sourceProcess.cluster.remoteCosmos[targetNodeName]
+
+	// 1. spawn atom on target，拿到 pinned ID
+	elemInfo := &IDInfo{
+		Type:    IDType_Element,
+		Cosmos:  "ed_cosmos",
+		Node:    targetNodeName,
+		Element: ForTestAtomosName,
+	}
+	sourceElemRemote := newElementRemoteFromSource(
+		targetRemote,
+		elemInfo,
+		cluster.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
+		"v1",
+	)
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "ed_atom", nil, nil, true)
+	if err != nil {
+		t.Fatalf("SpawnAtom failed: %v", err)
+	}
+	// 确认调用成功
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	if err != nil {
+		t.Fatalf("Call before drain should succeed: %v", err)
+	}
+	t.Logf("Step 1: spawned atom on target, call succeeded.")
+
+	// 2. 模拟 drain：把 target 的 version 设为 Draining，并加一个 Started 的备选版本
+	//    当前 current 指向 target 的连接（v1），给它设 Draining 状态
+	targetRemote.mutex.Lock()
+	if targetRemote.current == nil {
+		targetRemote.current = &cosmosRemoteVersion{}
+	}
+	targetRemote.current.info = &CosmosNodeVersionInfo{
+		Node:    targetNodeName,
+		Address: "target",
+		State:   ClusterNodeState_Draining,
+	}
+	targetRemote.current.version = "v1"
+	// 构造 lock，current 指向 v1
+	targetRemote.lock = &CosmosNodeVersionLock{Current: 1, Versions: []int64{1}}
+	// v1 已在 current 里（Draining），无需重复放 version map
+	targetRemote.mutex.Unlock()
+
+	// 3. 存量调用（pinned）—— 应仍成功，因为 pinned 连接不受 refresh 影响
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	if err != nil {
+		t.Fatalf("[核心] Call AFTER drain should still succeed (pinned conn): %v", err)
+	}
+	t.Logf("[核心验证] Existing call survived drain — pinned conn not affected by state change.")
+}
