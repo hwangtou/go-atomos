@@ -222,9 +222,11 @@ enum ClusterNodeState {
   ClusterNodeStateInvalid = 0;
   Starting = 1;
   Started = 2;
-  Stopping = 3;
-  Stopped = 4;
-  Draining = 5;
+  // Draining precedes Stopping: a node drains (stop new atoms, serve existing)
+  // before it stops (kill all atoms, exit). The numeric order mirrors lifecycle.
+  Draining = 3;
+  Stopping = 4;
+  Stopped = 5;
 }
 
 message CosmosNodeVersionLock {

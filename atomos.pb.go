@@ -145,9 +145,11 @@ const (
 	ClusterNodeState_ClusterNodeStateInvalid ClusterNodeState = 0
 	ClusterNodeState_Starting                ClusterNodeState = 1
 	ClusterNodeState_Started                 ClusterNodeState = 2
-	ClusterNodeState_Stopping                ClusterNodeState = 3
-	ClusterNodeState_Stopped                 ClusterNodeState = 4
-	ClusterNodeState_Draining                ClusterNodeState = 5
+	// Draining precedes Stopping: a node drains (stop new atoms, serve existing)
+	// before it stops (kill all atoms, exit). The numeric order mirrors lifecycle.
+	ClusterNodeState_Draining ClusterNodeState = 3
+	ClusterNodeState_Stopping ClusterNodeState = 4
+	ClusterNodeState_Stopped  ClusterNodeState = 5
 )
 
 // Enum value maps for ClusterNodeState.
@@ -156,17 +158,17 @@ var (
 		0: "ClusterNodeStateInvalid",
 		1: "Starting",
 		2: "Started",
-		3: "Stopping",
-		4: "Stopped",
-		5: "Draining",
+		3: "Draining",
+		4: "Stopping",
+		5: "Stopped",
 	}
 	ClusterNodeState_value = map[string]int32{
 		"ClusterNodeStateInvalid": 0,
 		"Starting":                1,
 		"Started":                 2,
-		"Stopping":                3,
-		"Stopped":                 4,
-		"Draining":                5,
+		"Draining":                3,
+		"Stopping":                4,
+		"Stopped":                 5,
 	}
 )
 
@@ -3653,9 +3655,9 @@ const file_atomos_proto_rawDesc = "" +
 	"\x17ClusterNodeStateInvalid\x10\x00\x12\f\n" +
 	"\bStarting\x10\x01\x12\v\n" +
 	"\aStarted\x10\x02\x12\f\n" +
-	"\bStopping\x10\x03\x12\v\n" +
-	"\aStopped\x10\x04\x12\f\n" +
-	"\bDraining\x10\x052\x92\t\n" +
+	"\bDraining\x10\x03\x12\f\n" +
+	"\bStopping\x10\x04\x12\v\n" +
+	"\aStopped\x10\x052\x92\t\n" +
 	"\x13AtomosRemoteService\x12T\n" +
 	"\n" +
 	"TryKilling\x12!.atomos.CosmosRemoteTryKillingReq\x1a!.atomos.CosmosRemoteTryKillingRsp\"\x00\x12Q\n" +
