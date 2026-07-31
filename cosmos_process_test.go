@@ -1,7 +1,6 @@
 package atomos
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -124,7 +123,7 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	})
 
 	dialOption := grpc.WithTransportCredentials(insecure.NewCredentials())
-	sourceConn, er := grpc.DialContext(context.Background(), fmt.Sprintf(":%d", tc.targetPort), dialOption)
+	sourceConn, er := grpc.NewClient(fmt.Sprintf(":%d", tc.targetPort), dialOption)
 	if er != nil {
 		t.Fatalf("Failed to dial source: %v", er)
 	}
@@ -146,7 +145,7 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	}
 
 	dialOption = grpc.WithTransportCredentials(insecure.NewCredentials())
-	targetConn, er := grpc.DialContext(context.Background(), fmt.Sprintf(":%d", tc.sourcePort), dialOption)
+	targetConn, er := grpc.NewClient(fmt.Sprintf(":%d", tc.sourcePort), dialOption)
 	if er != nil {
 		t.Fatalf("Failed to dial target: %v", er)
 	}

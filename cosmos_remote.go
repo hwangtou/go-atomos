@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 )
@@ -407,7 +408,7 @@ type cosmosRemoteVersion struct {
 	// "dial cycle". Unlike sync.Once, this can be reset by setDisable() to
 	// allow redial after a connection is closed. The dial itself happens
 	// *outside* the CosmosRemote mutex (which can be held by getCurrentClient
-	// callers), preventing a slow (~1s) grpc.DialContext from blocking all
+	// callers), preventing a slow (~1s) connect from blocking all
 	// cross-node calls.
 	dialMu  sync.Mutex
 	dialed  bool
@@ -468,24 +469,39 @@ func (c *cosmosRemoteVersion) check() bool {
 	// place while we dial without holding the CosmosRemote mutex.
 	info := c.getInfo()
 
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
-	defer cancel()
-
 	var er error
 	var client *grpc.ClientConn
 	if c.process.cluster.grpcDialOption == nil {
-		client, er = grpc.DialContext(ctx, info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		client, er = grpc.NewClient(info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
-		client, er = grpc.DialContext(ctx, info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
+		client, er = grpc.NewClient(info.Address, *c.process.cluster.grpcDialOption)
 	}
 	if er != nil {
-		conn, connEr := net.DialTimeout("tcp", info.Address, time.Second*1)
-		if conn != nil {
-			conn.Close()
-		}
-		c.process.local.Log().coreFatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", info.Address, er, conn, connEr)
+		c.process.local.Log().coreFatal("CosmosRemote: NewClient failed. addr=(%s),err=(%v)", info.Address, er)
 		return false
+	}
+	// grpc.NewClient connects lazily and ignores grpc.WithBlock. Preserve the
+	// old blocking-dial fail-fast semantics — calls to a down peer fail here
+	// within ~1s instead of hanging until each RPC's own deadline — by kicking
+	// off the connection and waiting for Ready (TLS handshake included).
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
+	defer cancel()
+	client.Connect()
+	for {
+		st := client.GetState()
+		if st == connectivity.Ready {
+			break
+		}
+		if !client.WaitForStateChange(ctx, st) {
+			// Timed out waiting for readiness.
+			client.Close()
+			conn, connEr := net.DialTimeout("tcp", info.Address, time.Second*1)
+			if conn != nil {
+				conn.Close()
+			}
+			c.process.local.Log().coreFatal("CosmosRemote: Connect failed. addr=(%s),state=(%v),conn=(%v),connEr=(%v)", info.Address, st, conn, connEr)
+			return false
+		}
 	}
 	// Publish the connection under dialMu. If setDisable() ran while we were
 	// dialing (it resets dialed=false), this version is already disabled: close
