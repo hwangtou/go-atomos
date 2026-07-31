@@ -87,6 +87,44 @@ P0/P1 的 13 项已在 commit 8abc6c9 修复。
 
 ---
 
+## ID 寻址改造 + Drain 灰度（2026-07-30 ~ 07-31，已交付）
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| 阶段 0 | getCli bug 修复（dialMu 替代 sync.Once） | ✅ |
+| 阶段 1-2 | pinned connection 解耦 current | ✅（后修竞态：pinnedConnBox 加锁） |
+| 阶段 3 | pinned 失效自动降级（Shutdown 检测） | ✅ |
+| 阶段 4 | Draining 状态 + drain 状态机 | ✅（后增强：节点本地拒绝新 Spawn） |
+| 阶段 5 | startupID 校验 + 地址复用新进程代识别 | ✅（07-31 补齐） |
+| 测试治理 | -race 全套从 13+ race/panic/死锁到全绿 | ✅（07-31） |
+| 仓库卫生 | 摘除 17MB 二进制、移除过期示例、grpc.NewClient 迁移 | ✅（07-31） |
+
+---
+
+## Windows 支持（已实现）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| util_file_win32.go 空壳 | ✅ 已实现 | 用跨平台 os API 真实实现；属主/权限检查降级为存在性校验（Windows 用 ACL） |
+| GOOS=windows 交叉编译 | ✅ 通过 | `GOOS=windows GOARCH=amd64 go build .` 成功 |
+| app_windows.go SysProcAttr | ✅ | 返回空结构体（Windows 无 setsid 概念） |
+| 运行时验证 | ⚠️ 待验证 | 编译通过，但未在真实 Windows 环境跑过（daemon/信号/PID 文件行为） |
+
+---
+
+## 剩余待办
+
+| 项 | 说明 | 优先级 | 依赖 |
+|---|---|---|---|
+| embedded etcd 测试基础设施 | drain 的 etcd 广播/lease/watch 端到端验证。代码已实现 updateNodeState，缺 etcd 测试环境 | 中 | 引入 go.etcd.io/etcd/tests/v3/integration |
+| 混沌测试 | drain 期间 kill 进程、etcd 网络分区、drain 超时兜底 | 中 | 预发布环境 |
+| Windows 运行时验证 | 编译已通过，但 daemon 化/信号处理/PID 文件在真实 Windows 的行为未验证 | 低 | Windows 环境 |
+| D1 Constructor 类型安全 | 设计取舍，类型安全靠运行时断言 | 低 | 大重构 |
+| D2 ID 接口混入 internal 方法 | asyncSet 等暴露在公开 ID 接口 | 低 | 大重构 |
+| D3 无 metrics / pprof | 需独立 HTTP server | 低 | 独立工作项 |
+
+---
+
 ## 第五批：Review 2026-07-30 新发现（已处理）
 
 | # | 问题 | 文件 | 状态 | 说明 |
