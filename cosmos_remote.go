@@ -230,8 +230,11 @@ func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
 		return nil
 	}
 	current := c.current
-	client := current.client
 	c.mutex.RUnlock()
+	// Read the connection through dialMu-guarded accessor: check() publishes
+	// and setDisable() clears client under dialMu, so a direct field read here
+	// would race with both.
+	client := current.getClient()
 	// Lazily dial on first use (or after a setDisable reset). check() guards
 	// itself with dialMu so concurrent callers don't redial, and runs without
 	// the CosmosRemote lock so a slow dial cannot stall other cross-node calls.
@@ -239,7 +242,7 @@ func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
 		current.check()
 		c.mutex.RLock()
 		if c.current == current {
-			client = current.client
+			client = current.getClient()
 		}
 		c.mutex.RUnlock()
 	}
@@ -411,16 +414,22 @@ func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo,
 	return c
 }
 
-func (c *cosmosRemoteVersion) check() bool {
-	//if c.avail //{
-	//	return true
-	//}
+// getClient returns the current dialed connection (nil if not dialed or
+// disabled). All reads/writes of client and avail go through dialMu so that
+// check(), setDisable() and callers never race on these fields.
+func (c *cosmosRemoteVersion) getClient() *grpc.ClientConn {
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
+	return c.client
+}
 
+func (c *cosmosRemoteVersion) check() bool {
 	c.dialMu.Lock()
 	if c.dialed {
 		// Already dialed in this cycle (success or failure); return current state.
+		avail := c.avail
 		c.dialMu.Unlock()
-		return c.avail
+		return avail
 	}
 	c.dialed = true
 	c.dialMu.Unlock()
@@ -444,8 +453,20 @@ func (c *cosmosRemoteVersion) check() bool {
 		c.process.local.Log().coreFatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
 		return false
 	}
+	// Publish the connection under dialMu. If setDisable() ran while we were
+	// dialing (it resets dialed=false), this version is already disabled: close
+	// the freshly dialed connection instead of publishing it, otherwise the
+	// connection would leak (nothing would ever Close it again).
+	c.dialMu.Lock()
+	if !c.dialed {
+		c.dialMu.Unlock()
+		client.Close()
+		c.process.local.Log().coreInfo("CosmosRemote: Dial finished after disable, closing. addr=(%s)", c.info.Address)
+		return false
+	}
 	c.client = client
 	c.avail = true
+	c.dialMu.Unlock()
 	c.process.local.Log().coreInfo("CosmosRemote: Dial. addr=(%s)", c.info.Address)
 	return true
 }
@@ -482,7 +503,7 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 	if targetVersion == nil {
 		return nil
 	}
-	cli := targetVersion.client
+	cli := targetVersion.getClient()
 	if cli == nil {
 		return NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: Client not found.").AddStack(nil)
 	}
