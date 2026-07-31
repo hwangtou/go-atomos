@@ -5,6 +5,8 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // Mail
@@ -15,7 +17,18 @@ type mail struct {
 	next *mail
 	id   uint64
 	data any
+	// allocMode records how this mail was allocated (plain/pool/debug) at
+	// allocMail time. releaseMail switches on this field instead of the global
+	// allocMail* flags, so tests flipping those globals while a mailbox
+	// goroutine is still draining can neither double-free nor leak a mail.
+	allocMode uint8
 }
+
+const (
+	mailAllocPlain uint8 = iota
+	mailAllocPool
+	mailAllocDebug
+)
 
 type mailExitCommand struct {
 	data   any
@@ -26,30 +39,32 @@ var mailPool = sync.Pool{
 	New: func() any { return &mail{} },
 }
 
-var allocMailUsingPool = false
-var allocMailInitCheck = false
-var allocMailDebug = false
+var allocMailUsingPool atomic.Bool
+var allocMailInitCheck atomic.Bool
+var allocMailDebug atomic.Bool
 var allocMailDebugMap = sync.Map{}
 
 // allocMail 分配邮件对象
 // Allocate mail object
 func allocMail() *mail {
-	if allocMailUsingPool {
-		return mailPool.Get().(*mail)
-	} else if allocMailDebug {
-		m := &mail{}
+	if allocMailUsingPool.Load() {
+		m := mailPool.Get().(*mail)
+		m.allocMode = mailAllocPool
+		return m
+	} else if allocMailDebug.Load() {
+		m := &mail{allocMode: mailAllocDebug}
 		_, file, line, _ := runtime.Caller(1)
 		allocMailDebugMap.Store(m, file+":"+strconv.Itoa(line))
 		return m
 	} else {
-		return &mail{}
+		return &mail{allocMode: mailAllocPlain}
 	}
 }
 
 // initMail 初始化邮件对象
 // Initialize mail object
 func initMail(m *mail, mailID uint64, data any) {
-	if allocMailInitCheck {
+	if allocMailInitCheck.Load() {
 		if m.next != nil {
 			panic("initMail: mail already allocated")
 		}
@@ -68,7 +83,7 @@ func initMail(m *mail, mailID uint64, data any) {
 // initKillMail 初始化退出邮件对象
 // Initialize kill mail object
 func initKillMail(m *mail, mailID uint64, data any, onDone func()) *mailExitCommand {
-	if allocMailInitCheck {
+	if allocMailInitCheck.Load() {
 		if m.next != nil {
 			panic("initKillMail: mail already allocated")
 		}
@@ -92,17 +107,21 @@ func initKillMail(m *mail, mailID uint64, data any, onDone func()) *mailExitComm
 // releaseMail 释放邮件对象
 // Release mail object
 func releaseMail(m *mail) {
-	if allocMailUsingPool {
+	// Switch on the per-mail allocMode captured at allocMail time, NOT on the
+	// current global flags. Tests flip allocMailUsingPool/allocMailDebug while
+	// mailbox goroutines of earlier tests may still be releasing mails; reading
+	// the globals here would both race and mismatch the alloc-side path
+	// (double pool Put / "not in debug map" panic).
+	switch m.allocMode {
+	case mailAllocPool:
 		m.next = nil
 		m.id = 0
 		m.data = nil
 		mailPool.Put(m)
-	} else {
-		if allocMailDebug {
-			_, has := allocMailDebugMap.LoadAndDelete(m)
-			if !has {
-				panic("releaseMail: mail not in debug map")
-			}
+	case mailAllocDebug:
+		_, has := allocMailDebugMap.LoadAndDelete(m)
+		if !has {
+			panic("releaseMail: mail not in debug map")
 		}
 	}
 }
@@ -160,6 +179,28 @@ func (mb *mailBox) isRunning() bool {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
 	return mb.running
+}
+
+// waitExit waits until the mailbox loop goroutine has fully exited.
+// mb.running is cleared BEFORE the loop's deferred final "Mailbox: Stop" log
+// runs, so isRunning()==false alone does not mean the goroutine is gone —
+// callers that need a fully-drained shutdown (process stop, test teardown)
+// should wait here to avoid late log writes racing with subsequent work.
+func (mb *mailBox) waitExit(timeout time.Duration) {
+	if mb == nil {
+		return
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		goID := mb.goID
+		if goID == 0 {
+			return
+		}
+		if !dumpAllGoID()[goID] {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func (mb *mailBox) getNum() uint32 {
@@ -500,8 +541,10 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 							value.onDone()
 						}
 
-						// release mails
-						releaseMail(curMail)
+						// release mails (clear curMail first; see default branch)
+						released := curMail
+						curMail = nil
+						releaseMail(released)
 						for ; mails != nil; mails = mails.next {
 							releaseMail(mails)
 						}
@@ -511,8 +554,13 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 					{
 						// When this line can be executed, it means there is mail in box.
 						mb.handler.mailboxOnReceive(curMail)
-						// release mail
-						releaseMail(curMail)
+						// release mail. Clear curMail BEFORE releasing so that if
+						// releaseMail itself panics (e.g. debug-mode double-release
+						// detection), the recover-defer above will not release it a
+						// second time.
+						released := curMail
+						curMail = nil
+						releaseMail(released)
 					}
 				}
 			}

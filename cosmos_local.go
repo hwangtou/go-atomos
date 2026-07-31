@@ -255,6 +255,12 @@ func (c *CosmosLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
 
+	// runnable is nil in bare test fixtures (and cannot contain elements then);
+	// guard instead of panicking on the nil dereference.
+	if c.runnable == nil {
+		return nil
+	}
+
 	// Unload local elements and its atomos.
 	for i := len(c.runnable.spawnOrder) - 1; i >= 0; i -= 1 {
 		name := c.runnable.spawnOrder[i]

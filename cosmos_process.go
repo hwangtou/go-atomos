@@ -478,6 +478,11 @@ func (p *CosmosProcess) Stop() *Error {
 
 	<-time.After(100 * time.Millisecond)
 	p.logging.stop()
+	// Wait for the mailbox loop goroutines to fully exit: their deferred final
+	// log runs after the stop acknowledgment, and returning before they exit
+	// leaves late log writes racing with whatever the caller does next.
+	p.local.atomos.mailbox.waitExit(5 * time.Second)
+	p.logging.logBox.waitExit(5 * time.Second)
 	return err
 }
 
