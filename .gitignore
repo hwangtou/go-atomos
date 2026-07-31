@@ -3,3 +3,10 @@
 examples/chat/data/
 vendor
 .claude/
+
+# Compiled protoc plugin binaries — build locally via protoc-gen-go-atomos/build.sh
+protoc-gen-go-atomos/protoc-gen-go
+protoc-gen-go-atomos/protoc-gen-go-atomos
+
+# Accidentally created home-dir artifact
+/~
