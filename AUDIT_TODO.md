@@ -84,3 +84,16 @@
 
 所有可修复的 P2/P3 问题已处理（B1-B7、C1-C6）。剩余 D1-D3 属设计取舍或需独立大改，标记为接受。
 P0/P1 的 13 项已在 commit 8abc6c9 修复。
+
+---
+
+## 第五批：Review 2026-07-30 新发现（已处理）
+
+| # | 问题 | 文件 | 状态 | 说明 |
+|---|---|---|---|---|
+| E1 | 示例生成代码过期，`go build ./...` 编译失败（引用已删除的 GetScaleID / 旧 ext 签名） | hello_atomos/、examples/hello_atomos/ | ✅ 已处理 | 按决策**移除过期 demo**（protoc-gen 插件本身与框架一致，重新生成即可用，需要时再加回示例） |
+| E2 | `ClusterNodeState` 枚举重编号（Stopping 3→4、Stopped 4→5、Draining 5→3）破坏 wire 兼容 | atomos.proto | ➖ 不处理 | 决策：大版本更新不兼容老版本，无需处理 |
+| E3 | `cosmosRemoteVersion.client/avail` 数据竞态：check() 无锁发布、dial 途中 setDisable 导致连接泄漏；tryKillingRemote 无锁读 | cosmos_remote.go | ✅ 已修复 | client/avail 全部收进 dialMu；check() 发布前检测 dial 途中被 disable 则 Close 新连接；新增 getClient() 访问器，getCurrentClient/tryKillingRemote 统一走它 |
+| E4 | mailbox loop recover defer 二次 releaseMail（debug panic；pool 模式下双重 Put = use-after-reuse） | mail.go | ✅ 已修复 | release 前先摘 curMail；mail 增加 allocMode 字段，release 按分配时模式而非全局标志，免疫测试翻转全局标志 |
+| E5 | Draining 节点本地不拒绝新 Spawn（pinned 连接可绕过路由层，drain 永远无法归零） | element_local.go / cosmos_process.go / error_code.go | ✅ 已修复 | ElementLocal.SpawnAtom 入口检查 process.isDraining()，拒绝并返回新错误码 ErrCosmosNodeDraining；含远程+本地 spawn 拒绝、存量调用不受影响的端到端测试 |
+| E6 | 测试基础设施竞态（-race 全套 13+ 个 race + 死锁 + panic） | 多个 _test.go、cosmos_process.go、mail.go | ✅ 已修复 | 全局调试标志改 atomic.Bool；测试 fixture 全部加 t.Cleanup 停 mailbox；新增 mailBox.waitExit（产品级，Stop() 等待 goroutine 真正退出）；CosmosLocal.OnStopping nil runnable 防护；t.Fatal-in-goroutine 改为错误收集；时序敏感断言改为轮询/阻塞桩（blocker）确定性化；`-race -count=2` 连续两轮全绿 |
