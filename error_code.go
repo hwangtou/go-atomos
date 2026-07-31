@@ -176,4 +176,12 @@ const (
 	ErrUtilFileFileExistFailed
 	ErrUtilFileGetDirectorySizeFailed
 	ErrUtilStringHashSHA256Failed
+
+	// Cluster / Drain
+	//
+	// Returned when a node in Draining state rejects a new atom spawn. Routing
+	// should steer callers away from draining nodes, but stale routes or pinned
+	// connections can still deliver a spawn — the node must refuse it locally so
+	// the caller can re-resolve and land on a Started node.
+	ErrCosmosNodeDraining
 )

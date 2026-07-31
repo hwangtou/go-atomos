@@ -294,6 +294,14 @@ func (p *CosmosProcess) stopFromOtherNodeAfterResponse() {
 var drainCheckInterval = 5 * time.Second
 var drainDefaultDeadline = 1 * time.Hour
 
+// isDraining reports whether the process has entered drain mode. Spawn paths
+// check this to reject new atoms locally (see ElementLocal.SpawnAtom).
+func (p *CosmosProcess) isDraining() bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.draining
+}
+
 // Drain enters drain mode: stop accepting new atoms, keep serving existing
 // ones, and exit gracefully once all atoms finish (or deadline elapses).
 //

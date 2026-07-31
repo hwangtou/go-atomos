@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"testing"
+	"time"
 )
 
 // TestIDRouting_CurrentSwitchBreaksExistingCalls 证明现状的核心缺陷：
@@ -289,4 +290,69 @@ func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
 		t.Fatalf("[核心] Call AFTER drain should still succeed (pinned conn): %v", err)
 	}
 	t.Logf("[核心验证] Existing call survived drain — pinned conn not affected by state change.")
+}
+
+// TestDrain_SpawnRejectedWhenDraining 验证 drain 的本地防线：
+// 即使调用方持有 pinned 连接（路由层已经无法拦住它），处于 Draining 状态的
+// 节点也必须在本地拒绝新的 SpawnAtom，否则存量永远不归零、drain 卡死到
+// deadline 强杀在途 atom。
+func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 50600, "dr_cosmos", "dr_node")
+	defer cluster.close()
+
+	targetNodeName := "dr_node_target"
+	targetRemote := cluster.sourceProcess.cluster.remoteCosmos[targetNodeName]
+	sourceElemRemote := newElementRemoteFromSource(
+		targetRemote,
+		&IDInfo{
+			Type:    IDType_Element,
+			Cosmos:  "dr_cosmos",
+			Node:    targetNodeName,
+			Element: ForTestAtomosName,
+		},
+		cluster.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
+		"v1",
+	)
+
+	// 1. drain 前 spawn 应成功（同时让 target 持有存量 atom，drain watcher 不会退出）
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_keep", nil, nil, true)
+	if err != nil {
+		t.Fatalf("SpawnAtom before drain should succeed: %v", err)
+	}
+	if atomID == nil {
+		t.Fatal("SpawnAtom before drain returned nil atom ID")
+	}
+	t.Log("Step 1: spawned atom before drain, succeeded.")
+
+	// 2. target 进入 drain（deadline 足够长，存量 atom 不归零，进程不会退出）
+	if err := cluster.targetProcess.Drain(time.Hour); err != nil {
+		t.Fatalf("Drain failed: %v", err)
+	}
+
+	// 3. drain 后经 pinned 连接的远程 spawn 必须被本地拒绝
+	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_new", nil, nil, true)
+	if err == nil {
+		t.Fatal("[核心] SpawnAtom on draining node should be rejected, but succeeded")
+	}
+	if err.Code != ErrCosmosNodeDraining {
+		t.Fatalf("[核心] expected ErrCosmosNodeDraining, got code=(%v) err=(%v)", err.Code, err)
+	}
+	t.Log("[核心验证] Remote spawn on draining node rejected with ErrCosmosNodeDraining.")
+
+	// 4. 本地 spawn 同样被拒绝
+	localElem, gerr := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
+	if gerr != nil {
+		t.Fatalf("getLocalElement failed: %v", gerr)
+	}
+	_, _, lerr := localElem.SpawnAtom(cluster.targetProcess.local, "dr_atom_local", nil, nil, true)
+	if lerr == nil || lerr.Code != ErrCosmosNodeDraining {
+		t.Fatalf("Local spawn on draining node should be rejected with ErrCosmosNodeDraining, got (%v)", lerr)
+	}
+	t.Log("[核心验证] Local spawn on draining node rejected with ErrCosmosNodeDraining.")
+
+	// 5. 存量 atom 的调用不受 drain 影响（与 TestDrain_ExistingCallsSurviveNewTrafficRedirects 互补）
+	if _, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil); err != nil {
+		t.Fatalf("Existing atom call during drain should succeed: %v", err)
+	}
+	t.Log("[核心验证] Existing atom still callable during drain.")
 }

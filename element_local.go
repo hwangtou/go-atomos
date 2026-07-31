@@ -312,6 +312,15 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 }
 
 func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+	// Reject new atoms while the node is draining. Routing already steers new
+	// traffic away from Draining nodes, but callers with stale routes or pinned
+	// connections can still land a spawn here — refuse it so the caller can
+	// re-resolve onto a Started node instead of silently anchoring a new atom
+	// on a node that is trying to empty out.
+	if p := e.cosmosLocal.process; p != nil && p.isDraining() {
+		return nil, nil, NewErrorf(ErrCosmosNodeDraining,
+			"Element: SpawnAtom rejected, node is draining. element=(%s),atom=(%s)", e.atomos.id.Element, name).AddStack(e)
+	}
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
 	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, true, fromLocalOrRemote, args...)
