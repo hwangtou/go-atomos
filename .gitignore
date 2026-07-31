@@ -10,3 +10,4 @@ protoc-gen-go-atomos/protoc-gen-go-atomos
 
 # Accidentally created home-dir artifact
 /~
+/supervisor/process_playground
