@@ -116,12 +116,85 @@ P0/P1 的 13 项已在 commit 8abc6c9 修复。
 
 | 项 | 说明 | 优先级 | 依赖 |
 |---|---|---|---|
-| embedded etcd 测试基础设施 | drain 的 etcd 广播/lease/watch 端到端验证。代码已实现 updateNodeState，缺 etcd 测试环境 | 中 | 引入 go.etcd.io/etcd/tests/v3/integration |
-| 混沌测试 | drain 期间 kill 进程、etcd 网络分区、drain 超时兜底 | 中 | 预发布环境 |
 | Windows 运行时验证 | 编译已通过，但 daemon 化/信号处理/PID 文件在真实 Windows 的行为未验证 | 低 | Windows 环境 |
-| D1 Constructor 类型安全 | 设计取舍，类型安全靠运行时断言 | 低 | 大重构 |
-| D2 ID 接口混入 internal 方法 | asyncSet 等暴露在公开 ID 接口 | 低 | 大重构 |
-| D3 无 metrics / pprof | 需独立 HTTP server | 低 | 独立工作项 |
+
+---
+
+## 测试基础设施（2026-07-31 已完成）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| embedded etcd 测试基础设施 | ✅ 已完成 | `embedded_etcd_test.go`（build tag: integration），进程内启停临时 etcd，CI 可跑真实 lease/watch/txn |
+| drain etcd 端到端测试 | ✅ 已完成 | `etcd_drain_test.go`：节点状态广播 + watch 感知链路验证 |
+| 混沌测试 | ✅ 已完成 | `chaos_test.go`：drain+kill server 优雅降级、drain spawn 拒绝+恢复 |
+
+---
+
+## 架构优化方向（非 bug，记录备查）
+
+以下三项是审计中识别的**架构设计债**，不影响正确性，但影响长期可维护性/可观测性/类型安全性。
+修复成本高（breaking change 或大模块），建议在下次大版本重构时考虑。
+
+### D1：ElementConstructor/AtomConstructor 返回同一 Atomos 接口（类型安全）
+
+**现状**（`interface.go:50-58`）：
+```go
+type ElementDeveloper interface {
+    ElementConstructor() Atomos      // Element 和 Atom 都返回同一个接口
+    AtomConstructor(name string) Atomos
+}
+```
+`Atomos` 接口只有 `String()` + `Halt()`，Element 和 Atom 在类型层面不可区分。
+
+**影响**：
+- 开发者拼错方法名或 ElementConstructor 误返回 Atom 类型，编译期发现不了
+- 只能等到运行时框架做 `instance.(XxxElement)` 类型断言才报 `ErrElementNotImplemented`
+- 错误反馈链路长，调试体验差
+
+**优化方向**：
+- 方案 A：引入泛型，`ElementDeveloper[E Element, A Atom]`，让工厂方法返回具体类型
+- 方案 B：拆成两个接口 `ElementConstructor() SomeElement` / `AtomConstructor() SomeAtom`
+- 注意：会改变 protoc 生成器输出 + 所有业务 dev.go 实现，是 breaking change
+
+### D2：ID 公开接口混入 internal 方法（接口污染）
+
+**现状**（`id.go`）：
+```go
+type ID interface {
+    ...
+    asyncSet(callback ...) (startupID, callbackID uint64)   // 仅框架内部用
+    asyncCallback(callerID ID, ...)                          // 仅框架内部用
+    getGoID() uint64                                         // 仅框架内部用
+}
+```
+三个小写命名的方法意图是 internal，但放在公开 `ID` 接口里。
+
+**影响**：
+- 任何实现 `ID` 的代码都必须实现这三个方法
+- 这是 `CosmosRemote`/`AtomRemote`/`ElementRemote` 被迫给 `asyncSet` 填 `return 0, 0` 空桩的根因
+- 接口职责不清，外部扩展困难
+
+**优化方向**：
+- 把三个方法拆到一个 `internalID` 子接口，框架内部通过类型断言访问
+- 或拆成 `PublicID`（面向业务）和 `RemoteID`（面向框架）两个接口
+- 注意：影响所有 remote ID 实现的接口满足性
+
+### D3：无 metrics / 无 pprof（可观测性）
+
+**现状**：
+- 无 Prometheus metrics（atom 数量、消息队列深度、RPC 延迟、内存等无法监控）
+- 无 pprof 端点（无法在线排查 CPU/内存/goroutine 泄漏）
+- 有 `IsHealthy()` 方法（Docker HEALTHCHECK 用），但无 HTTP server 暴露
+
+**影响**：
+- 生产环境缺乏运行时可观测性
+- 性能问题排查困难（需靠日志推断，无 profile 数据）
+
+**优化方向**：
+- 引入可选的 `net/http` server + `net/http/pprof` + prometheus client
+- 通过配置开关启用（如 `EnableDebugServer: true` + `DebugServerPort`）
+- 暴露的 metrics：active atom count per element、mailbox queue depth、RPC latency histogram、remote connection count
+- 是独立功能模块，不影响现有逻辑，可作为下一个 feature 独立开发
 
 ---
 
