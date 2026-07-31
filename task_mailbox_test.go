@@ -71,9 +71,7 @@ func TestTaskMailbox_SerialLifeCycle(t *testing.T) {
 
 	wg.Wait()
 
-	if mb.mailbox.isRunning() {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
-	}
+	waitMailboxStopped(t, mb.mailbox, 5*time.Second)
 
 	<-time.After(1 * time.Millisecond)
 	goMap = dumpAllGoID()
@@ -159,9 +157,7 @@ func TestTaskMailbox_SerialLifeCycleWithCallback(t *testing.T) {
 
 	wg.Wait()
 
-	if mb.mailbox.isRunning() {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
-	}
+	waitMailboxStopped(t, mb.mailbox, 5*time.Second)
 
 	<-time.After(1 * time.Millisecond)
 	goMap = dumpAllGoID()
@@ -183,8 +179,6 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 	mb := createTaskMailbox(taskMailboxName, true, newTestLoggingAtomos(t))
 	taskMailboxGoID := mb.mailbox.goID
 	t.Logf("task mailbox info: %s on goID(%d)", mb.mailbox.name, taskMailboxGoID)
-
-	cancelGoID := getGoID()
 
 	goMap := dumpAllGoID()
 	if _, exists := goMap[taskMailboxGoID]; !exists {
@@ -209,7 +203,7 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 		helper := &taskHelper{
 			task: nil,
 			taskWithCallback: func(taskID uint64) (callback func()) {
-				tba.executedMaps[taskID] = true
+				tba.markExecuted(taskID)
 				if tID != taskID {
 					t.Fatal("Unexpected task ID:", taskID)
 				}
@@ -233,7 +227,7 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 					if getGoID() != atomosGoID {
 						t.Fatal("callback is not running in atomos goID:", atomosGoID)
 					}
-					tba.callbackMaps[taskID] = true
+					tba.markCallback(taskID)
 					callbackWg.Done()
 				}
 			},
@@ -245,10 +239,20 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 			appendToHead: false,
 			cancelCallback: func(reason string) {
 				t.Logf("Task %d cancelled because: %s", tID, reason)
-				if getGoID() != cancelGoID {
-					t.Fatal("cancel callback is not running in atomos goID:", atomosGoID)
+				// NOTE: the cancel callback may run on EITHER the canceler's
+				// goroutine (fast path) or the task mailbox goroutine (the
+				// documented "edge" path where the mail was already popped, see
+				// cancelTaskQueue TaskMailing/m==nil branch). Asserting a fixed
+				// goID is therefore invalid; the cancelledMaps checks below
+				// verify the callback actually ran.
+				//
+				// Also guard against duplicate/late invocations: when the
+				// fixture cleanup halts the atomos, leftover task entries are
+				// cancelled again ("Cancel due to exit"), and Done-ing an
+				// already-zero WaitGroup would panic.
+				if !tba.markCancelled(tID) {
+					return
 				}
-				tba.cancelledMaps[tID] = true
 				wg.Done()
 				callbackWg.Done()
 			},
@@ -281,27 +285,27 @@ func TestTaskMailbox_SerialCancelTask(t *testing.T) {
 	wg.Wait()
 	callbackWg.Wait()
 
-	if len(tba.cancelledMaps) == 1 && tba.cancelledMaps[2] {
+	cancelledMaps, executedMaps, callbackMaps := tba.mapSnapshot()
+
+	if len(cancelledMaps) == 1 && cancelledMaps[2] {
 		t.Log("Cancel callback executed as expected.")
 	} else {
 		t.Fatal("Cancel callback was not executed as expected.")
 	}
 
-	if len(tba.callbackMaps) == 2 && tba.callbackMaps[1] && tba.callbackMaps[3] {
+	if len(callbackMaps) == 2 && callbackMaps[1] && callbackMaps[3] {
 		t.Log("Task callbacks executed as expected.")
 	} else {
 		t.Fatal("Task callbacks were not executed as expected.")
 	}
 
-	if len(tba.executedMaps) == 2 && tba.executedMaps[1] && tba.executedMaps[3] {
+	if len(executedMaps) == 2 && executedMaps[1] && executedMaps[3] {
 		t.Log("All tasks executed as expected.")
 	} else {
 		t.Fatal("Not all tasks were executed as expected.")
 	}
 
-	if mb.mailbox.isRunning() {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
-	}
+	waitMailboxStopped(t, mb.mailbox, 5*time.Second)
 
 	<-time.After(1 * time.Millisecond)
 	goMap = dumpAllGoID()
@@ -320,9 +324,57 @@ type testTaskMailboxBaseAtomos struct {
 
 	expectedCallback uint64
 
+	// mapsMu guards the three tracking maps below: they are written from the
+	// serial task mailbox goroutine (executed), the atomos mailbox goroutine
+	// (callback) and the test/canceler goroutine (cancelled) concurrently.
+	mapsMu        sync.Mutex
 	cancelledMaps map[uint64]bool
 	executedMaps  map[uint64]bool
 	callbackMaps  map[uint64]bool
+}
+
+func (tba *testTaskMailboxBaseAtomos) markExecuted(id uint64) {
+	tba.mapsMu.Lock()
+	tba.executedMaps[id] = true
+	tba.mapsMu.Unlock()
+}
+
+func (tba *testTaskMailboxBaseAtomos) markCallback(id uint64) {
+	tba.mapsMu.Lock()
+	tba.callbackMaps[id] = true
+	tba.mapsMu.Unlock()
+}
+
+// markCancelled records a cancel invocation. It returns false when the task
+// was already cancelled or fully executed (duplicate/late cancel, e.g. the
+// "Cancel due to exit" pass during fixture cleanup), so the caller should not
+// count it again.
+func (tba *testTaskMailboxBaseAtomos) markCancelled(id uint64) bool {
+	tba.mapsMu.Lock()
+	defer tba.mapsMu.Unlock()
+	if tba.cancelledMaps[id] || tba.callbackMaps[id] {
+		return false
+	}
+	tba.cancelledMaps[id] = true
+	return true
+}
+
+func (tba *testTaskMailboxBaseAtomos) mapSnapshot() (cancelled, executed, callback map[uint64]bool) {
+	tba.mapsMu.Lock()
+	defer tba.mapsMu.Unlock()
+	cancelled = make(map[uint64]bool, len(tba.cancelledMaps))
+	for k, v := range tba.cancelledMaps {
+		cancelled[k] = v
+	}
+	executed = make(map[uint64]bool, len(tba.executedMaps))
+	for k, v := range tba.executedMaps {
+		executed[k] = v
+	}
+	callback = make(map[uint64]bool, len(tba.callbackMaps))
+	for k, v := range tba.callbackMaps {
+		callback[k] = v
+	}
+	return
 }
 
 func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *testTaskMailboxBaseAtomos {
@@ -333,6 +385,23 @@ func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *t
 	}); err != nil {
 		t.Fatalf("Failed to start BaseAtomos: %v", err)
 	}
+	// Stop the mailbox when the test finishes. Without this, the leaked mailbox
+	// goroutine keeps allocating/releasing mails (e.g. delayed task timers) while
+	// later tests flip the global allocMail* debug flags and clear the debug map,
+	// which used to cause data races and spurious "mail not in debug map" panics.
+	t.Cleanup(func() {
+		if !ba.mailbox.isRunning() {
+			return
+		}
+		if err := ba.PushKillMail(p.local, nil); err != nil {
+			t.Logf("Cleanup: PushKillMail failed: %v", err)
+			return
+		}
+		for deadline := time.Now().Add(5 * time.Second); ba.mailbox.isRunning() && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+		waitMailboxGoroutineExit(ba.mailbox, 5*time.Second)
+	})
 	tba.t = t
 	tba.atomos = ba
 	tba.cancelledMaps = make(map[uint64]bool)
@@ -386,7 +455,7 @@ func (tba *testTaskMailboxBaseAtomos) OnStopping(from ID, cancelled []uint64) *E
 }
 
 func (tba *testTaskMailboxBaseAtomos) OnIDsReleased() {
-	panic("implement me")
+	// No-op: invoked when the test cleanup halts the atomos.
 }
 
 // Atomos

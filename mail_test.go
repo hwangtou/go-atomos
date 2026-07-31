@@ -1,8 +1,10 @@
 package atomos
 
 import (
+	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -10,14 +12,20 @@ import (
 // Test for mailbox
 
 func clearAllocMailDebugMap() {
-	if !allocMailDebug {
+	if !allocMailDebug.Load() {
 		return
 	}
-	allocMailDebugMap = sync.Map{}
+	// Delete entries instead of reassigning the sync.Map: mailbox goroutines of
+	// other tests may be calling LoadAndDelete on the map variable concurrently,
+	// and reassigning it would race with those reads.
+	allocMailDebugMap.Range(func(key, value any) bool {
+		allocMailDebugMap.Delete(key)
+		return true
+	})
 }
 
 func getAllocMailDebugNum() int {
-	if !allocMailDebug {
+	if !allocMailDebug.Load() {
 		return 0
 	}
 	num := 0
@@ -29,7 +37,7 @@ func getAllocMailDebugNum() int {
 }
 
 func getAllAllocMailDebugInfo() map[*mail]string {
-	if !allocMailDebug {
+	if !allocMailDebug.Load() {
 		return nil
 	}
 	info := make(map[*mail]string)
@@ -42,6 +50,25 @@ func getAllAllocMailDebugInfo() map[*mail]string {
 	return info
 }
 
+// waitAllocMailDebugZero polls until the debug allocation map drains (or the
+// timeout elapses and fails the test). Background goroutines (logging mailboxes
+// of test fixtures) hold transient debug mails, so an instantaneous zero check
+// is flaky; polling waits out the transients while still catching real leaks.
+func waitAllocMailDebugZero(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if getAllocMailDebugNum() == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Memory leak detected, some mails are not released. remaining=(%d),info=(%v)",
+				getAllocMailDebugNum(), getAllAllocMailDebugInfo())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // Smoke Test for Mailbox Life Cycle
 // It is a simple test to verify the mailbox life cycle.
 // Also test for:
@@ -52,8 +79,8 @@ func getAllAllocMailDebugInfo() map[*mail]string {
 // #5 mailboxOnReceive
 // #6 mailboxOnStop
 func TestMailbox_LifeCycle(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	var wg sync.WaitGroup
@@ -90,9 +117,10 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	wg.Add(count)
 	for i := 0; i < count; i++ {
 		m := allocMail()
-		if getAllocMailDebugNum() != i+1 {
-			t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
-		}
+		// NOTE: no per-iteration debug-map count assertion — the mailbox
+		// consumes (and releases) pushed mails concurrently, so any exact or
+		// bounded count here is inherently nondeterministic. Allocation
+		// tracking is verified by waitAllocMailDebugZero at the end.
 		initMail(m, DefaultMailID, nil)
 		h.mb.pushTail(m)
 	}
@@ -101,24 +129,19 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	// Kill
 	wg.Add(1)
 	m := allocMail()
-	if getAllocMailDebugNum() != 1 {
-		t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
-	}
 	initKillMail(m, DefaultMailID, nil, nil)
 	h.mb.pushHead(m)
-	if !h.mb.running {
+	if !h.mb.isRunning() {
 		t.Fatal("TestMailbox_Smoke: Mailbox is not running after sending exit mail.")
 	}
 	wg.Wait()
-	if h.mb.running {
+	if h.mb.isRunning() {
 		t.Fatal("TestMailbox_Smoke: Mailbox is still running after stopped.")
 	}
 
-	// Check memory leak
-	<-time.After(time.Millisecond)
-	if getAllocMailDebugNum() > 0 {
-		t.Fatal("TestMailbox_Smoke: Memory leak detected, some mails are not released.", allocMailDebugMap)
-	}
+	// Check memory leak: background log mails are transient, so poll until the
+	// debug map drains instead of asserting a single instantaneous zero.
+	waitAllocMailDebugZero(t, time.Second)
 
 	<-time.After(time.Millisecond)
 }
@@ -128,13 +151,27 @@ func TestMailbox_LifeCycle(t *testing.T) {
 // Push 100 more mails to test push kill mails after all mails sent.
 // #1 getNum
 func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	var sendWait, wg sync.WaitGroup
 	var h *testMailboxHandler
 	count := uint64(100)
+	// killPushed is closed by the main goroutine after the kill mail has been
+	// pushed, so that mail 0 in phase 2 blocks the mailbox until the kill mail
+	// is at the head of the queue. This makes the stop-time mail count
+	// deterministic and avoids t.Fatal being called from the mailbox goroutine
+	// (FailNow -> runtime.Goexit would kill the mailbox loop and deadlock wg).
+	killPushed := make(chan struct{})
+	var phase atomic.Int32
+	var errMu sync.Mutex
+	var errs []string
+	recordErr := func(format string, args ...any) {
+		errMu.Lock()
+		errs = append(errs, fmt.Sprintf(format, args...))
+		errMu.Unlock()
+	}
 	h = &testMailboxHandler{
 		t:  t,
 		mb: nil,
@@ -143,26 +180,32 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 			if n := mail.data.(uint64); n == 0 {
 				t.Log("TestMailBox_GetNum: A waiting mail received, wait for all mails sent.")
 				sendWait.Wait()
+				if phase.Load() == 2 {
+					// Phase 2: hold the mailbox until the kill mail is at the
+					// head, so the stop-time remaining count is deterministic.
+					<-killPushed
+				}
 			} else if num := int32(n) + int32(h.mb.getNum()); num < int32(count-2) || num > int32(count-1) {
-				t.Fatalf("TestMailBox_GetNum: GetNum returned wrong value during receiving mails. expect=(%d or %d) got=(%d)", n-1, n, h.mb.getNum())
+				recordErr("TestMailBox_GetNum: GetNum returned wrong value during receiving mails. expect=(%d or %d) got=(%d)", n-1, n, h.mb.getNum())
 			}
 			wg.Done()
 		},
 		stop: func(killMail, remainMails *mail, num uint32) *Error {
 			t.Log("TestMailBox_GetNum: Mail stopping.")
 			if killMail == nil {
-				t.Fatal("TestMailBox_GetNum: Stop received nil killMail.")
+				recordErr("TestMailBox_GetNum: Stop received nil killMail.")
+				return nil
 			}
 			if _, ok := killMail.data.(*mailExitCommand); !ok {
-				t.Fatalf("TestMailBox_GetNum: Stop received wrong killMail action. expect=(*mailExitCommand) got=(%T)", killMail.data)
+				recordErr("TestMailBox_GetNum: Stop received wrong killMail action. expect=(*mailExitCommand) got=(%T)", killMail.data)
 			}
 			if num != uint32(count-1) { // one mail is being processed
-				t.Fatalf("TestMailBox_GetNum: Stop received wrong num. expect=(%d) got=(%d)", count, num)
+				recordErr("TestMailBox_GetNum: Stop received wrong num. expect=(%d) got=(%d)", count-1, num)
 			}
 			cur := 1
 			for curMail := remainMails; curMail != nil; curMail = curMail.next {
 				if curMail.data.(uint64) != uint64(cur) {
-					t.Fatalf("TestMailBox_GetNum: Remaining mail has wrong data. expect=(%d) got=(%d)", cur, curMail.id)
+					recordErr("TestMailBox_GetNum: Remaining mail has wrong data. expect=(%d) got=(%d)", cur, curMail.data)
 				}
 				cur++
 				t.Log("TestMailBox_GetNum: Remaining mail:", curMail)
@@ -192,7 +235,7 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		t.Log("TestMailBox_GetNum: Mail send.", i)
 		m := allocMail()
 		if getAllocMailDebugNum() == 0 {
-			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 		}
 		initMail(m, DefaultMailID, i)
 		h.mb.pushTail(m)
@@ -208,12 +251,13 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 
 	// Kill
 	count = uint64(100)
+	phase.Store(2)
 	wg.Add(int(count))
 	sendWait.Add(int(count))
 	for i := uint64(0); i < count; i++ {
 		m := allocMail()
 		if getAllocMailDebugNum() == 0 {
-			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 		}
 		initMail(m, DefaultMailID, i)
 		h.mb.pushTail(m)
@@ -223,16 +267,24 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 	// kill mail
 	m := allocMail()
 	if getAllocMailDebugNum() == 0 {
-		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 	}
 	initKillMail(m, DefaultMailID, nil, nil)
 	h.mb.pushHead(m)
+	close(killPushed)
 	wg.Wait()
+
+	// Fail in the main goroutine if any callback recorded an error.
+	errMu.Lock()
+	for _, e := range errs {
+		t.Error(e)
+	}
+	errMu.Unlock()
 
 	// Check memory leak
 	<-time.After(time.Millisecond)
 	if getAllocMailDebugNum() > 0 {
-		t.Fatal("TestMailBox_GetNum: Memory leak detected, some mails are not released.", allocMailDebugMap)
+		t.Fatal("TestMailBox_GetNum: Memory leak detected, some mails are not released.", getAllocMailDebugNum())
 	}
 
 	<-time.After(time.Millisecond)
@@ -244,8 +296,8 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 // #3 pushTail / Push
 // #4 popByID
 func TestMailBox_ListCorrection(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailbox", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -728,8 +780,8 @@ func TestMailBox_ListCorrection(t *testing.T) {
 // #1 waitPop
 // #2 popAll
 func TestMailBox_WaitPopAndPopAll(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailboxWaitPop", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -947,8 +999,8 @@ func TestMailBox_WaitPopAndPopAll(t *testing.T) {
 }
 
 func TestMailBox_RemoveMail(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	mb := newMailBox("testMailboxRemoveMail", &testMailboxHandler{}, newTestLoggingAtomos(t))
@@ -1041,8 +1093,8 @@ func TestMailBox_RemoveMail(t *testing.T) {
 }
 
 func TestMailBox_StopIfNoMail(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	letItRun := make(chan struct{})
@@ -1108,8 +1160,8 @@ func TestMailBox_StopIfNoMail(t *testing.T) {
 }
 
 func TestMailBox_StartLoop(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	h := &testMailboxHandler{
@@ -1179,8 +1231,8 @@ func TestMailBox_StartLoop(t *testing.T) {
 }
 
 func TestMailBox_Loop(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	h := &testMailboxHandler{
@@ -1219,9 +1271,9 @@ func TestMailBox_Loop(t *testing.T) {
 }
 
 func TestMailBox_MailPool_ReleaseTwice(t *testing.T) {
-	allocMailUsingPool = true
-	allocMailInitCheck = false
-	allocMailDebug = false
+	allocMailUsingPool.Store(true)
+	allocMailInitCheck.Store(false)
+	allocMailDebug.Store(false)
 
 	m := allocMail()
 	releaseMail(m)
@@ -1231,9 +1283,9 @@ func TestMailBox_MailPool_ReleaseTwice(t *testing.T) {
 }
 
 func TestMailBox_MailPool_CheckRelease(t *testing.T) {
-	allocMailUsingPool = false
-	allocMailInitCheck = false
-	allocMailDebug = true
+	allocMailUsingPool.Store(false)
+	allocMailInitCheck.Store(false)
+	allocMailDebug.Store(true)
 	clearAllocMailDebugMap()
 
 	n := 1000
@@ -1244,9 +1296,9 @@ func TestMailBox_MailPool_CheckRelease(t *testing.T) {
 }
 
 func TestMailBox_MailPool_CheckPool(t *testing.T) {
-	allocMailUsingPool = true
-	allocMailInitCheck = true
-	allocMailDebug = false
+	allocMailUsingPool.Store(true)
+	allocMailInitCheck.Store(true)
+	allocMailDebug.Store(false)
 
 	n := 1000
 	waiters := 128
@@ -1395,7 +1447,7 @@ func (h *benchmarkMailHandler) mailboxOnStop(killMail, remainMails *mail, num ui
 }
 
 func benchmarkMailBox(b *testing.B, waiters int) {
-	allocMailUsingPool = true
+	allocMailUsingPool.Store(true)
 	h := benchmarkMailHandler{b: b}
 	mb := newMailBox("benchmarkMailbox", &h, newBenchLoggingAtomos(b))
 	if err := mb.start(nil); err != nil {

@@ -38,6 +38,26 @@ func newTestCosmosProcessWithoutCluster(t *testing.T, cosmosName, cosmosNode str
 		t.Fatalf("Failed to start local BaseAtomos: %v", err)
 	}
 
+	// Stop the local atomos mailbox and the process logging mailbox when the
+	// test finishes. Leaked goroutines keep allocating debug mails and calling
+	// t.Log after the test completed, which races with the testing framework
+	// and breaks other tests' allocation-debug assertions.
+	t.Cleanup(func() {
+		if p.local.atomos.mailbox.isRunning() {
+			if err := p.local.atomos.PushKillMail(p.local, nil); err != nil {
+				t.Logf("Cleanup: PushKillMail local atomos failed: %v", err)
+			}
+			for deadline := time.Now().Add(5 * time.Second); p.local.atomos.mailbox.isRunning() && time.Now().Before(deadline); {
+				time.Sleep(time.Millisecond)
+			}
+		}
+		waitMailboxGoroutineExit(p.local.atomos.mailbox, 5*time.Second)
+		if p.logging.logBox != nil && p.logging.logBox.isRunning() {
+			p.logging.stop()
+		}
+		waitMailboxGoroutineExit(p.logging.logBox, 5*time.Second)
+	})
+
 	return p
 }
 
@@ -157,6 +177,11 @@ func (tc *testCluster) close() {
 	}
 	if tc.sourceProcess != nil {
 		tc.sourceProcess.Stop()
+		// Stop() returns before the mailbox loop goroutines have fully exited
+		// (their deferred final log runs after the stop acknowledgment). Wait
+		// for actual goroutine exit so no late t.Log races with test teardown.
+		waitMailboxGoroutineExit(tc.sourceProcess.local.atomos.mailbox, 5*time.Second)
+		waitMailboxGoroutineExit(tc.sourceProcess.logging.logBox, 5*time.Second)
 		tc.sourceProcess = nil
 	}
 	if tc.targetServer != nil {
@@ -165,6 +190,8 @@ func (tc *testCluster) close() {
 	}
 	if tc.targetProcess != nil {
 		tc.targetProcess.Stop()
+		waitMailboxGoroutineExit(tc.targetProcess.local.atomos.mailbox, 5*time.Second)
+		waitMailboxGoroutineExit(tc.targetProcess.logging.logBox, 5*time.Second)
 		tc.targetProcess = nil
 	}
 }
