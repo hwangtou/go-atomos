@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -10,10 +11,19 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// pinnedConnBox guards the pinned gRPC connection against concurrent access.
+// BaseRemote is copied by value (embedded in AtomRemote, returned from
+// constructors), so the lock must live behind a pointer: every copy of the
+// same logical BaseRemote shares one box, and go vet's copylocks stays clean.
+type pinnedConnBox struct {
+	mu   sync.RWMutex
+	conn *grpc.ClientConn
+}
+
 type BaseRemote struct {
 	cosmos *CosmosRemote
 	info   *IDInfo
-	// pinnedConn is the gRPC connection captured at ID-creation time.
+	// pinned holds the gRPC connection captured at ID-creation time.
 	//
 	// Without this, getCli would always ask cosmos.getCurrentClient(), whose
 	// answer changes when the node's "current" version switches (e.g. during a
@@ -23,15 +33,16 @@ type BaseRemote struct {
 	//
 	// By pinning the connection at creation time, an ID keeps talking to the
 	// same version/instance for its entire lifetime, regardless of current
-	// changes. It may be nil (legacy/newBaseRemote path); in that case getCli
-	// falls back to getCurrentClient for backward compatibility.
-	pinnedConn *grpc.ClientConn
+	// changes. The box's conn may be nil (legacy/newBaseRemote path); in that
+	// case getCli falls back to getCurrentClient for backward compatibility.
+	pinned *pinnedConnBox
 }
 
 func newBaseRemote(cosmos *CosmosRemote, info *IDInfo) BaseRemote {
 	return BaseRemote{
 		cosmos: cosmos,
 		info:   info,
+		pinned: &pinnedConnBox{},
 	}
 }
 
@@ -41,9 +52,9 @@ func newBaseRemote(cosmos *CosmosRemote, info *IDInfo) BaseRemote {
 // the ID (typically cosmos.getCurrentClient() at that moment).
 func newBaseRemoteWithPinnedConn(cosmos *CosmosRemote, info *IDInfo, conn *grpc.ClientConn) BaseRemote {
 	return BaseRemote{
-		cosmos:     cosmos,
-		info:       info,
-		pinnedConn: conn,
+		cosmos: cosmos,
+		info:   info,
+		pinned: &pinnedConnBox{conn: conn},
 	}
 }
 
@@ -62,7 +73,10 @@ func (a *BaseRemote) getCliConn() *grpc.ClientConn {
 // cleared so subsequent calls fall back to getCurrentClient and (eventually)
 // get re-pinned to the new version's connection.
 func (a *BaseRemote) validPinnedConn() *grpc.ClientConn {
-	c := a.pinnedConn
+	p := a.pinned
+	p.mu.RLock()
+	c := p.conn
+	p.mu.RUnlock()
 	if c == nil {
 		return nil
 	}
@@ -70,10 +84,26 @@ func (a *BaseRemote) validPinnedConn() *grpc.ClientConn {
 	// node restarted, or setDisable ran). TransientFailure/Connecting are
 	// temporary — we keep the pin and let the call retry on the live transport.
 	if st := c.GetState(); st == connectivity.Shutdown {
-		a.pinnedConn = nil
+		p.mu.Lock()
+		// Clear only if it is still the same dead connection, so a concurrent
+		// re-pin is not clobbered.
+		if p.conn == c {
+			p.conn = nil
+		}
+		p.mu.Unlock()
 		return nil
 	}
 	return c
+}
+
+// getPinnedConn returns the pinned connection as-is (nil if absent or already
+// cleared). Unlike validPinnedConn it does not probe connectivity state and
+// has no side effects. Used by tests to assert pin lifecycle.
+func (a *BaseRemote) getPinnedConn() *grpc.ClientConn {
+	p := a.pinned
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.conn
 }
 
 func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {

@@ -133,7 +133,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 
 	// 3. 取出 pinned 连接并 Close 它（模拟节点重启：旧连接关闭，但 current 仍指向 target 的新连接）
 	atomRemote := atomID.(*AtomRemoteInSourceProcess).AtomRemote
-	pinned := atomRemote.remote.pinnedConn
+	pinned := atomRemote.remote.getPinnedConn()
 	if pinned == nil {
 		t.Fatal("pinnedConn should be set after SpawnAtom")
 	}
@@ -152,7 +152,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
 
 	// 验证 pin 已被清除（降级已触发）
-	if atomRemote.remote.pinnedConn != nil {
+	if atomRemote.remote.getPinnedConn() != nil {
 		t.Fatal("pinnedConn should be cleared after Shutdown detection (failover triggered)")
 	}
 	t.Logf("[验证] pinnedConn cleared after Shutdown detection — failover logic triggered correctly.")
