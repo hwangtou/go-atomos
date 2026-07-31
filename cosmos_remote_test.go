@@ -151,3 +151,73 @@ func toAnyPb(t *testing.T, msg proto.Message) *anypb.Any {
 	}
 	return arg
 }
+
+// TestCosmosRemote_AddressReuseDetectsNewGeneration covers the address-reuse
+// scenario: a node restarts and re-registers the SAME address. The startup_id
+// in CosmosNodeVersionInfo is what lets peers tell the new process generation
+// apart from the dead one — the version object (and its connection/state)
+// must be replaced, not silently reused.
+func TestCosmosRemote_AddressReuseDetectsNewGeneration(t *testing.T) {
+	p := newTestCosmosProcessWithoutCluster(t, "reuse_cosmos", "reuse_node")
+
+	newInfo := func(state ClusterNodeState, startupID uint64) *CosmosNodeVersionInfo {
+		return &CosmosNodeVersionInfo{
+			Node:    "peer_node",
+			Address: "127.0.0.1:59999",
+			Id: &IDInfo{
+				Type:   IDType_Cosmos,
+				Cosmos: "reuse_cosmos",
+				Node:   "peer_node",
+			},
+			State:     state,
+			StartupId: startupID,
+		}
+	}
+
+	remote := newCosmosRemoteFromNodeInfo(p, newInfo(ClusterNodeState_Started, 111))
+	remote.etcdCreateVersion(newInfo(ClusterNodeState_Started, 111), "1")
+	v1 := remote.version["1"]
+	if v1 == nil {
+		t.Fatal("version 1 should exist after create")
+	}
+
+	// Same generation, state transition Started→Draining: the version object
+	// must be kept, and the new state must reach the stored info (previously
+	// the info was never refreshed on same-address updates, so routing kept
+	// using the state captured at creation).
+	remote.etcdUpdateVersion(newInfo(ClusterNodeState_Draining, 111), "1")
+	if remote.version["1"] != v1 {
+		t.Fatal("same generation must keep the version object")
+	}
+	if got := v1.getInfo().GetState(); got != ClusterNodeState_Draining {
+		t.Fatalf("same-generation state refresh lost: got=(%v),want=(%v)", got, ClusterNodeState_Draining)
+	}
+
+	// Identical re-publish (keepalive update): proto.Equal → complete no-op.
+	remote.etcdUpdateVersion(newInfo(ClusterNodeState_Draining, 111), "1")
+	if remote.version["1"] != v1 {
+		t.Fatal("identical re-publish must be a no-op")
+	}
+
+	// Address reuse by a NEW generation: same address, different startup_id.
+	// The old version object must be disabled and replaced — otherwise gRPC
+	// would reconnect to the new process while we keep old-generation state.
+	remote.etcdUpdateVersion(newInfo(ClusterNodeState_Started, 222), "1")
+	v2 := remote.version["1"]
+	if v2 == v1 {
+		t.Fatal("new generation on the same address must replace the version object")
+	}
+	if got := v2.getInfo().GetStartupId(); got != 222 {
+		t.Fatalf("replaced version carries wrong startup_id: got=(%d),want=(%d)", got, 222)
+	}
+	if got := v2.getInfo().GetState(); got != ClusterNodeState_Started {
+		t.Fatalf("replaced version carries wrong state: got=(%v)", got)
+	}
+
+	// And a generation rolling BACK (stale etcd replay) is also a replacement,
+	// since any startup_id mismatch means a different process instance.
+	remote.etcdUpdateVersion(newInfo(ClusterNodeState_Started, 111), "1")
+	if remote.version["1"] == v2 {
+		t.Fatal("any startup_id change must replace the version object")
+	}
+}

@@ -216,6 +216,12 @@ message CosmosNodeVersionInfo {
   IDInfo id = 3;
   ClusterNodeState state = 4;
   map<string, IDInfo> elements = 5;
+  // startup_id identifies the process generation (CosmosProcess.startupID,
+  // unix-nano at boot). When a node restarts and reuses the same address, a
+  // changed startup_id tells peers this is a NEW process instance, so they
+  // must drop the old connection/state instead of treating it as the same
+  // version registration.
+  uint64 startup_id = 6;
 }
 
 enum ClusterNodeState {

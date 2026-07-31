@@ -86,14 +86,14 @@ func (c *CosmosRemote) refresh() {
 	// Existing calls are unaffected — they use pinned connections (see BaseRemote).
 	currentKey := strconv.FormatInt(c.lock.Current, 10)
 	currentVersion, has := c.version[currentKey]
-	if has && currentVersion.info.GetState() != ClusterNodeState_Draining {
+	if has && currentVersion.getInfo().GetState() != ClusterNodeState_Draining {
 		c.current = currentVersion
 		c.enable = true
 		return
 	}
 	// Current is Draining (or missing): look for any Started version.
 	for key, v := range c.version {
-		if v.info.GetState() == ClusterNodeState_Started {
+		if v.getInfo().GetState() == ClusterNodeState_Started {
 			c.current = v
 			c.enable = true
 			c.process.local.Log().coreInfo("CosmosRemote: refresh picked Started version=(%s) over Draining/Stopping current=(%s).", key, currentKey)
@@ -173,15 +173,27 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 		c.refresh()
 		return
 	}
-	if proto.Equal(info, oldVersion.info) {
+	oldInfo := oldVersion.getInfo()
+	if proto.Equal(info, oldInfo) {
 		return
 	}
 
 	c.remote.info = info.Id
-	if info.Address != oldVersion.info.Address {
+	if info.Address != oldInfo.Address || info.StartupId != oldInfo.StartupId {
+		// The address changed, OR the same address now serves a NEW process
+		// generation (the node restarted; startup_id differs). The old
+		// connection and version state belong to the dead process — disable and
+		// rebuild, otherwise gRPC would silently reconnect to the new process
+		// while we keep state bound to the old generation.
 		oldVersion.setDisable()
-		c.process.local.Log().coreInfo("CosmosRemote: Connect info version updated. version=(%s)", version)
+		c.process.local.Log().coreInfo("CosmosRemote: Connect info version replaced. version=(%s),addr=(%s=>%s),startup=(%d=>%d)",
+			version, oldInfo.Address, info.Address, oldInfo.StartupId, info.StartupId)
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
+	} else {
+		// Same process generation: refresh the metadata in place so state
+		// transitions (Started→Draining→Stopping) reach refresh(); otherwise
+		// routing keeps using the stale state captured at creation time.
+		oldVersion.setInfo(info)
 	}
 
 	// Compare old element and new element to know which element is added or removed.
@@ -423,6 +435,24 @@ func (c *cosmosRemoteVersion) getClient() *grpc.ClientConn {
 	return c.client
 }
 
+// getInfo returns a snapshot of the version registration info. check() reads
+// the address without holding the CosmosRemote mutex, while etcdUpdateVersion
+// may replace the info in place (state refresh) — so info access is serialized
+// through dialMu as well.
+func (c *cosmosRemoteVersion) getInfo() *CosmosNodeVersionInfo {
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
+	return c.info
+}
+
+// setInfo replaces the registration info in place (same process generation,
+// e.g. a state transition). Callers must hold the CosmosRemote write lock.
+func (c *cosmosRemoteVersion) setInfo(info *CosmosNodeVersionInfo) {
+	c.dialMu.Lock()
+	defer c.dialMu.Unlock()
+	c.info = info
+}
+
 func (c *cosmosRemoteVersion) check() bool {
 	c.dialMu.Lock()
 	if c.dialed {
@@ -434,6 +464,10 @@ func (c *cosmosRemoteVersion) check() bool {
 	c.dialed = true
 	c.dialMu.Unlock()
 
+	// Snapshot the registration info: etcdUpdateVersion may replace c.info in
+	// place while we dial without holding the CosmosRemote mutex.
+	info := c.getInfo()
+
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1) // TODO: timeout
 	defer cancel()
@@ -441,16 +475,16 @@ func (c *cosmosRemoteVersion) check() bool {
 	var er error
 	var client *grpc.ClientConn
 	if c.process.cluster.grpcDialOption == nil {
-		client, er = grpc.DialContext(ctx, c.info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		client, er = grpc.DialContext(ctx, info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	} else {
-		client, er = grpc.DialContext(ctx, c.info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
+		client, er = grpc.DialContext(ctx, info.Address, *c.process.cluster.grpcDialOption, grpc.WithBlock())
 	}
 	if er != nil {
-		conn, connEr := net.DialTimeout("tcp", c.info.Address, time.Second*1)
+		conn, connEr := net.DialTimeout("tcp", info.Address, time.Second*1)
 		if conn != nil {
 			conn.Close()
 		}
-		c.process.local.Log().coreFatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", c.info.Address, er, conn, connEr)
+		c.process.local.Log().coreFatal("CosmosRemote: Dial failed. addr=(%s),err=(%v),conn=(%v),connEr=(%v)", info.Address, er, conn, connEr)
 		return false
 	}
 	// Publish the connection under dialMu. If setDisable() ran while we were
@@ -461,13 +495,13 @@ func (c *cosmosRemoteVersion) check() bool {
 	if !c.dialed {
 		c.dialMu.Unlock()
 		client.Close()
-		c.process.local.Log().coreInfo("CosmosRemote: Dial finished after disable, closing. addr=(%s)", c.info.Address)
+		c.process.local.Log().coreInfo("CosmosRemote: Dial finished after disable, closing. addr=(%s)", info.Address)
 		return false
 	}
 	c.client = client
 	c.avail = true
 	c.dialMu.Unlock()
-	c.process.local.Log().coreInfo("CosmosRemote: Dial. addr=(%s)", c.info.Address)
+	c.process.local.Log().coreInfo("CosmosRemote: Dial. addr=(%s)", info.Address)
 	return true
 }
 

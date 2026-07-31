@@ -404,11 +404,12 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 		return nil
 	}
 	_, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
-		Node:     p.local.runnable.config.Node,
-		Address:  p.cluster.grpcAddress,
-		Id:       p.local.GetIDInfo(),
-		State:    state,
-		Elements: p.local.getClusterElementsInfo(),
+		Node:      p.local.runnable.config.Node,
+		Address:   p.cluster.grpcAddress,
+		Id:        p.local.GetIDInfo(),
+		State:     state,
+		Elements:  p.local.getClusterElementsInfo(),
+		StartupId: p.startupID,
 	})
 	if err != nil {
 		return err.AddStack(nil)

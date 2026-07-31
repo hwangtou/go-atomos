@@ -1893,12 +1893,18 @@ func (*ElementBroadcastO) Descriptor() ([]byte, []int) {
 }
 
 type CosmosNodeVersionInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Node          string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
-	Address       string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
-	Id            *IDInfo                `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
-	State         ClusterNodeState       `protobuf:"varint,4,opt,name=state,proto3,enum=atomos.ClusterNodeState" json:"state,omitempty"`
-	Elements      map[string]*IDInfo     `protobuf:"bytes,5,rep,name=elements,proto3" json:"elements,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Node     string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
+	Address  string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	Id       *IDInfo                `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	State    ClusterNodeState       `protobuf:"varint,4,opt,name=state,proto3,enum=atomos.ClusterNodeState" json:"state,omitempty"`
+	Elements map[string]*IDInfo     `protobuf:"bytes,5,rep,name=elements,proto3" json:"elements,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// startup_id identifies the process generation (CosmosProcess.startupID,
+	// unix-nano at boot). When a node restarts and reuses the same address, a
+	// changed startup_id tells peers this is a NEW process instance, so they
+	// must drop the old connection/state instead of treating it as the same
+	// version registration.
+	StartupId     uint64 `protobuf:"varint,6,opt,name=startup_id,json=startupId,proto3" json:"startup_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1966,6 +1972,13 @@ func (x *CosmosNodeVersionInfo) GetElements() map[string]*IDInfo {
 		return x.Elements
 	}
 	return nil
+}
+
+func (x *CosmosNodeVersionInfo) GetStartupId() uint64 {
+	if x != nil {
+		return x.StartupId
+	}
+	return 0
 }
 
 type CosmosNodeVersionLock struct {
@@ -3531,13 +3544,15 @@ const file_atomos_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12%\n" +
 	"\x0econtent_buffer\x18\x03 \x01(\fR\rcontentBuffer\"\x13\n" +
-	"\x11ElementBroadcastO\"\xab\x02\n" +
+	"\x11ElementBroadcastO\"\xca\x02\n" +
 	"\x15CosmosNodeVersionInfo\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x1e\n" +
 	"\x02id\x18\x03 \x01(\v2\x0e.atomos.IDInfoR\x02id\x12.\n" +
 	"\x05state\x18\x04 \x01(\x0e2\x18.atomos.ClusterNodeStateR\x05state\x12G\n" +
-	"\belements\x18\x05 \x03(\v2+.atomos.CosmosNodeVersionInfo.ElementsEntryR\belements\x1aK\n" +
+	"\belements\x18\x05 \x03(\v2+.atomos.CosmosNodeVersionInfo.ElementsEntryR\belements\x12\x1d\n" +
+	"\n" +
+	"startup_id\x18\x06 \x01(\x04R\tstartupId\x1aK\n" +
 	"\rElementsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12$\n" +
 	"\x05value\x18\x02 \x01(\v2\x0e.atomos.IDInfoR\x05value:\x028\x01\"M\n" +

@@ -173,11 +173,12 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	}
 
 	key, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
-		Node:     p.local.runnable.config.Node,
-		Address:  p.cluster.grpcAddress,
-		Id:       p.local.GetIDInfo(),
-		State:    ClusterNodeState_Started,
-		Elements: p.local.getClusterElementsInfo(),
+		Node:      p.local.runnable.config.Node,
+		Address:   p.cluster.grpcAddress,
+		Id:        p.local.GetIDInfo(),
+		State:     ClusterNodeState_Started,
+		Elements:  p.local.getClusterElementsInfo(),
+		StartupId: p.startupID,
 	})
 	if err != nil {
 		return err.AddStack(nil)
@@ -340,11 +341,12 @@ func (p *CosmosProcess) tryUnsettingCurrentAndUpdateNodeInfo() *Error {
 	// 更新节点信息
 	// Update node information
 	_, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
-		Node:     p.local.runnable.config.Node,
-		Address:  p.cluster.grpcAddress,
-		Id:       p.local.GetIDInfo(),
-		State:    ClusterNodeState_Stopping,
-		Elements: p.local.getClusterElementsInfo(),
+		Node:      p.local.runnable.config.Node,
+		Address:   p.cluster.grpcAddress,
+		Id:        p.local.GetIDInfo(),
+		State:     ClusterNodeState_Stopping,
+		Elements:  p.local.getClusterElementsInfo(),
+		StartupId: p.startupID,
 	})
 	if err != nil {
 		return err.AddStack(nil)
