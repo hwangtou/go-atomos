@@ -5,104 +5,197 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
-// IDTracker
+// atomRefState tracks all outstanding IDTracker references for a single atom
+// name within an Element. Its lifetime is longer than any individual Atom
+// instance: it survives a halt+respawn cycle so that references acquired
+// against a now-halted instance can still be Release()d correctly afterwards.
+//
+// References are accounted per instanceID (assigned at BaseAtomos
+// construction). A respawn produces a new instanceID, so the old instance's
+// references and the new instance's references are counted in separate cells
+// and never interfere. When a cell drains to zero and that instance has
+// halted, the instance becomes eligible for GC.
+type atomRefState struct {
+	element *ElementLocal
+	name    string
 
-type atomosIDTracker struct {
-	mutex   sync.Mutex
-	atomos  *BaseAtomos
+	mu sync.Mutex
+	// cells maps instanceID -> outstanding reference count for that instance.
+	// A cell is created on first addRef for an instance and removed when its
+	// count returns to zero. A halted-but-still-referenced instance keeps its
+	// cell alive until the last Release.
+	cells map[uint64]int64
+	// counter assigns a diagnostic id per tracker (for ToString/debug).
 	counter uint64
-	idMap   map[uint64]*IDTracker
+	// debug optionally records per-instance tracker metadata (file:line) so
+	// leaks can be enumerated via String(). Populated only when the owning
+	// process has idTrackerDebug enabled.
+	debug map[uint64][]*IDTracker
 }
 
-func initAtomosIDTracker(it *atomosIDTracker, atomos *BaseAtomos) {
-	it.atomos = atomos
-	it.idMap = map[uint64]*IDTracker{}
+// newAtomRefState constructs an empty ref state for the given name.
+func newAtomRefState(element *ElementLocal, name string) *atomRefState {
+	return &atomRefState{
+		element: element,
+		name:    name,
+		cells:   map[uint64]int64{},
+	}
 }
 
-func (i *atomosIDTracker) fromOld(old *atomosIDTracker) *atomosIDTracker {
-	old.atomos = i.atomos
-	return old
+// addRef increments the reference count for the given instance and returns a
+// new IDTracker bound to (state, instanceID). The tracker's Release will
+// decrement the same cell regardless of later respawns.
+func (s *atomRefState) addRef(instID uint64, info *IDTrackerInfo) *IDTracker {
+	s.mu.Lock()
+	s.cells[instID]++
+	s.counter++
+	tr := &IDTracker{
+		state:  s,
+		instID: instID,
+		id:     s.counter,
+	}
+	if info != nil {
+		tr.file = info.File
+		tr.line = int(info.Line)
+		tr.name = info.Name
+	}
+	if s.element.cosmosLocal != nil && s.element.cosmosLocal.process != nil &&
+		s.element.cosmosLocal.process.idTrackerDebug {
+		if s.debug == nil {
+			s.debug = map[uint64][]*IDTracker{}
+		}
+		s.debug[instID] = append(s.debug[instID], tr)
+	}
+	s.mu.Unlock()
+	return tr
 }
 
-// addIDTracker is used to add IDTracker for local.
-func (i *atomosIDTracker) addIDTracker(rt *IDTrackerInfo) *IDTracker {
-	i.mutex.Lock()
-	i.counter += 1
-	tracker := &IDTracker{id: i.counter}
-	i.idMap[tracker.id] = tracker
-	i.mutex.Unlock()
-
-	tracker.manager = i
-	tracker.file = rt.File
-	tracker.line = int(rt.Line)
-	tracker.name = rt.Name
-	return tracker
+// release decrements the reference count for the tracker's instance. When the
+// cell reaches zero it is removed and, if that instance has halted, the GC
+// hook is invoked. It is idempotent (guarded by IDTracker.released).
+//
+// Returns true if this call drained the instance's count to zero (so the
+// caller, the IDTracker, can fire the GC hook after dropping the lock).
+func (s *atomRefState) release(instID uint64) (drained bool) {
+	s.mu.Lock()
+	cnt, ok := s.cells[instID]
+	if !ok {
+		s.mu.Unlock()
+		return false
+	}
+	cnt--
+	if cnt <= 0 {
+		delete(s.cells, instID)
+		// Clean up the per-instance debug slice if present.
+		if s.debug != nil {
+			if _, has := s.debug[instID]; has {
+				delete(s.debug, instID)
+			}
+		}
+		drained = true
+	} else {
+		s.cells[instID] = cnt
+	}
+	s.mu.Unlock()
+	return drained
 }
 
-// refCount is used to get the number of IDTracker.
-func (i *atomosIDTracker) refCount() int {
-	i.mutex.Lock()
-	num := len(i.idMap)
-	i.mutex.Unlock()
-	return num
+// refCount returns the number of outstanding references for an instance.
+func (s *atomRefState) refCount(instID uint64) int64 {
+	s.mu.Lock()
+	cnt := s.cells[instID]
+	s.mu.Unlock()
+	return cnt
 }
 
-// String is used to get the string of IDTrackerManager.
-func (i *atomosIDTracker) String() string {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-	if len(i.idMap) == 0 {
+// isEmpty reports whether there are no outstanding references for any instance
+// of this name. Used by ElementLocal to retire a refState whose atom is gone.
+func (s *atomRefState) isEmpty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.cells) == 0
+}
+
+// String returns a human-readable dump of outstanding references, for leak
+// diagnostics (GetAllInactiveAtomsIDTrackerInfo).
+func (s *atomRefState) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.cells) == 0 {
 		return "No IDTracker remain"
 	}
 	b := strings.Builder{}
 	b.WriteString("IDTracker Info:")
-	for _, tracker := range i.idMap {
-		b.WriteString("\n\t")
-		b.WriteString(tracker.ToString())
+	if s.debug == nil {
+		// No debug metadata recorded; report per-instance counts only.
+		for instID, cnt := range s.cells {
+			b.WriteString(fmt.Sprintf("\n\tinstance=%d count=%d", instID, cnt))
+		}
+		return b.String()
+	}
+	for instID, trackers := range s.debug {
+		for _, tr := range trackers {
+			b.WriteString("\n\t")
+			b.WriteString(tr.ToString())
+		}
+		// Include instances that have a cell but no debug trackers recorded.
+		if len(trackers) == 0 {
+			if cnt, ok := s.cells[instID]; ok {
+				b.WriteString(fmt.Sprintf("\n\tinstance=%d count=%d", instID, cnt))
+			}
+		}
+	}
+	// Also include any cell instances not present in the debug map.
+	for instID, cnt := range s.cells {
+		if _, has := s.debug[instID]; !has {
+			b.WriteString(fmt.Sprintf("\n\tinstance=%d count=%d", instID, cnt))
+		}
 	}
 	return b.String()
 }
 
-// IDTracker is used to track the lifecycle of an ID.
-
+// IDTracker is used to track the lifecycle of an ID (a reference to an Atom).
+// Release must be called when the holder is done with the ID; the framework's
+// generated code emits `defer id.Release()` for this purpose. A tracker is
+// bound to the instance that was live when it was acquired, so a respawn under
+// the same name does not change which instance's count it decrements.
 type IDTracker struct {
-	id uint64
-
-	manager *atomosIDTracker
+	state    *atomRefState
+	instID   uint64
+	id       uint64
+	released atomic.Bool
 
 	file string
 	line int
 	name string
 }
 
+// ToString returns a diagnostic string "<instID>:<id>-<file>:<line>".
 func (i *IDTracker) ToString() string {
 	if i == nil {
 		return "nil"
 	}
-	return fmt.Sprintf("%d-%s:%d", i.id, i.file, i.line)
+	return fmt.Sprintf("%d:%d-%s:%d", i.instID, i.id, i.file, i.line)
 }
 
+// Release decrements the reference count for the bound instance. It is
+// idempotent: a second call is a safe no-op. When the instance's count reaches
+// zero and the instance has halted, the Element is notified so it may collect
+// the halted instance.
 func (i *IDTracker) Release() {
-	if i == nil {
+	if i == nil || i.state == nil {
 		return
 	}
-	// Detach from the manager under the lock so that a second Release() on the
-	// same tracker is a safe no-op instead of double-counting (which could
-	// spuriously drive the manager's idMap to 0 and re-trigger onIDReleased).
-	manager := i.manager
-	if manager == nil {
+	if !i.released.CompareAndSwap(false, true) {
 		return
 	}
-	i.manager = nil
-	manager.mutex.Lock()
-	delete(manager.idMap, i.id)
-	num := len(manager.idMap)
-	manager.mutex.Unlock()
-
-	if num == 0 {
-		manager.atomos.onIDReleased()
+	if i.state.release(i.instID) {
+		// This instance's references just drained to zero. Notify the Element
+		// so it can collect the instance if it has halted.
+		i.state.element.onInstanceRefsDrained(i.state, i.instID)
 	}
 }
 

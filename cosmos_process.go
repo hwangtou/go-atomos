@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.etcd.io/etcd/client/v3"
@@ -25,6 +26,13 @@ type CosmosProcess struct {
 	state CosmosProcessState
 
 	startupID uint64
+
+	// instanceSeq is a process-global monotonic counter assigning a unique
+	// instanceID to every BaseAtomos (every atom spawn, element, cosmos).
+	// instanceID distinguishes a respawned atom instance from its predecessor
+	// so per-instance reference counting (atomRefState) can tell a stale
+	// (pre-respawn) tracker from a current one without pointer/manager rewiring.
+	instanceSeq atomic.Uint64
 
 	// Per-process mutable settings (formerly package-level vars).
 	messageTimeoutTracer  bool
@@ -133,6 +141,16 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	//p.cluster.remoteTrackIDMap = map[uint64]*IDTracker{}
 
 	return nil
+}
+
+// allocInstanceID returns a process-unique, monotonically increasing id used
+// to tag each BaseAtomos instance. Used by atomRefState to distinguish a
+// respawned atom instance from its predecessor.
+func (p *CosmosProcess) allocInstanceID() uint64 {
+	if p == nil {
+		return 0
+	}
+	return p.instanceSeq.Add(1)
 }
 
 // Start 启动进程

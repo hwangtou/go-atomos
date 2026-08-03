@@ -33,10 +33,6 @@ type BaseAtomosHolder interface {
 	// OnStopping
 	// 停止中
 	OnStopping(from ID, cancelled []uint64) *Error
-
-	// OnIDsReleased
-	// 释放了所有ID
-	OnIDsReleased()
 }
 
 // BaseAtom状态
@@ -104,6 +100,11 @@ type BaseAtomos struct {
 	// 实现和句柄信息
 	impl ID
 	id   *IDInfo
+	// instanceID is a process-unique, monotonically increasing id assigned at
+	// construction. It distinguishes a respawned instance from its predecessor,
+	// enabling per-instance reference counting (atomRefState) to keep a stale
+	// (pre-respawn) tracker's Release separate from the new instance's count.
+	instanceID uint64
 
 	// 状态
 	// State
@@ -130,10 +131,6 @@ type BaseAtomos struct {
 	// Message Tracker, uses to handle Message Tracker from inner Atom.
 	mt atomosMessageTracker
 
-	// ID追踪管理器
-	// ID Tracker Manager
-	it *atomosIDTracker
-
 	asyncCallMutex   sync.Mutex
 	asyncCallbackID  uint64
 	asyncCallbackMap map[uint64]asyncCallbackWrap
@@ -151,6 +148,7 @@ func NewBaseAtomos(impl ID, id *IDInfo, lv LogLevel, holder BaseAtomosHolder, in
 		process:          process,
 		impl:             impl,
 		id:               id,
+		instanceID:       process.allocInstanceID(),
 		state:            BaseAtomosHalt,
 		mailbox:          nil,
 		holder:           holder,
@@ -158,7 +156,6 @@ func NewBaseAtomos(impl ID, id *IDInfo, lv LogLevel, holder BaseAtomosHolder, in
 		log:              atomosLogging{},
 		task:             atomosTaskManager{},
 		mt:               atomosMessageTracker{},
-		it:               &atomosIDTracker{},
 		asyncCallMutex:   sync.Mutex{},
 		asyncCallbackID:  0,
 		asyncCallbackMap: map[uint64]asyncCallbackWrap{},
@@ -168,7 +165,6 @@ func NewBaseAtomos(impl ID, id *IDInfo, lv LogLevel, holder BaseAtomosHolder, in
 	initAtomosLog(&a.log, a.id, lv, process.logging)
 	initAtomosTasksManager(a.log.logging, &a.task, a)
 	initAtomosMessageTracker(&a.mt)
-	initAtomosIDTracker(a.it, a)
 	return a
 }
 
@@ -553,12 +549,6 @@ func (a *BaseAtomos) setHalted(err *Error) {
 	case a.stoppingChan <- true:
 	default:
 	}
-}
-
-// IDTracker
-
-func (a *BaseAtomos) onIDReleased() {
-	a.holder.OnIDsReleased()
 }
 
 // Mailbox

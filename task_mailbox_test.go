@@ -454,10 +454,6 @@ func (tba *testTaskMailboxBaseAtomos) OnStopping(from ID, cancelled []uint64) *E
 	return nil
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnIDsReleased() {
-	// No-op: invoked when the test cleanup halts the atomos.
-}
-
 // Atomos
 
 func (tba *testTaskMailboxBaseAtomos) String() string {

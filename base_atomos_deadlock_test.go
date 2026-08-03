@@ -242,11 +242,6 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnStopping(from ID, cancelled 
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnIDsReleased() {
-	//TODO implement me
-	panic("implement me")
-}
-
 func (t *testBaseAtomosDeadlockMailboxBaseAtomos) String() string {
 	//TODO implement me
 	panic("implement me")

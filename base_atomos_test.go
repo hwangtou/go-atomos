@@ -239,11 +239,6 @@ func (t *testBaseAtomos) OnStopping(from ID, cancelled []uint64) *Error {
 	return nil
 }
 
-func (t *testBaseAtomos) OnIDsReleased() {
-	//TODO implement me
-	panic("implement me")
-}
-
 type testInstance struct {
 }
 

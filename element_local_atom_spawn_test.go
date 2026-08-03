@@ -94,9 +94,9 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		oldLogging := atom.atomos.log
 		oldTask := &atom.atomos.task
 		oldMt := &atom.atomos.mt
-		oldIt := atom.atomos.it
 		oldStopping := atom.atomos.stoppingChan
 		oldAsyncCallbackID := atom.atomos.asyncCallbackID
+		oldInstanceID := atom.atomos.instanceID
 
 		oldAtomInstance := atom.atomos.instance.(*testRunnableAtom)
 		oldAtomInstance.haltWait = 10 * time.Millisecond
@@ -110,13 +110,6 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if err.Code != ErrAtomSpawningAnExistedAtom {
 			t.Fatalf("Expected error code %d, got %d", ErrAtomSpawningAnExistedAtom, err.Code)
 		}
-
-		//asyncDone := make(chan struct{}, 1)
-		//if err := atom.AsyncMessagingByName(p.local, uint64(time.Now().Unix()), "Greeting", &ForTestGreetingI{Mode: 1}, func(message proto.Message, e *Error) {
-		//	asyncDone <- struct{}{}
-		//}, nil); err != nil {
-		//	t.Fatalf("Failed to send async message to atom: %v", err)
-		//}
 
 		// Stop and spawn again
 		atom.KillSelf()
@@ -134,11 +127,13 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if newTracker == nil {
 			t.Fatal("Expected new tracker to be non-nil")
 		}
-		if atom.State() != BaseAtomosWaiting {
-			t.Fatalf("Expected old atom to be in waiting state after kill, got %d", atom.State())
+		// After M2, a respawn allocates a brand-new *AtomLocal; the old pointer
+		// is NOT overlaid in place. The new atom is the live entry under the name.
+		if atom == newAtom {
+			t.Fatal("Expected new atom to be a distinct pointer after respawn (no struct overlay)")
 		}
-		if atom != newAtom {
-			t.Fatal("Expected new atom to be same after killing previous one")
+		if newAtom.State() != BaseAtomosWaiting {
+			t.Fatalf("Expected NEW atom to be waiting after respawn, got %d", newAtom.State())
 		}
 		if oldGoID == newAtom.atomos.GetGoID() {
 			t.Fatal("Expected new atom to have different GoID after killing previous one")
@@ -147,7 +142,7 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 			t.Fatal("Expected new atom to have same name element after killing previous one")
 		}
 		if oldImpl == newAtom.atomos.impl {
-			t.Fatal("Expected new atom to have same impl after killing previous one")
+			t.Fatal("Expected new atom to have different impl after killing previous one")
 		}
 		if oldID == newAtom.atomos.id {
 			t.Fatal("Expected new atom to have different ID after killing previous one")
@@ -164,14 +159,18 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if oldLogging == newAtom.atomos.log {
 			t.Fatal("Expected new atom to have different logging after killing previous one")
 		}
+		// Task/mt are value fields of the new struct, so they live at a new
+		// address (the old *AtomLocal is not overlaid anymore).
 		if oldTask == &newAtom.atomos.task {
-			t.Fatal("Expected new atom to have same task after killing previous one")
+			t.Fatal("Expected new atom to have different task after killing previous one")
 		}
 		if oldMt == &newAtom.atomos.mt {
-			t.Fatal("Expected new atom to have same message tracker after killing previous one")
+			t.Fatal("Expected new atom to have different message tracker after killing previous one")
 		}
-		if oldIt != newAtom.atomos.it {
-			t.Fatal("Expected new atom to have same ID tracker after killing previous one")
+		// instanceID must differ between the old and respawned instances; this is
+		// the cornerstone of per-instance reference counting (atomRefState).
+		if oldInstanceID == newAtom.atomos.instanceID {
+			t.Fatalf("Expected new atom to have a different instanceID after respawn; old=%d new=%d", oldInstanceID, newAtom.atomos.instanceID)
 		}
 
 		if oldAsyncCallbackID != newAtom.atomos.asyncCallbackID {
@@ -184,7 +183,7 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 			t.Fatal("Expected new atom to have an empty async callback map after killing previous one")
 		}
 		if oldStopping == newAtom.atomos.stoppingChan {
-			t.Fatal("Expected new atom to have same stopping channel after killing previous one")
+			t.Fatal("Expected new atom to have different stopping channel after killing previous one")
 		}
 	})
 }

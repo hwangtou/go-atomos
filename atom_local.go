@@ -338,10 +338,6 @@ func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	return nil
 }
 
-func (a *AtomLocal) OnIDsReleased() {
-	a.element.elementAtomRelease(a)
-}
-
 // 内部实现
 // INTERNAL
 

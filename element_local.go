@@ -28,6 +28,11 @@ type ElementLocal struct {
 	// 思考：要考虑在频繁变动的情景下，迭代不全的问题。
 	// 两种情景：更新&关闭。
 	atoms map[string]*AtomLocal
+	// refStates tracks outstanding IDTracker references per atom name. Unlike
+	// `atoms`, a refState outlives a halt+respawn cycle so that references
+	// acquired against a halted instance can still be Release()d correctly.
+	// Guarded by `lock`.
+	refStates map[string]*atomRefState
 	// Element的List容器的
 	names *list.List
 	// Lock.
@@ -78,6 +83,7 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 	} else {
 		e.atoms = map[string]*AtomLocal{}
 	}
+	e.refStates = map[string]*atomRefState{}
 	return e
 }
 
@@ -263,7 +269,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
 		if fromLocalOrRemote {
-			return atom, atom.atomos.it.addIDTracker(tracker), nil
+			return atom, e.addRefAtom(atom, tracker), nil
 		} else {
 			return atom, nil, nil
 		}
@@ -298,15 +304,26 @@ func (e *ElementLocal) GetActiveAtomsNum() int {
 func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	e.lock.RLock()
 	info := make(map[string]string, len(e.atoms))
-	atoms := make([]*AtomLocal, 0, len(e.atoms))
+	type entry struct {
+		atom *AtomLocal
+		st   *atomRefState
+	}
+	entries := make([]entry, 0, len(e.atoms))
 	for _, atomLocal := range e.atoms {
 		if atomLocal.atomos.IsInState(BaseAtomosHalt) {
-			atoms = append(atoms, atomLocal)
+			entries = append(entries, entry{atomLocal, e.refStates[atomLocal.GetIDInfo().Atom]})
 		}
 	}
 	e.lock.RUnlock()
-	for _, atomLocal := range atoms {
-		info[atomLocal.String()] = fmt.Sprintf(" -> %s\n", atomLocal.atomos.it.String())
+	for _, ent := range entries {
+		// A halted atom with a live refState means it still has outstanding
+		// IDTracker references; dump them. If no refState exists, there are
+		// no outstanding references.
+		dump := "No IDTracker remain"
+		if ent.st != nil {
+			dump = ent.st.String()
+		}
+		info[ent.atom.String()] = fmt.Sprintf(" -> %s\n", dump)
 	}
 	return info
 }
@@ -515,13 +532,6 @@ autoLoad:
 	return err
 }
 
-// OnIDsReleased is a no-op for Element. Only Atom requires the deferred-deletion
-// semantics (an Atom is removed from the Element map only after all IDTracker
-// references drain); Element and Cosmos themselves have no such lifecycle.
-func (e *ElementLocal) OnIDsReleased() {
-
-}
-
 // 内部实现
 // INTERNAL
 
@@ -595,7 +605,7 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock
 	}
 
 	if fromLocalOrRemote {
-		return oldAtom, oldAtom.atomos.it.addIDTracker(t), nil
+		return oldAtom, e.addRefAtom(oldAtom, t), nil
 	} else {
 		return oldAtom, nil, nil
 	}
@@ -629,41 +639,23 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex,
 	e.lock.Lock()
 	e.atoms[name] = atom
 	if oldAtom != nil {
-		//// 因为这里的锁是为了保证旧的Atom的内容不会被修改，但是这里的锁是在旧的Atom已经不再运行的情况下上锁，所以不会有并发修改的问题。
-		//// 完成后再对其解锁，以避免有并发Spawn的情况下，后面的Spawn出现死锁。
-		//oldLock := &oldAtom.atomos.mailbox.mutex
-		// 将旧的Atom的Name元素复制到新的Atom。
+		// Respawn under the same name: the old (halted) instance is replaced by
+		// this new one. Carry over the name list node and the async callback id
+		// counter. We intentionally do NOT do the old `*oldAtom = *atom` struct
+		// overlay nor migrate a shared IDTracker manager:
+		//   - References are now accounted per-instanceID in atomRefState (keyed
+		//     by name, surviving respawn). Old trackers bound to the old
+		//     instanceID keep Release()ing against their own cell, which drains
+		//     independently of the new instance. No manager rewiring needed.
+		//   - External holders obtained an `ID` interface / `*IDTracker`, not a
+		//     raw `*AtomLocal`, so letting the old struct become unreachable is
+		//     safe; the runtime GCs it once no one references it.
 		atom.nameElement = oldAtom.nameElement
-		// Hand the old atom's IDTracker map over to the new atom.
-		//
-		// This is intentional: external callers (remote nodes, other atoms) may
-		// still hold IDTracker references to the old atom. Because *oldAtom = *atom
-		// below reuses the pointer, those references must keep working. fromOld()
-		// rewires the old idMap's tracker manager to point at the new BaseAtomos,
-		// so a late Release() on an old tracker decrements the new atom's count
-		// instead of touching the (already-halted) old one.
-		//
-		// Safety relies on: (1) the old atom having fully halted before this point
-		// (the spawning flow waits on stoppingChan above); (2) IDTracker.Release
-		// being idempotent (it detaches after first use), so a double Release of a
-		// migrated tracker cannot spuriously drive the count to zero.
-		atom.atomos.it = atom.atomos.it.fromOld(oldAtom.atomos.it)
 		atom.atomos.asyncCallbackID = oldAtom.atomos.asyncCallbackID // asyncCallbackMap is NOT copied: the old map was already drained (each pending callback failed with not-running) during the old atom's mailboxOnStop, so carrying stale entries would only risk delivering a reply to the wrong (new) atom.
-
-		// 将新的Atom内容替换到旧的Atom。
-		*oldAtom = *atom
-		//// 将旧的Atom解锁。
-		//oldLock.Unlock()
-		// 把新创建的Atom的指针退换成旧的，这样就可以保证持有旧的Atom的ID能够继续使用。
-		atom = oldAtom
-
 	} else {
 		atom.nameElement = e.names.PushBack(name)
 	}
 	e.lock.Unlock()
-
-	// 如果旧的存在且不再运行，则用旧的Atom的结构体，创建一个新的Atom内容。
-	// 先将旧的Atom的内容拷贝到新的Atom。
 
 	// Atom的Spawn逻辑。
 	if err = atom.atomos.start(func() *Error {
@@ -677,28 +669,91 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex,
 		return nil, nil, err.AddStack(nil)
 	}
 	if fromLocalOrRemote {
-		return atom, atom.atomos.it.addIDTracker(t), nil
+		return atom, e.addRefAtom(atom, t), nil
 	} else {
 		return atom, nil, nil
 	}
 }
 
+// addRefAtom records a new IDTracker reference against atom's instanceID and
+// returns a tracker whose Release will decrement that instance's cell. The
+// refState is created lazily under e.lock.
+func (e *ElementLocal) addRefAtom(atom *AtomLocal, info *IDTrackerInfo) *IDTracker {
+	name := atom.GetIDInfo().Atom
+	e.lock.Lock()
+	st, ok := e.refStates[name]
+	if !ok {
+		st = newAtomRefState(e, name)
+		e.refStates[name] = st
+	}
+	e.lock.Unlock()
+	return st.addRef(atom.atomos.instanceID, info)
+}
+
+// refStateFor returns the refState for a name (nil if absent). Caller must
+// hold e.lock (RLock is sufficient).
+func (e *ElementLocal) refStateFor(name string) *atomRefState {
+	return e.refStates[name]
+}
+
+// onInstanceRefsDrained is invoked by IDTracker.Release when an instance's
+// reference count reaches zero. If that instance has halted, it becomes
+// eligible for collection; otherwise this is a no-op (a live instance simply
+// has no outstanding references right now).
+func (e *ElementLocal) onInstanceRefsDrained(st *atomRefState, instID uint64) {
+	e.lock.Lock()
+	atom, has := e.atoms[st.name]
+	// Only collect if the live entry under this name IS this instance. If a
+	// respawn already replaced it, the old instance is unreachable here and
+	// will simply be GC'd by the runtime once no pointers remain.
+	if has && atom.atomos.instanceID == instID && atom.atomos.isNotHalt() {
+		// Still live and current — nothing to collect.
+		e.lock.Unlock()
+		return
+	}
+	if has && atom.atomos.instanceID == instID && atom.atomos.isNotHalt() == false {
+		// Halted and current under this name: remove from the map.
+		delete(e.atoms, st.name)
+		if atom.nameElement != nil {
+			e.names.Remove(atom.nameElement)
+			atom.nameElement = nil
+		}
+	}
+	// Retire the refState if no live atom and no outstanding refs remain.
+	if st.isEmpty() {
+		if cur, stillHas := e.atoms[st.name]; !stillHas || cur == nil {
+			delete(e.refStates, st.name)
+		}
+	}
+	e.lock.Unlock()
+
+	if has && atom.atomos.instanceID == instID && atom.atomos.mailbox.isRunning() {
+		e.cosmosLocal.process.logging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", st.name)
+	}
+}
+
 func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
+	// Now driven by per-instance refState. A halted atom with no outstanding
+	// references is collected here on the explicit-release path (e.g. spawn
+	// failure cleanup) as well as via onInstanceRefsDrained.
 	if atom.atomos.isNotHalt() {
 		return
 	}
-	if atom.atomos.it.refCount() > 0 {
+	name := atom.GetIDInfo().Atom
+	instID := atom.atomos.instanceID
+
+	// If this instance still has outstanding references, keep it.
+	e.lock.RLock()
+	st := e.refStates[name]
+	e.lock.RUnlock()
+	if st != nil && st.refCount(instID) > 0 {
 		return
 	}
-	e.lock.Lock()
 
-	name := atom.GetIDInfo().Atom
-	// Guard against a respawn race: between the refCount()==0 check above and
-	// acquiring e.lock, another goroutine may have spawned a new Atom under the
-	// same name. Only delete if the entry under `name` is still THIS atom
-	// (pointer equality), otherwise we would wrongly remove the new instance.
+	e.lock.Lock()
 	current, has := e.atoms[name]
-	if !has || current != atom {
+	// Only delete if the live entry is still THIS instance (not a respawn).
+	if !has || current.atomos.instanceID != instID {
 		e.lock.Unlock()
 		return
 	}
@@ -706,6 +761,10 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	if atom.nameElement != nil {
 		e.names.Remove(atom.nameElement)
 		atom.nameElement = nil
+	}
+	// Retire the refState if it has no outstanding refs.
+	if st != nil && st.isEmpty() {
+		delete(e.refStates, name)
 	}
 	e.lock.Unlock()
 
@@ -716,21 +775,29 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 }
 
 func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
-	if atom.atomos.it.refCount() > 0 {
+	name := atom.GetIDInfo().Atom
+	instID := atom.atomos.instanceID
+
+	// If this instance still has outstanding references, keep it in the map
+	// until they drain (onInstanceRefsDrained will then collect it).
+	e.lock.RLock()
+	st := e.refStates[name]
+	e.lock.RUnlock()
+	if st != nil && st.refCount(instID) > 0 {
 		return
 	}
-	e.lock.Lock()
 
-	name := atom.GetIDInfo().Atom
-	// Guard against a respawn race: only remove if the entry under `name` is
-	// still THIS atom (pointer equality), otherwise a newer instance with the
-	// same name would be wrongly removed.
-	if current, has := e.atoms[name]; has && current == atom {
+	e.lock.Lock()
+	// Only remove if the live entry is still THIS instance (not a respawn).
+	if current, has := e.atoms[name]; has && current.atomos.instanceID == instID {
 		delete(e.atoms, name)
 	}
 	if atom.nameElement != nil {
 		e.names.Remove(atom.nameElement)
 		atom.nameElement = nil
+	}
+	if st != nil && st.isEmpty() {
+		delete(e.refStates, name)
 	}
 	e.lock.Unlock()
 
