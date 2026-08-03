@@ -116,7 +116,19 @@ P0/P1 的 13 项已在 commit 8abc6c9 修复。
 
 | 项 | 说明 | 优先级 | 依赖 |
 |---|---|---|---|
-| Windows 运行时验证 | 编译已通过，但 daemon 化/信号处理/PID 文件在真实 Windows 的行为未验证 | 低 | Windows 环境 |
+| ~~Windows 运行时验证~~ | ~~编译已通过，但 daemon 化/信号处理/PID 文件在真实 Windows 的行为未验证~~ | ~~低~~ | ~~Windows 环境~~ |
+
+**Windows 运行时验证已完成**（2026-08-03，VMware Win11）：
+
+| 验证项 | 结果 | 说明 |
+|---|---|---|
+| 进程启动 | ✅ | InitCosmosProcess + Start + OnBoot 全部正常 |
+| Element/Atom spawn | ✅ | Element 构造、Atom spawn、生命周期完整 |
+| 日志写入 | ✅ | Windows 文件路径/权限正常（access/error 日志文件正确写入） |
+| Ctrl+C 信号 | ✅ | SIGINT 正确触发优雅退出（standalone 模式） |
+| 优雅退出 | ✅ | OnShutdown → atom halt → element halt → logging Stop，顺序正确 |
+| PID 文件 | ✅ | standalone 模式不写 PID（预期），退出无残留 |
+| 验证程序 | wintest/main.go | `//go:build windows`，交叉编译 `GOOS=windows go build ./wintest` |
 
 ---
 
