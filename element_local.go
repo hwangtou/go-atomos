@@ -263,7 +263,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
 		if fromLocalOrRemote {
-			return atom, atom.atomos.it.addIDTracker(tracker, fromLocalOrRemote), nil
+			return atom, atom.atomos.it.addIDTracker(tracker), nil
 		} else {
 			return atom, nil, nil
 		}
@@ -515,6 +515,9 @@ autoLoad:
 	return err
 }
 
+// OnIDsReleased is a no-op for Element. Only Atom requires the deferred-deletion
+// semantics (an Atom is removed from the Element map only after all IDTracker
+// references drain); Element and Cosmos themselves have no such lifecycle.
 func (e *ElementLocal) OnIDsReleased() {
 
 }
@@ -592,7 +595,7 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock
 	}
 
 	if fromLocalOrRemote {
-		return oldAtom, oldAtom.atomos.it.addIDTracker(t, fromLocalOrRemote), nil
+		return oldAtom, oldAtom.atomos.it.addIDTracker(t), nil
 	} else {
 		return oldAtom, nil, nil
 	}
@@ -674,7 +677,7 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex,
 		return nil, nil, err.AddStack(nil)
 	}
 	if fromLocalOrRemote {
-		return atom, atom.atomos.it.addIDTracker(t, fromLocalOrRemote), nil
+		return atom, atom.atomos.it.addIDTracker(t), nil
 	} else {
 		return atom, nil, nil
 	}
@@ -690,13 +693,16 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 	e.lock.Lock()
 
 	name := atom.GetIDInfo().Atom
-	_, has := e.atoms[name]
-	if has {
-		delete(e.atoms, name)
-	} else {
+	// Guard against a respawn race: between the refCount()==0 check above and
+	// acquiring e.lock, another goroutine may have spawned a new Atom under the
+	// same name. Only delete if the entry under `name` is still THIS atom
+	// (pointer equality), otherwise we would wrongly remove the new instance.
+	current, has := e.atoms[name]
+	if !has || current != atom {
 		e.lock.Unlock()
 		return
 	}
+	delete(e.atoms, name)
 	if atom.nameElement != nil {
 		e.names.Remove(atom.nameElement)
 		atom.nameElement = nil
@@ -716,8 +722,10 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 	e.lock.Lock()
 
 	name := atom.GetIDInfo().Atom
-	_, has := e.atoms[name]
-	if has {
+	// Guard against a respawn race: only remove if the entry under `name` is
+	// still THIS atom (pointer equality), otherwise a newer instance with the
+	// same name would be wrongly removed.
+	if current, has := e.atoms[name]; has && current == atom {
 		delete(e.atoms, name)
 	}
 	if atom.nameElement != nil {

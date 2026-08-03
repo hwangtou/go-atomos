@@ -23,3 +23,11 @@ func MuteKeepaliveLog(b bool) {
 		p.muteKeepaliveLog = b
 	}
 }
+
+// SetIDTrackerDebug toggles IDTracker debug diagnostics on the default
+// CosmosProcess. See CosmosProcess.idTrackerDebug.
+func SetIDTrackerDebug(v bool) {
+	if p := SharedCosmosProcess(); p != nil {
+		p.idTrackerDebug = v
+	}
+}

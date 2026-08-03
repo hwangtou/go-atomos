@@ -281,6 +281,8 @@ func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	return nil
 }
 
+// OnIDsReleased is a no-op for Cosmos. Only Atom requires the deferred-deletion
+// semantics; see ElementLocal.OnIDsReleased.
 func (c *CosmosLocal) OnIDsReleased() {
 }
 

@@ -27,7 +27,7 @@ func (i *atomosIDTracker) fromOld(old *atomosIDTracker) *atomosIDTracker {
 }
 
 // addIDTracker is used to add IDTracker for local.
-func (i *atomosIDTracker) addIDTracker(rt *IDTrackerInfo, localOrRemote bool) *IDTracker {
+func (i *atomosIDTracker) addIDTracker(rt *IDTrackerInfo) *IDTracker {
 	i.mutex.Lock()
 	i.counter += 1
 	tracker := &IDTracker{id: i.counter}

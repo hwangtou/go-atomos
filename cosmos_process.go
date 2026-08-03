@@ -30,6 +30,13 @@ type CosmosProcess struct {
 	messageTimeoutTracer  bool
 	messageTimeoutDefault time.Duration
 	muteKeepaliveLog      bool
+	// idTrackerDebug toggles IDTracker debug diagnostics. When false (default),
+	// the IDTracker fast path uses a plain refcount with no per-reference
+	// allocation/map (optimal for production hot paths). When true, IDTracker
+	// maintains a debug map of all outstanding references with caller file:line,
+	// so leaks can be enumerated via String(). Consumed by a later milestone
+	// (count/diagnosis split); added here to be wired in later.
+	idTrackerDebug bool
 	// draining is set true by Drain(); the drainWatcher goroutine then waits
 	// for active atoms to reach zero before triggering graceful exit.
 	draining bool
@@ -94,6 +101,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.messageTimeoutTracer = true
 	p.messageTimeoutDefault = 2 * time.Second
 	p.muteKeepaliveLog = true
+	p.idTrackerDebug = false
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}

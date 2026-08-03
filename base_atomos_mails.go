@@ -82,8 +82,6 @@ type baseAtomosMail struct {
 	arg proto.Message
 	err *Error
 
-	tracker *IDTracker
-
 	wormhole BaseAtomosWormhole
 
 	taskClosure func(uint64)
@@ -243,7 +241,6 @@ func initWormholeMail(am *baseAtomosMail, from ID, wormhole BaseAtomosWormhole) 
 	am.from = from
 	am.name = ""
 	am.arg = nil
-	am.tracker = nil
 	am.wormhole = wormhole
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)
@@ -256,7 +253,6 @@ func initAtomosKillMail(am *baseAtomosMail, from ID) {
 	am.mailType = BaseAtomosMailKill
 	am.from = from
 	am.name = ""
-	am.tracker = nil
 	am.wormhole = nil
 	am.mailReply = mailReply{}
 	am.waitCh = make(chan *mailReply, 1)

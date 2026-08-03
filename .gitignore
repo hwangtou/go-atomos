@@ -3,6 +3,7 @@
 examples/chat/data/
 vendor
 .claude/
+.zcode/
 
 # Compiled protoc plugin binaries — build locally via protoc-gen-go-atomos/build.sh
 protoc-gen-go-atomos/protoc-gen-go
