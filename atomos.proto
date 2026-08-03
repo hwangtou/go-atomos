@@ -22,10 +22,6 @@ message IDInfo {
   uint64 version = 6;
 }
 
-//message IDContextInfo {
-//  repeated string id_chain = 1;
-//}
-
 enum LogLevel {
   Debug = 0;
   Info = 1;
@@ -167,11 +163,6 @@ message CertConfig {
   bool insecure_skip_verify = 3;
 }
 
-message CosmosLocalConfig {
-  string node_name = 1;
-  repeated string elements = 2;
-}
-
 message ElementConfig {
   string name = 1;
   uint64 version = 2;
@@ -182,15 +173,6 @@ message AtomMessageConfig {
   google.protobuf.Any in = 1;
   google.protobuf.Any out = 2;
 }
-
-message UDSCommandPacket {
-  int64 session_id = 1;
-  string command = 2;
-  bytes buf = 3;
-  Error err = 4;
-}
-
-// Cosmos Requester
 
 // Cosmos Requester
 
@@ -281,7 +263,6 @@ message CosmosRemoteDrainNodeRsp {
 message CosmosRemoteGetAtomIDReq {
   string element = 1;
   string atom = 2;
-//  CosmosArgs cosmos_args = 3;
 }
 message CosmosRemoteGetAtomIDRsp {
   IDInfo id = 1;
@@ -318,7 +299,6 @@ message CosmosRemoteGetElementInfoRsp {
 // Spawn Atom
 message CosmosRemoteSpawnAtomReq {
   IDInfo caller_id = 1;
-//  IDContextInfo caller_context = 2;
   string element = 3;
   string atom = 4;
   google.protobuf.Any args = 5;
@@ -332,7 +312,6 @@ message CosmosRemoteSpawnAtomRsp {
 // Sync Messaging
 message CosmosRemoteSyncMessagingByNameReq {
   IDInfo caller_id = 1;
-//  IDContextInfo caller_context = 2;
   IDInfo to = 3;
   CosmosArgs cosmos_args = 4;
   string message = 5;
@@ -374,7 +353,6 @@ message CosmosRemoteAsyncOnMessageCallbackRsp {
 // Kill Atom
 message CosmosRemoteKillAtomReq {
   IDInfo caller_id = 1;
-//  IDContextInfo caller_context = 2;
   IDInfo id = 3;
   CosmosArgs cosmos_args = 4;
 }
@@ -385,7 +363,6 @@ message CosmosRemoteKillAtomRsp {
 // Element Broadcast
 message CosmosRemoteElementBroadcastReq {
   IDInfo caller_id = 1;
-//  IDContextInfo caller_context = 2;
   string key = 3;
   string content_type = 4;
   bytes content_buffer = 5;
@@ -396,7 +373,6 @@ message CosmosRemoteElementBroadcastRsp {
 
 message CosmosArgs {
   repeated int32 types = 1;
-//  bool forbid_duplicated = 1;
   int64 base_atomos_timeout_in_nano = 2;
   bool base_atomos_append_to_head = 3;
   bool base_atomos_wait_killed = 4;
