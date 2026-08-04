@@ -68,6 +68,11 @@ func (s *atomRefState) addRef(instID uint64, info *IDTrackerInfo) *IDTracker {
 			s.debug = map[uint64][]*IDTracker{}
 		}
 		s.debug[instID] = append(s.debug[instID], tr)
+		// Register a GC finalizer so a tracker that is never Release()d reports
+		// itself (with its allocation site) instead of leaking silently. Only
+		// done in debug mode to avoid the per-GC cost in production; Release()
+		// detaches the finalizer on the happy path.
+		runtime.SetFinalizer(tr, finalizeIDTracker)
 	}
 	s.mu.Unlock()
 	return tr
@@ -192,10 +197,43 @@ func (i *IDTracker) Release() {
 	if !i.released.CompareAndSwap(false, true) {
 		return
 	}
+	// Detach the leak-detection finalizer on the happy path so a properly
+	// released tracker does no extra work at GC time.
+	runtime.SetFinalizer(i, nil)
 	if i.state.release(i.instID) {
 		// This instance's references just drained to zero. Notify the Element
 		// so it can collect the instance if it has halted.
 		i.state.element.onInstanceRefsDrained(i.state, i.instID)
+	}
+}
+
+// logger returns the process logger reachable from the tracker, nil-safe at
+// every hop so it can be used from a GC finalizer (where parts of the chain
+// may already be torn down during process shutdown).
+func (i *IDTracker) logger() *loggingAtomos {
+	if i == nil || i.state == nil {
+		return nil
+	}
+	e := i.state.element
+	if e == nil || e.cosmosLocal == nil || e.cosmosLocal.process == nil {
+		return nil
+	}
+	return e.cosmosLocal.process.logging
+}
+
+// finalizeIDTracker is the GC backstop for leak detection (debug mode only).
+// If a tracker is collected without ever being Release()d, this reports it with
+// its allocation site. It only reports — it does NOT mutate the refState
+// (acquiring atomRefState.mu from a finalizer risks racing process teardown);
+// the leaked count dies with the process.
+func finalizeIDTracker(tr *IDTracker) {
+	if tr == nil || tr.released.Load() {
+		return
+	}
+	if logging := tr.logger(); logging != nil {
+		logging.pushFrameworkErrorLog(
+			"IDTracker: leaked (never Release()d). inst=%d id=%d alloc=%s:%d caller=%s",
+			tr.instID, tr.id, tr.file, tr.line, tr.name)
 	}
 }
 
@@ -212,4 +250,23 @@ func NewIDTrackerInfoFromLocalGoroutine(skip int) *IDTrackerInfo {
 		}
 	}
 	return tracker
+}
+
+// WithID is a block-scope RAII helper for an IDTracker: it guarantees Release
+// is called on the given tracker when fn returns — whether by normal return,
+// early return, or panic. Use it when a bare `defer id.Release()` at function
+// scope would keep the reference alive longer than necessary, or to make the
+// acquire/release pair visually scoped.
+//
+//	tr, _ := GetXxxAtomID(...)
+//	return atomos.WithID(tr, func() (*Out, *Error) {
+//	    // use the ID captured above; tr is released on return
+//	})
+//
+// The tracker is constrained directly (rather than the full ID type) to avoid
+// the unexported-method trap on the ID interface; callers capture their ID in
+// the enclosing scope or pass it through the closure.
+func WithID[R any](tr *IDTracker, fn func() (R, *Error)) (R, *Error) {
+	defer tr.Release()
+	return fn()
 }
