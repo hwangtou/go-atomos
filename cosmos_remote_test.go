@@ -275,6 +275,122 @@ func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
 	}
 }
 
+// TestWithRebind_RetriesOnInstanceMismatch covers M5-2: WithRebind automatically
+// re-resolves the ID and retries once when a call fails with a rebind-triggering
+// error (here ErrAtomInstanceMismatch). The cluster integration of the mismatch
+// signal itself is covered by TestCosmosRemote_InstanceMismatchOnRespawn (M5-0);
+// this test exercises the WithRebind retry logic directly with a stub ID/call.
+func TestWithRebind_RetriesOnInstanceMismatch(t *testing.T) {
+	calls := 0
+	out, err := WithRebind(func() (ID, *Error) {
+		return stubID{}, nil
+	}, func(id ID) (string, *Error) {
+		calls++
+		if calls == 1 {
+			return "", NewError(ErrAtomInstanceMismatch, "stale").AddStack(nil)
+		}
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatalf("WithRebind failed: %v", err)
+	}
+	if out != "ok" {
+		t.Fatalf("expected out=ok, got %q", out)
+	}
+	if calls != 2 {
+		t.Fatalf("expected 2 calls (initial + 1 rebind retry), got %d", calls)
+	}
+}
+
+// TestWithRebind_NoRetryOnSuccess verifies WithRebind calls once and returns on
+// success without retrying.
+func TestWithRebind_NoRetryOnSuccess(t *testing.T) {
+	calls := 0
+	out, err := WithRebind(func() (ID, *Error) {
+		return stubID{}, nil
+	}, func(id ID) (string, *Error) {
+		calls++
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatalf("WithRebind failed: %v", err)
+	}
+	if out != "ok" {
+		t.Fatalf("expected out=ok, got %q", out)
+	}
+	if calls != 1 {
+		t.Fatalf("expected exactly 1 call (no retry on success), got %d", calls)
+	}
+}
+
+// TestWithRebind_NoRetryOnUnrelatedError verifies WithRebind does NOT retry on a
+// non-rebind error (it returns the error directly after one call).
+func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
+	sentinel := NewError(ErrFrameworkInternalError, "sentinel business error").AddStack(nil)
+	calls := 0
+	_, err := WithRebind(func() (ID, *Error) {
+		return stubID{}, nil
+	}, func(id ID) (string, *Error) {
+		calls++
+		return "", sentinel
+	})
+	if err == nil {
+		t.Fatal("expected the sentinel error back")
+	}
+	if err.Code != sentinel.Code {
+		t.Fatalf("expected sentinel error code %d, got %d", sentinel.Code, err.Code)
+	}
+	if calls != 1 {
+		t.Fatalf("expected exactly 1 call (no retry on unrelated error), got %d", calls)
+	}
+}
+
+// TestWithRebind_ResolveErrorNoCall verifies WithRebind returns the resolve
+// error without invoking call.
+func TestWithRebind_ResolveErrorNoCall(t *testing.T) {
+	resolveErr := NewError(ErrCosmosRemoteConnectFailed, "no node").AddStack(nil)
+	calls := 0
+	_, err := WithRebind(func() (ID, *Error) {
+		return nil, resolveErr
+	}, func(id ID) (string, *Error) {
+		calls++
+		return "", nil
+	})
+	if err == nil || err.Code != resolveErr.Code {
+		t.Fatalf("expected resolve error back, got %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("expected 0 calls when resolve fails, got %d", calls)
+	}
+}
+
+// stubID is a minimal ID used to exercise WithRebind's control flow without a
+// full cosmos/cluster setup. It is NOT ReleasableID (no Release method), so
+// releaseID is a no-op on it — matching the remote-ID behavior.
+type stubID struct{}
+
+func (stubID) GetIDInfo() *IDInfo       { return nil }
+func (stubID) String() string           { return "stub" }
+func (stubID) Cosmos() CosmosNode       { return nil }
+func (stubID) State() BaseAtomosState   { return 0 }
+func (stubID) IdleTime() time.Duration  { return 0 }
+func (stubID) SyncMessagingByName(ID, string, proto.Message, []ArgsForBaseAtomos) (proto.Message, *Error) {
+	return nil, nil
+}
+func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message, *Error), []ArgsForBaseAtomos) *Error {
+	return nil
+}
+func (stubID) asyncSet(func(proto.Message, *Error)) (uint64, uint64) { return 0, 0 }
+func (stubID) asyncCallback(ID, string, uint64, uint64, proto.Message, *Error) {
+}
+func (stubID) DecoderByName(string) (MessageDecoder, MessageDecoder) { return nil, nil }
+func (stubID) Kill(ID, []ArgsForBaseAtomos) *Error                    { return nil }
+func (stubID) SendWormhole(ID, BaseAtomosWormhole, []ArgsForBaseAtomos) *Error {
+	return nil
+}
+func (stubID) getGoID() uint64 { return 0 }
+
+
 // TestCosmosRemote_AddressReuseDetectsNewGeneration covers the address-reuse
 // scenario: a node restarts and re-registers the SAME address. The startup_id
 // in CosmosNodeVersionInfo is what lets peers tell the new process generation
