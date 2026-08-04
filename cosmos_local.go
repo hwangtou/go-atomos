@@ -157,7 +157,14 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBase
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	id, tracker, err = e.GetAtomID(name, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	// Only capture caller file:line when debug diagnostics are enabled; in
+	// production the info is unused (addRef fills the debug map only when
+	// idTrackerDebug is on), so skip the runtime.Caller cost on the hot path.
+	var info *IDTrackerInfo
+	if c.process.idTrackerDebug {
+		info = NewIDTrackerInfoFromLocalGoroutine(3)
+	}
+	id, tracker, err = e.GetAtomID(name, info, true)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -169,7 +176,11 @@ func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, ar
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.SpawnAtom(callerID, name, arg, NewIDTrackerInfoFromLocalGoroutine(3), true)
+	var info *IDTrackerInfo
+	if c.process.idTrackerDebug {
+		info = NewIDTrackerInfoFromLocalGoroutine(3)
+	}
+	return e.SpawnAtom(callerID, name, arg, info, true)
 }
 
 func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {

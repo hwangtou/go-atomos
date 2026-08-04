@@ -186,3 +186,59 @@ func TestIDTracker_RefSurvivesRespawn(t *testing.T) {
 		}
 	})
 }
+
+// BenchmarkIDTracker_AddRefRelease measures the addRef+Release hot path,
+// comparing idTrackerDebug on (runtime.Caller + IDTrackerInfo allocation per
+// call) vs off (nil info, no caller capture).
+//
+// Run: go test -bench=AddRefRelease -benchmem
+func BenchmarkIDTracker_AddRefRelease(b *testing.B) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	// Stand up a real cosmos process so the element/atom infrastructure is live.
+	id := &IDInfo{Type: IDType_Atom, Cosmos: "bench_cosmos", Node: "bench_node", Element: "bench_elem", Atom: "bench_atom"}
+	p, err := newCosmosProcess(id.Cosmos, id.Node, newTestLogging(b))
+	if err != nil {
+		b.Fatalf("newCosmosProcess: %v", err)
+	}
+	r := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: id.Cosmos, Node: id.Node})
+	if err := p.Start(r); err != nil {
+		b.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = p.Stop() }()
+
+	elem, err := p.local.getLocalElement(ForTestAtomosName)
+	if err != nil {
+		b.Fatalf("getLocalElement: %v", err)
+	}
+	atom, _, err := elem.elementAtomSpawn(nil, "bench_atom", nil, elem.elemImpl, nil, &IDTrackerInfo{}, false, true)
+	if err != nil {
+		b.Fatalf("elementAtomSpawn: %v", err)
+	}
+
+	// Sub-benchmark: idTrackerDebug off (production hot path).
+	b.Run("DebugOff", func(b *testing.B) {
+		p.idTrackerDebug = false
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			tr := elem.addRefAtom(atom, nil)
+			tr.Release()
+		}
+	})
+
+	// Sub-benchmark: idTrackerDebug on (captures runtime.Caller per call).
+	b.Run("DebugOn", func(b *testing.B) {
+		p.idTrackerDebug = true
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			tr := elem.addRefAtom(atom, NewIDTrackerInfoFromLocalGoroutine(2))
+			tr.Release()
+		}
+	})
+
+	p.idTrackerDebug = false
+}
+
+

@@ -7,14 +7,14 @@ import (
 )
 
 type testLogging struct {
-	t *testing.T
+	t testing.TB
 }
 
-func newTestLogging(t *testing.T) *testLogging {
+func newTestLogging(t testing.TB) *testLogging {
 	return &testLogging{t: t}
 }
 
-func newTestLoggingAtomos(t *testing.T) *loggingAtomos {
+func newTestLoggingAtomos(t testing.TB) *loggingAtomos {
 	la := &loggingAtomos{}
 	if err := la.init(&testLogging{t: t}); err != nil {
 		t.Fatalf("newTestLogging: Init logging failed. err=(%v)", err.AddStack(nil))
