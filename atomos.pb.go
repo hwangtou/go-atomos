@@ -207,6 +207,7 @@ type IDInfo struct {
 	Element       string                 `protobuf:"bytes,4,opt,name=element,proto3" json:"element,omitempty"`
 	Atom          string                 `protobuf:"bytes,5,opt,name=atom,proto3" json:"atom,omitempty"`
 	Version       uint64                 `protobuf:"varint,6,opt,name=version,proto3" json:"version,omitempty"`
+	InstanceId    uint64                 `protobuf:"varint,7,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,6 +280,13 @@ func (x *IDInfo) GetAtom() string {
 func (x *IDInfo) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
+	}
+	return 0
+}
+
+func (x *IDInfo) GetInstanceId() uint64 {
+	if x != nil {
+		return x.InstanceId
 	}
 	return 0
 }
@@ -3303,14 +3311,16 @@ var File_atomos_proto protoreflect.FileDescriptor
 
 const file_atomos_proto_rawDesc = "" +
 	"\n" +
-	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa0\x01\n" +
+	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc1\x01\n" +
 	"\x06IDInfo\x12\"\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x0e.atomos.IDTypeR\x04type\x12\x16\n" +
 	"\x06cosmos\x18\x02 \x01(\tR\x06cosmos\x12\x12\n" +
 	"\x04node\x18\x03 \x01(\tR\x04node\x12\x18\n" +
 	"\aelement\x18\x04 \x01(\tR\aelement\x12\x12\n" +
 	"\x04atom\x18\x05 \x01(\tR\x04atom\x12\x18\n" +
-	"\aversion\x18\x06 \x01(\x04R\aversion\"\x9b\x01\n" +
+	"\aversion\x18\x06 \x01(\x04R\aversion\x12\x1f\n" +
+	"\vinstance_id\x18\a \x01(\x04R\n" +
+	"instanceId\"\x9b\x01\n" +
 	"\aLogMail\x12\x1e\n" +
 	"\x02id\x18\x01 \x01(\v2\x0e.atomos.IDInfoR\x02id\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12&\n" +

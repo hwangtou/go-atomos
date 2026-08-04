@@ -86,7 +86,7 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 	}
 	switch req.Id.Type {
 	case IDType_Atom:
-		atom, err := elem.getAtomFromRemote(req.Id.Atom)
+		atom, err := elem.getAtomFromRemote(req.Id.Atom, req.Id.InstanceId)
 		if err != nil {
 			rsp.State = int32(BaseAtomosHalt)
 		} else {
@@ -112,7 +112,7 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	}
 	switch req.Id.Type {
 	case IDType_Atom:
-		atom, err := elem.getAtomFromRemote(req.Id.Atom)
+		atom, err := elem.getAtomFromRemote(req.Id.Atom, req.Id.InstanceId)
 		if err != nil {
 			rsp.IdleTime = 0
 		} else {
@@ -221,7 +221,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		}
 		switch req.To.Type {
 		case IDType_Atom:
-			atom, err := elem.getAtomFromRemote(req.To.Atom)
+			atom, err := elem.getAtomFromRemote(req.To.Atom, req.To.InstanceId)
 			if err != nil {
 				rsp.Error = err.AddStack(a.process.local)
 				return rsp, nil
@@ -288,7 +288,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 	}
 	switch req.ToId.Type {
 	case IDType_Atom:
-		atom, err := elem.getAtomFromRemote(req.ToId.Atom)
+		atom, err := elem.getAtomFromRemote(req.ToId.Atom, req.ToId.InstanceId)
 		if err != nil {
 			rsp.Error = err.AddStack(a.process.local)
 			return rsp, nil

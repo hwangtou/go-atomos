@@ -20,6 +20,7 @@ message IDInfo {
   string element = 4;
   string atom = 5;
   uint64 version = 6;
+  uint64 instance_id = 7;
 }
 
 enum LogLevel {

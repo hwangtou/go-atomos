@@ -65,6 +65,7 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	}
 
 	// Check GetAtomID again to see if the Atom now exists
+	var atomIDInfo *IDInfo
 	if rsp, er := cli.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
 		Element: ForTestAtomosName,
 		Atom:    testAtom,
@@ -74,21 +75,17 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid response: rsp=(%v)", rsp)
 	} else if rsp.Id.Cosmos != "test_cosmos" || rsp.Id.Node != "test_node_target" || rsp.Id.Element != ForTestAtomosName || rsp.Id.Atom != testAtom {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid ID info: rsp.Id=(%v)", rsp.Id)
+	} else if rsp.Id.InstanceId == 0 {
+		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned zero instance_id: rsp.Id=(%v)", rsp.Id)
 	} else {
+		atomIDInfo = rsp.Id
 		t.Logf("CosmosRemote: GetAtomID gRPC call succeeded, rsp=(%v)", rsp)
 	}
 
-	// Sync Messaging test
+	// Sync Messaging test (use the resolved IDInfo so it carries instance_id)
 	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId: cluster.sourceProcess.local.GetIDInfo(),
-		To: &IDInfo{
-			Type:    IDType_Atom,
-			Cosmos:  "test_cosmos",
-			Node:    "test_node_target",
-			Element: ForTestAtomosName,
-			Atom:    testAtom,
-			Version: 0,
-		},
+		To:       atomIDInfo,
 		CosmosArgs: nil,
 		Message:    "Greeting",
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
@@ -115,14 +112,7 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	}
 	if rsp, er := cli.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
 		CallerId: cluster.sourceProcess.local.GetIDInfo(),
-		ToId: &IDInfo{
-			Type:    IDType_Atom,
-			Cosmos:  "test_cosmos",
-			Node:    "test_node_target",
-			Element: ForTestAtomosName,
-			Atom:    testAtom,
-			Version: 0,
-		},
+		ToId:     atomIDInfo,
 		CosmosArgs: nil,
 		StartupId:  startupID,
 		AsyncId:    asyncID,
@@ -150,6 +140,139 @@ func toAnyPb(t *testing.T, msg proto.Message) *anypb.Any {
 		t.Fatalf("CosmosRemote: toAnyPb. err=(%v)", er)
 	}
 	return arg
+}
+
+// TestCosmosRemote_InstanceMismatchOnRespawn covers M5-0: a remote caller that
+// holds an IDInfo resolved before a halt+respawn must get ErrAtomInstanceMismatch
+// when it next calls, because the live instance's instance_id changed. Rebinding
+// (re-GetAtomID) yields the new instance_id and succeeds.
+func TestCosmosRemote_InstanceMismatchOnRespawn(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 50200, "test_cosmos", "mm_node")
+	defer cluster.close()
+
+	client := cluster.sourceProcess.cluster.remoteCosmos["mm_node_target"].current.client
+	cli := NewAtomosRemoteServiceClient(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	const atomName = "test_mismatch_atom"
+
+	// Spawn an atom on the target node and capture its instance_id.
+	var staleID *IDInfo
+	if rsp, er := cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		Element:    ForTestAtomosName,
+		Atom:       atomName,
+		Args:       nil,
+		CosmosArgs: nil,
+	}); er != nil {
+		t.Fatalf("SpawnAtom failed: %v", er)
+	} else if rsp == nil || rsp.Id == nil || rsp.Error != nil {
+		t.Fatalf("SpawnAtom invalid rsp: %v", rsp)
+	} else {
+		staleID = rsp.Id
+		if staleID.InstanceId == 0 {
+			t.Fatalf("SpawnAtom returned zero instance_id: %v", staleID)
+		}
+	}
+
+	// Kill the atom on the target node directly (simulate halt), then respawn it
+	// under the same name — the new instance gets a NEW instance_id.
+	elem, err := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
+	if err != nil {
+		t.Fatalf("getLocalElement on target: %v", err)
+	}
+	targetAtom, _, err := elem.GetAtomID(atomName, nil, false)
+	if err != nil {
+		t.Fatalf("target GetAtomID: %v", err)
+	}
+	oldImpl := targetAtom.(*AtomLocal).atomos.instance.(*testRunnableAtom)
+	oldImpl.haltNotify = make(chan struct{}, 1)
+	targetAtom.(*AtomLocal).KillSelf()
+	<-oldImpl.haltNotify
+	// Respawn on the target (new instance_id).
+	if _, _, err := elem.elementAtomSpawn(nil, atomName, nil, elem.elemImpl, nil, NewIDTrackerInfoFromLocalGoroutine(3), false, false); err != nil {
+		t.Fatalf("target respawn failed: %v", err)
+	}
+
+	// A sync call with the STALE instance_id must be rejected.
+	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		To:         staleID, // carries the old instance_id
+		CosmosArgs: nil,
+		Message:    "Greeting",
+		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	}); er != nil {
+		t.Fatalf("Sync call transport error: %v", er)
+	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrAtomInstanceMismatch {
+		t.Fatalf("Expected ErrAtomInstanceMismatch with stale instance_id, got rsp=%v", rsp)
+	}
+
+	// Rebind: re-GetAtomID yields the fresh instance_id.
+	var freshID *IDInfo
+	if rsp, er := cli.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
+		Element: ForTestAtomosName, Atom: atomName,
+	}); er != nil {
+		t.Fatalf("rebind GetAtomID transport error: %v", er)
+	} else if rsp == nil || rsp.Id == nil || rsp.Error != nil {
+		t.Fatalf("rebind GetAtomID invalid rsp: %v", rsp)
+	} else {
+		freshID = rsp.Id
+		if freshID.InstanceId == staleID.InstanceId {
+			t.Fatalf("rebind did not yield a new instance_id: stale=%d fresh=%d", staleID.InstanceId, freshID.InstanceId)
+		}
+	}
+
+	// A sync call with the FRESH instance_id must succeed.
+	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		To:         freshID,
+		CosmosArgs: nil,
+		Message:    "Greeting",
+		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	}); er != nil {
+		t.Fatalf("fresh sync transport error: %v", er)
+	} else if rsp == nil || rsp.Error != nil {
+		t.Fatalf("fresh sync should succeed, got rsp=%v", rsp)
+	}
+}
+
+// TestCosmosRemote_InstanceIDZeroRejected covers the strict policy: a remote
+// call whose To.InstanceId is 0 must be rejected (legacy/unset client).
+func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 50300, "test_cosmos", "zr_node")
+	defer cluster.close()
+
+	client := cluster.sourceProcess.cluster.remoteCosmos["zr_node_target"].current.client
+	cli := NewAtomosRemoteServiceClient(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// Spawn so a live instance exists, then call with instance_id explicitly 0.
+	if _, er := cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		Element:    ForTestAtomosName,
+		Atom:       "test_zero_atom",
+		Args:       nil,
+		CosmosArgs: nil,
+	}); er != nil {
+		t.Fatalf("SpawnAtom failed: %v", er)
+	}
+
+	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId: cluster.sourceProcess.local.GetIDInfo(),
+		To: &IDInfo{
+			Type: IDType_Atom, Cosmos: "test_cosmos", Node: "zr_node_target",
+			Element: ForTestAtomosName, Atom: "test_zero_atom",
+			// InstanceId intentionally left 0.
+		},
+		CosmosArgs: nil,
+		Message:    "Greeting",
+		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	}); er != nil {
+		t.Fatalf("Sync transport error: %v", er)
+	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrAtomInstanceMismatch {
+		t.Fatalf("Expected ErrAtomInstanceMismatch for instance_id=0, got rsp=%v", rsp)
+	}
 }
 
 // TestCosmosRemote_AddressReuseDetectsNewGeneration covers the address-reuse

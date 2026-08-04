@@ -858,21 +858,41 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 	return nil
 }
 
-func (e *ElementLocal) getAtomFromRemote(name string) (*AtomLocal, *Error) {
+// getAtomFromRemote resolves the live Atom instance for a remote caller.
+//
+// callerInstanceID is the per-instance epoch the caller holds (from the IDInfo
+// it received when resolving the ID). The strict policy (M5-0):
+//   - callerInstanceID == 0 → reject (ErrAtomInstanceMismatch): a remote call
+//     must carry a real epoch. Legacy clients without instance_id must rebind.
+//   - callerInstanceID != live instance's instanceID → reject: the caller's
+//     handle points at a previous (now-replaced) instance; rebind required.
+//
+// A cache miss no longer triggers an implicit respawn for remote callers: a
+// respawn would produce a NEW instanceID that the caller's stale epoch cannot
+// match, so implicit respawn would only hand back a different instance than the
+// caller expects (a dirty-data source). Remote callers must rebind explicitly
+// (GetAtomID/SpawnAtom) to obtain the current instance.
+func (e *ElementLocal) getAtomFromRemote(name string, callerInstanceID uint64) (*AtomLocal, *Error) {
+	// Strict policy: a remote call must carry a real instance_id.
+	if callerInstanceID == 0 {
+		return nil, NewErrorf(ErrAtomInstanceMismatch,
+			"Element: Remote call missing instance_id (legacy client?). name=(%s)", name).AddStack(e)
+	}
 	e.lock.RLock()
 	atom, hasAtom := e.atoms[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
+		if atom.atomos.instanceID != callerInstanceID {
+			return nil, NewErrorf(ErrAtomInstanceMismatch,
+				"Element: Atom instance mismatch. name=(%s),caller_inst=(%d),live_inst=(%d)",
+				name, callerInstanceID, atom.atomos.instanceID).AddStack(e)
+		}
 		return atom, nil
 	}
-	// Auto data persistence.
-	persistence, ok := e.elemImpl.Developer.(AutoData)
-	if !ok || persistence == nil {
-		return nil, nil
-	}
-	atom, _, err := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, nil, false, false)
-	if err != nil {
-		return nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s),err=(%v)", name, err).AddStack(e)
-	}
-	return atom, nil
+	// No live instance under this name. Do NOT implicitly respawn for a remote
+	// caller: the caller's epoch is necessarily stale (any respawn would yield a
+	// new instanceID), so the caller must rebind.
+	return nil, NewErrorf(ErrAtomInstanceMismatch,
+		"Element: Atom not live and caller epoch is stale. name=(%s),caller_inst=(%d)",
+		name, callerInstanceID).AddStack(e)
 }

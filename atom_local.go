@@ -69,6 +69,10 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 		return nil, err.AddStack(nil)
 	}
 	a.atomos = NewBaseAtomos(a, id, lv, a, instance, e.cosmosLocal.process)
+	// Stamp the per-instance epoch into the IDInfo so remote callers can detect
+	// a stale handle after a halt+respawn (M5-0 instance_id check). Only the Atom
+	// type carries a real instance_id; Element/Cosmos leave it 0.
+	id.InstanceId = a.atomos.instanceID
 
 	return a, nil
 }

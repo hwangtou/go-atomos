@@ -152,6 +152,7 @@ const (
 	ErrAtomMessageArgType
 	ErrAtomMessageReplyType
 	ErrAtomSpawningAnExistedAtom
+	ErrAtomInstanceMismatch
 
 	// Util File
 	//
