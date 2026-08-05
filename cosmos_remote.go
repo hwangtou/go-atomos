@@ -24,6 +24,11 @@ type CosmosRemote struct {
 	version map[string]*cosmosRemoteVersion
 
 	elements map[string]*ElementRemoteFromSource
+
+	// watchers are DeathWatch callbacks fired when this remote node departs
+	// (its version key is deleted from etcd). Guarded by mutex. Entries may be
+	// tombstoned (set nil) by cancel; dispatch skips nil.
+	watchers []DeathWatchCallback
 }
 
 func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersionInfo) *CosmosRemote {
@@ -50,6 +55,43 @@ func newCosmosRemoteFromLockInfo(process *CosmosProcess, lock *CosmosNodeVersion
 	}
 	c.remote = newBaseRemote(c, nil)
 	return c
+}
+
+// DeathWatchCallback is invoked (asynchronously, outside any framework lock)
+// when the remote node's version key is deleted from etcd — i.e. the node
+// left, crashed, or its lease expired. The callback receives the node name and
+// the dead version's info (including StartupId, so the caller can distinguish a
+// same-address restart from a true departure). Use it to drop cached remote IDs
+// pointing at this node; the framework itself holds no such cache. The callback
+// must be idempotent — a single departure may produce multiple delete events.
+type DeathWatchCallback func(ev NodeDeathEvent)
+
+// NodeDeathEvent describes a remote node departure delivered to DeathWatch
+// callbacks.
+type NodeDeathEvent struct {
+	// Node is the departed remote node's name.
+	Node string
+	// Info is the CosmosNodeVersionInfo of the dead version (carries Address,
+	// StartupId, State, Elements). Nil if unavailable.
+	Info *CosmosNodeVersionInfo
+}
+
+// AddDeathWatch registers a callback fired when this remote node departs.
+// Returns a cancel func to detach the watcher (mirrors IDTracker.Release style).
+// Safe to call from any goroutine. Callbacks fire asynchronously outside
+// framework locks, so they may call back into the framework without deadlocking.
+func (c *CosmosRemote) AddDeathWatch(cb DeathWatchCallback) (cancel func()) {
+	c.mutex.Lock()
+	c.watchers = append(c.watchers, cb)
+	idx := len(c.watchers) - 1
+	c.mutex.Unlock()
+	return func() {
+		c.mutex.Lock()
+		if idx < len(c.watchers) {
+			c.watchers[idx] = nil // tombstone; dispatch skips nil
+		}
+		c.mutex.Unlock()
+	}
 }
 
 type CosmosRemoteInTargetProcess struct {
@@ -221,19 +263,61 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 
 func (c *CosmosRemote) etcdDeleteVersion(version string) {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	v, has := c.version[version]
+	var deadInfo *CosmosNodeVersionInfo
+	var snapshot []DeathWatchCallback
 	if has {
 		delete(c.version, version)
+		deadInfo = v.info
 		if c.current != nil && c.current.version == v.version {
 			c.current = nil
 			//for _, elem := range c.elements {
 			//	elem.setDisable()
 			//}
 		}
+		// Close the dead version's gRPC connection. Previously setDisable() was
+		// only called on the PUT (address/startup-id change) path, which leaked
+		// the conn on a plain delete (node leave / lease expire). Closing here
+		// pairs conn teardown with version removal.
+		v.setDisable()
+		// Snapshot watchers under the lock so dispatch can run lock-free.
+		if len(c.watchers) > 0 {
+			snapshot = append(snapshot, c.watchers...)
+		}
 	}
 	c.refresh()
+	c.mutex.Unlock()
+
+	// Dispatch DeathWatch callbacks asynchronously. This runs outside c.mutex
+	// AND outside p.cluster.remoteMutex (held by the upstream caller
+	// etcdDeleteClusterVersionNodeInfo), so callbacks may safely call back into
+	// the framework. Async dispatch also bounds the etcd watcher goroutine's
+	// exposure to slow/panicking user callbacks.
+	if len(snapshot) > 0 && deadInfo != nil {
+		ev := NodeDeathEvent{Node: c.GetNodeName(), Info: deadInfo}
+		go c.dispatchDeathWatch(ev, snapshot)
+	}
+}
+
+// dispatchDeathWatch invokes each (non-tombstoned) DeathWatch callback,
+// recovering from panics so one bad callback cannot kill the dispatch.
+func (c *CosmosRemote) dispatchDeathWatch(ev NodeDeathEvent, callbacks []DeathWatchCallback) {
+	for _, cb := range callbacks {
+		if cb == nil {
+			continue
+		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if c.process != nil && c.process.logging != nil {
+						c.process.logging.pushFrameworkErrorLog(
+							"DeathWatch: callback panicked. node=(%s) err=(%v)", ev.Node, r)
+					}
+				}
+			}()
+			cb(ev)
+		}()
+	}
 }
 
 func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {

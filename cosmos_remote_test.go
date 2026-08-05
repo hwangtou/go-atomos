@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -460,3 +461,102 @@ func TestCosmosRemote_AddressReuseDetectsNewGeneration(t *testing.T) {
 		t.Fatal("any startup_id change must replace the version object")
 	}
 }
+
+// newDeathWatchTestRemote builds a *CosmosRemote with one populated version,
+// for unit-testing DeathWatch without a live etcd/gRPC round-trip. basePort must
+// be unique per test to avoid gRPC port conflicts when tests run together.
+func newDeathWatchTestRemote(t *testing.T, basePort int) (*CosmosRemote, string) {
+	t.Helper()
+	cluster := newTestCosmosProcessSimulateCluster(t, basePort, "test_cosmos", "dw_node")
+	remote := cluster.sourceProcess.cluster.remoteCosmos["dw_node_target"]
+	if remote == nil {
+		t.Fatal("remoteCosmos target is nil")
+	}
+	const versionKey = "v1"
+	info := &CosmosNodeVersionInfo{
+		Node:    "dw_node_target",
+		Address: fmt.Sprintf("127.0.0.1:%d", cluster.targetPort),
+		Id: &IDInfo{
+			Type: IDType_Cosmos, Cosmos: "test_cosmos", Node: "dw_node_target",
+		},
+		State: ClusterNodeState_Started,
+	}
+	remote.etcdCreateVersion(info, versionKey)
+	return remote, versionKey
+}
+
+// TestDeathWatch_FiresOnVersionDelete covers M5-1: a registered DeathWatch
+// callback fires (asynchronously) when the watched node's version is deleted.
+func TestDeathWatch_FiresOnVersionDelete(t *testing.T) {
+	remote, versionKey := newDeathWatchTestRemote(t, 50700)
+
+	done := make(chan NodeDeathEvent, 1)
+	cancel := remote.AddDeathWatch(func(ev NodeDeathEvent) {
+		done <- ev
+	})
+	defer cancel()
+
+	remote.etcdDeleteVersion(versionKey)
+
+	select {
+	case ev := <-done:
+		if ev.Node != "dw_node_target" {
+			t.Fatalf("expected Node=dw_node_target, got %q", ev.Node)
+		}
+		if ev.Info == nil {
+			t.Fatal("expected non-nil Info")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("DeathWatch callback did not fire within 1s")
+	}
+}
+
+// TestDeathWatch_CancelDetaches verifies the cancel func detaches the watcher.
+func TestDeathWatch_CancelDetaches(t *testing.T) {
+	remote, versionKey := newDeathWatchTestRemote(t, 50800)
+
+	done := make(chan NodeDeathEvent, 1)
+	cancel := remote.AddDeathWatch(func(ev NodeDeathEvent) {
+		done <- ev
+	})
+	cancel()
+
+	remote.etcdDeleteVersion(versionKey)
+
+	// Give the async dispatch a moment to (not) fire.
+	select {
+	case ev := <-done:
+		t.Fatalf("canceled watcher should not fire, got %v", ev)
+	case <-time.After(100 * time.Millisecond):
+		// expected: no fire
+	}
+}
+
+// TestDeathWatch_MultipleWatchers verifies all registered watchers fire, and a
+// canceled one does not while others still do.
+func TestDeathWatch_MultipleWatchers(t *testing.T) {
+	remote, versionKey := newDeathWatchTestRemote(t, 50900)
+
+	done1 := make(chan NodeDeathEvent, 1)
+	done2 := make(chan NodeDeathEvent, 1)
+	cancel1 := remote.AddDeathWatch(func(ev NodeDeathEvent) { done1 <- ev })
+	defer cancel1()
+	cancel2 := remote.AddDeathWatch(func(ev NodeDeathEvent) { done2 <- ev })
+	cancel2() // detach the second watcher
+
+	remote.etcdDeleteVersion(versionKey)
+
+	// done1 should fire; done2 should not.
+	select {
+	case <-done1:
+	case <-time.After(time.Second):
+		t.Fatal("watcher 1 did not fire")
+	}
+	select {
+	case ev := <-done2:
+		t.Fatalf("canceled watcher 2 should not fire, got %v", ev)
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
