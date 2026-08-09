@@ -450,8 +450,68 @@ func TestWithID_NormalReturn(t *testing.T) {
 			t.Fatalf("WithID returned unexpected: out=%v err=%v", out, e)
 		}
 		if got := atomRefCountFor(t, elem, atom); got != 1 {
-			t.Fatalf("expected refCount 1 after WithID normal return, got %d", got)
+			t.Fatalf("expected refCount 1 after WithID normal return, got %d", atomRefCountFor(t, elem, atom))
 		}
+	})
+}
+
+// TestCosmosSpawnAtom_SucceedsWithDebugOff is a regression test for the M3
+// hot-path optimization (commit 9a6290e). That commit gated construction of
+// IDTrackerInfo behind idTrackerDebug inside CosmosLocal.CosmosSpawnAtom /
+// CosmosGetAtomID to skip the runtime.Caller cost in production. The original
+// implementation passed a nil *IDTrackerInfo when debug was off, which tripped
+// the non-nil guard in ElementLocal.SpawnAtom/GetAtomID
+// ("fromLocalOrRemote requires a tracker") and made every local spawn/get
+// through the Cosmos layer fail silently in production (debug default false).
+//
+// This test exercises the FULL cosmos-layer path (CosmosSpawnAtom then
+// CosmosGetAtomID), not the lower-level ElementLocal.elementAtomSpawn that the
+// other tests in this file use directly, and asserts success with
+// idTrackerDebug == false — the combination that regressed. All existing
+// spawn tests bypassed CosmosSpawnAtom (calling elementAtomSpawn with a
+// non-nil tracker by hand), which is why the regression escaped CI.
+func TestCosmosSpawnAtom_SucceedsWithDebugOff(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		// Production default: debug diagnostics off. This is the exact
+		// combination that regressed under M3.
+		if p.idTrackerDebug {
+			t.Fatalf("test precondition: expected idTrackerDebug=false, got true")
+		}
+
+		const atomName = "cosmos_spawn_debug_off_atom"
+
+		// Spawn through the Cosmos layer — the path generated code
+		// (SpawnForTestAtomosAtom) and all real callers use. Before the fix
+		// this returned ErrFrameworkInternalError ("id tracker is nil").
+		id, tracker, err := p.local.CosmosSpawnAtom(p.local, ForTestAtomosName, atomName, &ForTestSpawnArg{})
+		if err != nil {
+			t.Fatalf("CosmosSpawnAtom failed with debug off: %v", err)
+		}
+		if id == nil {
+			t.Fatal("CosmosSpawnAtom returned nil ID with no error")
+		}
+		if tracker == nil {
+			t.Fatal("CosmosSpawnAtom returned nil tracker — caller cannot Release the reference (leak)")
+		}
+		defer tracker.Release()
+
+		// The same nil-tracker regression also affected CosmosGetAtomID (M3
+		// touched both). Exercise it against the atom just spawned.
+		id2, tracker2, err := p.local.CosmosGetAtomID(ForTestAtomosName, atomName)
+		if err != nil {
+			t.Fatalf("CosmosGetAtomID failed with debug off: %v", err)
+		}
+		if id2 == nil {
+			t.Fatal("CosmosGetAtomID returned nil ID with no error")
+		}
+		if tracker2 == nil {
+			t.Fatal("CosmosGetAtomID returned nil tracker")
+		}
+		tracker2.Release()
 	})
 }
 

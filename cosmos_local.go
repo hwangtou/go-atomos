@@ -157,14 +157,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBase
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	// Only capture caller file:line when debug diagnostics are enabled; in
-	// production the info is unused (addRef fills the debug map only when
-	// idTrackerDebug is on), so skip the runtime.Caller cost on the hot path.
-	var info *IDTrackerInfo
-	if c.process.idTrackerDebug {
-		info = NewIDTrackerInfoFromLocalGoroutine(3)
-	}
-	id, tracker, err = e.GetAtomID(name, info, true)
+	id, tracker, err = e.GetAtomID(name, c.newLocalIDTrackerInfo(), true)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
@@ -176,11 +169,23 @@ func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, ar
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	var info *IDTrackerInfo
+	return e.SpawnAtom(callerID, name, arg, c.newLocalIDTrackerInfo(), true)
+}
+
+// newLocalIDTrackerInfo returns a non-nil IDTrackerInfo for a local spawn/get,
+// satisfying the non-nil contract enforced by ElementLocal.GetAtomID/SpawnAtom
+// (fromLocalOrRemote requires a tracker so addRefAtom can record the reference).
+//
+// The caller's file:line (via runtime.Caller) is captured only when debug
+// diagnostics are enabled; in production a zero-value IDTrackerInfo is returned,
+// avoiding the runtime.Caller + runtime.FuncForPC + string allocation cost on
+// the hot path. addRef (atomos_id_tracker.go) treats a zero-value info the same
+// as a nil one for diagnostic purposes, so no debug data is lost either way.
+func (c *CosmosLocal) newLocalIDTrackerInfo() *IDTrackerInfo {
 	if c.process.idTrackerDebug {
-		info = NewIDTrackerInfoFromLocalGoroutine(3)
+		return NewIDTrackerInfoFromLocalGoroutine(3)
 	}
-	return e.SpawnAtom(callerID, name, arg, info, true)
+	return &IDTrackerInfo{}
 }
 
 func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
