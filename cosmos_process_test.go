@@ -1,6 +1,7 @@
 package atomos
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -123,9 +124,17 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	})
 
 	dialOption := grpc.WithTransportCredentials(insecure.NewCredentials())
-	sourceConn, er := grpc.NewClient(fmt.Sprintf(":%d", tc.targetPort), dialOption)
+	// Tests need a deterministic connection: grpc.NewClient (used in
+	// production since 885846a) is lazy/non-blocking, which makes the first
+	// RPC bear the connect cost and intermittently trips its own timeout on
+	// Windows. DialContext+WithBlock blocks here until the connection is truly
+	// up (or fails fast), so every subsequent RPC in the test starts from a
+	// ready connection. (NewClient remains correct for production.)
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	sourceConn, er := grpc.DialContext(dialCtx, fmt.Sprintf(":%d", tc.targetPort), dialOption, grpc.WithBlock())
+	dialCancel()
 	if er != nil {
-		t.Fatalf("Failed to dial source: %v", er)
+		t.Fatalf("Failed to dial source→target :%d: %v", tc.targetPort, er)
 	}
 	sourceToTarget := tc.sourceProcess.cluster.remoteCosmos[cosmosNodePrefix+"_target"]
 	sourceToTarget.enable = true
@@ -139,15 +148,27 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	sourceToTarget.elements = map[string]*ElementRemoteFromSource{
 		ForTestAtomosName: newElementRemoteFromSource(
 			sourceToTarget,
-			sourceToTarget.remote.info,
+			// Element-level IDInfo (NOT the node-level remote.info): the
+			// ElementRemote carries this info and ElementRemote.SpawnAtom/
+			// GetAtomID read e.remote.info.Element to fill the wire request.
+			// Passing the node-level info (empty Element) made every cosmos-layer
+			// remote spawn/get fail with "Local element not found" on the target.
+			&IDInfo{
+				Type:    IDType_Element,
+				Cosmos:  cosmosName,
+				Node:    cosmosNodePrefix + "_target",
+				Element: ForTestAtomosName,
+			},
 			tc.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
 			""),
 	}
 
 	dialOption = grpc.WithTransportCredentials(insecure.NewCredentials())
-	targetConn, er := grpc.NewClient(fmt.Sprintf(":%d", tc.sourcePort), dialOption)
+	dialCtx2, dialCancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	targetConn, er := grpc.DialContext(dialCtx2, fmt.Sprintf(":%d", tc.sourcePort), dialOption, grpc.WithBlock())
+	dialCancel2()
 	if er != nil {
-		t.Fatalf("Failed to dial target: %v", er)
+		t.Fatalf("Failed to dial target→source :%d: %v", tc.sourcePort, er)
 	}
 	targetToSource := tc.targetProcess.cluster.remoteCosmos[cosmosNodePrefix+"_source"]
 	targetToSource.enable = true
@@ -161,7 +182,13 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	targetToSource.elements = map[string]*ElementRemoteFromSource{
 		ForTestAtomosName: newElementRemoteFromSource(
 			targetToSource,
-			targetToSource.remote.info,
+			// Element-level IDInfo, see source→target block above for rationale.
+			&IDInfo{
+				Type:    IDType_Element,
+				Cosmos:  cosmosName,
+				Node:    cosmosNodePrefix + "_source",
+				Element: ForTestAtomosName,
+			},
 			tc.targetProcess.local.runnable.implements[ForTestAtomosName].Interface,
 			""),
 	}

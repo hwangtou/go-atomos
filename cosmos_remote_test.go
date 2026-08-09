@@ -560,3 +560,93 @@ func TestDeathWatch_MultipleWatchers(t *testing.T) {
 	}
 }
 
+// TestCosmosRemote_CosmosLayerSpawnAndGet covers the cosmos-layer remote path
+// end to end: a caller on the source node spawns/gets an atom on the target
+// node through CosmosRemote.CosmosSpawnAtom / CosmosGetAtomID (the cosmos-level
+// API that generated SpawnXxxAtom/GetXxxAtomID helpers and real apps use),
+// then performs an RPC against the remote ID.
+//
+// Why this test exists: the existing remote tests (InstanceMismatchOnRespawn,
+// InstanceIDZeroRejected) drive the wire via a raw gRPC stub client
+// (NewAtomosRemoteServiceClient), which bypasses CosmosRemote.CosmosSpawnAtom
+// / ElementRemote.SpawnAtom entirely. That left the cosmos-layer remote path —
+// the one M3's IDTrackerInfo change also touches (CosmosRemote passes nil
+// tracker + fromLocalOrRemote=false to ElementRemote) — without any coverage.
+// This test closes that gap and additionally documents the remote IDTracker
+// contract (remote IDs return a nil tracker; Release is a nil-safe no-op).
+//
+// Uses newTestCosmosProcessSimulateCluster (no etcd; hand-wired gRPC between
+// two real CosmosProcess nodes). basePort 36100 is chosen outside Windows'
+// dynamic excluded port ranges (e.g. 50000-50059, 50627-50726) so the test is
+// not environment-flaky like the fixed-:50700 tests on this host.
+func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 36100, "test_cosmos", "rc_node")
+	defer cluster.close()
+
+	// sourceToTarget is the *CosmosRemote the source node uses to reach the
+	// target. It implements CosmosNode, so its CosmosSpawnAtom/CosmosGetAtomID
+	// are exactly what a generated SpawnForTestAtomosAtom(node, ...) would call.
+	sourceToTarget := cluster.sourceProcess.cluster.remoteCosmos["rc_node_target"]
+	if sourceToTarget == nil {
+		t.Fatal("source node has no remoteCosmos entry for target")
+	}
+	caller := cluster.sourceProcess.local // *CosmosLocal satisfies SelfID
+
+	const atomName = "cosmos_layer_remote_atom"
+
+	// 1. CosmosSpawnAtom through the cosmos layer (the path M3 touched).
+	id, tracker, err := sourceToTarget.CosmosSpawnAtom(caller, ForTestAtomosName, atomName, &ForTestSpawnArg{})
+	if err != nil {
+		t.Fatalf("CosmosRemote.CosmosSpawnAtom failed: %v", err)
+	}
+	if id == nil {
+		t.Fatal("CosmosRemote.CosmosSpawnAtom returned nil ID")
+	}
+	// Remote IDs carry NO tracker — this is the documented contract remote IDs
+	// rely on (TestIDTracker_NilReleaseSafety). The spawn path must not regress
+	// to returning a non-nil tracker that callers would then have to Release.
+	if tracker != nil {
+		t.Fatalf("remote spawn should return nil tracker, got non-nil: %v", tracker)
+	}
+
+	// Verify the atom actually materialized on the TARGET node.
+	targetElem, err := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
+	if err != nil {
+		t.Fatalf("getLocalElement on target: %v", err)
+	}
+	targetElem.lock.RLock()
+	_, spawned := targetElem.atoms[atomName]
+	targetElem.lock.RUnlock()
+	if !spawned {
+		t.Fatal("atom was not spawned on the target node")
+	}
+
+	// 2. RPC through the returned remote ID (validates the ID is usable, not
+	//    just a shell). Wrap it as ForTestAtomosAtomID{ID: remoteID} — the
+	//    embedded ID dispatches SyncMessagingByName over gRPC.
+	remoteAtomID := &ForTestAtomosAtomID{ID: id}
+	if out, e := remoteAtomID.Greeting(caller, &ForTestGreetingI{Mode: 1}); e != nil {
+		t.Fatalf("remote Greeting RPC failed: %v", e)
+	} else if out == nil {
+		t.Fatal("remote Greeting returned nil out")
+	}
+
+	// 3. CosmosGetAtomID through the same cosmos layer (M3 touched both).
+	id2, tracker2, err := sourceToTarget.CosmosGetAtomID(ForTestAtomosName, atomName)
+	if err != nil {
+		t.Fatalf("CosmosRemote.CosmosGetAtomID failed: %v", err)
+	}
+	if id2 == nil {
+		t.Fatal("CosmosRemote.CosmosGetAtomID returned nil ID")
+	}
+	if tracker2 != nil {
+		t.Fatalf("remote get should return nil tracker, got non-nil: %v", tracker2)
+	}
+	// The re-resolved ID must carry the same instance_id as the spawn (no
+	// respawn happened), so a call against it also succeeds.
+	remoteAtomID2 := &ForTestAtomosAtomID{ID: id2}
+	if _, e := remoteAtomID2.Greeting(caller, &ForTestGreetingI{Mode: 1}); e != nil {
+		t.Fatalf("remote Greeting RPC via re-resolved ID failed: %v", e)
+	}
+}
+
