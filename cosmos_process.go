@@ -48,6 +48,10 @@ type CosmosProcess struct {
 	// draining is set true by Drain(); the drainWatcher goroutine then waits
 	// for active atoms to reach zero before triggering graceful exit.
 	draining bool
+	// drainCancel, when non-nil, is closed by Stop() to signal drainWatcher to
+	// exit promptly. Without it, drainWatcher keeps polling (and logging) after
+	// the process has stopped, which races with test/teardown logging.
+	drainCancel chan struct{}
 
 	logging *loggingAtomos
 	local   *CosmosLocal
@@ -263,6 +267,12 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
+			// Signal drainWatcher (if running) to exit promptly so its polling
+			// goroutine does not outlive the process and race with teardown.
+			if p.drainCancel != nil {
+				close(p.drainCancel)
+				p.drainCancel = nil
+			}
 			return nil
 		case CosmosProcessStateShutdown:
 			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
@@ -348,6 +358,7 @@ func (p *CosmosProcess) Drain(deadline time.Duration) *Error {
 		return nil
 	}
 	p.draining = true
+	p.drainCancel = make(chan struct{})
 	p.mutex.Unlock()
 
 	if deadline <= 0 {
@@ -382,6 +393,9 @@ func (p *CosmosProcess) drainWatcher(deadline time.Duration) {
 
 	for {
 		select {
+		case <-p.drainCancel:
+			p.local.Log().coreInfo("CosmosProcess: Drain cancelled by Stop(). Exiting drainWatcher.")
+			return
 		case <-ticker.C:
 			active := p.countActiveAtoms()
 			p.local.Log().coreInfo("CosmosProcess: Drain polling. active_atoms=(%d)", active)
@@ -466,6 +480,12 @@ func (p *CosmosProcess) Stop() *Error {
 			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
+			// Signal drainWatcher (if running) to exit promptly so its polling
+			// goroutine does not outlive the process and race with teardown.
+			if p.drainCancel != nil {
+				close(p.drainCancel)
+				p.drainCancel = nil
+			}
 			return nil
 		case CosmosProcessStateShutdown:
 			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
