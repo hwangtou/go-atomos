@@ -34,11 +34,19 @@ message ForTestGreetingI {
 message ForTestGreetingO {}
 
 service ForTestAtomos {
-  // Element-level
-  rpc ElementSpawn (atomos.Nil) returns (ForTestData) {}
-  rpc ElementSayHello (ForTestHelloI) returns (ForTestHelloO) {}
+  // Element-level (using explicit option)
+  rpc ElementSpawn (atomos.Nil) returns (ForTestData) {
+    option (atomos.atomos_method) = AtomosElementSpawn;
+  }
+  rpc ElementSayHello (ForTestHelloI) returns (ForTestHelloO) {
+    option (atomos.atomos_method) = AtomosElementMethod;
+  }
 
-  // Atom-level
-  rpc Spawn (ForTestSpawnArg) returns (ForTestData) {}
-  rpc Greeting (ForTestGreetingI) returns (ForTestGreetingO) {}
+  // Atom-level (using explicit option)
+  rpc Spawn (ForTestSpawnArg) returns (ForTestData) {
+    option (atomos.atomos_method) = AtomosAtomSpawn;
+  }
+  rpc Greeting (ForTestGreetingI) returns (ForTestGreetingO) {
+    option (atomos.atomos_method) = AtomosAtomMethod;
+  }
 }

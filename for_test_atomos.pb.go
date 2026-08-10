@@ -16,7 +16,7 @@ const ForTestAtomosName = "ForTestAtomos"
 
 type ForTestAtomosElement interface {
 	Atomos
-	// Element-level
+	// Element-level (using explicit option)
 	Spawn(self ElementSelfID, data *ForTestData, args ...ArgsForBaseAtomos) *Error
 
 	SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err *Error)
@@ -27,7 +27,7 @@ type ForTestAtomosElement interface {
 type ForTestAtomosAtom interface {
 	Atomos
 
-	// Atom-level
+	// Atom-level (using explicit option)
 	Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, args ...ArgsForBaseAtomos) *Error
 
 	Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err *Error)

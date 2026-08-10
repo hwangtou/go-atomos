@@ -71,6 +71,6 @@
 | O2 | 修复 G2 行 509 错误 TrimPrefix | 低 | 高 |
 | O3 | 删除 G8 死参数 | 低 | 高 |
 | O4 | 中英文注释统一为英文（G6） | 低 | 中 |
-| O5 | 用 proto custom option 替代前缀约定（G3） | 中 | 中 |
+| O5 | 用 proto custom option 替代前缀约定（G3） | ✅ 已完成 | 中 |
 | O6 | 去掉 CODE JUMPER hack（G4） | 中 | 低 |
 | O7 | 精简 Messenger 类型参数（G5） | 高 | 低 |

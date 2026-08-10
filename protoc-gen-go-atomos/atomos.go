@@ -4,7 +4,9 @@ import (
 	"errors"
 	"strings"
 
+	atomos "github.com/hwangtou/go-atomos"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -12,6 +14,52 @@ const (
 	atomosPackage   = protogen.GoImportPath("github.com/hwangtou/go-atomos")
 	protobufPackage = protogen.GoImportPath("google.golang.org/protobuf/proto")
 )
+
+// methodCategory classifies a proto rpc into Element/Atom/spawn.
+type methodCategory int
+
+const (
+	catElementMethod methodCategory = 1
+	catAtomMethod    methodCategory = 2
+	catElementSpawn  methodCategory = 3
+	catAtomSpawn     methodCategory = 4
+)
+
+// categorizeMethod reads the atomos_method custom option first; if absent
+// (AtomosMethodAuto = 0), falls back to the name-prefix convention for
+// backward compatibility.
+func categorizeMethod(method *protogen.Method) methodCategory {
+	opts := method.Desc.Options().(*descriptorpb.MethodOptions)
+	if opts != nil {
+		// Read the extension using the generated E_AtomosMethod descriptor.
+		val := proto.GetExtension(opts, atomos.E_AtomosMethod)
+		if v, ok := val.(atomos.AtomosMethodType); ok && v != atomos.AtomosMethodType_AtomosMethodAuto {
+			switch v {
+			case atomos.AtomosMethodType_AtomosElementMethod:
+				return catElementMethod
+			case atomos.AtomosMethodType_AtomosAtomMethod:
+				return catAtomMethod
+			case atomos.AtomosMethodType_AtomosElementSpawn:
+				return catElementSpawn
+			case atomos.AtomosMethodType_AtomosAtomSpawn:
+				return catAtomSpawn
+			}
+		}
+	}
+
+	// Fallback: name-prefix convention (backward compatible).
+	name := method.GoName
+	if name == "ElementSpawn" {
+		return catElementSpawn
+	}
+	if name == "Spawn" {
+		return catAtomSpawn
+	}
+	if strings.HasPrefix(name, "Element") && name != "Element" {
+		return catElementMethod
+	}
+	return catAtomMethod
+}
 
 // generateFile generates a _grpc.pb.go file containing gRPC service definitions.
 func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
@@ -395,68 +443,61 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 
 const deprecationComment = "// Deprecated: Do not use."
 
-// elementMethods returns the Element-level methods of a service, excluding
-// Spawn and empty names. This centralizes the filtering logic that was
-// previously duplicated across 6 call sites with subtly different (and
-// sometimes contradictory) conditions.
+// elementMethods returns the Element-level methods (excluding spawn).
 func elementMethods(service *protogen.Service) []*protogen.Method {
 	var out []*protogen.Method
 	for _, m := range service.Methods {
-		name := m.GoName
-		if !strings.HasPrefix(name, "Element") {
-			continue
+		if categorizeMethod(m) == catElementMethod {
+			out = append(out, m)
 		}
-		if name == "Element" || name == "ElementSpawn" {
-			continue
-		}
-		if strings.TrimPrefix(name, "Element") == "" {
-			continue
-		}
-		out = append(out, m)
 	}
 	return out
 }
 
-// atomMethods returns the Atom-level methods of a service, excluding Element-*
-// methods, Spawn, and empty names.
+// atomMethods returns the Atom-level methods (excluding spawn).
 func atomMethods(service *protogen.Service) []*protogen.Method {
 	var out []*protogen.Method
 	for _, m := range service.Methods {
-		name := m.GoName
-		if strings.HasPrefix(name, "Element") {
-			continue
+		if categorizeMethod(m) == catAtomMethod {
+			out = append(out, m)
 		}
-		if name == "Spawn" || name == "" {
-			continue
-		}
-		out = append(out, m)
 	}
 	return out
 }
 
-// elementSpawnMethod returns the ElementSpawn method if present, nil otherwise.
+// elementSpawnMethod returns the Element spawn method if present, nil otherwise.
 func elementSpawnMethod(service *protogen.Service) *protogen.Method {
 	for _, m := range service.Methods {
-		if m.GoName == "ElementSpawn" {
+		if categorizeMethod(m) == catElementSpawn {
 			return m
 		}
 	}
 	return nil
 }
 
-// atomSpawnMethod returns the Atom Spawn method if present, nil otherwise.
+// atomSpawnMethod returns the Atom spawn method if present, nil otherwise.
 func atomSpawnMethod(service *protogen.Service) *protogen.Method {
 	for _, m := range service.Methods {
-		if m.GoName == "Spawn" {
+		if categorizeMethod(m) == catAtomSpawn {
 			return m
 		}
 	}
 	return nil
 }
 
-// elementMethodName strips the "Element" prefix from a method name.
+// elementMethodName returns the generated method name for an Element method.
+// When using the name-prefix convention (ElementSayHello), the "Element" prefix
+// is stripped. When using explicit option, the method name is used as-is.
 func elementMethodName(m *protogen.Method) string {
-	return strings.TrimPrefix(m.GoName, "Element")
+	cat := categorizeMethod(m)
+	if cat == catElementMethod {
+		// Check if the method uses the prefix convention (Auto fallback with
+		// "Element" prefix) vs explicit option.
+		if strings.HasPrefix(m.GoName, "Element") && m.GoName != "Element" {
+			return strings.TrimPrefix(m.GoName, "Element")
+		}
+	}
+	return m.GoName
 }
 
 // writeMethodComment emits the leading comment of a method (if any).

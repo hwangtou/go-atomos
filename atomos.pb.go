@@ -9,6 +9,7 @@ package atomos
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
@@ -197,6 +198,66 @@ func (x ClusterNodeState) Number() protoreflect.EnumNumber {
 // Deprecated: Use ClusterNodeState.Descriptor instead.
 func (ClusterNodeState) EnumDescriptor() ([]byte, []int) {
 	return file_atomos_proto_rawDescGZIP(), []int{2}
+}
+
+type AtomosMethodType int32
+
+const (
+	// Auto: determine by name prefix (backward compatible). This is the default.
+	AtomosMethodType_AtomosMethodAuto AtomosMethodType = 0
+	// Element-level method (runs on the singleton Element instance).
+	AtomosMethodType_AtomosElementMethod AtomosMethodType = 1
+	// Atom-level method (runs on a named Atom instance).
+	AtomosMethodType_AtomosAtomMethod AtomosMethodType = 2
+	// Element spawn (the ElementSpawn rpc).
+	AtomosMethodType_AtomosElementSpawn AtomosMethodType = 3
+	// Atom spawn (the Spawn rpc).
+	AtomosMethodType_AtomosAtomSpawn AtomosMethodType = 4
+)
+
+// Enum value maps for AtomosMethodType.
+var (
+	AtomosMethodType_name = map[int32]string{
+		0: "AtomosMethodAuto",
+		1: "AtomosElementMethod",
+		2: "AtomosAtomMethod",
+		3: "AtomosElementSpawn",
+		4: "AtomosAtomSpawn",
+	}
+	AtomosMethodType_value = map[string]int32{
+		"AtomosMethodAuto":    0,
+		"AtomosElementMethod": 1,
+		"AtomosAtomMethod":    2,
+		"AtomosElementSpawn":  3,
+		"AtomosAtomSpawn":     4,
+	}
+)
+
+func (x AtomosMethodType) Enum() *AtomosMethodType {
+	p := new(AtomosMethodType)
+	*p = x
+	return p
+}
+
+func (x AtomosMethodType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AtomosMethodType) Descriptor() protoreflect.EnumDescriptor {
+	return file_atomos_proto_enumTypes[3].Descriptor()
+}
+
+func (AtomosMethodType) Type() protoreflect.EnumType {
+	return &file_atomos_proto_enumTypes[3]
+}
+
+func (x AtomosMethodType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AtomosMethodType.Descriptor instead.
+func (AtomosMethodType) EnumDescriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{3}
 }
 
 type IDInfo struct {
@@ -3307,11 +3368,28 @@ func (x *CosmosArgs) GetBaseAtomosWaitKilled() bool {
 	return false
 }
 
+var file_atomos_proto_extTypes = []protoimpl.ExtensionInfo{
+	{
+		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
+		ExtensionType: (*AtomosMethodType)(nil),
+		Field:         50001,
+		Name:          "atomos.atomos_method",
+		Tag:           "varint,50001,opt,name=atomos_method,enum=atomos.AtomosMethodType",
+		Filename:      "atomos.proto",
+	},
+}
+
+// Extension fields to descriptorpb.MethodOptions.
+var (
+	// optional atomos.AtomosMethodType atomos_method = 50001;
+	E_AtomosMethod = &file_atomos_proto_extTypes[0]
+)
+
 var File_atomos_proto protoreflect.FileDescriptor
 
 const file_atomos_proto_rawDesc = "" +
 	"\n" +
-	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc1\x01\n" +
+	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/descriptor.proto\"\xc1\x01\n" +
 	"\x06IDInfo\x12\"\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x0e.atomos.IDTypeR\x04type\x12\x16\n" +
 	"\x06cosmos\x18\x02 \x01(\tR\x06cosmos\x12\x12\n" +
@@ -3548,7 +3626,13 @@ const file_atomos_proto_rawDesc = "" +
 	"\aStarted\x10\x02\x12\f\n" +
 	"\bDraining\x10\x03\x12\f\n" +
 	"\bStopping\x10\x04\x12\v\n" +
-	"\aStopped\x10\x052\x92\t\n" +
+	"\aStopped\x10\x05*\x84\x01\n" +
+	"\x10AtomosMethodType\x12\x14\n" +
+	"\x10AtomosMethodAuto\x10\x00\x12\x17\n" +
+	"\x13AtomosElementMethod\x10\x01\x12\x14\n" +
+	"\x10AtomosAtomMethod\x10\x02\x12\x16\n" +
+	"\x12AtomosElementSpawn\x10\x03\x12\x13\n" +
+	"\x0fAtomosAtomSpawn\x10\x042\x92\t\n" +
 	"\x13AtomosRemoteService\x12T\n" +
 	"\n" +
 	"TryKilling\x12!.atomos.CosmosRemoteTryKillingReq\x1a!.atomos.CosmosRemoteTryKillingRsp\"\x00\x12Q\n" +
@@ -3563,7 +3647,8 @@ const file_atomos_proto_rawDesc = "" +
 	"\x14AsyncMessagingByName\x12+.atomos.CosmosRemoteAsyncMessagingByNameReq\x1a+.atomos.CosmosRemoteAsyncMessagingByNameRsp\"\x00\x12x\n" +
 	"\x16AsyncOnMessageCallback\x12-.atomos.CosmosRemoteAsyncOnMessageCallbackReq\x1a-.atomos.CosmosRemoteAsyncOnMessageCallbackRsp\"\x00\x12N\n" +
 	"\bKillAtom\x12\x1f.atomos.CosmosRemoteKillAtomReq\x1a\x1f.atomos.CosmosRemoteKillAtomRsp\"\x00\x12f\n" +
-	"\x10ElementBroadcast\x12'.atomos.CosmosRemoteElementBroadcastReq\x1a'.atomos.CosmosRemoteElementBroadcastRsp\"\x00B&Z$github.com/hwangtou/go-atomos;atomosb\x06proto3"
+	"\x10ElementBroadcast\x12'.atomos.CosmosRemoteElementBroadcastReq\x1a'.atomos.CosmosRemoteElementBroadcastRsp\"\x00:b\n" +
+	"\ratomos_method\x12\x1e.google.protobuf.MethodOptions\x18ц\x03 \x01(\x0e2\x18.atomos.AtomosMethodTypeR\fatomosMethod\x88\x01\x01B&Z$github.com/hwangtou/go-atomos;atomosb\x06proto3"
 
 var (
 	file_atomos_proto_rawDescOnce sync.Once
@@ -3577,156 +3662,160 @@ func file_atomos_proto_rawDescGZIP() []byte {
 	return file_atomos_proto_rawDescData
 }
 
-var file_atomos_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_atomos_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_atomos_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_atomos_proto_goTypes = []any{
 	(IDType)(0),                                   // 0: atomos.IDType
 	(LogLevel)(0),                                 // 1: atomos.LogLevel
 	(ClusterNodeState)(0),                         // 2: atomos.ClusterNodeState
-	(*IDInfo)(nil),                                // 3: atomos.IDInfo
-	(*LogMail)(nil),                               // 4: atomos.LogMail
-	(*Error)(nil),                                 // 5: atomos.Error
-	(*ErrorCallerInfo)(nil),                       // 6: atomos.ErrorCallerInfo
-	(*Nil)(nil),                                   // 7: atomos.Nil
-	(*Bool)(nil),                                  // 8: atomos.Bool
-	(*Int32)(nil),                                 // 9: atomos.Int32
-	(*Int32S)(nil),                                // 10: atomos.Int32s
-	(*Int64)(nil),                                 // 11: atomos.Int64
-	(*Int64S)(nil),                                // 12: atomos.Int64s
-	(*UInt32)(nil),                                // 13: atomos.UInt32
-	(*UInt32S)(nil),                               // 14: atomos.UInt32s
-	(*UInt64)(nil),                                // 15: atomos.UInt64
-	(*UInt64S)(nil),                               // 16: atomos.UInt64s
-	(*Float32)(nil),                               // 17: atomos.Float32
-	(*Float32S)(nil),                              // 18: atomos.Float32s
-	(*Float64)(nil),                               // 19: atomos.Float64
-	(*Float64S)(nil),                              // 20: atomos.Float64s
-	(*String)(nil),                                // 21: atomos.String
-	(*Strings)(nil),                               // 22: atomos.Strings
-	(*Bytes)(nil),                                 // 23: atomos.Bytes
-	(*Config)(nil),                                // 24: atomos.Config
-	(*CosmosClusterConfig)(nil),                   // 25: atomos.CosmosClusterConfig
-	(*CertConfig)(nil),                            // 26: atomos.CertConfig
-	(*ElementConfig)(nil),                         // 27: atomos.ElementConfig
-	(*AtomMessageConfig)(nil),                     // 28: atomos.AtomMessageConfig
-	(*IDTrackerInfo)(nil),                         // 29: atomos.IDTrackerInfo
-	(*ElementBroadcastI)(nil),                     // 30: atomos.ElementBroadcastI
-	(*ElementBroadcastO)(nil),                     // 31: atomos.ElementBroadcastO
-	(*CosmosNodeVersionInfo)(nil),                 // 32: atomos.CosmosNodeVersionInfo
-	(*CosmosNodeVersionLock)(nil),                 // 33: atomos.CosmosNodeVersionLock
-	(*CosmosRemoteTryKillingReq)(nil),             // 34: atomos.CosmosRemoteTryKillingReq
-	(*CosmosRemoteTryKillingRsp)(nil),             // 35: atomos.CosmosRemoteTryKillingRsp
-	(*CosmosRemoteDrainNodeReq)(nil),              // 36: atomos.CosmosRemoteDrainNodeReq
-	(*CosmosRemoteDrainNodeRsp)(nil),              // 37: atomos.CosmosRemoteDrainNodeRsp
-	(*CosmosRemoteGetAtomIDReq)(nil),              // 38: atomos.CosmosRemoteGetAtomIDReq
-	(*CosmosRemoteGetAtomIDRsp)(nil),              // 39: atomos.CosmosRemoteGetAtomIDRsp
-	(*CosmosRemoteGetIDStateReq)(nil),             // 40: atomos.CosmosRemoteGetIDStateReq
-	(*CosmosRemoteGetIDStateRsp)(nil),             // 41: atomos.CosmosRemoteGetIDStateRsp
-	(*CosmosRemoteGetIDIdleTimeReq)(nil),          // 42: atomos.CosmosRemoteGetIDIdleTimeReq
-	(*CosmosRemoteGetIDIdleTimeRsp)(nil),          // 43: atomos.CosmosRemoteGetIDIdleTimeRsp
-	(*CosmosRemoteGetElementInfoReq)(nil),         // 44: atomos.CosmosRemoteGetElementInfoReq
-	(*CosmosRemoteGetElementInfoRsp)(nil),         // 45: atomos.CosmosRemoteGetElementInfoRsp
-	(*CosmosRemoteSpawnAtomReq)(nil),              // 46: atomos.CosmosRemoteSpawnAtomReq
-	(*CosmosRemoteSpawnAtomRsp)(nil),              // 47: atomos.CosmosRemoteSpawnAtomRsp
-	(*CosmosRemoteSyncMessagingByNameReq)(nil),    // 48: atomos.CosmosRemoteSyncMessagingByNameReq
-	(*CosmosRemoteSyncMessagingByNameRsp)(nil),    // 49: atomos.CosmosRemoteSyncMessagingByNameRsp
-	(*CosmosRemoteAsyncMessagingByNameReq)(nil),   // 50: atomos.CosmosRemoteAsyncMessagingByNameReq
-	(*CosmosRemoteAsyncMessagingByNameRsp)(nil),   // 51: atomos.CosmosRemoteAsyncMessagingByNameRsp
-	(*CosmosRemoteAsyncOnMessageCallbackReq)(nil), // 52: atomos.CosmosRemoteAsyncOnMessageCallbackReq
-	(*CosmosRemoteAsyncOnMessageCallbackRsp)(nil), // 53: atomos.CosmosRemoteAsyncOnMessageCallbackRsp
-	(*CosmosRemoteKillAtomReq)(nil),               // 54: atomos.CosmosRemoteKillAtomReq
-	(*CosmosRemoteKillAtomRsp)(nil),               // 55: atomos.CosmosRemoteKillAtomRsp
-	(*CosmosRemoteElementBroadcastReq)(nil),       // 56: atomos.CosmosRemoteElementBroadcastReq
-	(*CosmosRemoteElementBroadcastRsp)(nil),       // 57: atomos.CosmosRemoteElementBroadcastRsp
-	(*CosmosArgs)(nil),                            // 58: atomos.CosmosArgs
-	nil,                                           // 59: atomos.Config.CustomizeEntry
-	nil,                                           // 60: atomos.ElementConfig.MessagesEntry
-	nil,                                           // 61: atomos.CosmosNodeVersionInfo.ElementsEntry
-	(*timestamppb.Timestamp)(nil),                 // 62: google.protobuf.Timestamp
-	(*anypb.Any)(nil),                             // 63: google.protobuf.Any
+	(AtomosMethodType)(0),                         // 3: atomos.AtomosMethodType
+	(*IDInfo)(nil),                                // 4: atomos.IDInfo
+	(*LogMail)(nil),                               // 5: atomos.LogMail
+	(*Error)(nil),                                 // 6: atomos.Error
+	(*ErrorCallerInfo)(nil),                       // 7: atomos.ErrorCallerInfo
+	(*Nil)(nil),                                   // 8: atomos.Nil
+	(*Bool)(nil),                                  // 9: atomos.Bool
+	(*Int32)(nil),                                 // 10: atomos.Int32
+	(*Int32S)(nil),                                // 11: atomos.Int32s
+	(*Int64)(nil),                                 // 12: atomos.Int64
+	(*Int64S)(nil),                                // 13: atomos.Int64s
+	(*UInt32)(nil),                                // 14: atomos.UInt32
+	(*UInt32S)(nil),                               // 15: atomos.UInt32s
+	(*UInt64)(nil),                                // 16: atomos.UInt64
+	(*UInt64S)(nil),                               // 17: atomos.UInt64s
+	(*Float32)(nil),                               // 18: atomos.Float32
+	(*Float32S)(nil),                              // 19: atomos.Float32s
+	(*Float64)(nil),                               // 20: atomos.Float64
+	(*Float64S)(nil),                              // 21: atomos.Float64s
+	(*String)(nil),                                // 22: atomos.String
+	(*Strings)(nil),                               // 23: atomos.Strings
+	(*Bytes)(nil),                                 // 24: atomos.Bytes
+	(*Config)(nil),                                // 25: atomos.Config
+	(*CosmosClusterConfig)(nil),                   // 26: atomos.CosmosClusterConfig
+	(*CertConfig)(nil),                            // 27: atomos.CertConfig
+	(*ElementConfig)(nil),                         // 28: atomos.ElementConfig
+	(*AtomMessageConfig)(nil),                     // 29: atomos.AtomMessageConfig
+	(*IDTrackerInfo)(nil),                         // 30: atomos.IDTrackerInfo
+	(*ElementBroadcastI)(nil),                     // 31: atomos.ElementBroadcastI
+	(*ElementBroadcastO)(nil),                     // 32: atomos.ElementBroadcastO
+	(*CosmosNodeVersionInfo)(nil),                 // 33: atomos.CosmosNodeVersionInfo
+	(*CosmosNodeVersionLock)(nil),                 // 34: atomos.CosmosNodeVersionLock
+	(*CosmosRemoteTryKillingReq)(nil),             // 35: atomos.CosmosRemoteTryKillingReq
+	(*CosmosRemoteTryKillingRsp)(nil),             // 36: atomos.CosmosRemoteTryKillingRsp
+	(*CosmosRemoteDrainNodeReq)(nil),              // 37: atomos.CosmosRemoteDrainNodeReq
+	(*CosmosRemoteDrainNodeRsp)(nil),              // 38: atomos.CosmosRemoteDrainNodeRsp
+	(*CosmosRemoteGetAtomIDReq)(nil),              // 39: atomos.CosmosRemoteGetAtomIDReq
+	(*CosmosRemoteGetAtomIDRsp)(nil),              // 40: atomos.CosmosRemoteGetAtomIDRsp
+	(*CosmosRemoteGetIDStateReq)(nil),             // 41: atomos.CosmosRemoteGetIDStateReq
+	(*CosmosRemoteGetIDStateRsp)(nil),             // 42: atomos.CosmosRemoteGetIDStateRsp
+	(*CosmosRemoteGetIDIdleTimeReq)(nil),          // 43: atomos.CosmosRemoteGetIDIdleTimeReq
+	(*CosmosRemoteGetIDIdleTimeRsp)(nil),          // 44: atomos.CosmosRemoteGetIDIdleTimeRsp
+	(*CosmosRemoteGetElementInfoReq)(nil),         // 45: atomos.CosmosRemoteGetElementInfoReq
+	(*CosmosRemoteGetElementInfoRsp)(nil),         // 46: atomos.CosmosRemoteGetElementInfoRsp
+	(*CosmosRemoteSpawnAtomReq)(nil),              // 47: atomos.CosmosRemoteSpawnAtomReq
+	(*CosmosRemoteSpawnAtomRsp)(nil),              // 48: atomos.CosmosRemoteSpawnAtomRsp
+	(*CosmosRemoteSyncMessagingByNameReq)(nil),    // 49: atomos.CosmosRemoteSyncMessagingByNameReq
+	(*CosmosRemoteSyncMessagingByNameRsp)(nil),    // 50: atomos.CosmosRemoteSyncMessagingByNameRsp
+	(*CosmosRemoteAsyncMessagingByNameReq)(nil),   // 51: atomos.CosmosRemoteAsyncMessagingByNameReq
+	(*CosmosRemoteAsyncMessagingByNameRsp)(nil),   // 52: atomos.CosmosRemoteAsyncMessagingByNameRsp
+	(*CosmosRemoteAsyncOnMessageCallbackReq)(nil), // 53: atomos.CosmosRemoteAsyncOnMessageCallbackReq
+	(*CosmosRemoteAsyncOnMessageCallbackRsp)(nil), // 54: atomos.CosmosRemoteAsyncOnMessageCallbackRsp
+	(*CosmosRemoteKillAtomReq)(nil),               // 55: atomos.CosmosRemoteKillAtomReq
+	(*CosmosRemoteKillAtomRsp)(nil),               // 56: atomos.CosmosRemoteKillAtomRsp
+	(*CosmosRemoteElementBroadcastReq)(nil),       // 57: atomos.CosmosRemoteElementBroadcastReq
+	(*CosmosRemoteElementBroadcastRsp)(nil),       // 58: atomos.CosmosRemoteElementBroadcastRsp
+	(*CosmosArgs)(nil),                            // 59: atomos.CosmosArgs
+	nil,                                           // 60: atomos.Config.CustomizeEntry
+	nil,                                           // 61: atomos.ElementConfig.MessagesEntry
+	nil,                                           // 62: atomos.CosmosNodeVersionInfo.ElementsEntry
+	(*timestamppb.Timestamp)(nil),                 // 63: google.protobuf.Timestamp
+	(*anypb.Any)(nil),                             // 64: google.protobuf.Any
+	(*descriptorpb.MethodOptions)(nil),            // 65: google.protobuf.MethodOptions
 }
 var file_atomos_proto_depIdxs = []int32{
 	0,  // 0: atomos.IDInfo.type:type_name -> atomos.IDType
-	3,  // 1: atomos.LogMail.id:type_name -> atomos.IDInfo
-	62, // 2: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
+	4,  // 1: atomos.LogMail.id:type_name -> atomos.IDInfo
+	63, // 2: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
 	1,  // 3: atomos.LogMail.level:type_name -> atomos.LogLevel
-	6,  // 4: atomos.Error.call_stacks:type_name -> atomos.ErrorCallerInfo
-	3,  // 5: atomos.ErrorCallerInfo.id:type_name -> atomos.IDInfo
+	7,  // 4: atomos.Error.call_stacks:type_name -> atomos.ErrorCallerInfo
+	4,  // 5: atomos.ErrorCallerInfo.id:type_name -> atomos.IDInfo
 	1,  // 6: atomos.Config.log_level:type_name -> atomos.LogLevel
-	25, // 7: atomos.Config.enable_cluster:type_name -> atomos.CosmosClusterConfig
-	59, // 8: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
-	26, // 9: atomos.CosmosClusterConfig.enable_cert:type_name -> atomos.CertConfig
-	60, // 10: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
-	63, // 11: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
-	63, // 12: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
-	3,  // 13: atomos.CosmosNodeVersionInfo.id:type_name -> atomos.IDInfo
+	26, // 7: atomos.Config.enable_cluster:type_name -> atomos.CosmosClusterConfig
+	60, // 8: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
+	27, // 9: atomos.CosmosClusterConfig.enable_cert:type_name -> atomos.CertConfig
+	61, // 10: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
+	64, // 11: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
+	64, // 12: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
+	4,  // 13: atomos.CosmosNodeVersionInfo.id:type_name -> atomos.IDInfo
 	2,  // 14: atomos.CosmosNodeVersionInfo.state:type_name -> atomos.ClusterNodeState
-	61, // 15: atomos.CosmosNodeVersionInfo.elements:type_name -> atomos.CosmosNodeVersionInfo.ElementsEntry
-	5,  // 16: atomos.CosmosRemoteTryKillingRsp.error:type_name -> atomos.Error
-	5,  // 17: atomos.CosmosRemoteDrainNodeRsp.error:type_name -> atomos.Error
-	3,  // 18: atomos.CosmosRemoteGetAtomIDRsp.id:type_name -> atomos.IDInfo
-	5,  // 19: atomos.CosmosRemoteGetAtomIDRsp.error:type_name -> atomos.Error
-	3,  // 20: atomos.CosmosRemoteGetIDStateReq.id:type_name -> atomos.IDInfo
-	5,  // 21: atomos.CosmosRemoteGetIDStateRsp.error:type_name -> atomos.Error
-	3,  // 22: atomos.CosmosRemoteGetIDIdleTimeReq.id:type_name -> atomos.IDInfo
-	5,  // 23: atomos.CosmosRemoteGetIDIdleTimeRsp.error:type_name -> atomos.Error
-	3,  // 24: atomos.CosmosRemoteSpawnAtomReq.caller_id:type_name -> atomos.IDInfo
-	63, // 25: atomos.CosmosRemoteSpawnAtomReq.args:type_name -> google.protobuf.Any
-	58, // 26: atomos.CosmosRemoteSpawnAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
-	3,  // 27: atomos.CosmosRemoteSpawnAtomRsp.id:type_name -> atomos.IDInfo
-	5,  // 28: atomos.CosmosRemoteSpawnAtomRsp.error:type_name -> atomos.Error
-	3,  // 29: atomos.CosmosRemoteSyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
-	3,  // 30: atomos.CosmosRemoteSyncMessagingByNameReq.to:type_name -> atomos.IDInfo
-	58, // 31: atomos.CosmosRemoteSyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
-	63, // 32: atomos.CosmosRemoteSyncMessagingByNameReq.args:type_name -> google.protobuf.Any
-	63, // 33: atomos.CosmosRemoteSyncMessagingByNameRsp.reply:type_name -> google.protobuf.Any
-	5,  // 34: atomos.CosmosRemoteSyncMessagingByNameRsp.error:type_name -> atomos.Error
-	3,  // 35: atomos.CosmosRemoteAsyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
-	3,  // 36: atomos.CosmosRemoteAsyncMessagingByNameReq.to_id:type_name -> atomos.IDInfo
-	58, // 37: atomos.CosmosRemoteAsyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
-	63, // 38: atomos.CosmosRemoteAsyncMessagingByNameReq.args:type_name -> google.protobuf.Any
-	5,  // 39: atomos.CosmosRemoteAsyncMessagingByNameRsp.error:type_name -> atomos.Error
-	3,  // 40: atomos.CosmosRemoteAsyncOnMessageCallbackReq.to_id:type_name -> atomos.IDInfo
-	3,  // 41: atomos.CosmosRemoteAsyncOnMessageCallbackReq.callback_id:type_name -> atomos.IDInfo
-	63, // 42: atomos.CosmosRemoteAsyncOnMessageCallbackReq.args:type_name -> google.protobuf.Any
-	5,  // 43: atomos.CosmosRemoteAsyncOnMessageCallbackReq.error:type_name -> atomos.Error
-	5,  // 44: atomos.CosmosRemoteAsyncOnMessageCallbackRsp.error:type_name -> atomos.Error
-	3,  // 45: atomos.CosmosRemoteKillAtomReq.caller_id:type_name -> atomos.IDInfo
-	3,  // 46: atomos.CosmosRemoteKillAtomReq.id:type_name -> atomos.IDInfo
-	58, // 47: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
-	5,  // 48: atomos.CosmosRemoteKillAtomRsp.error:type_name -> atomos.Error
-	3,  // 49: atomos.CosmosRemoteElementBroadcastReq.caller_id:type_name -> atomos.IDInfo
-	5,  // 50: atomos.CosmosRemoteElementBroadcastRsp.error:type_name -> atomos.Error
-	28, // 51: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
-	3,  // 52: atomos.CosmosNodeVersionInfo.ElementsEntry.value:type_name -> atomos.IDInfo
-	34, // 53: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
-	36, // 54: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
-	38, // 55: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
-	40, // 56: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
-	42, // 57: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
-	44, // 58: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
-	46, // 59: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
-	48, // 60: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
-	50, // 61: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
-	52, // 62: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
-	54, // 63: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
-	56, // 64: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
-	35, // 65: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
-	37, // 66: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
-	39, // 67: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
-	41, // 68: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
-	43, // 69: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
-	45, // 70: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
-	47, // 71: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
-	49, // 72: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
-	51, // 73: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
-	53, // 74: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
-	55, // 75: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
-	57, // 76: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
-	65, // [65:77] is the sub-list for method output_type
-	53, // [53:65] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
+	62, // 15: atomos.CosmosNodeVersionInfo.elements:type_name -> atomos.CosmosNodeVersionInfo.ElementsEntry
+	6,  // 16: atomos.CosmosRemoteTryKillingRsp.error:type_name -> atomos.Error
+	6,  // 17: atomos.CosmosRemoteDrainNodeRsp.error:type_name -> atomos.Error
+	4,  // 18: atomos.CosmosRemoteGetAtomIDRsp.id:type_name -> atomos.IDInfo
+	6,  // 19: atomos.CosmosRemoteGetAtomIDRsp.error:type_name -> atomos.Error
+	4,  // 20: atomos.CosmosRemoteGetIDStateReq.id:type_name -> atomos.IDInfo
+	6,  // 21: atomos.CosmosRemoteGetIDStateRsp.error:type_name -> atomos.Error
+	4,  // 22: atomos.CosmosRemoteGetIDIdleTimeReq.id:type_name -> atomos.IDInfo
+	6,  // 23: atomos.CosmosRemoteGetIDIdleTimeRsp.error:type_name -> atomos.Error
+	4,  // 24: atomos.CosmosRemoteSpawnAtomReq.caller_id:type_name -> atomos.IDInfo
+	64, // 25: atomos.CosmosRemoteSpawnAtomReq.args:type_name -> google.protobuf.Any
+	59, // 26: atomos.CosmosRemoteSpawnAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	4,  // 27: atomos.CosmosRemoteSpawnAtomRsp.id:type_name -> atomos.IDInfo
+	6,  // 28: atomos.CosmosRemoteSpawnAtomRsp.error:type_name -> atomos.Error
+	4,  // 29: atomos.CosmosRemoteSyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
+	4,  // 30: atomos.CosmosRemoteSyncMessagingByNameReq.to:type_name -> atomos.IDInfo
+	59, // 31: atomos.CosmosRemoteSyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
+	64, // 32: atomos.CosmosRemoteSyncMessagingByNameReq.args:type_name -> google.protobuf.Any
+	64, // 33: atomos.CosmosRemoteSyncMessagingByNameRsp.reply:type_name -> google.protobuf.Any
+	6,  // 34: atomos.CosmosRemoteSyncMessagingByNameRsp.error:type_name -> atomos.Error
+	4,  // 35: atomos.CosmosRemoteAsyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
+	4,  // 36: atomos.CosmosRemoteAsyncMessagingByNameReq.to_id:type_name -> atomos.IDInfo
+	59, // 37: atomos.CosmosRemoteAsyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
+	64, // 38: atomos.CosmosRemoteAsyncMessagingByNameReq.args:type_name -> google.protobuf.Any
+	6,  // 39: atomos.CosmosRemoteAsyncMessagingByNameRsp.error:type_name -> atomos.Error
+	4,  // 40: atomos.CosmosRemoteAsyncOnMessageCallbackReq.to_id:type_name -> atomos.IDInfo
+	4,  // 41: atomos.CosmosRemoteAsyncOnMessageCallbackReq.callback_id:type_name -> atomos.IDInfo
+	64, // 42: atomos.CosmosRemoteAsyncOnMessageCallbackReq.args:type_name -> google.protobuf.Any
+	6,  // 43: atomos.CosmosRemoteAsyncOnMessageCallbackReq.error:type_name -> atomos.Error
+	6,  // 44: atomos.CosmosRemoteAsyncOnMessageCallbackRsp.error:type_name -> atomos.Error
+	4,  // 45: atomos.CosmosRemoteKillAtomReq.caller_id:type_name -> atomos.IDInfo
+	4,  // 46: atomos.CosmosRemoteKillAtomReq.id:type_name -> atomos.IDInfo
+	59, // 47: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	6,  // 48: atomos.CosmosRemoteKillAtomRsp.error:type_name -> atomos.Error
+	4,  // 49: atomos.CosmosRemoteElementBroadcastReq.caller_id:type_name -> atomos.IDInfo
+	6,  // 50: atomos.CosmosRemoteElementBroadcastRsp.error:type_name -> atomos.Error
+	29, // 51: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
+	4,  // 52: atomos.CosmosNodeVersionInfo.ElementsEntry.value:type_name -> atomos.IDInfo
+	65, // 53: atomos.atomos_method:extendee -> google.protobuf.MethodOptions
+	3,  // 54: atomos.atomos_method:type_name -> atomos.AtomosMethodType
+	35, // 55: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
+	37, // 56: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
+	39, // 57: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
+	41, // 58: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
+	43, // 59: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
+	45, // 60: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
+	47, // 61: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
+	49, // 62: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
+	51, // 63: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
+	53, // 64: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
+	55, // 65: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
+	57, // 66: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
+	36, // 67: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
+	38, // 68: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
+	40, // 69: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
+	42, // 70: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
+	44, // 71: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
+	46, // 72: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
+	48, // 73: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
+	50, // 74: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
+	52, // 75: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
+	54, // 76: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
+	56, // 77: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
+	58, // 78: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
+	67, // [67:79] is the sub-list for method output_type
+	55, // [55:67] is the sub-list for method input_type
+	54, // [54:55] is the sub-list for extension type_name
+	53, // [53:54] is the sub-list for extension extendee
 	0,  // [0:53] is the sub-list for field type_name
 }
 
@@ -3740,15 +3829,16 @@ func file_atomos_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atomos_proto_rawDesc), len(file_atomos_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   59,
-			NumExtensions: 0,
+			NumExtensions: 1,
 			NumServices:   1,
 		},
 		GoTypes:           file_atomos_proto_goTypes,
 		DependencyIndexes: file_atomos_proto_depIdxs,
 		EnumInfos:         file_atomos_proto_enumTypes,
 		MessageInfos:      file_atomos_proto_msgTypes,
+		ExtensionInfos:    file_atomos_proto_extTypes,
 	}.Build()
 	File_atomos_proto = out.File
 	file_atomos_proto_goTypes = nil
