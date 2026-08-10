@@ -1,5 +1,5 @@
-// Command atomos-vet-deferrelease is a go vet analyzer that flags ID-returning
-// factory calls whose result is assigned to a variable but not released via
+// Package deferrelease is a go vet analyzer that flags ID-returning factory
+// calls whose result is assigned to a variable but not released via
 // `defer <id>.Release()`, WithID, or WithRebind in the same function — a likely
 // IDTracker leak.
 //
@@ -7,18 +7,13 @@
 // *IDTracker (Atom IDs), and excludes Element IDs (nil tracker). Only non-test
 // files are checked: tests deliberately use bare non-deferred Release for
 // scoping.
-//
-// Run via:
-//
-//	go vet -vettool=$(which atomos-vet-deferrelease) ./...
-package main
+package deferrelease
 
 import (
 	"go/ast"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
-	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
 const doc = `check that ID-returning go-atomos factories are followed by defer Release/WithID/WithRebind
@@ -36,18 +31,11 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
-func main() { singlechecker.Main(Analyzer) }
-
 func run(pass *analysis.Pass) (interface{}, error) {
-	// Skip test files.
-	if isTestFile(pass) {
-		return nil, nil
-	}
 	for _, file := range pass.Files {
-		// Skip generated files (e.g. *_atomos.pb.go). Generated factories
-		// intentionally forward the tracker to the caller (ownership transfer),
-		// which is a valid pattern we should not flag. The standard Go
-		// "Code generated ... DO NOT EDIT." header marks these.
+		if isTestFile(pass, file) {
+			continue
+		}
 		if isGenerated(file) {
 			continue
 		}
@@ -56,15 +44,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if !ok || fn.Body == nil {
 				continue
 			}
-			analyzeFunc(pass, file, fn)
+			analyzeFunc(pass, fn)
 		}
 	}
 	return nil, nil
 }
 
-// isGenerated reports whether the file carries the standard
-// "Code generated ... DO NOT EDIT." header, marking it as code-generated
-// (and thus exempt from the analyzer's release-discipline check).
 func isGenerated(file *ast.File) bool {
 	for _, cg := range file.Comments {
 		for _, c := range cg.List {
@@ -76,28 +61,23 @@ func isGenerated(file *ast.File) bool {
 	return false
 }
 
-// isTestFile reports whether the pass is analyzing a _test.go package.
-func isTestFile(pass *analysis.Pass) bool {
-	// pass.Pkg.Path() for test files has a "_test" suffix in the package path.
-	return strings.HasSuffix(pass.Pkg.Path(), "_test")
+func isTestFile(pass *analysis.Pass, file *ast.File) bool {
+	// Check by file name (not package path): test files in the same package as
+	// production code (single-package testing, common in Go) still need skipping.
+	pos := pass.Fset.Position(file.Pos())
+	return strings.HasSuffix(pos.Filename, "_test.go")
 }
 
-// analyzeFunc inspects one function body for tracker-returning assignments
-// lacking a release path.
-func analyzeFunc(pass *analysis.Pass, file *ast.File, fn *ast.FuncDecl) {
-	// Collect identifiers that are released via defer .Release(), or passed to
-	// WithID / WithRebind.
+func analyzeFunc(pass *analysis.Pass, fn *ast.FuncDecl) {
 	released := map[string]bool{}
 	exempted := map[string]bool{}
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch stmt := n.(type) {
 		case *ast.DeferStmt:
-			// defer <id>.Release()
 			if name := receiverOfRelease(stmt.Call); name != "" {
 				released[name] = true
 			}
 		case *ast.ExprStmt:
-			// WithID(<tr>, ...) or WithRebind(...) bare call.
 			if call, ok := stmt.X.(*ast.CallExpr); ok {
 				noteExempt(call, exempted)
 			}
@@ -117,8 +97,6 @@ func analyzeFunc(pass *analysis.Pass, file *ast.File, fn *ast.FuncDecl) {
 		return true
 	})
 
-	// Now scan for assignments from tracker-returning factories and report any
-	// whose target is not released/exempted.
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		stmt, ok := n.(*ast.AssignStmt)
 		if !ok {
@@ -133,13 +111,10 @@ func analyzeFunc(pass *analysis.Pass, file *ast.File, fn *ast.FuncDecl) {
 			if info == nil {
 				continue
 			}
-			// For single-value RHS (generated GetXxxAtomID/SpawnXxxAtom): LHS is the ID.
-			// For multi-value RHS (CosmosGetAtomID/CosmosSpawnAtom): LHS[i] corresponds
-			// per-result; we care about the ID result (index 0) and the tracker result.
 			targets := targetsFor(stmt, i, info)
 			for _, tgt := range targets {
 				if tgt == "_" {
-					continue // explicitly discarded
+					continue
 				}
 				if released[tgt] || exempted[tgt] {
 					continue
@@ -153,7 +128,6 @@ func analyzeFunc(pass *analysis.Pass, file *ast.File, fn *ast.FuncDecl) {
 	})
 }
 
-// receiverOfRelease returns the identifier name in `x.Release()` call, or "".
 func receiverOfRelease(call *ast.CallExpr) string {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Release" {
@@ -166,25 +140,16 @@ func receiverOfRelease(call *ast.CallExpr) string {
 	return ident.Name
 }
 
-// noteExempt records identifiers consumed by WithID/WithRebind helpers.
 func noteExempt(call *ast.CallExpr, exempted map[string]bool) {
 	fnName := callFuncName(call)
 	switch fnName {
 	case "WithID":
-		// WithID(<tr>, ...): first arg is the tracker (or an expression whose
-		// base identifier we can extract). Exempt that identifier.
 		if len(call.Args) >= 1 {
 			if name := baseIdentName(call.Args[0]); name != "" {
 				exempted[name] = true
 			}
 		}
 	case "WithRebind":
-		// WithRebind(resolve, call): IDs obtained inside resolve and used only
-		// in call are released internally. We exempt identifiers passed into
-		// either closure conservatively by scanning the closure bodies for used
-		// identifiers — but at minimum, any identifier appearing as a result of
-		// a factory inside these closures is exempt. Simple heuristic: exempt
-		// identifiers referenced inside the closure args.
 		for _, arg := range call.Args {
 			ast.Inspect(arg, func(n ast.Node) bool {
 				if ident, ok := n.(*ast.Ident); ok && ident.Name != "" {
@@ -218,34 +183,22 @@ func baseIdentName(expr ast.Expr) string {
 	return ""
 }
 
-// factoryInfo describes a tracker-returning factory call.
 type factoryInfo struct {
-	factoryName string
-	// releasableIndex is the result index (0-based) holding the variable that
-	// must be Released. For generated single-return factories (Get*AtomID /
-	// Spawn*Atom) it is 0 (the ID embeds *IDTracker, so id.Release() works).
-	// For runtime multi-return factories (CosmosGetAtomID / CosmosSpawnAtom) it
-	// is 1 (the standalone *IDTracker result).
+	factoryName     string
 	releasableIndex int
 }
 
 func factoryReturnInfo(call *ast.CallExpr) *factoryInfo {
 	name := callFuncName(call)
-	// Generated free functions returning *XxxAtomID (single return value + error).
 	if isAtomIDFactoryName(name) {
 		return &factoryInfo{factoryName: name, releasableIndex: 0}
 	}
-	// Runtime methods returning (ID, *IDTracker, *Error): the tracker (index 1)
-	// is the releasable surface.
 	if name == "CosmosGetAtomID" || name == "CosmosSpawnAtom" {
 		return &factoryInfo{factoryName: name, releasableIndex: 1}
 	}
 	return nil
 }
 
-// isAtomIDFactoryName reports whether name is a generated Atom ID factory
-// (Get<Svc>AtomID or Spawn<Svc>Atom). Element factories (Get<Svc>ElementID)
-// return false because their tracker is nil.
 func isAtomIDFactoryName(name string) bool {
 	const getPrefix, atomIDSuffix = "Get", "AtomID"
 	if strings.HasPrefix(name, getPrefix) && strings.HasSuffix(name, atomIDSuffix) &&
@@ -260,19 +213,13 @@ func isAtomIDFactoryName(name string) bool {
 	return false
 }
 
-// targetsFor returns the identifier names that must be released, given an
-// assignment statement, the rhs index, and the factory info.
 func targetsFor(stmt *ast.AssignStmt, rhsIdx int, info *factoryInfo) []string {
-	// Multi-value assignment from a single multi-return call:
-	//   id, err            := GetFooAtomID(...)      // releasable=0 (id)
-	//   id, tr, err        := CosmosGetAtomID(...)   // releasable=1 (tracker)
 	if len(stmt.Rhs) == 1 && len(stmt.Lhs) > 1 {
 		if info.releasableIndex < len(stmt.Lhs) {
 			return []string{identName(stmt.Lhs[info.releasableIndex])}
 		}
 		return nil
 	}
-	// Single-value assignment: lhs[rhsIdx] = rhs[rhsIdx] (releasableIndex 0).
 	if rhsIdx < len(stmt.Lhs) {
 		return []string{identName(stmt.Lhs[rhsIdx])}
 	}
