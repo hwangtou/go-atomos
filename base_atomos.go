@@ -203,6 +203,37 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 		return nil, helper.getError()
 	}
 
+	// Deadlock detection: check whether this sync call would close a cycle in
+	// the local wait-graph. The executing goroutine (getGoID) is about to block
+	// in waitReply waiting for the target Atom's mailbox goroutine (a.GetGoID).
+	// If the target can already reach the caller via existing wait-edges, this
+	// push would deadlock — return immediately instead of waiting 10s.
+	// Remote targets (goID==0) cannot form local cycles and are skipped.
+	callerGoID := getGoID()
+	targetGoID := a.GetGoID()
+	hasWaitEdge := false
+	if callerGoID != 0 && targetGoID != 0 {
+		if callerGoID == targetGoID {
+			return nil, NewErrorf(ErrIDFirstSyncCallDeadlock,
+				"Atomos: Sync call deadlock (self). caller=(%s) target=(%s) name=(%s)",
+				from.GetIDInfo().Info(), a.id.Info(), name).AddStack(nil)
+		}
+		if a.process.detectDeadlockAndWait(callerGoID, targetGoID) {
+			return nil, NewErrorf(ErrIDFirstSyncCallDeadlock,
+				"Atomos: Sync call deadlock (cycle). caller=(%s) target=(%s) name=(%s) chain=%s",
+				from.GetIDInfo().Info(), a.id.Info(), name,
+				a.process.waitChain(targetGoID, callerGoID)).AddStack(nil)
+		}
+		hasWaitEdge = true
+	}
+	// Ensure the wait edge is removed on every exit path after this point.
+	removeEdge := func() {
+		if hasWaitEdge {
+			a.process.removeWaitEdge(callerGoID)
+			hasWaitEdge = false
+		}
+	}
+
 	am := allocBaseAtomosMail()
 	initBaseAtomosMailSync(am, from, name, in)
 
@@ -213,11 +244,13 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 		ok = a.mailbox.pushTail(am.mail)
 	}
 	if !ok {
+		removeEdge()
 		return reply, NewErrorf(ErrAtomosIsNotRunning,
 			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
 
 	replyInterface, err := am.waitReply(a, helper)
+	removeEdge()
 	if err != nil && err.Code == ErrAtomosIsNotRunning {
 		return nil, err.AddStack(nil)
 	}

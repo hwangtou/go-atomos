@@ -81,6 +81,9 @@ type testRunnableAtom struct {
 	greetingNotify chan struct{}
 	greetingWait   time.Duration
 
+	// cyclePeer is the atom name to call in Greeting modes 3/4 (cycle tests).
+	cyclePeer string
+
 	haltNotify chan struct{}
 	haltWait   time.Duration
 }
@@ -114,6 +117,54 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 	}
 	switch in.Mode {
 	case 1:
+		out = &ForTestGreetingO{}
+	case 2:
+		// Self-sync-call: this atom's mailbox goroutine sync-calls itself.
+		// Must be detected as deadlock (ErrIDFirstSyncCallDeadlock) by the
+		// wait-graph before blocking. Without detection this would hang 10s.
+		selfID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.self.GetIDInfo().Atom)
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
+		defer selfID.Release()
+		_, e = selfID.Greeting(t.self, &ForTestGreetingI{Mode: 1})
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
+		out = &ForTestGreetingO{}
+	case 3:
+		// Cycle: this atom sync-calls a peer atom, which sync-calls back here.
+		// The peer name is carried in the in-message (reuse the existing field
+		// via a convention: we read t.cyclePeer set by the test).
+		if t.cyclePeer == "" {
+			return nil, NewErrorf(ErrFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
+		}
+		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
+		defer peerID.Release()
+		// Call the peer; the peer's Greeting(mode=4) calls back here.
+		_, e = peerID.Greeting(t.self, &ForTestGreetingI{Mode: 4})
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
+		out = &ForTestGreetingO{}
+	case 4:
+		// Cycle callback: the peer calls back to its own peer (the originator).
+		// This is the second hop that closes the cycle → must deadlock.
+		if t.cyclePeer == "" {
+			return nil, NewErrorf(ErrFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
+		}
+		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
+		defer peerID.Release()
+		_, e = peerID.Greeting(t.self, &ForTestGreetingI{Mode: 1})
+		if e != nil {
+			return nil, e.AddStack(t.self)
+		}
 		out = &ForTestGreetingO{}
 	default:
 		panic("unknown mode")

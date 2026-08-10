@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,6 +34,16 @@ type CosmosProcess struct {
 	// so per-instance reference counting (atomRefState) can tell a stale
 	// (pre-respawn) tracker from a current one without pointer/manager rewiring.
 	instanceSeq atomic.Uint64
+
+	// waitMu guards waitGraph, the sync-call wait-graph used for deadlock
+	// detection. Each entry (executingGoID → targetMailboxGoID) records that a
+	// goroutine is blocked in PushSyncMessage.waitReply waiting for a target
+	// Atom's mailbox goroutine to process a sync mail. A cycle in this graph
+	// (e.g. A's mailbox blocked on B while B's mailbox is blocked on A) is a
+	// deadlock; PushSyncMessage checks this before enqueue and returns
+	// ErrIDFirstSyncCallDeadlock immediately instead of waiting 10s for timeout.
+	waitMu    sync.Mutex
+	waitGraph map[uint64]uint64
 
 	// Per-process mutable settings (formerly package-level vars).
 	messageTimeoutTracer  bool
@@ -114,6 +125,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.messageTimeoutDefault = 2 * time.Second
 	p.muteKeepaliveLog = true
 	p.idTrackerDebug = false
+	p.waitGraph = map[uint64]uint64{}
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}
@@ -155,6 +167,83 @@ func (p *CosmosProcess) allocInstanceID() uint64 {
 		return 0
 	}
 	return p.instanceSeq.Add(1)
+}
+
+// detectDeadlockAndWait checks whether adding a wait edge callerGoID →
+// targetGoID would close a cycle in the sync-call wait-graph. If it would, it
+// returns true (deadlock) and does NOT register the edge. If it would not, it
+// registers the edge atomically (under waitMu) and returns false. The
+// check+register is atomic so that two concurrent sync pushes that would form a
+// cycle cannot both pass the check (the second sees the first's edge).
+//
+// callerGoID is the goroutine currently executing PushSyncMessage (about to
+// block in waitReply); targetGoID is the target Atom's mailbox goroutine.
+func (p *CosmosProcess) detectDeadlockAndWait(callerGoID, targetGoID uint64) (deadlock bool) {
+	if p == nil {
+		return false
+	}
+	p.waitMu.Lock()
+	defer p.waitMu.Unlock()
+	// Walk the wait chain starting from the target: if the target can already
+	// reach the caller, adding caller→target closes a cycle.
+	cur := targetGoID
+	for cur != 0 {
+		if cur == callerGoID {
+			return true // cycle: target reaches caller
+		}
+		next, ok := p.waitGraph[cur]
+		if !ok {
+			break // chain ended, no cycle
+		}
+		cur = next
+	}
+	// No cycle: register the edge. Each goroutine has at most one outstanding
+	// wait edge at a time (it blocks synchronously), so a plain assignment is
+	// correct. Lazy-init the map for CosmosProcess instances constructed
+	// outside init() (e.g. bare test fixtures).
+	if p.waitGraph == nil {
+		p.waitGraph = map[uint64]uint64{}
+	}
+	p.waitGraph[callerGoID] = targetGoID
+	return false
+}
+
+// removeWaitEdge removes the wait edge for the given executing goroutine. Called
+// after waitReply returns (success, timeout, or error) so the graph does not
+// retain stale edges.
+func (p *CosmosProcess) removeWaitEdge(executingGoID uint64) {
+	if p == nil {
+		return
+	}
+	p.waitMu.Lock()
+	delete(p.waitGraph, executingGoID)
+	p.waitMu.Unlock()
+}
+
+// waitChain returns a human-readable description of the wait chain from `from`
+// to `to` (inclusive), for deadlock diagnostics. Caller must hold no lock; this
+// acquires waitMu briefly. Only meaningful once a cycle is already confirmed.
+func (p *CosmosProcess) waitChain(from, to uint64) string {
+	if p == nil {
+		return ""
+	}
+	p.waitMu.Lock()
+	defer p.waitMu.Unlock()
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d", from)
+	cur := from
+	for cur != 0 && cur != to {
+		next, ok := p.waitGraph[cur]
+		if !ok {
+			break
+		}
+		fmt.Fprintf(&b, "→%d", next)
+		cur = next
+	}
+	if cur == to {
+		fmt.Fprintf(&b, "→%d(cycle)", to)
+	}
+	return b.String()
 }
 
 // Start 启动进程
