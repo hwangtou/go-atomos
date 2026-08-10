@@ -57,7 +57,7 @@ type testRunnableElement struct {
 	self ElementSelfID
 }
 
-func (t *testRunnableElement) Spawn(self ElementSelfID, data *ForTestData) *Error {
+func (t *testRunnableElement) Spawn(self ElementSelfID, data *ForTestData, _ ...ArgsForBaseAtomos) *Error {
 	t.self = self
 	return nil
 }
@@ -88,7 +88,7 @@ type testRunnableAtom struct {
 	haltWait   time.Duration
 }
 
-func (t *testRunnableAtom) Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData) *Error {
+func (t *testRunnableAtom) Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, _ ...ArgsForBaseAtomos) *Error {
 	t.self = self
 	return nil
 }

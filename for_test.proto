@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package atomos;
+option go_package = "github.com/hwangtou/go-atomos;atomos";
+
+import "atomos.proto";
+
+// ForTestData is the spawn-time data for both Element and Atom.
+message ForTestData {
+  string name = 1;
+}
+
+// ForTestHello is an Element-level RPC.
+message ForTestHelloI {
+  string message = 1;
+}
+message ForTestHelloO {
+  int32 id = 1;
+}
+
+// ForTestSpawnArg is the argument for Atom spawn.
+message ForTestSpawnArg {
+  string name = 1;
+}
+
+// ForTestGreeting is an Atom-level RPC.
+message ForTestGreetingI {
+  enum TestMode {
+    None = 0;
+    SyncSelfCallDeadlock = 1;
+  }
+  TestMode mode = 1;
+}
+message ForTestGreetingO {}
+
+service ForTestAtomos {
+  // Element-level
+  rpc ElementSpawn (atomos.Nil) returns (ForTestData) {}
+  rpc ElementSayHello (ForTestHelloI) returns (ForTestHelloO) {}
+
+  // Atom-level
+  rpc Spawn (ForTestSpawnArg) returns (ForTestData) {}
+  rpc Greeting (ForTestGreetingI) returns (ForTestGreetingO) {}
+}

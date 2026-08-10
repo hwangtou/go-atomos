@@ -9,23 +9,16 @@ import (
 const ForTestAtomosName = "ForTestAtomos"
 
 ////////////////////////////////////
-/////////// 需要实现的接口 ///////////
-////// Interface to implement //////
+//////// Interfaces to implement //////
 ////////////////////////////////////
 
 // ForTestAtomosElement is the atomos implements of ForTestAtomos element.
 
 type ForTestAtomosElement interface {
 	Atomos
-	// Element的创建（自旋）方法
-	// Element creation (spin) method
-	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self ElementSelfID, data *ForTestData) *Error
+	// Element-level
+	Spawn(self ElementSelfID, data *ForTestData, args ...ArgsForBaseAtomos) *Error
 
-	// 向Element发送SayHello消息
-	// Send SayHello message to Element
-	// I = Input
-	// O = Output
 	SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err *Error)
 }
 
@@ -34,20 +27,14 @@ type ForTestAtomosElement interface {
 type ForTestAtomosAtom interface {
 	Atomos
 
-	// Spawn
-	// Atom的创建（自旋）方法
-	// Atom creation (spin) method
-	// 与别不同的是，rpc的input参数表示Spawn时传入的参数，rpc的output参数表示Spawn时传入的数据（需要支持自动持久化）。
-	Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData) *Error
+	// Atom-level
+	Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, args ...ArgsForBaseAtomos) *Error
 
-	// 向Atom发送Greeting消息
-	// Send Greeting message to Atom
 	Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err *Error)
 }
 
 ////////////////////////////////////
-/////////////// 识别符 //////////////
-//////////////// ID ////////////////
+//////////////// IDs ////////////////
 ////////////////////////////////////
 
 // Element: ForTestAtomos
@@ -57,8 +44,7 @@ type ForTestAtomosElementID struct {
 	*IDTracker
 }
 
-// 获取某节点中的ElementID
-// Get element id of node
+// Get element id of a node.
 func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, *Error) {
 	ca, err := c.CosmosGetElementID(ForTestAtomosName)
 	if err != nil {
@@ -67,19 +53,13 @@ func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, *Error) {
 	return &ForTestAtomosElementID{ca, nil}, nil
 }
 
-// 向Element发送SayHello消息
-// Send SayHello message to Element
-// I = Input
-// O = Output
 // Sync
 func (c *ForTestAtomosElementID) SayHello(callerID SelfID, in *ForTestHelloI, ext ...ArgsForBaseAtomos) (out *ForTestHelloO, err *Error) {
-	/* CODE JUMPER 代码跳转 */ _ = func() { _ = forTestAtomosElementValue.SayHello }
 	return forTestAtomosElementMessengerValue.SayHello().SyncElement(c, callerID, in, ext...)
 }
 
 // Async
 func (c *ForTestAtomosElementID) AsyncSayHello(callerID SelfID, in *ForTestHelloI, callback func(out *ForTestHelloO, err *Error), ext ...ArgsForBaseAtomos) {
-	/* CODE JUMPER 代码跳转 */ _ = func() { _ = forTestAtomosElementValue.SayHello }
 	forTestAtomosElementMessengerValue.SayHello().AsyncElement(c, callerID, in, callback, ext...)
 }
 
@@ -90,8 +70,7 @@ type ForTestAtomosAtomID struct {
 	*IDTracker
 }
 
-// 创建（自旋）某节点中的一个Atom，并返回AtomID
-// Create (spin) an atom in a node and return the AtomID
+// Create (spawn) an atom in a node and return the AtomID.
 func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg) (*ForTestAtomosAtomID, *Error) {
 	id, tracker, err := c.CosmosSpawnAtom(caller, ForTestAtomosName, name, arg)
 	if id == nil {
@@ -100,8 +79,7 @@ func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTe
 	return &ForTestAtomosAtomID{id, tracker}, err
 }
 
-// 获取某节点中的AtomID
-// Get atom id of node
+// Get atom id of a node.
 func GetForTestAtomosAtomID(c CosmosNode, name string) (*ForTestAtomosAtomID, *Error) {
 	ca, tracker, err := c.CosmosGetAtomID(ForTestAtomosName, name)
 	if err != nil {
@@ -112,13 +90,11 @@ func GetForTestAtomosAtomID(c CosmosNode, name string) (*ForTestAtomosAtomID, *E
 
 // Sync
 func (c *ForTestAtomosAtomID) Greeting(callerID SelfID, in *ForTestGreetingI, ext ...ArgsForBaseAtomos) (out *ForTestGreetingO, err *Error) {
-	/* CODE JUMPER 代码跳转 */ _ = func() { _ = forTestAtomosAtomValue.Greeting }
 	return forTestAtomosAtomMessengerValue.Greeting().SyncAtom(c, callerID, in, ext...)
 }
 
 // Async
 func (c *ForTestAtomosAtomID) AsyncGreeting(callerID SelfID, in *ForTestGreetingI, callback func(out *ForTestGreetingO, err *Error), ext ...ArgsForBaseAtomos) {
-	/* CODE JUMPER 代码跳转 */ _ = func() { _ = forTestAtomosAtomValue.Greeting }
 	forTestAtomosAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
@@ -151,18 +127,18 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(ForTestAtomosName, dev)
 	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error {
 		dataT, _ := data.(*ForTestData)
-		elem, ok := a.(ForTestAtomosElement)
+		e, ok := a.(ForTestAtomosElement)
 		if !ok {
-			return NewErrorf(ErrElementNotImplemented, "Element not implemented, type=(ForTestAtomosElement)")
+			return NewErrorf(ErrElementNotImplemented, "Element not implemented, type=(%T)", a)
 		}
-		return elem.Spawn(s, dataT)
+		return e.Spawn(s, dataT)
 	}
 	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error {
 		argT, _ := arg.(*ForTestSpawnArg)
 		dataT, _ := data.(*ForTestData)
 		atom, ok := a.(ForTestAtomosAtom)
 		if !ok {
-			return NewErrorf(ErrAtomNotImplemented, "Atom not implemented, type=(ForTestAtomosAtom)")
+			return NewErrorf(ErrAtomNotImplemented, "Atom not implemented, type=(%T)", a)
 		}
 		return atom.Spawn(s, argT, dataT)
 	}
@@ -175,9 +151,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	return elem
 }
 
-// Atomos Internal
-
-// Element Define
+// Element Messenger
 
 type forTestAtomosElementMessenger struct{}
 
@@ -188,7 +162,7 @@ func (m forTestAtomosElementMessenger) SayHello() Messenger[*ForTestAtomosElemen
 var forTestAtomosElementMessengerValue forTestAtomosElementMessenger
 var forTestAtomosElementValue ForTestAtomosElement
 
-// Atom Define
+// Atom Messenger
 
 type forTestAtomosAtomMessenger struct{}
 
