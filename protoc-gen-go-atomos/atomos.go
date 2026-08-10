@@ -46,8 +46,7 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 		g.P()
 
 		g.P("////////////////////////////////////")
-		g.P("/////////// 需要实现的接口 ///////////")
-		g.P("////// Interface to implement //////")
+		g.P("//////// Interfaces to implement //////")
 		g.P("////////////////////////////////////")
 		g.P()
 
@@ -61,8 +60,7 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 		genAtomInterface(g, service)
 
 		g.P("////////////////////////////////////")
-		g.P("/////////////// 识别符 //////////////")
-		g.P("//////////////// ID ////////////////")
+		g.P("//////////////// IDs ////////////////")
 		g.P("////////////////////////////////////")
 
 		// Interface
@@ -80,7 +78,6 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	elementName := service.GoName + "Element"
 
-	// Server struct.
 	g.P("// ", elementName, " is the atomos implements of ", service.GoName, " element.")
 	g.P()
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
@@ -90,37 +87,29 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.Annotate(elementName, service.Location)
 	g.P("type ", elementName, " interface {")
 	g.P(atomosPackage.Ident("Atomos"))
-	hasElementSpawn := false
-	// Element
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		methodName = strings.TrimPrefix(methodName, "Element")
 
-		// Comment
+	// ElementSpawn
+	if spawn := elementSpawnMethod(service); spawn != nil {
+		g.Annotate(elementName+".Spawn", spawn.Location)
+		if spawn.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
+		}
+		writeMethodComment(g, spawn)
+		spawnElementSign(g, spawn)
+		g.P()
+	} else {
+		spawnElementDefaultSign(g)
+	}
+
+	// Element methods
+	for _, method := range elementMethods(service) {
+		methodName := elementMethodName(method)
 		g.Annotate(elementName+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
 		}
-		commentLen := len(method.Comments.Leading.String())
-		if commentLen > 0 {
-			g.P(method.Comments.Leading.String()[:commentLen-1])
-		}
-
-		// Spawn & Methods
-		if methodName == "Spawn" {
-			hasElementSpawn = true
-			spawnElementSign(g, method)
-			g.P()
-		} else {
-			methodSign(g, method, methodName)
-		}
-	}
-
-	if !hasElementSpawn {
-		spawnElementDefaultSign(g)
+		writeMethodComment(g, method)
+		methodSign(g, method, methodName)
 	}
 	g.P("}")
 	g.P()
@@ -129,7 +118,6 @@ func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	atomName := service.GoName + "Atom"
 
-	// Server struct.
 	g.P("// ", atomName, " is the atomos implements of ", service.GoName, " atom.")
 	g.P()
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
@@ -140,28 +128,28 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("type ", atomName, " interface {")
 	g.P(atomosPackage.Ident("Atomos"))
 	g.P()
-	// Atom
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if strings.HasPrefix(methodName, "Element") {
-			continue
+
+	// AtomSpawn
+	if spawn := atomSpawnMethod(service); spawn != nil {
+		g.Annotate(atomName+".Spawn", spawn.Location)
+		if spawn.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
+			g.P(deprecationComment)
 		}
+		writeMethodComment(g, spawn)
+		spawnAtomSign(g, spawn)
+		g.P()
+	}
+
+	// Atom methods
+	for _, method := range atomMethods(service) {
+		methodName := method.GoName
 		g.Annotate(atomName+"."+methodName, method.Location)
 		if method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated() {
 			g.P(deprecationComment)
 		}
-		commentLen := len(method.Comments.Leading.String())
-		if commentLen > 0 {
-			g.P(method.Comments.Leading.String()[:commentLen-1])
-		}
-		if methodName == "Spawn" {
-			spawnAtomSign(g, method)
-			g.P()
-		} else {
-			methodSign(g, method, methodName)
-		}
+		writeMethodComment(g, method)
+		methodSign(g, method, methodName)
 	}
-
 	g.P("}")
 	g.P()
 }
@@ -169,7 +157,6 @@ func genAtomInterface(g *protogen.GeneratedFile, service *protogen.Service) {
 func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	idName := service.GoName + "ElementID"
 	elementIDName := service.GoName + "ElementID"
-	elementValueName := noExport(service.GoName) + "ElementValue"
 	elementMessengerValueName := noExport(service.GoName) + "ElementMessengerValue"
 
 	g.P()
@@ -183,70 +170,47 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 	g.P("}")
 	g.P()
 
-	g.P("// 获取某节点中的ElementID")
-	g.P("// Get element id of node")
-	// NewClient factory.
+	g.P("// Get element id of a node.")
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func Get", elementIDName, " (c ", atomosPackage.Ident("CosmosNode"), ") (*", elementIDName, ", *", atomosPackage.Ident("Error"), ") {")
+	g.P("func Get", elementIDName, "(c ", atomosPackage.Ident("CosmosNode"), ") (*", elementIDName, ", *", atomosPackage.Ident("Error"), ") {")
 	g.P("ca, err := c.CosmosGetElementID(", service.GoName, "Name)")
 	g.P("if err != nil { return nil, err }")
-	g.P("return &", elementIDName, "{ca, nil, ", "}, nil")
+	g.P("return &", elementIDName, "{ca, nil}, nil")
 	g.P("}")
 	g.P()
 
 	// Client method implementations.
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "ElementSpawn") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		methodName = strings.TrimPrefix(methodName, "Element")
-		if methodName == "" {
-			continue
-		}
+	for _, method := range elementMethods(service) {
+		methodName := elementMethodName(method)
 
-		// Comment
 		g.P()
-		commentLen := len(method.Comments.Leading.String())
-		if commentLen > 0 {
-			g.P(method.Comments.Leading.String()[:commentLen-1])
-		}
+		writeMethodComment(g, method)
 
 		// Sync
 		g.P("// Sync")
-		g.P("func (c *", idName, ") ", methodName+"(callerID ", atomosPackage.Ident("SelfID"),
+		g.P("func (c *", idName, ") ", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") (out *", g.QualifiedGoIdent(method.Output.GoIdent),
-			", err *", atomosPackage.Ident("Error"), ")", " {")
-		g.P("/* CODE JUMPER 代码跳转 */ _ = func() { _ = " + elementValueName + "." + methodName + " }")
-		g.P("return " + elementMessengerValueName + "." + methodName + "().SyncElement(c, callerID, in, ext...)")
+			", err *", atomosPackage.Ident("Error"), ") {")
+		g.P("return ", elementMessengerValueName, ".", methodName, "().SyncElement(c, callerID, in, ext...)")
 		g.P("}")
 
 		// Async
 		g.P("// Async")
-		g.P("func (c *", idName, ") Async", methodName+"(callerID ", atomosPackage.Ident("SelfID"),
+		g.P("func (c *", idName, ") Async", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", callback func(out *", g.QualifiedGoIdent(method.Output.GoIdent), ", err *", atomosPackage.Ident("Error"), ")",
 			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") {")
-		g.P("/* CODE JUMPER 代码跳转 */ _ = func() { _ = " + elementValueName + "." + methodName + " }")
-		g.P(elementMessengerValueName + "." + methodName + "().AsyncElement(c, callerID, in, callback, ext...)")
+		g.P(elementMessengerValueName, ".", methodName, "().AsyncElement(c, callerID, in, callback, ext...)")
 		g.P("}")
 		g.P()
 	}
-
 }
 
 func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	atomName := service.GoName + "AtomID"
-	atomValueName := noExport(service.GoName) + "AtomValue"
 	atomMessengerValueName := noExport(service.GoName) + "AtomMessengerValue"
 
 	g.P("// Atom: ", service.GoName)
@@ -259,70 +223,54 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P()
 
-	g.P("// 创建（自旋）某节点中的一个Atom，并返回AtomID")
-	g.P("// Create (spin) an atom in a node and return the AtomID")
-
-	// Spawn
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if methodName == "Spawn" {
-			elementName := service.GoName
-			spawnArgTypeName := g.QualifiedGoIdent(method.Input.GoIdent)
-			g.P("func Spawn", service.GoName, "Atom(caller ", atomosPackage.Ident("SelfID"), ", c ", atomosPackage.Ident("CosmosNode"),
-				", name string, arg *", spawnArgTypeName, ") (*",
-				atomName, ", *", atomosPackage.Ident("Error"), ") {")
-			g.P("id, tracker, err := c.CosmosSpawnAtom(caller,", elementName, "Name, name, arg)")
-			g.P("if id == nil { return nil, err.AddStack(nil) }")
-			g.P("return &", atomName, "{id, tracker, ", "}, err")
-			g.P("}")
-			break
-		}
+	// Spawn factory.
+	g.P("// Create (spawn) an atom in a node and return the AtomID.")
+	if spawn := atomSpawnMethod(service); spawn != nil {
+		spawnArgTypeName := g.QualifiedGoIdent(spawn.Input.GoIdent)
+		g.P("func Spawn", service.GoName, "Atom(caller ", atomosPackage.Ident("SelfID"), ", c ", atomosPackage.Ident("CosmosNode"),
+			", name string, arg *", spawnArgTypeName, ") (*",
+			atomName, ", *", atomosPackage.Ident("Error"), ") {")
+		g.P("id, tracker, err := c.CosmosSpawnAtom(caller, ", service.GoName, "Name, name, arg)")
+		g.P("if id == nil { return nil, err.AddStack(nil) }")
+		g.P("return &", atomName, "{id, tracker}, err")
+		g.P("}")
+		g.P()
 	}
 
-	g.P("// 获取某节点中的AtomID")
-	g.P("// Get atom id of node")
-	// NewClient factory.
+	g.P("// Get atom id of a node.")
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func Get", atomName, " (c ", atomosPackage.Ident("CosmosNode"), ", name string) (*", atomName, ", *", atomosPackage.Ident("Error"), ") {")
+	g.P("func Get", atomName, "(c ", atomosPackage.Ident("CosmosNode"), ", name string) (*", atomName, ", *", atomosPackage.Ident("Error"), ") {")
 	g.P("ca, tracker, err := c.CosmosGetAtomID(", service.GoName, "Name, name)")
 	g.P("if err != nil { return nil, err }")
-	g.P("return &", atomName, "{ca, tracker, ", "}, nil")
+	g.P("return &", atomName, "{ca, tracker}, nil")
 	g.P("}")
 	g.P()
 
 	// Client method implementations.
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		if methodName == "" {
-			continue
-		}
+	for _, method := range atomMethods(service) {
+		methodName := method.GoName // G2 fix: no TrimPrefix("Element") — atom methods are already filtered
+
+		g.P()
+		writeMethodComment(g, method)
 
 		// Sync
 		g.P("// Sync")
-		g.P("func (c *", atomName, ") ", methodName+"(callerID ", atomosPackage.Ident("SelfID"),
+		g.P("func (c *", atomName, ") ", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") (out *", g.QualifiedGoIdent(method.Output.GoIdent),
-			", err *", atomosPackage.Ident("Error"), ")", " {")
-		g.P("/* CODE JUMPER 代码跳转 */ _ = func() { _ = " + atomValueName + "." + methodName + " }")
-		g.P("return " + atomMessengerValueName + "." + methodName + "().SyncAtom(c, callerID, in, ext...)")
+			", err *", atomosPackage.Ident("Error"), ") {")
+		g.P("return ", atomMessengerValueName, ".", methodName, "().SyncAtom(c, callerID, in, ext...)")
 		g.P("}")
 
 		// Async
 		g.P("// Async")
-		g.P("func (c *", atomName, ") Async", methodName+"(callerID ", atomosPackage.Ident("SelfID"),
+		g.P("func (c *", atomName, ") Async", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", callback func(out *", g.QualifiedGoIdent(method.Output.GoIdent), ", err *", atomosPackage.Ident("Error"), ")",
 			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") {")
-		g.P("/* CODE JUMPER 代码跳转 */ _ = func() { _ = " + atomValueName + "." + methodName + " }")
-		g.P(atomMessengerValueName + "." + methodName + "().AsyncAtom(c, callerID, in, callback, ext...)")
+		g.P(atomMessengerValueName, ".", methodName, "().AsyncAtom(c, callerID, in, callback, ext...)")
 		g.P("}")
 		g.P()
 	}
@@ -348,19 +296,8 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("elem := ", atomosPackage.Ident("NewImplementationFromDeveloper"), "(dev)")
 	g.P("elem.Interface = Get", interfaceName, "(dev)")
 	g.P("elem.ElementHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
-
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") || methodName == "Element" {
-			continue
-		}
-		if strings.HasPrefix(methodName, "ElementSpawn") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		elemName := strings.TrimPrefix(methodName, "Element")
+	for _, method := range elementMethods(service) {
+		elemName := elementMethodName(method)
 		g.P("\"", elemName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") {")
 		g.P("a, i, err := ", elementMessengerValueName, ".", elemName, "().ExecuteAtom(to, in)")
 		g.P("if err != nil { return nil, err.AddStack(nil) }")
@@ -370,17 +307,8 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("}")
 
 	g.P("elem.AtomHandlers = map[string]", atomosPackage.Ident("MessageHandler"), "{")
-	for _, method := range service.Methods {
+	for _, method := range atomMethods(service) {
 		methodName := method.GoName
-		if strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		if methodName == "" {
-			continue
-		}
 		g.P("\"", methodName, "\": func(from ", atomosPackage.Ident("ID"), ", to ", atomosPackage.Ident("Atomos"), ", in ", protobufPackage.Ident("Message"), ") (", protobufPackage.Ident("Message"), ", *", atomosPackage.Ident("Error"), ") {")
 		g.P("a, i, err := ", atomMessengerValueName, ".", methodName, "().ExecuteAtom(to, in)")
 		g.P("if err != nil { return nil, err.AddStack(nil) }")
@@ -393,72 +321,43 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("}")
 
 	g.P("func Get", elementName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
-	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper("), elementName, "Name, dev)")
+	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper"), "(", elementName, "Name, dev)")
 
-	hasElementSpawn := false
-	for _, method := range service.Methods {
-		if method.GoName != "ElementSpawn" {
-			continue
-		}
-		hasElementSpawn = true
-		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ", args...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
-		g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
-		g.P("elem, ok := a.(", elementElementName, ")")
-		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
-		g.P("return elem.Spawn(s, dataT)")
+	if spawn := elementSpawnMethod(service); spawn != nil {
+		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ", args ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
+		g.P("dataT, _ := data.(*", g.QualifiedGoIdent(spawn.Output.GoIdent), ")")
+		g.P("e, ok := a.(", elementElementName, ")")
+		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(%T)\", a) }")
+		g.P("return e.Spawn(s, dataT)")
 		g.P("}")
-	}
-	if !hasElementSpawn {
-		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ", args...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
-		//g.P("dataT, _ := data.(*", method.Output.GoIdent, ")")
-		g.P("elem, ok := a.(", elementElementName, ")")
-		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(", elementElementName, ")\") }")
-		g.P("return elem.Spawn(s, nil)")
+	} else {
+		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ", args ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
+		g.P("e, ok := a.(", elementElementName, ")")
+		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrElementNotImplemented"), ", \"Element not implemented, type=(%T)\", a) }")
+		g.P("return e.Spawn(s, nil)")
 		g.P("}")
 	}
 
-	for _, method := range service.Methods {
-		if method.GoName != "Spawn" {
-			continue
-		}
-		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", arg, data ", protobufPackage.Ident("Message"), ", args...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
-		g.P("argT, _ := arg.(*", method.Input.GoIdent, "); dataT, _ := data.(*", method.Output.GoIdent, ")")
+	if spawn := atomSpawnMethod(service); spawn != nil {
+		g.P("elem.AtomSpawner = func(s ", atomosPackage.Ident("AtomSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", arg, data ", protobufPackage.Ident("Message"), ", args ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") *", atomosPackage.Ident("Error"), " {")
+		g.P("argT, _ := arg.(*", g.QualifiedGoIdent(spawn.Input.GoIdent), "); dataT, _ := data.(*", g.QualifiedGoIdent(spawn.Output.GoIdent), ")")
 		g.P("atom, ok := a.(", elementAtomName, ")")
-		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomNotImplemented"), ", \"Atom not implemented, type=(", elementAtomName, ")\") }")
+		g.P("if !ok { return ", atomosPackage.Ident("NewErrorf"), "(", atomosPackage.Ident("ErrAtomNotImplemented"), ", \"Atom not implemented, type=(%T)\", a) }")
 		g.P("return atom.Spawn(s, argT, dataT)")
 		g.P("}")
 	}
 
 	g.P("elem.ElementDecoders = map[string]*", atomosPackage.Ident("IOMessageDecoder"), "{")
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "ElementSpawn") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		elemName := strings.TrimPrefix(methodName, "Element")
-		if elemName == "" {
-			continue
-		}
-		g.P("\"", elemName, "\": ", elementMessengerValueName, ".", elemName, "().Decoder(&", method.Input.GoIdent, "{}, &", method.Output.GoIdent, "{}),")
+	for _, method := range elementMethods(service) {
+		elemName := elementMethodName(method)
+		g.P("\"", elemName, "\": ", elementMessengerValueName, ".", elemName, "().Decoder(&", g.QualifiedGoIdent(method.Input.GoIdent), "{}, &", g.QualifiedGoIdent(method.Output.GoIdent), "{}),")
 	}
 	g.P("}")
 
 	g.P("elem.AtomDecoders = map[string]*", atomosPackage.Ident("IOMessageDecoder"), "{")
-	for _, method := range service.Methods {
+	for _, method := range atomMethods(service) {
 		methodName := method.GoName
-		if strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		g.P("\"", methodName, "\": ", atomMessengerValueName, ".", methodName, "().Decoder(&", method.Input.GoIdent, "{}, &", method.Output.GoIdent, "{}),")
+		g.P("\"", methodName, "\": ", atomMessengerValueName, ".", methodName, "().Decoder(&", g.QualifiedGoIdent(method.Input.GoIdent), "{}, &", g.QualifiedGoIdent(method.Output.GoIdent), "{}),")
 	}
 	g.P("}")
 
@@ -466,52 +365,27 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("}")
 
 	g.P()
-	g.P("// Atomos Internal")
-	g.P()
-	g.P("// Element Define")
+	g.P("// Element Messenger")
 	g.P()
 
 	g.P("type ", elementMessengerName, " struct {}")
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if !strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "ElementSpawn") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		elemFnName := strings.TrimPrefix(methodName, "Element")
-		if elemFnName == "" {
-			continue
-		}
-		g.P("func (m ", elementMessengerName, ") ", elemFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", method.Input.GoIdent, ", *", method.Output.GoIdent, "]{")
-		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", method.Input.GoIdent, ", *", method.Output.GoIdent, "]{nil, nil, \"", elemFnName, "\"}")
+	for _, method := range elementMethods(service) {
+		elemFnName := elementMethodName(method)
+		g.P("func (m ", elementMessengerName, ") ", elemFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "] {")
+		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{nil, nil, \"", elemFnName, "\"}")
 		g.P("}")
 	}
 	g.P("var ", elementMessengerValueName, " ", elementMessengerName)
 	g.P("var ", elementValueName, " ", elementElementName)
 	g.P()
 
-	g.P("// Atom Define")
+	g.P("// Atom Messenger")
 	g.P()
 	g.P("type ", atomMessengerName, " struct {}")
-	for _, method := range service.Methods {
-		methodName := method.GoName
-		if strings.HasPrefix(methodName, "Element") {
-			continue
-		}
-		if strings.HasPrefix(methodName, "Spawn") {
-			continue
-		}
-		atomFnName := strings.TrimPrefix(methodName, "Element")
-		if atomFnName == "" {
-			continue
-		}
-		g.P("func (m ", atomMessengerName, ") ", atomFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", method.Input.GoIdent, ", *", method.Output.GoIdent, "]{")
-		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", method.Input.GoIdent, ", *", method.Output.GoIdent, "]{nil, nil, \"", atomFnName, "\"}")
+	for _, method := range atomMethods(service) {
+		atomFnName := method.GoName
+		g.P("func (m ", atomMessengerName, ") ", atomFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "] {")
+		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{nil, nil, \"", atomFnName, "\"}")
 		g.P("}")
 	}
 	g.P("var ", atomMessengerValueName, " ", atomMessengerName)
@@ -520,6 +394,78 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 }
 
 const deprecationComment = "// Deprecated: Do not use."
+
+// elementMethods returns the Element-level methods of a service, excluding
+// Spawn and empty names. This centralizes the filtering logic that was
+// previously duplicated across 6 call sites with subtly different (and
+// sometimes contradictory) conditions.
+func elementMethods(service *protogen.Service) []*protogen.Method {
+	var out []*protogen.Method
+	for _, m := range service.Methods {
+		name := m.GoName
+		if !strings.HasPrefix(name, "Element") {
+			continue
+		}
+		if name == "Element" || name == "ElementSpawn" {
+			continue
+		}
+		if strings.TrimPrefix(name, "Element") == "" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// atomMethods returns the Atom-level methods of a service, excluding Element-*
+// methods, Spawn, and empty names.
+func atomMethods(service *protogen.Service) []*protogen.Method {
+	var out []*protogen.Method
+	for _, m := range service.Methods {
+		name := m.GoName
+		if strings.HasPrefix(name, "Element") {
+			continue
+		}
+		if name == "Spawn" || name == "" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// elementSpawnMethod returns the ElementSpawn method if present, nil otherwise.
+func elementSpawnMethod(service *protogen.Service) *protogen.Method {
+	for _, m := range service.Methods {
+		if m.GoName == "ElementSpawn" {
+			return m
+		}
+	}
+	return nil
+}
+
+// atomSpawnMethod returns the Atom Spawn method if present, nil otherwise.
+func atomSpawnMethod(service *protogen.Service) *protogen.Method {
+	for _, m := range service.Methods {
+		if m.GoName == "Spawn" {
+			return m
+		}
+	}
+	return nil
+}
+
+// elementMethodName strips the "Element" prefix from a method name.
+func elementMethodName(m *protogen.Method) string {
+	return strings.TrimPrefix(m.GoName, "Element")
+}
+
+// writeMethodComment emits the leading comment of a method (if any).
+func writeMethodComment(g *protogen.GeneratedFile, method *protogen.Method) {
+	commentLen := len(method.Comments.Leading.String())
+	if commentLen > 0 {
+		g.P(method.Comments.Leading.String()[:commentLen-1])
+	}
+}
 
 func spawnElementSign(g *protogen.GeneratedFile, method *protogen.Method) {
 	g.P("Spawn(self ", atomosPackage.Ident("ElementSelfID"),
