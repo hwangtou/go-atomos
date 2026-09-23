@@ -3,6 +3,7 @@ package atomos
 import (
 	"gopkg.in/yaml.v2"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -206,5 +207,25 @@ func applyEnvOverrides(conf *Config) {
 			conf.EnableCluster = &CosmosClusterConfig{}
 		}
 		conf.EnableCluster.EtcdEndpoints = strings.Split(v, ",")
+	}
+	// ATOMOS_GRPC_PORTS: comma-separated optional gRPC listen ports for the
+	// cluster node (e.g. "23107"). FreeBSD rc.d split-topology deploys pass
+	// the per-node port via this env; without it OptionalPorts stays empty and
+	// cluster boot fatals with "No available port in optionals ports list".
+	if v := os.Getenv("ATOMOS_GRPC_PORTS"); v != "" {
+		if conf.EnableCluster == nil {
+			conf.EnableCluster = &CosmosClusterConfig{}
+		}
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			port, err := strconv.Atoi(part)
+			if err != nil || port <= 0 || port > 65535 {
+				continue
+			}
+			conf.EnableCluster.OptionalPorts = append(conf.EnableCluster.OptionalPorts, int32(port))
+		}
 	}
 }
