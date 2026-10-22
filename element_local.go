@@ -177,6 +177,10 @@ func (e *ElementLocal) KillSelf() {
 	e.Log().Info("Element: KillSelf.")
 }
 
+func (e *ElementLocal) AsyncCallbackPending() int {
+	return e.atomos.AsyncCallbackPending()
+}
+
 func (e *ElementLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {

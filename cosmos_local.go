@@ -101,6 +101,10 @@ func (c *CosmosLocal) KillSelf() {
 	c.Log().Info("Cosmos: Cannot KillSelf.")
 }
 
+func (c *CosmosLocal) AsyncCallbackPending() int {
+	return 0
+}
+
 func (c *CosmosLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {

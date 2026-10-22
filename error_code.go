@@ -153,6 +153,10 @@ const (
 	ErrAtomMessageReplyType
 	ErrAtomSpawningAnExistedAtom
 
+	// 异步回调因 atom 停机被清账终结(回调随实例消亡前以错误跑完,业务可据此降级/补偿)
+	// 注意:追加在 iota 块末尾,不可插入中间——错误码数值随 RPC 跨服务传输,错位会导致兼容问题
+	ErrAsyncCallbackCancelledByHalt
+
 	// Util File
 
 	ErrUtilOSStatError                      = 201

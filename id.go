@@ -88,6 +88,11 @@ type SelfID interface {
 	// Atomos kills itself internally.
 	KillSelf()
 
+	// AsyncCallbackPending 返回在途异步回调数量。
+	// 业务空闲清理可在 KillSelf 前检查:非空时推迟自杀,给在途回复留排空窗口
+	// (atom 停机时框架会把在途回调以 ErrAsyncCallbackCancelledByHalt 终结)。
+	AsyncCallbackPending() int
+
 	// Parallel 提供由recover保护的并发支持。
 	// Provide concurrent support protected by recover.
 	Parallel(func())

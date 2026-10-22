@@ -178,8 +178,11 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if oldAsyncCallbackID != newAtom.atomos.asyncCallbackID {
 			t.Fatal("Expected new atom to have same async callback ID after killing previous one")
 		}
-		if len(oldAsyncCallbackMap) == len(newAtom.atomos.asyncCallbackMap) {
-			t.Fatal("Expected new atom to have same async callback map after killing previous one")
+		if len(oldAsyncCallbackMap) != 0 {
+			t.Fatal("Expected old atom's async callback map to be cleared on halt")
+		}
+		if len(newAtom.atomos.asyncCallbackMap) != 0 {
+			t.Fatal("Expected new atom to start with an empty async callback map after killing previous one")
 		}
 		if oldStopping == newAtom.atomos.stoppingChan {
 			t.Fatal("Expected new atom to have same stopping channel after killing previous one")

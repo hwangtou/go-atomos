@@ -181,6 +181,10 @@ func (a *AtomLocal) KillSelf() {
 	a.Log().Info("Atom: KillSelf.")
 }
 
+func (a *AtomLocal) AsyncCallbackPending() int {
+	return a.atomos.AsyncCallbackPending()
+}
+
 func (a *AtomLocal) Parallel(fn func()) {
 	go func() {
 		defer func() {
