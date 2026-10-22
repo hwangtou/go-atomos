@@ -387,8 +387,16 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	sem := make(chan struct{}, runtime.NumCPU()) // 信号量，用于控制并发goroutine的数量。
 	exitWG := sync.WaitGroup{}
 
+	// 快照 names:e.names 链表由 e.lock 保护,atom 停机(elementAtomStopping/elementAtomRelease)会在锁内 Remove;
+	// 此处若直接遍历链表,与并发 Remove 构成数据竞争(且迭代指针可能被链表变异破坏)。
+	// 锁内快照后遍历副本,顺序无关紧要(目的是停掉所有 atom)。
+	e.lock.RLock()
+	names := make([]string, 0, len(e.atoms))
 	for nameElem := e.names.Back(); nameElem != nil; nameElem = nameElem.Prev() {
-		name := nameElem.Value.(string)
+		names = append(names, nameElem.Value.(string))
+	}
+	e.lock.RUnlock()
+	for _, name := range names {
 		e.lock.RLock()
 		atom, has := e.atoms[name]
 		e.lock.RUnlock()
