@@ -69,14 +69,26 @@ func TestTaskMailbox_SerialLifeCycle(t *testing.T) {
 
 	wg.Wait()
 
-	if mb.mailbox.isRunning() {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
+	// wg.Done 在任务 fn 内触发,先于 handleTaskQueue 的 defer 清理与队列空载自动关停,
+	// 直接断言会与关停流程竞争——带超时轮询等待邮箱退出。
+	deadline := time.Now().Add(2 * time.Second)
+	for mb.mailbox.isRunning() {
+		if time.Now().After(deadline) {
+			t.Fatal("Mailbox should be stopped after processing all mails.")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
-	<-time.After(1 * time.Millisecond)
-	goMap = dumpAllGoID()
-	if _, exists := goMap[taskMailboxGoID]; exists {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
+	// 同理,邮箱 goroutine 的退出也是异步的,轮询等待 goID 消失。
+	for {
+		goMap = dumpAllGoID()
+		if _, exists := goMap[taskMailboxGoID]; !exists {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Mailbox goroutine should exit after processing all mails.")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
 	<-time.After(time.Millisecond)
@@ -155,14 +167,26 @@ func TestTaskMailbox_SerialLifeCycleWithCallback(t *testing.T) {
 
 	wg.Wait()
 
-	if mb.mailbox.isRunning() {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
+	// wg.Done 在任务 fn 内触发,先于 handleTaskQueue 的 defer 清理与队列空载自动关停,
+	// 直接断言会与关停流程竞争——带超时轮询等待邮箱退出。
+	deadline := time.Now().Add(2 * time.Second)
+	for mb.mailbox.isRunning() {
+		if time.Now().After(deadline) {
+			t.Fatal("Mailbox should be stopped after processing all mails.")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
-	<-time.After(1 * time.Millisecond)
-	goMap = dumpAllGoID()
-	if _, exists := goMap[taskMailboxGoID]; exists {
-		t.Fatal("Mailbox should be stopped after processing all mails.")
+	// 同理,邮箱 goroutine 的退出也是异步的,轮询等待 goID 消失。
+	for {
+		goMap = dumpAllGoID()
+		if _, exists := goMap[taskMailboxGoID]; !exists {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Mailbox goroutine should exit after processing all mails.")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
 	<-time.After(time.Millisecond)

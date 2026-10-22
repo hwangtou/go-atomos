@@ -1,8 +1,10 @@
 package atomos
 
 import (
+	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -79,8 +81,10 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	wg.Add(count)
 	for i := 0; i < count; i++ {
 		m := allocMail()
-		if getAllocMailDebugNum() != i+1 {
-			t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
+		// mailbox goroutine 在 recv 返回后才 releaseMail(mail.go loop),与主
+		// goroutine 并发,此刻已分配未释放的邮件数在 [1, i+1] 区间都合法。
+		if num := getAllocMailDebugNum(); num < 1 || num > i+1 {
+			t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", getAllAllocMailDebugInfo())
 		}
 		initMail(m, DefaultMailID, nil)
 		h.mb.pushTail(m)
@@ -90,23 +94,26 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	// Kill
 	wg.Add(1)
 	m := allocMail()
-	if getAllocMailDebugNum() != 1 {
-		t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", allocMailDebugMap)
+	// 最后一封 recv 的 wg.Done 先于其 releaseMail,此处可能还有 1 封未释放,
+	// 加上刚分配的 kill 邮件,合法值为 1 或 2。
+	if num := getAllocMailDebugNum(); num < 1 || num > 2 {
+		t.Fatal("TestMailbox_Smoke: Mail allocation tracking failed.", getAllAllocMailDebugInfo())
+	}
+	// running 状态必须在 push kill 之前断言——push 之后 mailbox goroutine
+	// 随时可能处理 kill 并置 running=false,此后断言 running==true 逻辑上不成立。
+	if !h.mb.isRunning() {
+		t.Fatal("TestMailbox_Smoke: Mailbox is not running before sending exit mail.")
 	}
 	initKillMail(m, DefaultMailID, nil, nil)
 	h.mb.pushHead(m)
-	if !h.mb.running {
-		t.Fatal("TestMailbox_Smoke: Mailbox is not running after sending exit mail.")
-	}
 	wg.Wait()
-	if h.mb.running {
+	if h.mb.isRunning() {
 		t.Fatal("TestMailbox_Smoke: Mailbox is still running after stopped.")
 	}
 
 	// Check memory leak
-	<-time.After(time.Millisecond)
-	if getAllocMailDebugNum() > 0 {
-		t.Fatal("TestMailbox_Smoke: Memory leak detected, some mails are not released.", allocMailDebugMap)
+	if waitAllocMailDebugZero(time.Second) > 0 {
+		t.Fatal("TestMailbox_Smoke: Memory leak detected, some mails are not released.", getAllAllocMailDebugInfo())
 	}
 
 	<-time.After(time.Millisecond)
@@ -124,6 +131,13 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 	var sendWait, wg sync.WaitGroup
 	var h *testMailboxHandler
 	count := uint64(100)
+	// handler 运行在 mailbox goroutine 上,不能直接 t.Fatal——Goexit 会杀死
+	// mailbox goroutine,剩余 wg.Done 永不执行,主 goroutine 的 wg.Wait 永久挂死。
+	// 错误经 buffered channel 回传,由测试主 goroutine 断言。
+	errCh := make(chan string, 8)
+	// 第二阶段 push 了 kill 邮件,它在队列中会被 getNum 计入(+1),
+	// 中间过程的 num 断言只在第一阶段(无 kill)成立。
+	var phase atomic.Int32
 	h = &testMailboxHandler{
 		t:  t,
 		mb: nil,
@@ -132,30 +146,45 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 			if n := mail.data.(uint64); n == 0 {
 				t.Log("TestMailBox_GetNum: A waiting mail received, wait for all mails sent.")
 				sendWait.Wait()
-			} else if num := int32(n) + int32(h.mb.getNum()); num < int32(count-2) || num > int32(count-1) {
-				t.Fatalf("TestMailBox_GetNum: GetNum returned wrong value during receiving mails. expect=(%d or %d) got=(%d)", n-1, n, h.mb.getNum())
+			} else if phase.Load() == 0 {
+				if num := int32(n) + int32(h.mb.getNum()); num < int32(count-2) || num > int32(count-1) {
+					errCh <- fmt.Sprintf("TestMailBox_GetNum: GetNum returned wrong value during receiving mails. expect=(%d or %d) got=(%d)", n-1, n, h.mb.getNum())
+				}
 			}
 			wg.Done()
 		},
 		stop: func(killMail, remainMails *mail, num uint32) *Error {
 			t.Log("TestMailBox_GetNum: Mail stopping.")
 			if killMail == nil {
-				t.Fatal("TestMailBox_GetNum: Stop received nil killMail.")
+				errCh <- "TestMailBox_GetNum: Stop received nil killMail."
+			} else if _, ok := killMail.data.(*mailExitCommand); !ok {
+				errCh <- fmt.Sprintf("TestMailBox_GetNum: Stop received wrong killMail action. expect=(*mailExitCommand) got=(%T)", killMail.data)
 			}
-			if _, ok := killMail.data.(*mailExitCommand); !ok {
-				t.Fatalf("TestMailBox_GetNum: Stop received wrong killMail action. expect=(*mailExitCommand) got=(%T)", killMail.data)
-			}
-			if num != uint32(count-1) { // one mail is being processed
-				t.Fatalf("TestMailBox_GetNum: Stop received wrong num. expect=(%d) got=(%d)", count, num)
-			}
-			cur := 1
+			// kill 落点与消费进度存在时序竞争,剩余邮件的起点(1 或更大)不确定,
+			// 只能断言:data 连续递增、最后一封是 count-1、num 等于链表长度。
+			var counted uint32
+			var prev uint64
 			for curMail := remainMails; curMail != nil; curMail = curMail.next {
-				if curMail.data.(uint64) != uint64(cur) {
-					t.Fatalf("TestMailBox_GetNum: Remaining mail has wrong data. expect=(%d) got=(%d)", cur, curMail.id)
+				d := curMail.data.(uint64)
+				if counted == 0 {
+					if d < 1 {
+						errCh <- fmt.Sprintf("TestMailBox_GetNum: First remaining mail has wrong data. expect=(>=1) got=(%d)", d)
+					}
+				} else if d != prev+1 {
+					errCh <- fmt.Sprintf("TestMailBox_GetNum: Remaining mails are not consecutive. prev=(%d) got=(%d)", prev, d)
 				}
-				cur++
+				prev = d
+				counted++
 				t.Log("TestMailBox_GetNum: Remaining mail:", curMail)
 				wg.Done()
+			}
+			if counted == 0 {
+				errCh <- "TestMailBox_GetNum: Stop received no remaining mails."
+			} else if prev != count-1 {
+				errCh <- fmt.Sprintf("TestMailBox_GetNum: Last remaining mail has wrong data. expect=(%d) got=(%d)", count-1, prev)
+			}
+			if num != counted {
+				errCh <- fmt.Sprintf("TestMailBox_GetNum: Stop received wrong num. expect=(%d) got=(%d)", counted, num)
 			}
 			return nil
 		},
@@ -181,7 +210,7 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		t.Log("TestMailBox_GetNum: Mail send.", i)
 		m := allocMail()
 		if getAllocMailDebugNum() == 0 {
-			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllAllocMailDebugInfo())
 		}
 		initMail(m, DefaultMailID, i)
 		h.mb.pushTail(m)
@@ -197,12 +226,13 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 
 	// Kill
 	count = uint64(100)
+	phase.Store(1)
 	wg.Add(int(count))
 	sendWait.Add(int(count))
 	for i := uint64(0); i < count; i++ {
 		m := allocMail()
 		if getAllocMailDebugNum() == 0 {
-			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllAllocMailDebugInfo())
 		}
 		initMail(m, DefaultMailID, i)
 		h.mb.pushTail(m)
@@ -212,16 +242,21 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 	// kill mail
 	m := allocMail()
 	if getAllocMailDebugNum() == 0 {
-		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", allocMailDebugMap)
+		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllAllocMailDebugInfo())
 	}
 	initKillMail(m, DefaultMailID, nil, nil)
 	h.mb.pushHead(m)
 	wg.Wait()
 
+	// handler 内回传的错误在 mailbox goroutine 上收集,此处统一断言。
+	close(errCh)
+	for msg := range errCh {
+		t.Error(msg)
+	}
+
 	// Check memory leak
-	<-time.After(time.Millisecond)
-	if getAllocMailDebugNum() > 0 {
-		t.Fatal("TestMailBox_GetNum: Memory leak detected, some mails are not released.", allocMailDebugMap)
+	if waitAllocMailDebugZero(time.Second) > 0 {
+		t.Fatal("TestMailBox_GetNum: Memory leak detected, some mails are not released.", getAllAllocMailDebugInfo())
 	}
 
 	<-time.After(time.Millisecond)

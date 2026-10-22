@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,28 @@ func newTestAtomosTaskManager(t *testing.T) *atomosTaskManager {
 		}
 	}
 	return at
+}
+
+// waitTaskDone 轮询等待任务达到 TaskDone 且已从 manager.tasks 删除。
+// task.timerState 与 at.tasks 由 at.mutex 保护;任务 fn 内的 channel 信号
+// 先于 handleTaskQueue 的 defer 清理触发,直接裸读会与清理构成数据竞争
+// (参照 mail.go waitAllocMailDebugZero 的轮询模式)。
+func waitTaskDone(t *testing.T, at *atomosTaskManager, task *atomosTask) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		at.mutex.Lock()
+		state := task.timerState
+		_, has := at.tasks[task.id]
+		at.mutex.Unlock()
+		if state == TaskDone && !has {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Expected task %d to be TaskDone and removed from tasks map, state=(%d), has=(%v)", task.id, state, has)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func TestAtomosTaskManager_LifeCycle(t *testing.T) {
@@ -612,12 +635,7 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 
 	at.addToQueue(at.atomos.mailbox, task1)
 	<-wait
-	if task1.timerState != TaskDone {
-		t.Fatal("Expected task1 timerState to be TaskDone after execution.")
-	}
-	if at.tasks[task1.id] != nil {
-		t.Fatal("Expected task1 to be removed from AtomosTaskManager tasks map after execution.")
-	}
+	waitTaskDone(t, at, task1)
 	if n := waitAllocMailDebugZero(time.Second); n != 0 {
 		t.Fatal("Expected 0 allocated mails after processing task1, got ", n)
 	}
@@ -645,12 +663,7 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 
 	at.addToQueue(at.atomos.mailbox, task2)
 	<-wait
-	if task2.timerState != TaskDone {
-		t.Fatal("Expected task2 timerState to be TaskDone after execution.")
-	}
-	if at.tasks[task2.id] != nil {
-		t.Fatal("Expected task2 to be removed from AtomosTaskManager tasks map after execution.")
-	}
+	waitTaskDone(t, at, task2)
 	if n := waitAllocMailDebugZero(time.Second); n != 0 {
 		t.Fatal("Expected 0 allocated mails after processing task2, got ", n)
 	}
@@ -676,12 +689,7 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 
 	at.addToQueue(at.atomos.mailbox, task3)
 	<-wait
-	if task3.timerState != TaskDone {
-		t.Fatal("Expected task3 timerState to be TaskDone after execution.")
-	}
-	if at.tasks[task3.id] != nil {
-		t.Fatal("Expected task3 to be removed from AtomosTaskManager tasks map after execution.")
-	}
+	waitTaskDone(t, at, task3)
 	if n := waitAllocMailDebugZero(time.Second); n != 0 {
 		t.Fatal("Expected 0 allocated mails after processing task3, got ", n)
 	}
@@ -689,9 +697,6 @@ func TestAtomosTaskManager_HandleTaskQueue(t *testing.T) {
 	// Task4 is a task that panics during execution.
 	helper4 := createTaskHelper(at, at.atomos.mailbox, nil, func(taskID uint64) func() {
 		panic("test panic")
-		return func() {
-			t.Fatal("test panic")
-		}
 	}, []ArgsForTask{
 		ArgTaskRecoverFunc(func(r any) {
 			t.Log("recovered from panic", r)
@@ -849,17 +854,17 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	at := newTestAtomosTaskManager(t)
 
 	// Test canceling a mailing task.
-	// First mail with 100ms delay, second mail to cancel it in 10ms.
-	state := 0
+	// state/cancelState 由任务 timer/mailbox goroutine 写、测试主 goroutine 读,必须 atomic。
+	var state, cancelState atomic.Int32
 	wait1 := make(chan struct{})
 	helper1 := createTaskHelper(at, at.atomos.mailbox, nil, func(taskID uint64) func() {
 		t.Log("Executing first mailing", taskID)
-		state = 1
+		state.Store(1)
 		wait1 <- struct{}{}
 		<-time.After(time.Millisecond * 500)
 		return func() {
 			t.Log("Executing first mail done", taskID)
-			state = 2
+			state.Store(2)
 			wait1 <- struct{}{}
 		}
 	}, []ArgsForTask{
@@ -889,7 +894,6 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	})
 
 	// Second mail
-	cancelState := 0
 	helper2 := createTaskHelper(at, at.atomos.mailbox, nil, func(taskID uint64) func() {
 		t.Fatal("Canceled task should not execute, but got ID:", taskID)
 		return func() {
@@ -898,7 +902,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	}, []ArgsForTask{
 		ArgTaskDelay(100 * time.Millisecond),
 		ArgTaskCancelCallback(func(reason string) {
-			cancelState = 1
+			cancelState.Store(1)
 			t.Log("Canceled mailing task callback executed. Reason:", reason)
 		}),
 	})
@@ -906,6 +910,15 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	task2 := helper2.atomosTask
 	if task2.id != 2 {
 		t.Fatalf("Expected third task ID to be 2, got %d", task2.id)
+	}
+
+	// 这两个断言必须在定时器创建之前:timer 一旦启动,delayAddToQueue 在
+	// timer goroutine 上持锁改写 timerState,裸读构成数据竞争。
+	if task2.timerState != TaskScheduling {
+		t.Fatal("Expected task2 timerState to be TaskScheduling before cancellation.")
+	}
+	if at.tasks[task2.id] != task2 {
+		t.Fatal("Expected task2 to be registered in AtomosTaskManager tasks map.")
 	}
 
 	am2 := allocBaseAtomosMail()
@@ -916,16 +929,32 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	}
 
 	wait2 := make(chan struct{})
+	// 先等 task1 开始执行:它会占用 atomos mailbox goroutine 500ms,
+	// task2 的邮件入队后不会被立即消费,从而确定性地停留在 TaskMailing,
+	// 消除"测试取消 task2"与"mailbox goroutine 开始执行 task2"之间的时序竞争。
+	<-wait1
+	if state.Load() != 1 {
+		t.Fatalf("Expected state to be 1 after first mailing started, got %d", state.Load())
+	}
+	// task1 fn 内的 wait1 信号发生在 handleTaskQueue 置 TaskExecuting 之后,
+	// 且清理 defer 要待 fn 返回(500ms 后)才运行,此处裸读无并发写。
+	if task1.timerState != TaskExecuting {
+		t.Fatal("Expected task1 timerState to be TaskExecuting during execution.")
+	}
+	if at.tasks[task1.id] != task1 {
+		t.Fatal("Expected task1 to be still registered in AtomosTaskManager tasks map during execution.")
+	}
+	// 执行中的任务不可取消。
+	if err := at.cancelTaskQueue(task1, false, "test cancel executing mailing"); err == nil {
+		t.Fatalf("Failed to cancel executing mailing task: %v", err)
+	} else if err.Code != ErrAtomosTaskCannotCancelRunningTask {
+		t.Fatalf("Expected ErrAtomosTaskCannotCancelRunningTask when canceling executing task, got: %v", err)
+	}
+
 	task2.timer = time.AfterFunc(time.Millisecond, func() {
 		at.delayAddToQueue(at.atomos.mailbox, task2)
 		wait2 <- struct{}{}
 	})
-	if task2.timerState != TaskScheduling {
-		t.Fatal("Expected task2 timerState to be TaskScheduling before cancellation.")
-	}
-	if at.tasks[task2.id] != task2 {
-		t.Fatal("Expected task2 to be registered in AtomosTaskManager tasks map.")
-	}
 	<-wait2
 	if task2.timerState != TaskMailing {
 		t.Fatal("Expected task2 timerState to be TaskMailing after timer fired.")
@@ -934,46 +963,25 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 		t.Fatal("Expected task2 to be still registered in AtomosTaskManager tasks map.")
 	}
 
-	if state != 0 {
-		t.Fatalf("Expected state to be 0 before cancellation, got %d", state)
+	if state.Load() != 1 {
+		t.Fatalf("Expected state to remain 1 before cancellation, got %d", state.Load())
 	}
 	if err := at.cancelTaskQueue(task2, false, "test cancel mailing"); err != nil {
 		t.Fatalf("Failed to cancel mailing task: %v", err)
 	}
-	if state != 0 {
-		t.Fatalf("Expected state to remain 0 after cancellation, got %d", state)
+	if state.Load() != 1 {
+		t.Fatalf("Expected state to remain 1 after cancellation, got %d", state.Load())
 	}
-	if cancelState != 1 {
-		t.Fatalf("Expected cancelState to be 1 after cancel callback, got %d", cancelState)
-	}
-
-	// Testing cancel executing mailing task
-	<-wait1
-	if state != 1 {
-		t.Fatalf("Expected state to be 1 after first mailing started, got %d", state)
-	}
-	if task1.timerState != TaskExecuting {
-		t.Fatal("Expected task1 timerState to be TaskExecuting during execution.")
-	}
-	if at.tasks[task1.id] != task1 {
-		t.Fatal("Expected task1 to be removed from AtomosTaskManager tasks map during execution.")
-	}
-	if err := at.cancelTaskQueue(task1, false, "test cancel executing mailing"); err == nil {
-		t.Fatalf("Failed to cancel executing mailing task: %v", err)
-	} else if err.Code != ErrAtomosTaskCannotCancelRunningTask {
-		t.Fatalf("Expected ErrAtomosTaskCannotCancelRunningTask when canceling executing task, got: %v", err)
+	if cancelState.Load() != 1 {
+		t.Fatalf("Expected cancelState to be 1 after cancel callback, got %d", cancelState.Load())
 	}
 
+	// Testing cancel done mailing task
 	<-wait1
-	if state != 2 {
-		t.Fatalf("Expected state to be 2 after first mailing completed, got %d", state)
+	if state.Load() != 2 {
+		t.Fatalf("Expected state to be 2 after first mailing completed, got %d", state.Load())
 	}
-	if task1.timerState != TaskDone {
-		t.Fatal("Expected task1 timerState to be TaskDone after execution.")
-	}
-	if at.tasks[task1.id] != nil {
-		t.Fatal("Expected task1 to remain removed from AtomosTaskManager tasks map after execution.")
-	}
+	waitTaskDone(t, at, task1)
 	if err := at.cancelTaskQueue(task1, false, "test cancel done mailing"); err == nil {
 		t.Fatalf("Canceling a done task should fail, but got no error.")
 	} else if err.Code != ErrAtomosTaskCannotCancelDoneTask {
@@ -981,7 +989,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	}
 
 	if n := waitAllocMailDebugZero(time.Second); n != 0 {
-		t.Fatal("Expected 1 allocated mail after canceling second mailing task, got ", n)
+		t.Fatal("Expected 0 allocated mails after canceling second mailing task, got ", n)
 	}
 
 	<-time.After(time.Millisecond)
