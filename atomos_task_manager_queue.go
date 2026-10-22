@@ -86,7 +86,9 @@ func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnW
 			return nil
 		}
 	default:
-		return at.addToQueue(at.atomos.mailbox, task)
+		// 立即任务必须投递到传入的 mailbox(串行/并发队列),而不是 atomos 主邮箱——
+		// 否则并发队列不并发、每个立即任务泄漏一个 taskMailbox goroutine、cancel 弹错队列。
+		return at.addToQueue(mailbox, task)
 	}
 }
 

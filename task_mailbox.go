@@ -42,16 +42,7 @@ func (m *taskMailbox) mailboxOnStop(_, remainMails *mail, num uint32) *Error {
 
 func (m *taskMailbox) handleAtomosMail(mail *mail) {
 	am := mail.data.(*baseAtomosMail)
-	helper := am.atomosTask.helper
-	at := helper.manager
-	if fn := helper.task; fn != nil {
-		fn(am.mail.id)
-	} else if fnWithCallback := helper.taskWithCallback; fnWithCallback != nil {
-		callback := fnWithCallback(am.mail.id)
-		if callback != nil {
-			at.atomos.PushTaskCallbackMail(am.name, callback, helper.recoverFn)
-		}
-	} else {
-		at.atomos.log.Fatal("AtomosTask: Task closure is nil. taskHelper=(%+v)", helper)
-	}
+	// 串行/并发队列邮箱与主邮箱走同一套任务状态机:
+	// 已取消的任务跳过执行、Mailing→Executing→Done 转换、完成后从 manager.tasks 清理。
+	am.atomosTask.helper.manager.handleTaskQueue(am)
 }
