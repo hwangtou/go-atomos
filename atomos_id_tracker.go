@@ -144,7 +144,7 @@ func (s *atomRefState) String() string {
 	for instID, trackers := range s.debug {
 		for _, tr := range trackers {
 			b.WriteString("\n\t")
-			b.WriteString(tr.ToString())
+			b.WriteString(tr.String())
 		}
 		// Include instances that have a cell but no debug trackers recorded.
 		if len(trackers) == 0 {
@@ -178,8 +178,9 @@ type IDTracker struct {
 	name string
 }
 
-// ToString returns a diagnostic string "<instID>:<id>-<file>:<line>".
-func (i *IDTracker) ToString() string {
+// String returns a diagnostic string "<instID>:<id>-<file>:<line>".
+// It implements fmt.Stringer.
+func (i *IDTracker) String() string {
 	if i == nil {
 		return "nil"
 	}

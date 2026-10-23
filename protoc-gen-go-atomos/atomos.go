@@ -217,6 +217,10 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 	g.P("*", atomosPackage.Ident("IDTracker"))
 	g.P("}")
 	g.P()
+	// Disambiguate String: both the embedded ID and *IDTracker implement
+	// fmt.Stringer, so the promoted selector would be ambiguous.
+	g.P("func (c *", idName, ") String() string { return c.ID.String() }")
+	g.P()
 
 	g.P("// Get element id of a node.")
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
@@ -269,6 +273,10 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P(atomosPackage.Ident("ID"))
 	g.P("*", atomosPackage.Ident("IDTracker"))
 	g.P("}")
+	g.P()
+	// Disambiguate String: both the embedded ID and *IDTracker implement
+	// fmt.Stringer, so the promoted selector would be ambiguous.
+	g.P("func (c *", atomName, ") String() string { return c.ID.String() }")
 	g.P()
 
 	// Spawn factory.

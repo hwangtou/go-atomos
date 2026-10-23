@@ -44,6 +44,8 @@ type ForTestAtomosElementID struct {
 	*IDTracker
 }
 
+func (c *ForTestAtomosElementID) String() string { return c.ID.String() }
+
 // Get element id of a node.
 func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, error) {
 	ca, err := c.CosmosGetElementID(ForTestAtomosName)
@@ -69,6 +71,8 @@ type ForTestAtomosAtomID struct {
 	ID
 	*IDTracker
 }
+
+func (c *ForTestAtomosAtomID) String() string { return c.ID.String() }
 
 // Create (spawn) an atom in a node and return the AtomID.
 func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg) (*ForTestAtomosAtomID, error) {

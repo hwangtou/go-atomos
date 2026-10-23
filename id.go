@@ -90,9 +90,11 @@ type SelfID interface {
 	ID
 	AtomosUtilities
 
-	// CosmosMain 获取Cosmos的本地实现。
-	// Get local implementation of Cosmos.
-	CosmosMain() *CosmosLocal
+	// CosmosMain 获取Cosmos节点（本地实现以 CosmosNode 接口返回）。
+	// 需要 *CosmosLocal 具体类型处自行类型断言。
+	// Get the Cosmos node (the local implementation, returned as CosmosNode).
+	// Callers needing *CosmosLocal specifically can type-assert.
+	CosmosMain() CosmosNode
 
 	// KillSelf Atomos从内部杀死自己。
 	// Atomos kills itself internally.

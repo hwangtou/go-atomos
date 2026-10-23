@@ -66,7 +66,7 @@ func NewError(code int64, message string) *Error {
 	}
 }
 
-func NewErrorf(code int64, format string, args ...interface{}) *Error {
+func NewErrorf(code int64, format string, args ...any) *Error {
 	return &Error{
 		Code:       code,
 		Message:    fmt.Sprintf(format, args...),
@@ -98,7 +98,7 @@ func asError(err error) *Error {
 	return NewError(ErrCodeUnknown, err.Error())
 }
 
-func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...interface{}) *Error {
+func (x *Error) AddPanicStack(id SelfID, skip int, reason any, args ...any) *Error {
 	if x == nil {
 		return nil
 	}
@@ -125,7 +125,7 @@ func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...i
 	return x
 }
 
-func (x *Error) AddStack(id SelfID, args ...interface{}) *Error {
+func (x *Error) AddStack(id SelfID, args ...any) *Error {
 	if x == nil {
 		return nil
 	}
@@ -183,7 +183,7 @@ func (x *Error) IsAtomExist() bool {
 	return errors.Is(x, ErrAtomIsRunning)
 }
 
-func (x *Error) Scan(value interface{}) error {
+func (x *Error) Scan(value any) error {
 	if value == nil {
 		return nil
 	}

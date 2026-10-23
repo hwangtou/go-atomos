@@ -87,14 +87,14 @@ func (argBaseAtomosWaitKilled) argForBaseAtomos() {}
 
 // BaseAtomosWithAny
 
-type ArgBaseAtomosWithAny struct {
+type argBaseAtomosWithAny struct {
 	Any any
 }
 
-func (ArgBaseAtomosWithAny) getArgType() ArgType {
+func (argBaseAtomosWithAny) getArgType() ArgType {
 	return ArgTypeBaseAtomosWithAny
 }
-func (ArgBaseAtomosWithAny) argForBaseAtomos() {}
+func (argBaseAtomosWithAny) argForBaseAtomos() {}
 
 // BaseAtomosFromLocalOnly / BaseAtomosFromRemoteOnly
 

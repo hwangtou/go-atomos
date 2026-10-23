@@ -77,7 +77,7 @@ func TestIDTracker_BasicRefCount(t *testing.T) {
 		}
 
 		// ToString should report a reasonable instID:id-file:line format.
-		if got := t3.ToString(); got == "" {
+		if got := t3.String(); got == "" {
 			t.Fatal("Expected non-empty ToString for tracker")
 		}
 	})
@@ -90,7 +90,7 @@ func TestIDTracker_NilReleaseSafety(t *testing.T) {
 	// Must not panic.
 	nilTracker.Release()
 
-	if got := nilTracker.ToString(); got != "nil" {
+	if got := nilTracker.String(); got != "nil" {
 		t.Fatalf("Expected \"nil\" for nil tracker ToString, got %q", got)
 	}
 }

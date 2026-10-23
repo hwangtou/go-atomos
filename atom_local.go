@@ -171,7 +171,7 @@ func (a *AtomLocal) Task() Task {
 // With SelfID, Atom can access its self-main with "CosmosSelf", can kill itself use "KillSelf" from inner.
 // It also provides Log and Tasks method to inner Atom.
 
-func (a *AtomLocal) CosmosMain() *CosmosLocal {
+func (a *AtomLocal) CosmosMain() CosmosNode {
 	return a.element.cosmosLocal
 }
 

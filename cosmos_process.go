@@ -727,7 +727,7 @@ func (p *CosmosProcess) IsHealthy() bool {
 // It replaces the former package-level RecoveryMiddleware, which depended on
 // the deleted sharedCosmosProcess singleton.
 func (p *CosmosProcess) recoveryMiddleware() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				if p != nil {

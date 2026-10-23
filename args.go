@@ -9,7 +9,7 @@ import "time"
 // ArgBaseAtomosTimeout creates an argument that specifies a timeout duration for BaseAtomos operations.
 // 创建一个参数，指定BaseAtomos操作的超时时间。
 // Example usage:
-// toID.SyncMessagingByName(callerID, "message_name", inMessage, []atomos.ArgsForBaseAtomos{atomos.ArgBaseAtomosTimeout(5 * time.Second)})
+// toID.SyncMessagingByName(callerID, "message_name", inMessage, atomos.ArgBaseAtomosTimeout(5*time.Second))
 func ArgBaseAtomosTimeout(timeout time.Duration) ArgsForBaseAtomos {
 	return argBaseAtomosTimeout{timeout: timeout}
 }
@@ -17,7 +17,7 @@ func ArgBaseAtomosTimeout(timeout time.Duration) ArgsForBaseAtomos {
 // ArgBaseAtomosAppendToHead creates an argument that indicates the message should be appended to the head of the mailbox queue.
 // 创建一个参数，表示消息应添加到邮箱队列的头部。
 // Example usage:
-// toID.AsyncMessagingByName(callerID, "message_name", inMessage, callback, []atomos.ArgsForBaseAtomos{atomos.ArgBaseAtomosAppendToHead()})
+// toID.AsyncMessagingByName(callerID, "message_name", inMessage, callback, atomos.ArgBaseAtomosAppendToHead())
 func ArgBaseAtomosAppendToHead() ArgsForBaseAtomos {
 	return argBaseAtomosAppendToHead{}
 }
@@ -25,17 +25,17 @@ func ArgBaseAtomosAppendToHead() ArgsForBaseAtomos {
 // ArgBaseAtomosWaitKilled creates an argument that indicates the operation should wait until the BaseAtomos is killed.
 // 创建一个参数，表示操作应等待直到BaseAtomos被终止。
 // Example usage:
-// toID.Kill(callerID, []atomos.ArgsForBaseAtomos{atomos.ArgBaseAtomosWaitKilled()})
+// toID.Kill(callerID, atomos.ArgBaseAtomosWaitKilled())
 func ArgBaseAtomosWaitKilled() ArgsForBaseAtomos {
 	return argBaseAtomosWaitKilled{}
 }
 
-// NewArgBaseAtomosWithAny creates an argument that holds any arbitrary data to be passed along with the BaseAtomos operation.
+// ArgBaseAtomosAny creates an argument that holds any arbitrary data to be passed along with the BaseAtomos operation.
 // 创建一个参数，包含任何任意数据，以便与BaseAtomos操作一起传递。
 // Example usage:
-// toID.SyncMessagingByName(callerID, "message_name", inMessage, []atomos.ArgsForBaseAtomos{atomos.NewArgBaseAtomosWithAny(myData)})
-func NewArgBaseAtomosWithAny(any any) ArgsForBaseAtomos {
-	return ArgBaseAtomosWithAny{Any: any}
+// toID.SyncMessagingByName(callerID, "message_name", inMessage, atomos.ArgBaseAtomosAny(myData))
+func ArgBaseAtomosAny(v any) ArgsForBaseAtomos {
+	return argBaseAtomosWithAny{Any: v}
 }
 
 // ArgBaseAtomosFromLocalOnly marks an Element.GetAtomID/SpawnAtom call as
@@ -93,7 +93,7 @@ func ArgTaskAppendToHead() ArgsForTask { return argTaskAppendToHead{} }
 // ArgTaskCancelCallback creates an argument that holds a callback function to be called when a task is canceled.
 // 创建一个参数，包含一个回调函数，当任务被取消时调用该函数。
 // Example usage:
-// self.Task().AddToAtomosQueue(func(taskID uint64) {}, atomos.ArgTaskCancelCallback(func() {}))
+// self.Task().AddToAtomosQueue(func(taskID uint64) {}, atomos.ArgTaskCancelCallback(func(reason string) {}))
 func ArgTaskCancelCallback(cb func(reason string)) ArgsForTask {
 	return argTaskCancelCallback{callback: cb}
 }

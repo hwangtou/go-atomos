@@ -13,12 +13,12 @@ type Logging interface {
 
 	SetLevel(lv LogLevel)
 
-	Debug(format string, args ...interface{})
-	Info(format string, args ...interface{})
-	Warn(format string, args ...interface{})
+	Debug(format string, args ...any)
+	Info(format string, args ...any)
+	Warn(format string, args ...any)
 
-	Error(format string, args ...interface{})
-	Fatal(format string, args ...interface{})
+	Error(format string, args ...any)
+	Fatal(format string, args ...any)
 }
 
 // loggingInternal is the framework-internal extension of Logging with the
@@ -27,9 +27,9 @@ type Logging interface {
 type loggingInternal interface {
 	Logging
 
-	coreInfo(format string, args ...interface{})
-	coreError(format string, args ...interface{})
-	coreFatal(format string, args ...interface{})
+	coreInfo(format string, args ...any)
+	coreError(format string, args ...any)
+	coreFatal(format string, args ...any)
 }
 
 // Atomos日志管理器
@@ -75,56 +75,56 @@ func (l *atomosLogging) pushAtomosLog(id *IDInfo, level LogLevel, msg string) {
 // 各种级别的日志函数。
 // Log functions in difference levels.
 
-func (l *atomosLogging) Debug(format string, args ...interface{}) {
+func (l *atomosLogging) Debug(format string, args ...any) {
 	if l.level > LogLevel_Debug {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Debug, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) Info(format string, args ...interface{}) {
+func (l *atomosLogging) Info(format string, args ...any) {
 	if l.level > LogLevel_Info {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Info, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) coreInfo(format string, args ...interface{}) {
+func (l *atomosLogging) coreInfo(format string, args ...any) {
 	if l.level > LogLevel_CoreInfo {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_CoreInfo, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) Warn(format string, args ...interface{}) {
+func (l *atomosLogging) Warn(format string, args ...any) {
 	if l.level > LogLevel_Warn {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Warn, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) Error(format string, args ...interface{}) {
+func (l *atomosLogging) Error(format string, args ...any) {
 	if l.level > LogLevel_Err {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Err, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) coreError(format string, args ...interface{}) {
+func (l *atomosLogging) coreError(format string, args ...any) {
 	if l.level > LogLevel_CoreErr {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_CoreErr, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) Fatal(format string, args ...interface{}) {
+func (l *atomosLogging) Fatal(format string, args ...any) {
 	if l.level > LogLevel_Fatal {
 		return
 	}
 	l.pushAtomosLog(l.id, LogLevel_Fatal, fmt.Sprintf(format, args...))
 }
 
-func (l *atomosLogging) coreFatal(format string, args ...interface{}) {
+func (l *atomosLogging) coreFatal(format string, args ...any) {
 	if l.level > LogLevel_CoreFatal {
 		return
 	}

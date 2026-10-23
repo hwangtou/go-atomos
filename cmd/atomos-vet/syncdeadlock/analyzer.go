@@ -40,7 +40,7 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
-func run(pass *analysis.Pass) (interface{}, error) {
+func run(pass *analysis.Pass) (any, error) {
 	// Collect all sync handler methods in this package.
 	var handlers []*ast.FuncDecl
 	for _, file := range pass.Files {
