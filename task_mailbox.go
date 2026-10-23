@@ -1,7 +1,5 @@
 package atomos
 
-import "runtime/debug"
-
 // SerialQueue
 
 type taskMailbox struct {
@@ -44,34 +42,7 @@ func (m *taskMailbox) mailboxOnStop(_, remainMails *mail, num uint32) *Error {
 
 func (m *taskMailbox) handleAtomosMail(mail *mail) {
 	am := mail.data.(*baseAtomosMail)
-	helper := am.atomosTask.helper
-	at := helper.manager
-	// Wrap the user closure in a recover so that a panic does not escape into
-	// the mailbox loop (which would only log a generic error and drop the rest
-	// of the queue). Mirrors atomosTaskManager.handleTaskQueue: invoke the
-	// helper's recoverFn when provided, otherwise log the panic.
-	defer func() {
-		if r := recover(); r != nil {
-			defer func() {
-				if r2 := recover(); r2 != nil {
-					at.atomos.log.Fatal("AtomosTask: Recover from panic in panic handler (taskMailbox). reason=(%v), stack=(%s)\n", r2, string(debug.Stack()))
-				}
-			}()
-			if f := helper.recoverFn; f != nil {
-				f(r)
-			} else {
-				at.atomos.log.Fatal("AtomosTask: Recover from panic when handling task (taskMailbox). reason=(%v), stack=(%s)\n", r, string(debug.Stack()))
-			}
-		}
-	}()
-	if fn := helper.task; fn != nil {
-		fn(am.mail.id)
-	} else if fnWithCallback := helper.taskWithCallback; fnWithCallback != nil {
-		callback := fnWithCallback(am.mail.id)
-		if callback != nil {
-			at.atomos.PushTaskCallbackMail(am.name, callback, helper.recoverFn)
-		}
-	} else {
-		at.atomos.log.Fatal("AtomosTask: Task closure is nil. taskHelper=(%+v)", helper)
-	}
+	// 串行/并发队列邮箱与主邮箱走同一套任务状态机:
+	// 已取消的任务跳过执行、Mailing→Executing→Done 转换、完成后从 manager.tasks 清理。
+	am.atomosTask.helper.manager.handleTaskQueue(am)
 }
