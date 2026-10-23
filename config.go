@@ -10,11 +10,11 @@ import (
 func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, *Error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
+		return nil, NewErrorf(ErrCodeCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
 	}
 	y := &NodeYAMLConfig{}
 	if err = yaml.Unmarshal(dat, y); err != nil {
-		return nil, NewErrorf(ErrCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err).AddStack(nil)
+		return nil, NewErrorf(ErrCodeCosmosConfigInvalid, "Unmarshal failed, err=(%v)", err).AddStack(nil)
 	}
 	logLevel := LogLevel_Debug
 	if lv, ok := LogLevel_value[y.LogLevel]; ok {
@@ -69,7 +69,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 	for _, element := range y.EnableElements {
 		impl, has := runnable.implements[element]
 		if !has {
-			return nil, NewErrorf(ErrCosmosConfigInvalid, "Element not found. element=(%s)", element).AddStack(nil)
+			return nil, NewErrorf(ErrCodeCosmosConfigInvalid, "Element not found. element=(%s)", element).AddStack(nil)
 		}
 		runnable.SetElementSpawn(impl.Interface.Config.Name)
 	}
@@ -86,13 +86,13 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 // config. Returns nil when clustering is disabled.
 func (x *Config) ValidateSupervisorConfig() *Error {
 	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+		return NewError(ErrCodeCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}
 	if x.EnableCluster == nil || !x.EnableCluster.Enable {
 		return nil
 	}
 	if len(x.EnableCluster.EtcdEndpoints) == 0 {
-		return NewError(ErrCosmosConfigInvalid, "Cluster enabled but no etcd endpoints configured").AddStack(nil)
+		return NewError(ErrCodeCosmosConfigInvalid, "Cluster enabled but no etcd endpoints configured").AddStack(nil)
 	}
 	return nil
 }
@@ -100,13 +100,13 @@ func (x *Config) ValidateSupervisorConfig() *Error {
 // ValidateCosmosNodeConfig validates the node-level fields (names, paths).
 func (x *Config) ValidateCosmosNodeConfig() *Error {
 	if x == nil {
-		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
+		return NewError(ErrCodeCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}
 	if !checkCosmosName(x.Cosmos) {
-		return NewErrorf(ErrCosmosConfigInvalid, "Cosmos name invalid or empty. cosmos=(%s)", x.Cosmos).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosConfigInvalid, "Cosmos name invalid or empty. cosmos=(%s)", x.Cosmos).AddStack(nil)
 	}
 	if !checkNodeName(x.Node) {
-		return NewErrorf(ErrCosmosConfigInvalid, "Node name invalid or empty. node=(%s)", x.Node).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosConfigInvalid, "Node name invalid or empty. node=(%s)", x.Node).AddStack(nil)
 	}
 	return nil
 }

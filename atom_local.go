@@ -55,13 +55,13 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	instance, err := func() (at Atomos, err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewError(ErrFrameworkRecoverFromPanic, "Atom: AtomConstructor panic.").AddStack(a)
+				err = NewError(ErrCodeFrameworkRecoverFromPanic, "Atom: AtomConstructor panic.").AddStack(a)
 				a.element.cosmosLocal.Log().Error("AtomLocal: AtomConstructor panic. err=(%v)", r)
 			}
 		}()
 		at = current.Developer.AtomConstructor(name)
 		if at == nil {
-			return nil, NewError(ErrFrameworkIncorrectUsage, "Atom: AtomConstructor return nil.").AddStack(a)
+			return nil, NewError(ErrCodeFrameworkIncorrectUsage, "Atom: AtomConstructor return nil.").AddStack(a)
 		}
 		return at, nil
 	}()
@@ -199,7 +199,7 @@ func (a *AtomLocal) Parallel(fn func()) {
 						a.Log().Fatal("Atom: Parallel critical problem again. err=(%v)", err)
 					}
 				}()
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Parallel recovers from panic.").AddPanicStack(a, 3, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atom: Parallel recovers from panic.").AddPanicStack(a, 3, r)
 				// Hook or Log
 				if ar, ok := a.atomos.instance.(AtomosRecover); ok {
 					ar.ParallelRecover(err)
@@ -238,7 +238,7 @@ func (a *AtomLocal) Persistence() AtomAutoData {
 func (a *AtomLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
-		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
+		return nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists,
 			"Atom: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a)
 	}
 	return a.atomos.onSyncMessaging(fromID, name, handler, in)
@@ -250,7 +250,7 @@ func (a *AtomLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID 
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
 			a.atomos.log.coreError("Atom: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
+			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists, "Atom: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
 		}
 		return
 	}
@@ -282,7 +282,7 @@ func (a *AtomLocal) onFnCallback(callback *atomosCallback) {
 func (a *AtomLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
+		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
 		return err.AddStack(a)
@@ -304,7 +304,7 @@ func (a *AtomLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Stopping recovers from panic.").AddPanicStack(a, 3, r, data)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atom: Stopping recovers from panic.").AddPanicStack(a, 3, r, data)
 			} else {
 				err = err.AddPanicStack(a, 3, r, data)
 			}
@@ -328,19 +328,19 @@ func (a *AtomLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	impl := a.element.elemImpl
 	if impl == nil {
 		a.Log().Fatal("Atom: Stopping save data error. no element implement. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo().Info(), a.element, data)
-		return NewErrorf(ErrAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
+		return NewErrorf(ErrCodeAtomKillElementNoImplement, "Atom: Stopping save data error. no element implement. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
 	persistence, ok := impl.Developer.(AutoData)
 	if !ok || persistence == nil {
 		a.Log().Fatal("Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo().Info(), a.element, data)
-		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
+		return NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
 	atomPersistence := persistence.AtomAutoData()
 	if atomPersistence == nil {
 		a.Log().Fatal("Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v),data=(%v)", a.atomos.GetIDInfo().Info(), a.element, data)
-		return NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
+		return NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
 	if err = atomPersistence.SetAtomData(a.atomos.id.Atom, data); err != nil {
@@ -362,7 +362,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Atom: Spawn recovers from panic.").AddPanicStack(a, 3, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atom: Spawn recovers from panic.").AddPanicStack(a, 3, r)
 			} else {
 				err = err.AddPanicStack(a, 3, r)
 			}
@@ -391,7 +391,7 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 				return err.AddStack(a)
 			}
 			if data == nil && arg == nil {
-				return NewErrorf(ErrAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
+				return NewErrorf(ErrCodeAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
 			}
 		}
 	}

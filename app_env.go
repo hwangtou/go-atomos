@@ -35,18 +35,18 @@ func (a *appEnv) checkRunPath() *Error {
 	runPath := a.config.RunPath
 	stat, er := os.Stat(runPath)
 	if er != nil {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Invalid run path. path=(%s),err=(%v)", runPath, er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Invalid run path. path=(%s),err=(%v)", runPath, er).AddStack(nil)
 	}
 	if !stat.IsDir() {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path is not a directory. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path is not a directory. err=(%v)", er).AddStack(nil)
 	}
 
 	runTestPath := runPath + "/test"
 	if er = os.WriteFile(runTestPath, []byte{}, 0644); er != nil {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path cannot writ. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path cannot writ. err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Remove(runTestPath); er != nil {
-		return NewErrorf(ErrAppEnvRunPathInvalid, "App: Run path test file cannot delete. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path test file cannot delete. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }
@@ -60,7 +60,7 @@ func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 
 	processID, er := strconv.ParseInt(string(pidBuf), 10, 64)
 	if er != nil {
-		return false, 0, NewErrorf(ErrAppEnvRunPathPIDFileInvalid, "App: Run path pid file invalid. err=(%v)", er).AddStack(nil)
+		return false, 0, NewErrorf(ErrCodeAppEnvRunPathPIDFileInvalid, "App: Run path pid file invalid. err=(%v)", er).AddStack(nil)
 	}
 
 	var ok bool
@@ -72,7 +72,7 @@ func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 	}
 	er = proc.Signal(syscall.Signal(0))
 	if er == nil {
-		return true, int(processID), NewErrorf(ErrAppEnvRunPathPIDIsRunning, "App: Run path pid is running. pid=(%d),err=(%v)", processID, er).AddStack(nil)
+		return true, int(processID), NewErrorf(ErrCodeAppEnvRunPathPIDIsRunning, "App: Run path pid is running. pid=(%d),err=(%v)", processID, er).AddStack(nil)
 	}
 	if er.Error() == "os: app already finished" {
 		goto removePID
@@ -85,12 +85,12 @@ func (a *appEnv) checkRunPathProcessID() (bool, int, *Error) {
 	case syscall.ESRCH:
 		goto removePID
 	case syscall.EPERM:
-		return true, int(processID), NewErrorf(ErrAppEnvRunPathPIDIsRunning, "App: Run path pid is EPERM. pid=(%d),err=(%v)", processID, er).AddStack(nil)
+		return true, int(processID), NewErrorf(ErrCodeAppEnvRunPathPIDIsRunning, "App: Run path pid is EPERM. pid=(%d),err=(%v)", processID, er).AddStack(nil)
 	}
 
 removePID:
 	if er = os.Remove(runPIDPath); er != nil {
-		return false, 0, NewErrorf(ErrAppEnvRunPathRemovePIDFailed, "App: Run path pid file removes failed. pid=(%d),err=(%v)", processID, er).AddStack(nil)
+		return false, 0, NewErrorf(ErrCodeAppEnvRunPathRemovePIDFailed, "App: Run path pid file removes failed. pid=(%d),err=(%v)", processID, er).AddStack(nil)
 	}
 	return false, 0, nil
 }
@@ -106,7 +106,7 @@ func (a *appEnv) daemon() *Error {
 		// idempotent across repeated calls within one process.
 		_ = os.Remove(runPIDPath)
 		if er := os.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
-			return NewErrorf(ErrAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
+			return NewErrorf(ErrCodeAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
 		}
 	}
 	go a.daemonNotify()

@@ -257,14 +257,14 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 	// Check if in prepare state.
 	if err := func() *Error {
 		if p == nil {
-			return NewError(ErrCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").
+			return NewError(ErrCodeCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").
 				AddStack(nil)
 		}
 		p.mutex.Lock()
 		defer p.mutex.Unlock()
 
 		if p.state != CosmosProcessStatePrepare {
-			return NewError(ErrCosmosProcessHasBeenStarted, "CosmosProcess: Process can only start once.").
+			return NewError(ErrCodeCosmosProcessHasBeenStarted, "CosmosProcess: Process can only start once.").
 				AddStack(nil)
 		}
 		p.state = CosmosProcessStateStartup
@@ -277,7 +277,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 	if err := func() (err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewError(ErrCosmosProcessOnStartupPanic, "CosmosProcess: Process startups panic.").
+				err = NewError(ErrCodeCosmosProcessOnStartupPanic, "CosmosProcess: Process startups panic.").
 					AddPanicStack(p.local, 1, r)
 			}
 		}()
@@ -369,9 +369,9 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		defer p.mutex.Unlock()
 		switch p.state {
 		case CosmosProcessStatePrepare:
-			return NewError(ErrCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping app is preparing.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping app is preparing.").AddStack(p.local)
 		case CosmosProcessStateStartup:
-			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
 			// Signal drainWatcher (if running) to exit promptly so its polling
@@ -382,11 +382,11 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 			}
 			return nil
 		case CosmosProcessStateShutdown:
-			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
 		case CosmosProcessStateOff:
-			return NewError(ErrCosmosProcessCannotStopOffState, "CosmosProcess: Stopping app is halt.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopOffState, "CosmosProcess: Stopping app is halt.").AddStack(p.local)
 		}
-		return NewError(ErrCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(p.local)
+		return NewError(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(p.local)
 	}(); err != nil {
 		return err.AddStack(p.local)
 	}
@@ -394,7 +394,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 	err := func() (err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewError(ErrCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").
+				err = NewError(ErrCodeCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").
 					AddPanicStack(p.local, 1, r)
 			}
 		}()
@@ -454,12 +454,12 @@ func (p *CosmosProcess) isDraining() bool {
 // goroutine; this method returns immediately after marking the state.
 func (p *CosmosProcess) Drain(deadline time.Duration) *Error {
 	if p == nil {
-		return NewError(ErrCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
+		return NewError(ErrCodeCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
 	}
 	p.mutex.Lock()
 	if p.state != CosmosProcessStateRunning {
 		p.mutex.Unlock()
-		return NewErrorf(ErrCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", p.state).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", p.state).AddStack(nil)
 	}
 	if p.draining {
 		p.mutex.Unlock()
@@ -582,16 +582,16 @@ func (p *CosmosProcess) Stop() *Error {
 	// Guard against a nil receiver — a process that was never initialized
 	// would panic on Stop. Return an error instead.
 	if p == nil {
-		return NewError(ErrCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
+		return NewError(ErrCodeCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
 	}
 	if err := func() *Error {
 		p.mutex.Lock()
 		defer p.mutex.Unlock()
 		switch p.state {
 		case CosmosProcessStatePrepare:
-			return NewError(ErrCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping app is preparing.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopPrepareState, "CosmosProcess: Stopping app is preparing.").AddStack(p.local)
 		case CosmosProcessStateStartup:
-			return NewError(ErrCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
 			// Signal drainWatcher (if running) to exit promptly so its polling
@@ -602,11 +602,11 @@ func (p *CosmosProcess) Stop() *Error {
 			}
 			return nil
 		case CosmosProcessStateShutdown:
-			return NewError(ErrCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopShutdownState, "CosmosProcess: Stopping app is shutting down.").AddStack(p.local)
 		case CosmosProcessStateOff:
-			return NewError(ErrCosmosProcessCannotStopOffState, "CosmosProcess: Stopping app is halt.").AddStack(p.local)
+			return NewError(ErrCodeCosmosProcessCannotStopOffState, "CosmosProcess: Stopping app is halt.").AddStack(p.local)
 		}
-		return NewError(ErrCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(p.local)
+		return NewError(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Stopping app is in invalid app state.").AddStack(p.local)
 	}(); err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (p *CosmosProcess) Stop() *Error {
 	err := func() (err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewError(ErrCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").
+				err = NewError(ErrCodeCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").
 					AddPanicStack(p.local, 1, r)
 			}
 		}()
@@ -658,7 +658,7 @@ func (p *CosmosProcess) Stop() *Error {
 func (p *CosmosProcess) mainScriptOnBootProtect() (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewError(ErrCosmosProcessOnStartupPanic, "CosmosProcess: Process boots panic.").AddPanicStack(p.local, 3, r)
+			err = NewError(ErrCodeCosmosProcessOnStartupPanic, "CosmosProcess: Process boots panic.").AddPanicStack(p.local, 3, r)
 			p.local.coreLog().coreFatal("CosmosProcess: Main script boot failed. err=(%+v)", err)
 		}
 	}()
@@ -671,7 +671,7 @@ func (p *CosmosProcess) mainScriptOnBootProtect() (err *Error) {
 func (p *CosmosProcess) mainScriptOnStartUpProtect() (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewError(ErrCosmosProcessOnStartupPanic, "CosmosProcess: Process startups panic.").AddPanicStack(p.local, 3, r)
+			err = NewError(ErrCodeCosmosProcessOnStartupPanic, "CosmosProcess: Process startups panic.").AddPanicStack(p.local, 3, r)
 			p.local.coreLog().coreFatal("CosmosProcess: Main script startup failed. err=(%+v)", r)
 		}
 	}()
@@ -684,7 +684,7 @@ func (p *CosmosProcess) mainScriptOnStartUpProtect() (err *Error) {
 func (p *CosmosProcess) mainScriptOnShutdownProtect() (err *Error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = NewError(ErrCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").AddPanicStack(p.local, 3, r)
+			err = NewError(ErrCodeCosmosProcessOnShutdownPanic, "CosmosProcess: Process shutdowns panic.").AddPanicStack(p.local, 3, r)
 			p.local.coreLog().coreFatal("CosmosProcess: Main script shutdown failed. err=(%+v)", r)
 		}
 	}()
@@ -771,7 +771,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	// Get the local IP address, for accepting connections from other nodes in the cluster.
 	addrList, er := net.InterfaceAddrs()
 	if er != nil {
-		return NewErrorf(ErrCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
+		return NewErrorf(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
 	}
 	var ip string
 	for _, address := range addrList {
@@ -784,7 +784,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		}
 	}
 	if ip == "" {
-		return NewError(ErrCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address.").AddStack(p.local)
+		return NewError(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address.").AddStack(p.local)
 	}
 	p.local.coreLog().coreInfo("CosmosProcess: Using IP. ip=(%s)", ip)
 
@@ -795,7 +795,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		DialTimeout: etcdDialTime * time.Second,
 	})
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdConnectFailed, "CosmosProcess: Failed to connect etcd. err=(%v)", er).AddStack(p.local)
+		return NewErrorf(ErrCodeCosmosEtcdConnectFailed, "CosmosProcess: Failed to connect etcd. err=(%v)", er).AddStack(p.local)
 	}
 	p.cluster.etcdClient = cli
 	p.cluster.etcdInfoCh = make(chan string)
@@ -870,7 +870,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	// Check if grpc server is available.
 	if grpcServer == nil {
 		p.local.coreLog().coreFatal("CosmosProcess: Failed to start gRPC server. No available port in optionals ports list. ports=(%v)", ports)
-		return NewError(ErrCosmosEtcdGRPCServerFailed, "CosmosProcess: Failed to start etcd grpc server.").AddStack(p.local)
+		return NewError(ErrCodeCosmosEtcdGRPCServerFailed, "CosmosProcess: Failed to start etcd grpc server.").AddStack(p.local)
 	}
 
 	p.cluster.grpcServerOption = serverOption

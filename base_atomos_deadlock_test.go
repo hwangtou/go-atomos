@@ -201,7 +201,7 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onSyncMessaging(fromID ID, nam
 		}
 		ba2 := ba2Interface.(*testBaseAtomosDeadlockMailboxBaseAtomos)
 		_, err := ba2.atomos.PushSyncMessage(t, "test_deadlock_ba1_ba2_ba1_chain_2", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
-		if err == nil || err.Code != ErrAtomosPushTimeoutReject {
+		if err == nil || err.Code != ErrCodeAtomosPushTimeoutReject {
 			t.t.Errorf("ba2 PushSyncMessage to ba1 in chain expected timeout error, got: %v", err)
 		}
 		t.t.Log("test_deadlock_ba1_ba2_ba1_chain_1 ok")

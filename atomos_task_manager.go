@@ -198,7 +198,7 @@ func (at *atomosTaskManager) stopUnlock() {
 // Append task, and return a cancellable task id.
 func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error) {
 	if taskClosure == nil {
-		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
+		return 0, NewErrorf(ErrCodeAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
 
 	at.mutex.Lock()
@@ -206,7 +206,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error)
 
 	// If BaseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
-		return 0, NewErrorf(ErrAtomosIsNotRunning,
+		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
 
@@ -219,7 +219,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error)
 
 	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
-		return 0, NewErrorf(ErrAtomosIsNotRunning,
+		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
 	return at.curID, nil
@@ -230,7 +230,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error)
 // Append task after duration, and return a cancellable task id.
 func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (id uint64, err *Error) {
 	if taskClosure == nil {
-		return 0, NewErrorf(ErrAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
+		return 0, NewErrorf(ErrCodeAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
 
 	at.mutex.Lock()
@@ -238,7 +238,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 
 	// If BaseAtomos is nil, Atomos has been stopped, add failed.
 	if at.atomos == nil {
-		return 0, NewErrorf(ErrAtomosIsNotRunning,
+		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
 
@@ -322,7 +322,7 @@ func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryI
 		}
 	})
 	if er != nil {
-		return 0, NewErrorf(ErrAtomosTaskAddCrontabFailed, "AtomosTask: Add crontab failed. spec=(%s),err=(%v)", spec, er).AddStack(nil)
+		return 0, NewErrorf(ErrCodeAtomosTaskAddCrontabFailed, "AtomosTask: Add crontab failed. spec=(%s),err=(%v)", spec, er).AddStack(nil)
 	}
 	return uint64(eid), nil
 }
@@ -345,7 +345,7 @@ func (at *atomosTaskManager) CancelCrontab(entryID uint64) (err *Error) {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 	if at.cron == nil {
-		return NewErrorf(ErrAtomosTaskRemoveCrontabFailed, "AtomosTask: Cancel crontab failed, crontab not exist.").AddStack(nil)
+		return NewErrorf(ErrCodeAtomosTaskRemoveCrontabFailed, "AtomosTask: Cancel crontab failed, crontab not exist.").AddStack(nil)
 	}
 
 	at.cron.Remove(cron.EntryID(entryID))
@@ -400,7 +400,7 @@ func (at *atomosTaskManager) cancelTask(id uint64, mailboxExit bool, t *atomosTa
 			//deallocAtomosMail(t.baseAtomosMail)
 			// FRAMEWORK LEVEL ERROR
 			// Because it shouldn't happen, we won't find Canceled timer.
-			err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Delete a not exists task timer. task=(%+v)", t).AddStack(nil)
+			err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "AtomosTask: Delete a not exists task timer. task=(%+v)", t).AddStack(nil)
 			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
 			return err
 
@@ -426,21 +426,21 @@ func (at *atomosTaskManager) cancelTask(id uint64, mailboxExit bool, t *atomosTa
 		case TaskMailing:
 			m := at.atomos.mailbox.popByID(id)
 			if m == nil {
-				err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
+				err = NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
 				return err
 			}
 			releaseMail(m)
 			return nil
 		default:
 			// FRAMEWORK LEVEL ERROR
-			err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Unknown timer state, task=(%+v)", t).AddStack(nil)
+			err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "AtomosTask: Unknown timer state, task=(%+v)", t).AddStack(nil)
 			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
 			return err
 		}
 	}
 	m := at.atomos.mailbox.popByID(id)
 	if m == nil {
-		err = NewErrorf(ErrAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
+		err = NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
 		return err
 	}
 	releaseMail(m)
@@ -459,7 +459,7 @@ func (at *atomosTaskManager) handleTask(am *baseAtomosMail) {
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "AtomosTask: Task recovers from panic.").AddPanicStack(nil, 2, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "AtomosTask: Task recovers from panic.").AddPanicStack(nil, 2, r)
 			} else {
 				err = err.AddPanicStack(nil, 2, r)
 			}

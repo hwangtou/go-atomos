@@ -71,7 +71,7 @@ func asIDInternal(id ID) (idInternal, *Error) {
 	if ii, ok := id.(idInternal); ok {
 		return ii, nil
 	}
-	return nil, NewErrorf(ErrFrameworkInvalidID,
+	return nil, NewErrorf(ErrCodeFrameworkInvalidID,
 		"ID: implementation %T does not provide the framework-internal ID extension; passing a user-implemented ID to framework kernel paths is a programming error.", id).AddStack(nil)
 }
 

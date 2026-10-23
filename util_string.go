@@ -52,7 +52,7 @@ func (u *utilStringHashGenerator) Gen(content string) (string, *Error) {
 	// Write the serialized buf to the hash.
 	_, er := u.hash.Write([]byte(content))
 	if er != nil {
-		return "", NewErrorf(ErrUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to write content to hash. err=(%v)", er).AddStack(nil)
+		return "", NewErrorf(ErrCodeUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to write content to hash. err=(%v)", er).AddStack(nil)
 	}
 	// Calculate the hash and get the resulting byte slice.
 	hashBytes := u.hash.Sum(nil)
@@ -65,7 +65,7 @@ func (u *utilStringHashGenerator) Gen(content string) (string, *Error) {
 func (u *utilStringHashGenerator) GenAny(content any) (string, *Error) {
 	buf, er := json.Marshal(content)
 	if er != nil {
-		return "", NewErrorf(ErrUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to marshal content. err=(%v)", er).AddStack(nil)
+		return "", NewErrorf(ErrCodeUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to marshal content. err=(%v)", er).AddStack(nil)
 	}
 	return u.Gen(string(buf))
 }

@@ -152,7 +152,7 @@ func (x *Error) Error() string {
 }
 
 func (x *Error) IsAtomExist() bool {
-	return x.Code == ErrAtomIsRunning
+	return x.Code == ErrCodeAtomIsRunning
 }
 
 func (x *Error) Scan(value interface{}) error {

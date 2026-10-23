@@ -98,7 +98,7 @@ func TestBaseAtomosHelper_InvalidArgs(t *testing.T) {
 			}
 			if err := helper.getError(); err == nil {
 				t.Fatal("getError returned nil despite hasErrors")
-			} else if err.Code != ErrAtomosInvalidArguments {
+			} else if err.Code != ErrCodeAtomosInvalidArguments {
 				t.Errorf("unexpected error code: %v", err.Code)
 			}
 		})

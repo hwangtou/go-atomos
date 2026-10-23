@@ -27,7 +27,7 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 		lockInfo.Versions = append(lockInfo.Versions, version)
 		buf, er := json.Marshal(lockInfo)
 		if er != nil {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 		}
 		// Try to insert the key only if it does not exist
 		resp, er := txn.If(
@@ -39,18 +39,18 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 		).Commit()
 
 		if er != nil {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 		}
 		if !resp.Succeeded {
 			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 		}
 		return nil
 	} else {
 		// Unmarshal the lock info
 		er := json.Unmarshal(buf, lockInfo)
 		if er != nil {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
 		}
 		// Check if the number of keys is equal or more than the maximum allowed
 		if len(lockInfo.Versions) >= maxNodes {
@@ -58,14 +58,14 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 			// would let an arbitrary number of concurrent versions of the same
 			// node run at once, defeating the purpose of the version lock (which
 			// serializes hot upgrades to at most maxNodes coexisting versions).
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. versions=(%v),maxNodes=(%d)", lockInfo.Versions, maxNodes).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. versions=(%v),maxNodes=(%d)", lockInfo.Versions, maxNodes).AddStack(nil)
 		}
 		lockInfo.Versions = append(lockInfo.Versions, version)
 
 		// Marshal the lock info
 		buf, er := json.Marshal(lockInfo)
 		if er != nil {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 		}
 		// Try to update the key only if the version is the same
 		resp, er := txn.If(
@@ -79,11 +79,11 @@ func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Cli
 		).Commit()
 
 		if er != nil {
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 		}
 		if !resp.Succeeded {
 			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-			return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 		}
 		return nil
 	}
@@ -102,11 +102,11 @@ func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
 	// Transaction
 	txn := p.cluster.etcdClient.Txn(context.Background())
 	if buf == nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
 	}
 	// Unmarshal the lock info
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Remove the version from the lock info
 	for i, v := range lockInfo.Versions {
@@ -122,7 +122,7 @@ func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
 	// Marshal the lock info
 	buf, er := json.Marshal(lockInfo)
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Try to update the key only if the version is the same
 	resp, er := txn.If(
@@ -136,11 +136,11 @@ func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
 	).Commit()
 
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
 		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }
@@ -158,11 +158,11 @@ func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 	// Transaction
 	txn := p.cluster.etcdClient.Txn(context.Background())
 	if buf == nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
 	}
 	// Unmarshal the lock info
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Check version is in the lock info
 	found := false
@@ -181,7 +181,7 @@ func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 	// Marshal the lock info
 	buf, er := json.Marshal(lockInfo)
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Try to update the key only if the version is the same
 	resp, er := txn.If(
@@ -195,11 +195,11 @@ func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 	).Commit()
 
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
 		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }
@@ -217,11 +217,11 @@ func (p *CosmosProcess) etcdStoppingNodeVersionUnlock() *Error {
 	// Transaction
 	txn := p.cluster.etcdClient.Txn(context.Background())
 	if buf == nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
 	}
 	// Unmarshal the lock info
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Remove the version from the lock info
 	for i, v := range lockInfo.Versions {
@@ -237,7 +237,7 @@ func (p *CosmosProcess) etcdStoppingNodeVersionUnlock() *Error {
 	// Marshal the lock info
 	buf, er := json.Marshal(lockInfo)
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 	}
 	// Try to update the key only if the version is the same
 	resp, er := txn.If(
@@ -251,11 +251,11 @@ func (p *CosmosProcess) etcdStoppingNodeVersionUnlock() *Error {
 	).Commit()
 
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
 	}
 	if !resp.Succeeded {
 		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
 	}
 	return nil
 }

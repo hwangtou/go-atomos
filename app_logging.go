@@ -156,7 +156,7 @@ func NewAppLoggingToFile(logPath string, logFileMaxSize, logPathMaxRatio int64, 
 func (l *AppLoggingToFile) openLogFile(path string) (*os.File, *Error) {
 	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, AppLoggingFilePerm)
 	if er != nil {
-		return nil, NewErrorf(ErrAppEnvLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
+		return nil, NewErrorf(ErrCodeAppEnvLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
 	}
 	return f, nil
 }
@@ -209,7 +209,7 @@ func (l *AppLoggingToFile) checkLogPathSize() *Error {
 		return nil
 	})
 	if er != nil {
-		return NewErrorf(ErrAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
 	}
 	sort.Slice(fileInfoList, func(i, j int) bool {
 		return fileInfoList[i].ModTime().Before(fileInfoList[j].ModTime())
@@ -220,7 +220,7 @@ func (l *AppLoggingToFile) checkLogPathSize() *Error {
 		}
 		er := os.Remove(filepath.Join(l.logPath, fileInfo.Name()))
 		if er != nil {
-			return NewErrorf(ErrAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
+			return NewErrorf(ErrCodeAppEnvLoggingPathInvalid, "check log path size failed, err=(%v)", er).AddStack(nil)
 		}
 		sizeNeeded -= fileInfo.Size()
 	}
@@ -251,7 +251,7 @@ func (l *AppLoggingToFile) writeAccessLogLocked(s string) {
 			return
 		} else {
 			if _, er := l.curAccessLog.WriteString(s); er != nil {
-				l.onError(NewErrorf(ErrAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write access log failed, err=(%v)", er).AddStack(nil))
+				l.onError(NewErrorf(ErrCodeAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write access log failed, err=(%v)", er).AddStack(nil))
 				return
 			}
 		}
@@ -270,7 +270,7 @@ func (l *AppLoggingToFile) writeAccessLogLocked(s string) {
 		// Close the old log file.
 		er := l.curAccessLog.Close()
 		if er != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close access log failed, err=(%v)", er).AddStack(nil))
+			l.onError(NewErrorf(ErrCodeAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close access log failed, err=(%v)", er).AddStack(nil))
 		}
 
 		// Switch to the new log file.
@@ -295,7 +295,7 @@ func (l *AppLoggingToFile) WriteErrorLog(s string) {
 
 	n, er := l.curErrorLog.WriteString(s)
 	if er != nil {
-		l.onError(NewErrorf(ErrAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write error log failed, err=(%v)", er).AddStack(nil))
+		l.onError(NewErrorf(ErrCodeAppEnvLoggingFileWriteFailed, "AppLoggingToFile: Write error log failed, err=(%v)", er).AddStack(nil))
 		return
 	}
 	l.curErrorSize += int64(n)
@@ -310,7 +310,7 @@ func (l *AppLoggingToFile) WriteErrorLog(s string) {
 		// Close the old log file.
 		er := l.curErrorLog.Close()
 		if er != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close error log failed, err=(%v)", er).AddStack(nil))
+			l.onError(NewErrorf(ErrCodeAppEnvLoggingFileCloseFailed, "AppLoggingToFile: Close error log failed, err=(%v)", er).AddStack(nil))
 		}
 
 		// Switch to the new log file.
@@ -330,13 +330,13 @@ func (l *AppLoggingToFile) Close() {
 	defer l.writeMu.Unlock()
 	if l.curAccessLog != nil {
 		if err := l.curAccessLog.Close(); err != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "Close access log failed. err=(%v)", err).AddStack(nil))
+			l.onError(NewErrorf(ErrCodeAppEnvLoggingFileCloseFailed, "Close access log failed. err=(%v)", err).AddStack(nil))
 		}
 		l.curAccessLog = nil
 	}
 	if l.curErrorLog != nil {
 		if err := l.curErrorLog.Close(); err != nil {
-			l.onError(NewErrorf(ErrAppEnvLoggingFileCloseFailed, "Close error log failed. err=(%v)", err).AddStack(nil))
+			l.onError(NewErrorf(ErrCodeAppEnvLoggingFileCloseFailed, "Close error log failed. err=(%v)", err).AddStack(nil))
 		}
 		l.curErrorLog = nil
 	}

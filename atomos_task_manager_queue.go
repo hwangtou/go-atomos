@@ -253,7 +253,7 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 		case TaskCancelled:
 			{
 				//at.log.pushFrameworkErrorLog("AtomosTask: CancelTaskQueue, USAGE ERROR, task already cancelled. task=(%+v)", task)
-				return NewErrorf(ErrAtomosTaskCannotCancelCancelledTask, "AtomosTask: CancelTaskQueue, USAGE ERROR, task already cancelled. task=(%+v)", task).AddStack(nil)
+				return NewErrorf(ErrCodeAtomosTaskCannotCancelCancelledTask, "AtomosTask: CancelTaskQueue, USAGE ERROR, task already cancelled. task=(%+v)", task).AddStack(nil)
 			}
 		case TaskScheduling:
 			{
@@ -277,7 +277,7 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 					if m != nil {
 						releaseMail(m)
 					}
-					return NewErrorf(ErrFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, invalid timer. task=(%+v)", task).AddStack(nil)
+					return NewErrorf(ErrCodeFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, invalid timer. task=(%+v)", task).AddStack(nil)
 				}
 
 				// 删除任务容器中的任务。
@@ -295,7 +295,7 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 					if m != nil {
 						releaseMail(m)
 					}
-					return NewErrorf(ErrFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, task not exists. task=(%+v)", task).AddStack(nil)
+					return NewErrorf(ErrCodeFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, task not exists. task=(%+v)", task).AddStack(nil)
 				}
 
 				// 正确性检查。
@@ -307,7 +307,7 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 					if m != nil && !released {
 						releaseMail(m)
 					}
-					return NewErrorf(ErrFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, task mail still in mailbox. task=(%+v)", task).AddStack(nil)
+					return NewErrorf(ErrCodeFrameworkInternalError, "AtomosTask: CancelTaskQueue, FRAMEWORK ERROR, task mail still in mailbox. task=(%+v)", task).AddStack(nil)
 				}
 
 				// 设置任务状态为已取消。
@@ -340,11 +340,11 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 			}
 		case TaskExecuting:
 			{
-				return NewErrorf(ErrAtomosTaskCannotCancelRunningTask, "AtomosTask: Cannot cancel a running task. task=(%+v)", task).AddStack(nil)
+				return NewErrorf(ErrCodeAtomosTaskCannotCancelRunningTask, "AtomosTask: Cannot cancel a running task. task=(%+v)", task).AddStack(nil)
 			}
 		case TaskDone:
 			{
-				return NewErrorf(ErrAtomosTaskCannotCancelDoneTask, "AtomosTask: Cannot cancel a done task. task=(%+v)", task).AddStack(nil)
+				return NewErrorf(ErrCodeAtomosTaskCannotCancelDoneTask, "AtomosTask: Cannot cancel a done task. task=(%+v)", task).AddStack(nil)
 			}
 		}
 		return nil

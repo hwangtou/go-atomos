@@ -804,7 +804,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelSchedulingTask(t *testing.T) {
 	// canceling again should be no-op
 	if err := at.cancelTaskQueue(task, false, "test cancel again"); err == nil {
 		t.Fatalf("Canceling an already canceled task should be no-op, but got error: %v", err)
-	} else if err.Code != ErrAtomosTaskCannotCancelCancelledTask {
+	} else if err.Code != ErrCodeAtomosTaskCannotCancelCancelledTask {
 		t.Fatalf("Expected ErrAtomosTaskCannotCancelNotScheduled when canceling already canceled task, got: %v", err)
 	}
 
@@ -970,7 +970,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	}
 	if err := at.cancelTaskQueue(task1, false, "test cancel executing mailing"); err == nil {
 		t.Fatalf("Failed to cancel executing mailing task: %v", err)
-	} else if err.Code != ErrAtomosTaskCannotCancelRunningTask {
+	} else if err.Code != ErrCodeAtomosTaskCannotCancelRunningTask {
 		t.Fatalf("Expected ErrAtomosTaskCannotCancelRunningTask when canceling executing task, got: %v", err)
 	}
 
@@ -981,7 +981,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	waitTaskDone(t, at, task1)
 	if err := at.cancelTaskQueue(task1, false, "test cancel done mailing"); err == nil {
 		t.Fatalf("Canceling a done task should fail, but got no error.")
-	} else if err.Code != ErrAtomosTaskCannotCancelDoneTask {
+	} else if err.Code != ErrCodeAtomosTaskCannotCancelDoneTask {
 		t.Fatalf("Expected ErrAtomosTaskCannotCancelDoneTask when canceling done task, got: %v", err)
 	}
 

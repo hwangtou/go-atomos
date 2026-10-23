@@ -114,11 +114,11 @@ func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecod
 }
 
 func (e *ElementRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(nil)
+	return NewError(ErrCodeElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(nil)
 }
 
 func (e *ElementRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
-	return NewErrorf(ErrElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
+	return NewErrorf(ErrCodeElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
 }
 
 func (e *ElementRemote) getGoID() uint64 {
@@ -140,7 +140,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, fromLocalOrRemo
 		Atom:    name,
 	})
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: GetAtomID response error. err=(%v)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "ElementRemote: GetAtomID response error. err=(%v)", er).AddStack(nil)
 	}
 	if rsp.Error != nil {
 		return nil, nil, rsp.Error.AddStack(nil)
@@ -202,7 +202,7 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 	if arg != nil {
 		anyArg, er = anypb.New(arg)
 		if er != nil {
-			return nil, nil, NewError(ErrCosmosRemoteRequestInvalid, "ElementRemote: SpawnAtom arg error.").AddStack(nil)
+			return nil, nil, NewError(ErrCodeCosmosRemoteRequestInvalid, "ElementRemote: SpawnAtom arg error.").AddStack(nil)
 		}
 	}
 	rsp, er := cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
@@ -212,7 +212,7 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 		Args:     anyArg,
 	})
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
 	}
 	if rsp.Error != nil && rsp.Id == nil {
 		return nil, nil, rsp.Error.AddStack(nil)

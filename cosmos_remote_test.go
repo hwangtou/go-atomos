@@ -27,7 +27,7 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call failed. err=(%v)", er)
 	} else if rsp == nil || rsp.Id != nil || rsp.Error == nil {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid response: rsp=(%v)", rsp)
-	} else if rsp.Error.Code != ErrMainElementNotFound {
+	} else if rsp.Error.Code != ErrCodeMainElementNotFound {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid error code: rsp.Error.Code=(%v)", rsp.Error.Code)
 	} else {
 		t.Logf("CosmosRemote: GetAtomID gRPC call succeeded, rsp=(%v)", rsp)
@@ -42,7 +42,7 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call failed. err=(%v)", er)
 	} else if rsp == nil || rsp.Id != nil || rsp.Error == nil {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid response: rsp=(%v)", rsp)
-	} else if rsp.Error.Code != ErrAtomNotExists {
+	} else if rsp.Error.Code != ErrCodeAtomNotExists {
 		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid error code: rsp.Error.Code=(%v)", rsp.Error.Code)
 	} else {
 		t.Logf("CosmosRemote: GetAtomID gRPC call succeeded, rsp=(%v)", rsp)
@@ -204,7 +204,7 @@ func TestCosmosRemote_InstanceMismatchOnRespawn(t *testing.T) {
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
 	}); er != nil {
 		t.Fatalf("Sync call transport error: %v", er)
-	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrAtomInstanceMismatch {
+	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrCodeAtomInstanceMismatch {
 		t.Fatalf("Expected ErrAtomInstanceMismatch with stale instance_id, got rsp=%v", rsp)
 	}
 
@@ -271,7 +271,7 @@ func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
 	}); er != nil {
 		t.Fatalf("Sync transport error: %v", er)
-	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrAtomInstanceMismatch {
+	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrCodeAtomInstanceMismatch {
 		t.Fatalf("Expected ErrAtomInstanceMismatch for instance_id=0, got rsp=%v", rsp)
 	}
 }
@@ -288,7 +288,7 @@ func TestWithRebind_RetriesOnInstanceMismatch(t *testing.T) {
 	}, func(id ID) (string, *Error) {
 		calls++
 		if calls == 1 {
-			return "", NewError(ErrAtomInstanceMismatch, "stale").AddStack(nil)
+			return "", NewError(ErrCodeAtomInstanceMismatch, "stale").AddStack(nil)
 		}
 		return "ok", nil
 	})
@@ -327,7 +327,7 @@ func TestWithRebind_NoRetryOnSuccess(t *testing.T) {
 // TestWithRebind_NoRetryOnUnrelatedError verifies WithRebind does NOT retry on a
 // non-rebind error (it returns the error directly after one call).
 func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
-	sentinel := NewError(ErrFrameworkInternalError, "sentinel business error").AddStack(nil)
+	sentinel := NewError(ErrCodeFrameworkInternalError, "sentinel business error").AddStack(nil)
 	calls := 0
 	_, err := WithRebind(func() (ID, *Error) {
 		return stubID{}, nil
@@ -349,7 +349,7 @@ func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
 // TestWithRebind_ResolveErrorNoCall verifies WithRebind returns the resolve
 // error without invoking call.
 func TestWithRebind_ResolveErrorNoCall(t *testing.T) {
-	resolveErr := NewError(ErrCosmosRemoteConnectFailed, "no node").AddStack(nil)
+	resolveErr := NewError(ErrCodeCosmosRemoteConnectFailed, "no node").AddStack(nil)
 	calls := 0
 	_, err := WithRebind(func() (ID, *Error) {
 		return nil, resolveErr

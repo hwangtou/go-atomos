@@ -51,7 +51,7 @@ func TestDeadlock_SelfCall(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected ErrIDFirstSyncCallDeadlock from self-call, got nil")
 		}
-		if err.Code != ErrIDFirstSyncCallDeadlock {
+		if err.Code != ErrCodeIDFirstSyncCallDeadlock {
 			t.Fatalf("expected ErrIDFirstSyncCallDeadlock, got code=%d: %v", err.Code, err)
 		}
 	})
@@ -89,7 +89,7 @@ func TestDeadlock_Cycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected ErrIDFirstSyncCallDeadlock from cycle, got nil")
 		}
-		if err.Code != ErrIDFirstSyncCallDeadlock {
+		if err.Code != ErrCodeIDFirstSyncCallDeadlock {
 			t.Fatalf("expected ErrIDFirstSyncCallDeadlock, got code=%d: %v", err.Code, err)
 		}
 	})
@@ -154,7 +154,7 @@ func TestDeadlock_TimeoutStillWorks(t *testing.T) {
 		// A slow handler that is actively processing (mail popped) yields
 		// ErrAtomosPushTimeoutHandling; one still queued yields Reject. Either
 		// is acceptable — the point is it is NOT ErrIDFirstSyncCallDeadlock.
-		if err.Code == ErrIDFirstSyncCallDeadlock {
+		if err.Code == ErrCodeIDFirstSyncCallDeadlock {
 			t.Fatalf("expected timeout (Reject or Handling), got deadlock false positive: %v", err)
 		}
 	})

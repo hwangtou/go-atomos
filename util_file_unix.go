@@ -27,13 +27,13 @@ func utilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) 
 	pathStat, er := os.Stat(dir)
 	if er != nil {
 		if !os.IsNotExist(er) {
-			return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Failed to stat directory. dir=(%s),err=(%v)", dir, er).AddStack(nil)
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Failed to stat directory. dir=(%s),err=(%v)", dir, er).AddStack(nil)
 		}
 		if err := os.MkdirAll(dir, perm); err != nil {
-			return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Failed to create directory. dir=(%s),err=(%v)", dir, err).AddStack(nil)
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Failed to create directory. dir=(%s),err=(%v)", dir, err).AddStack(nil)
 		}
 	} else if !pathStat.IsDir() {
-		return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: utilPath is not directory. dir=(%s)", dir).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: utilPath is not directory. dir=(%s)", dir).AddStack(nil)
 	}
 
 	if ensureWritable {
@@ -46,13 +46,13 @@ func utilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) 
 			}
 		}
 		if logTestPath == "" {
-			return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot create test file. dir=(%s)", dir).AddStack(nil)
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot create test file. dir=(%s)", dir).AddStack(nil)
 		}
 		if er = os.WriteFile(logTestPath, []byte{}, utilFileEnsureDirectoryFilePerm); er != nil {
-			return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot write test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot write test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
 		}
 		if er = os.Remove(logTestPath); er != nil {
-			return NewErrorf(ErrUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot remove test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot remove test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
 		}
 	}
 	return nil
@@ -64,10 +64,10 @@ func utilFileFileExist(file string) (bool, *Error) {
 		if os.IsNotExist(er) {
 			return false, nil
 		}
-		return false, NewErrorf(ErrUtilFileFileExistFailed, "utilFileFileExist: Failed to stat file. file=(%s),err=(%v)", file, er).AddStack(nil)
+		return false, NewErrorf(ErrCodeUtilFileFileExistFailed, "utilFileFileExist: Failed to stat file. file=(%s),err=(%v)", file, er).AddStack(nil)
 	}
 	if pathStat.IsDir() {
-		return false, NewErrorf(ErrUtilFileFileExistFailed, "utilFileFileExist: utilPath is directory. file=(%s)", file).AddStack(nil)
+		return false, NewErrorf(ErrCodeUtilFileFileExistFailed, "utilFileFileExist: utilPath is directory. file=(%s)", file).AddStack(nil)
 	}
 	return true, nil
 }
@@ -82,7 +82,7 @@ func utilFileGetDirectorySize(dir string) (int64, *Error) {
 		return nil
 	})
 	if er != nil {
-		return 0, NewErrorf(ErrUtilFileGetDirectorySizeFailed, "utilFileGetDirectorySize: Failed to get directory size. dir=(%s),err=(%v)", dir, er).AddStack(nil)
+		return 0, NewErrorf(ErrCodeUtilFileGetDirectorySizeFailed, "utilFileGetDirectorySize: Failed to get directory size. dir=(%s),err=(%v)", dir, er).AddStack(nil)
 	}
 	return size, nil
 }
@@ -102,7 +102,7 @@ func (p *utilPath) Refresh() *Error {
 	stat, er := os.Stat(p.path)
 	if er != nil {
 		if !os.IsNotExist(er) {
-			return NewErrorf(ErrUtilOSStatError, "utilPath: Get os state error. err=(%v)", er).AddStack(nil)
+			return NewErrorf(ErrCodeUtilOSStatError, "utilPath: Get os state error. err=(%v)", er).AddStack(nil)
 		}
 	}
 	p.FileInfo = stat
@@ -126,7 +126,7 @@ func (p *utilPath) CreateDirectoryIfNotExist(u *user.User, g *user.Group, perm o
 			return err.AddStack(nil)
 		}
 	} else if !p.IsDir() {
-		return NewError(ErrUtilPathShouldBeDirectory, "utilPath: utilPath should be a directory.").AddStack(nil)
+		return NewError(ErrCodeUtilPathShouldBeDirectory, "utilPath: utilPath should be a directory.").AddStack(nil)
 	} else {
 		// Check its owner and mode.
 		if err := p.ConfirmOwnerAndMode(g, perm); err != nil {
@@ -141,12 +141,12 @@ func (p *utilPath) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) *E
 		return er.AddStack(nil)
 	}
 	if !p.Exist() {
-		return NewError(ErrUtilDirectoryNotExist, "utilPath: Directory not exists.").AddStack(nil)
+		return NewError(ErrCodeUtilDirectoryNotExist, "utilPath: Directory not exists.").AddStack(nil)
 	}
 	// Owner
 	gidList, er := u.GroupIds()
 	if er != nil {
-		return NewErrorf(ErrUtilGetUserGroupIDsFailed, "utilPath: Get user group id list failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilGetUserGroupIDsFailed, "utilPath: Get user group id list failed. err=(%v)", er).AddStack(nil)
 	}
 	switch stat := p.Sys().(type) {
 	case *syscall.Stat_t:
@@ -159,14 +159,14 @@ func (p *utilPath) CheckDirectoryOwnerAndMode(u *user.User, perm os.FileMode) *E
 			}
 		}
 		if !groupOwner {
-			return NewError(ErrUtilUsersGroupsHaveNotOwnedDirectory, "utilPath: User's groups have not owned directory.").AddStack(nil)
+			return NewError(ErrCodeUtilUsersGroupsHaveNotOwnedDirectory, "utilPath: User's groups have not owned directory.").AddStack(nil)
 		}
 	default:
-		return NewErrorf(ErrUtilNotSupportedOS, "utilPath: Not supported OS.").AddStack(nil)
+		return NewErrorf(ErrCodeUtilNotSupportedOS, "utilPath: Not supported OS.").AddStack(nil)
 	}
 	// Mode
 	if p.Mode().Perm() != perm {
-		return NewError(ErrUtilFileModePermNotMatch, "utilPath: File mode perm not match.").AddStack(nil)
+		return NewError(ErrCodeUtilFileModePermNotMatch, "utilPath: File mode perm not match.").AddStack(nil)
 	}
 	return nil
 }
@@ -177,18 +177,18 @@ func (p *utilPath) Exist() bool {
 
 func (p *utilPath) MakeDirectory(mode os.FileMode) *Error {
 	if er := os.Mkdir(p.path, mode); er != nil {
-		return NewErrorf(ErrUtilFileMakeDirectoryFailed, "utilPath: Make directory failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileMakeDirectoryFailed, "utilPath: Make directory failed. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }
 
 func (p *utilPath) ListDirectory() ([]*utilPath, *Error) {
 	if !p.IsDir() {
-		return nil, NewError(ErrUtilPathShouldBeDirectory, "utilPath: Can only list directory.").AddStack(nil)
+		return nil, NewError(ErrCodeUtilPathShouldBeDirectory, "utilPath: Can only list directory.").AddStack(nil)
 	}
 	files, er := os.ReadDir(p.path)
 	if er != nil {
-		return nil, NewErrorf(ErrUtilReadDirectoryFailed, "utilPath: Read dir failed. err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrCodeUtilReadDirectoryFailed, "utilPath: Read dir failed. err=(%v)", er).AddStack(nil)
 	}
 	paths := make([]*utilPath, 0, len(files))
 	for _, file := range files {
@@ -203,17 +203,17 @@ func (p *utilPath) ListDirectory() ([]*utilPath, *Error) {
 func (p *utilPath) ChangeOwnerAndMode(u *user.User, group *user.Group, perm os.FileMode) *Error {
 	gid, er := strconv.ParseInt(group.Gid, 10, 64)
 	if er != nil {
-		return NewErrorf(ErrUtilFileChangeOwnerAndModeFailed, "utilPath: Parse group gid failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileChangeOwnerAndModeFailed, "utilPath: Parse group gid failed. err=(%v)", er).AddStack(nil)
 	}
 	uid, er := strconv.ParseInt(u.Uid, 10, 64)
 	if er != nil {
-		return NewErrorf(ErrUtilFileChangeOwnerAndModeFailed, "utilPath: Parse uid failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileChangeOwnerAndModeFailed, "utilPath: Parse uid failed. err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Chown(p.path, int(uid), int(gid)); er != nil {
-		return NewErrorf(ErrUtilFileChangeOwnerAndModeFailed, "utilPath: Change owner failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileChangeOwnerAndModeFailed, "utilPath: Change owner failed. err=(%v)", er).AddStack(nil)
 	}
 	if er = os.Chmod(p.path, perm); er != nil {
-		return NewErrorf(ErrUtilFileChangeOwnerAndModeFailed, "utilPath: Change mode failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilFileChangeOwnerAndModeFailed, "utilPath: Change mode failed. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }
@@ -223,14 +223,14 @@ func (p *utilPath) ConfirmOwnerAndMode(group *user.Group, perm os.FileMode) *Err
 	switch stat := p.Sys().(type) {
 	case *syscall.Stat_t:
 		if strconv.FormatUint(uint64(stat.Gid), 10) != group.Gid {
-			return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "utilPath: Parse group gid failed.").AddStack(nil)
+			return NewError(ErrCodeUtilFileConfirmOwnerAndModeFailed, "utilPath: Parse group gid failed.").AddStack(nil)
 		}
 	default:
-		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "utilPath: Not supported OS.").AddStack(nil)
+		return NewError(ErrCodeUtilFileConfirmOwnerAndModeFailed, "utilPath: Not supported OS.").AddStack(nil)
 	}
 	// Mode
 	if p.Mode().Perm() != perm {
-		return NewError(ErrUtilFileConfirmOwnerAndModeFailed, "utilPath: File mode perm not match.").AddStack(nil)
+		return NewError(ErrCodeUtilFileConfirmOwnerAndModeFailed, "utilPath: File mode perm not match.").AddStack(nil)
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (p *utilPath) CreateFileIfNotExist(buf []byte, perm os.FileMode) *Error {
 	}
 	er := os.WriteFile(p.path, buf, perm)
 	if er != nil {
-		return NewErrorf(ErrUtilCreateFileFailed, "utilPath: Create file failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeUtilCreateFileFailed, "utilPath: Create file failed. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }

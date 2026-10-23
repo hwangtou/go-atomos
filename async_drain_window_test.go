@@ -120,7 +120,7 @@ func TestAsyncDrainWindow(t *testing.T) {
 	if got := cancelled.get(); got != 1 {
 		t.Fatalf("清账应终结回调 1 次,实际 %d 次", got)
 	}
-	if code := cancelledCode.get(); code != ErrAsyncCallbackCancelledByHalt {
+	if code := cancelledCode.get(); code != ErrCodeAsyncCallbackCancelledByHalt {
 		t.Fatalf("清账错误码不符: 期望 ErrAsyncCallbackCancelledByHalt,实际 %d", code)
 	}
 	t.Log("✅ 阶段二通过: 推迟额度用尽后照常回收,残余回调被清账以 ErrAsyncCallbackCancelledByHalt 终结")

@@ -32,7 +32,7 @@ func getGoID() uint64 {
 
 func Recover(id SelfID) {
 	if r := recover(); r != nil {
-		err := NewErrorf(ErrFrameworkRecoverFromPanic, "Recovered from panic.").AddPanicStack(id, 3, r)
+		err := NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Recovered from panic.").AddPanicStack(id, 3, r)
 		id.Log().Error("Recover: %v", err)
 	}
 }

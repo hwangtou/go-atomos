@@ -22,11 +22,11 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 			ci := proto.Clone(i)
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, ci); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
+					return nil, NewErrorf(ErrCodeAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
 				if err := json.Unmarshal(buf, ci); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
+					return nil, NewErrorf(ErrCodeAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
 			return ci, nil
@@ -35,11 +35,11 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 			ci := proto.Clone(i)
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, ci); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
+					return nil, NewErrorf(ErrCodeAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			} else {
 				if err := json.Unmarshal(buf, ci); err != nil {
-					return nil, NewErrorf(ErrAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
+					return nil, NewErrorf(ErrCodeAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
 				}
 			}
 			return ci, nil
@@ -51,7 +51,7 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, e
 	// Check arguments.
 	var nilID OUT
 	if callerID == nil {
-		return nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
+		return nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
 	}
 	m.ElementID = e
 
@@ -62,7 +62,7 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		callback(nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
 	}
 	m.ElementID = e
 
@@ -79,7 +79,7 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext 
 	// Check arguments.
 	var nilID OUT
 	if callerID == nil {
-		return nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
+		return nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
 	}
 	m.AtomID = a
 
@@ -90,7 +90,7 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		callback(nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
 	}
 	m.AtomID = a
 
@@ -108,13 +108,13 @@ func (m Messenger[E, A, AT, IN, OUT]) ExecuteAtom(to Atomos, in proto.Message) (
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageArgType, "Arg type=(%T)", in).AddStack(nil)
+		return nilAT, nilIN, NewErrorf(ErrCodeAtomMessageArgType, "Arg type=(%T)", in).AddStack(nil)
 	}
 	a, ok := to.(AT)
 	if !ok {
 		var nilAT AT
 		var nilIN IN
-		return nilAT, nilIN, NewErrorf(ErrAtomMessageAtomType, "Atom type=(%T)", to).AddStack(nil)
+		return nilAT, nilIN, NewErrorf(ErrCodeAtomMessageAtomType, "Atom type=(%T)", to).AddStack(nil)
 	}
 	return a, i, nil
 }
@@ -127,7 +127,7 @@ func (m Messenger[E, A, AT, IN, OUT]) handleReply(rsp proto.Message, err *Error)
 	reply, ok := rsp.(OUT)
 	if !ok {
 		var nilID OUT
-		return nilID, NewErrorf(ErrAtomMessageReplyType, "Reply type invalid. name=(%s),type=(%T)", m.Name, rsp).AddStack(nil)
+		return nilID, NewErrorf(ErrCodeAtomMessageReplyType, "Reply type invalid. name=(%s),type=(%T)", m.Name, rsp).AddStack(nil)
 	}
 	return reply, err.AddStack(nil)
 }

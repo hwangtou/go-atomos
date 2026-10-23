@@ -61,11 +61,11 @@ func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder
 }
 
 func (c *CosmosLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
+	return NewError(ErrCodeMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
 }
 
 func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
+	return NewError(ErrCodeMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
 }
 
 func (c *CosmosLocal) getGoID() uint64 {
@@ -121,7 +121,7 @@ func (c *CosmosLocal) Parallel(fn func()) {
 						c.Log().Fatal("Cosmos: Parallel critical problem again. err=(%v)", err)
 					}
 				}()
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Cosmos: Parallel recovers from panic.").AddPanicStack(c, 3, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Cosmos: Parallel recovers from panic.").AddPanicStack(c, 3, r)
 				// Hook or Log
 				if ar, ok := c.atomos.instance.(AtomosRecover); ok {
 					ar.ParallelRecover(err)
@@ -236,7 +236,7 @@ func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.M
 // Mailbox Handler
 
 func (c *CosmosLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
-	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
+	return nil, NewError(ErrCodeMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
 }
 
 func (c *CosmosLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
@@ -245,7 +245,7 @@ func (c *CosmosLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncI
 		c.atomos.log.coreError("Cosmos: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", err)
 		return
 	}
-	fromInternal.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
+	fromInternal.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrCodeMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
 }
 
 func (c *CosmosLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
@@ -273,7 +273,7 @@ func (c *CosmosLocal) onFnCallback(callback *atomosCallback) {
 func (c *CosmosLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
+		err := NewErrorf(ErrCodeAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
 		c.Log().Error(err.Message)
 		return err
 	}
@@ -340,7 +340,7 @@ func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Err
 
 	nodeName, has := router.GetCosmosNodeName(c.GetNodeName(), elemName, atomName)
 	if !has {
-		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: GetCosmossNodeName failed. element=(%s),atomName=(%s)", elemName, atomName).AddStack(c)
+		return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: GetCosmossNodeName failed. element=(%s),atomName=(%s)", elemName, atomName).AddStack(c)
 	}
 
 	if nodeName == c.GetNodeName() {
@@ -354,7 +354,7 @@ func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Err
 		defer c.process.cluster.remoteMutex.RUnlock()
 		cr, has := c.process.cluster.remoteCosmos[nodeName]
 		if !has {
-			return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Remote element not found. name=(%s)", elemName).AddStack(c)
+			return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Remote element not found. name=(%s)", elemName).AddStack(c)
 		}
 		e, err := cr.getElement(elemName)
 		if err != nil {
@@ -369,11 +369,11 @@ func (c *CosmosLocal) getLocalElement(name string) (elem *ElementLocal, err *Err
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil {
-		return nil, NewError(ErrMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
+		return nil, NewError(ErrCodeMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
 	}
 	elem, has := c.elements[name]
 	if !has {
-		return nil, NewErrorf(ErrMainElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
+		return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
 	}
 	return elem, nil
 }
@@ -383,7 +383,7 @@ func (c *CosmosLocal) getLocalAllElements() (elems []*ElementLocal, err *Error) 
 	defer c.mutex.RUnlock()
 
 	if c.runnable == nil {
-		return nil, NewError(ErrMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
+		return nil, NewError(ErrCodeMainRunnableNotFound, "Cosmos: It's not running.").AddStack(c)
 	}
 	for _, elem := range c.elements {
 		elems = append(elems, elem)
@@ -398,7 +398,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	for _, name := range c.runnable.spawnOrder {
 		impl := c.runnable.implements[name]
 		if impl == nil {
-			err = NewErrorf(ErrMainElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)
+			err = NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)
 			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%s)", name, err.Message)
 			break
 		}
@@ -434,7 +434,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 							c.Log().Fatal("Cosmos: StartRunning recovers from panic. err=(%v)", err)
 						}
 					}()
-					err = NewErrorf(ErrMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)
+					err = NewErrorf(ErrCodeMainStartRunningPanic, "Cosmos: StartRunning recovers from panic.").AddPanicStack(c, 3, r)
 					// Hook or Log
 					if ar, ok := c.atomos.instance.(AtomosRecover); ok {
 						ar.ParallelRecover(err)
@@ -460,7 +460,7 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Element: Spawn Element recovers from panic.").AddPanicStack(c, 4, r)
 			} else {
 				err = err.AddPanicStack(c, 4, r)
 			}
@@ -485,7 +485,7 @@ func (c *CosmosLocal) cosmosElementSpawn(r *CosmosRunnable, i *ElementImplementa
 	}
 	c.mutex.Unlock()
 	if has {
-		return nil, NewErrorf(ErrElementLoaded, "Cosmos: Spawn Element exists. name=(%s)", name).AddStack(c)
+		return nil, NewErrorf(ErrCodeElementLoaded, "Cosmos: Spawn Element exists. name=(%s)", name).AddStack(c)
 	}
 
 	// Element的Spawn逻辑。

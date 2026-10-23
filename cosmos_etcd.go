@@ -84,7 +84,7 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	// Parse the key pair to create tls config of gRPC server.
 	serverCert, er := tls.X509KeyPair(serverCertPem, serverKeyPem)
 	if er != nil {
-		return false, nil, nil, NewErrorf(ErrCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
 	}
 
 	// Client-side
@@ -101,12 +101,12 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	if clientCertPem != nil && clientKeyPem != nil {
 		certPool = x509.NewCertPool()
 		if ok := certPool.AppendCertsFromPEM(clientCertPem); !ok {
-			return false, nil, nil, NewErrorf(ErrCosmosEtcdClusterTLSInvalid, "etcd: failed to parse client certificate").AddStack(nil)
+			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse client certificate").AddStack(nil)
 		}
 		// Load client's certificate and private key
 		clientCert, er = tls.X509KeyPair(serverCertPem, serverKeyPem)
 		if er != nil {
-			return false, nil, nil, NewErrorf(ErrCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
+			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
 		}
 	}
 
@@ -204,7 +204,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	go func(firstLease *clientv3.LeaseGrantResponse) {
 		defer func() {
 			if r := recover(); r != nil {
-				p.etcdErrorHandler(NewErrorf(ErrFrameworkInternalError, "etcd: Watcher keepalive stopped.").AddStack(nil))
+				p.etcdErrorHandler(NewErrorf(ErrCodeFrameworkInternalError, "etcd: Watcher keepalive stopped.").AddStack(nil))
 			}
 		}()
 
@@ -215,7 +215,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			p.local.coreLog().coreInfo("etcd: Watcher will stop.")
 			_, er := p.cluster.etcdClient.Delete(context.Background(), key)
 			if er != nil {
-				p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
+				p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
 			}
 			if cancel := p.cluster.etcdCancelWatch; cancel != nil {
 				cancel()
@@ -255,7 +255,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				}
 				_, er := p.cluster.etcdClient.Put(context.Background(), key, infoBuf, clientv3.WithLease(lease.ID))
 				if er != nil {
-					p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to update cluster version info. err=(%s)", er).AddStack(nil))
+					p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to update cluster version info. err=(%s)", er).AddStack(nil))
 				}
 			}
 		}
@@ -280,11 +280,11 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 	// First, get all the node information.
 	getResp, er := cli.Get(context.Background(), keyPrefix, clientv3.WithPrefix())
 	if er != nil {
-		return NewErrorf(ErrCosmosEtcdGetFailed, "etcd: Failed to fetch cluster info. err=(%s)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosEtcdGetFailed, "etcd: Failed to fetch cluster info. err=(%s)", er).AddStack(nil)
 	}
 	for _, ev := range getResp.Kvs {
 		if !bytes.HasPrefix(ev.Key, keyPrefixBytes) {
-			p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(ev.Key)).AddStack(nil))
+			p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(ev.Key)).AddStack(nil))
 			continue
 		}
 		key := strings.TrimPrefix(string(ev.Key), keyPrefix)
@@ -308,7 +308,7 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 				for _, event := range watchResp.Events {
 					p.local.coreLog().coreInfo("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value))
 					if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-						p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+						p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
 						continue
 					}
 					key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
@@ -364,11 +364,11 @@ func (p *CosmosProcess) handleKey(key string, value []byte, updateOrDelete bool)
 	// key: {nodeName}/version/{version}
 	keys := strings.Split(key, "/")
 	if len(keys) != 3 {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key format. key=(%s)", key).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key format. key=(%s)", key).AddStack(nil))
 		return
 	}
 	if keys[1] != "version" {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key version. key=(%s)", key).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key version. key=(%s)", key).AddStack(nil))
 		return
 	}
 
@@ -396,7 +396,7 @@ func (p *CosmosProcess) etcdUpdateClusterVersionLockInfo(nodeName string, buf []
 	// Unmarshal the lock info
 	lockInfo := &CosmosNodeVersionLock{}
 	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update current version lock, got invalid value. node=(%s),err=(%s)", nodeName, er).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdUpdateFailed, "etcd: Update current version lock, got invalid value. node=(%s),err=(%s)", nodeName, er).AddStack(nil))
 		return
 	}
 
@@ -430,7 +430,7 @@ func (p *CosmosProcess) etcdDeleteClusterVersionLockInfo(nodeName string) {
 
 	remote, has := p.cluster.remoteCosmos[nodeName]
 	if !has {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Delete current version lock, got invalid node. node=(%s)", nodeName).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdUpdateFailed, "etcd: Delete current version lock, got invalid node. node=(%s)", nodeName).AddStack(nil))
 		return
 	}
 	remote.etcdDeleteLock()
@@ -442,7 +442,7 @@ func (p *CosmosProcess) etcdUpdateClusterVersionNodeInfo(nodeName string, versio
 	p.local.coreLog().coreInfo("etcd: Update cluster version info. node=(%s),version=(%s)", nodeName, versionKey)
 	info := &CosmosNodeVersionInfo{}
 	if er := json.Unmarshal(value, info); er != nil {
-		p.etcdErrorHandler(NewErrorf(ErrCosmosEtcdUpdateFailed, "etcd: Update cluster version info, got invalid cluster info value. node=(%s),version=(%s),err=(%v)", nodeName, versionKey, er).AddStack(nil))
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdUpdateFailed, "etcd: Update cluster version info, got invalid cluster info value. node=(%s),version=(%s),err=(%v)", nodeName, versionKey, er).AddStack(nil))
 		return
 	}
 
@@ -485,7 +485,7 @@ func (p *CosmosProcess) etcdNodeVersion(nodeName string, version int64, info *Co
 	key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, nodeName, version)
 	infoBuf, er := json.Marshal(info)
 	if er != nil {
-		return "", "", NewErrorf(ErrCosmosEtcdKeepaliveFailed, "etcd: Failed to marshal cluster version info. err=(%s)", er).AddStack(nil)
+		return "", "", NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Failed to marshal cluster version info. err=(%s)", er).AddStack(nil)
 	}
 	return key, string(infoBuf), nil
 }

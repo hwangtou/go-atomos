@@ -172,7 +172,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	case res := <-noopResult:
 		if res.err == nil {
 			t.Fatal("Expected queued noop call to be woken with error, got nil error")
-		} else if res.err.Code != ErrAtomosIsStopping {
+		} else if res.err.Code != ErrCodeAtomosIsStopping {
 			t.Fatalf("Expected queued noop error code ErrAtomosIsStopping, got=(%d) err=(%v)", res.err.Code, res.err)
 		}
 	case <-time.After(2 * time.Second):

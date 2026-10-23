@@ -137,7 +137,7 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		// The peer name is carried in the in-message (reuse the existing field
 		// via a convention: we read t.cyclePeer set by the test).
 		if t.cyclePeer == "" {
-			return nil, NewErrorf(ErrFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
+			return nil, NewErrorf(ErrCodeFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
 		}
 		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
 		if e != nil {
@@ -154,7 +154,7 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		// Cycle callback: the peer calls back to its own peer (the originator).
 		// This is the second hop that closes the cycle → must deadlock.
 		if t.cyclePeer == "" {
-			return nil, NewErrorf(ErrFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
+			return nil, NewErrorf(ErrCodeFrameworkInternalError, "cycle test: cyclePeer not set").AddStack(t.self)
 		}
 		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
 		if e != nil {

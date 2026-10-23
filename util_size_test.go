@@ -121,7 +121,7 @@ func TestStringToDiskSize(t *testing.T) {
 				sizeStr: "",
 			},
 			want:    0,
-			wantErr: NewError(ErrFrameworkIncorrectUsage, "utilStringToFileSize: The string should not be empty."),
+			wantErr: NewError(ErrCodeFrameworkIncorrectUsage, "utilStringToFileSize: The string should not be empty."),
 		},
 		{
 			name: "TestStringToDiskSize-1",
@@ -289,7 +289,7 @@ func TestStringToDiskSize(t *testing.T) {
 				sizeStr: "1.0.1GB",
 			},
 			want:    0,
-			wantErr: NewErrorf(ErrFrameworkIncorrectUsage, "utilStringToFileSize: Invalid size string. size=(1.0.1GB)"),
+			wantErr: NewErrorf(ErrCodeFrameworkIncorrectUsage, "utilStringToFileSize: Invalid size string. size=(1.0.1GB)"),
 		},
 	}
 	for _, tt := range tests {

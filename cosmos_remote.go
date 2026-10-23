@@ -352,7 +352,7 @@ func (c *CosmosRemote) getElement(name string) (*elementRemoteFromSource, *Error
 
 	elem, has := c.elements[name]
 	if !has {
-		return nil, NewErrorf(ErrCosmosRemoteElementNotFound, "CosmosRemote: Element not found. name=(%s)", name).AddStack(nil)
+		return nil, NewErrorf(ErrCodeCosmosRemoteElementNotFound, "CosmosRemote: Element not found. name=(%s)", name).AddStack(nil)
 	}
 	return elem, nil
 }
@@ -403,11 +403,11 @@ func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecode
 }
 
 func (c *CosmosRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
+	return NewError(ErrCodeCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
+	return NewError(ErrCodeCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) getGoID() uint64 {
@@ -472,7 +472,7 @@ func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, co
 	})
 
 	if er != nil {
-		return NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: ElementBroadcast error. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: ElementBroadcast error. err=(%v)", er).AddStack(nil)
 	}
 	if rsp.Error != nil {
 		return rsp.Error.AddStack(nil)
@@ -627,7 +627,7 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 			targetVersion = c.version[s]
 		}
 	default:
-		err = NewError(ErrCosmosEtcdClusterVersionsCheckFailed, "CosmosRemote: Version invalid.").AddStack(nil)
+		err = NewError(ErrCodeCosmosEtcdClusterVersionsCheckFailed, "CosmosRemote: Version invalid.").AddStack(nil)
 	}
 	c.mutex.RUnlock()
 
@@ -639,7 +639,7 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 	}
 	cli := targetVersion.getClient()
 	if cli == nil {
-		return NewError(ErrCosmosRemoteConnectFailed, "CosmosRemote: Client not found.").AddStack(nil)
+		return NewError(ErrCodeCosmosRemoteConnectFailed, "CosmosRemote: Client not found.").AddStack(nil)
 	}
 
 	client := NewAtomosRemoteServiceClient(cli)
@@ -648,7 +648,7 @@ func (c *CosmosRemote) tryKillingRemote() (err *Error) {
 	_, er := client.TryKilling(ctx, &CosmosRemoteTryKillingReq{})
 
 	if er != nil {
-		return NewErrorf(ErrCosmosRemoteRequestInvalid, "CosmosRemote: Try killing error. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: Try killing error. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }

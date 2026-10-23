@@ -27,7 +27,7 @@ type App struct {
 
 func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, *Error) {
 	if len(os.Args) < 1 {
-		return nil, NewErrorf(ErrRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
 	}
 	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
 	if err := utilFileEnsureDirectory(wd, os.ModePerm|os.ModeDir, true); err != nil {
@@ -200,11 +200,11 @@ func (a *App) ForkAppProcess() *Error {
 	var proc *os.Process
 	execPath, er := os.Executable()
 	if er != nil {
-		return NewErrorf(ErrAppEnvGetExecutableFailed, "App: Launching, get executable path failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvGetExecutableFailed, "App: Launching, get executable path failed. err=(%v)", er).AddStack(nil)
 	}
 	wd, er := os.Getwd()
 	if er != nil {
-		return NewErrorf(ErrAppEnvGetExecutableFailed, "App: Launching, get work path failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvGetExecutableFailed, "App: Launching, get work path failed. err=(%v)", er).AddStack(nil)
 	}
 
 	a.env.executablePath = execPath
@@ -228,7 +228,7 @@ func (a *App) ForkAppProcess() *Error {
 	}
 	proc, er = os.StartProcess(a.env.executablePath, a.env.args, attr)
 	if er != nil {
-		return NewErrorf(ErrAppEnvLaunchedFailed, "App: Launching, start process failed. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeAppEnvLaunchedFailed, "App: Launching, start process failed. err=(%v)", er).AddStack(nil)
 	}
 	a.env.pid = proc.Pid
 	return nil

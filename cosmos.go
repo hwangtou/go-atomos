@@ -84,7 +84,7 @@ type CosmosRunnable struct {
 func (r *CosmosRunnable) Check() *Error {
 	// Config
 	if r.config == nil {
-		return NewError(ErrRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
+		return NewError(ErrCodeRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
 	}
 	if err := r.config.Check(); err != nil {
 		return err.AddStack(nil)
@@ -95,7 +95,7 @@ func (r *CosmosRunnable) Check() *Error {
 	}
 	// MainScript
 	if r.mainScript == nil {
-		return NewError(ErrRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
+		return NewError(ErrCodeRunnableScriptNotFound, "Runnable: Script not found").AddStack(nil)
 	}
 	return nil
 }

@@ -1222,10 +1222,10 @@ func TestMailBox_StartLoop(t *testing.T) {
 		return nil
 	}); err == nil {
 		t.Fatalf("TestMailBox_StartLoop: Double Start did not return error.")
-	} else if err.Code == ErrFrameworkRecoverFromPanic && err.Message == "Mailbox: Has already run." {
+	} else if err.Code == ErrCodeFrameworkRecoverFromPanic && err.Message == "Mailbox: Has already run." {
 		t.Logf("TestMailBox_StartLoop: Double Start returned expected error. err=(%v)", err.AddStack(nil))
 	} else {
-		t.Fatalf("TestMailBox_StartLoop: Double Start returned wrong error. expect=(code:%d message:'%s') got=(code:%d message:'%s')", ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.", err.Code, err.Message)
+		t.Fatalf("TestMailBox_StartLoop: Double Start returned wrong error. expect=(code:%d message:'%s') got=(code:%d message:'%s')", ErrCodeFrameworkRecoverFromPanic, "Mailbox: Has already run.", err.Code, err.Message)
 	}
 	t.Log("TestMailBox_StartLoop: Start double failed cases passed.")
 

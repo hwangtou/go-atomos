@@ -116,7 +116,7 @@ func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, c
 		conn = a.cosmos.getCurrentClient()
 	}
 	if conn == nil {
-		return nil, nil, nil, NewError(ErrCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
+		return nil, nil, nil, NewError(ErrCodeCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
 	}
 
 	client := NewAtomosRemoteServiceClient(conn)
@@ -171,7 +171,7 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 	if in != nil {
 		arg, er = anypb.New(in)
 		if er != nil {
-			return nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "BaseRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
+			return nil, NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
 		}
 	}
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
@@ -182,12 +182,12 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 		Args:       arg,
 	})
 	if er != nil {
-		return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+		return nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 	}
 	if rsp.Reply != nil {
 		reply, er = rsp.Reply.UnmarshalNew()
 		if er != nil {
-			return nil, NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
+			return nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName reply unmarshal error. err=(%v)", er).AddStack(nil)
 		}
 	}
 	if rsp.Error != nil {
@@ -211,7 +211,7 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		arg, er = anypb.New(in)
 		if er != nil {
 			if callback != nil {
-				callback(nil, NewErrorf(ErrCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
+				callback(nil, NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
 			}
 			return nil
 		}
@@ -247,7 +247,7 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		Args:       arg,
 	})
 	if er != nil {
-		return NewErrorf(ErrCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
 	}
 	if rsp.Error != nil {
 		return rsp.Error.AddStack(nil)
@@ -314,7 +314,7 @@ func (a *BaseRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
 		CosmosArgs: helper.getRemoteArg(),
 	})
 	if er != nil {
-		return NewError(ErrCosmosRemoteResponseInvalid, "BaseRemote: KillAtom response error.").AddStack(nil)
+		return NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: KillAtom response error.").AddStack(nil)
 	}
 
 	if rsp.Error != nil {

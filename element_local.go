@@ -139,7 +139,7 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 }
 
 func (e *ElementLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
-	return NewError(ErrFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
+	return NewError(ErrCodeFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
 }
 
 func (e *ElementLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
@@ -197,7 +197,7 @@ func (e *ElementLocal) Parallel(fn func()) {
 						e.Log().Fatal("Element: Parallel critical problem again. err=(%v)", err)
 					}
 				}()
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Parallel recovered from panic.").AddPanicStack(e, 3, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Element: Parallel recovered from panic.").AddPanicStack(e, 3, r)
 				// Hook or Log
 				if ar, ok := e.atomos.instance.(AtomosRecover); ok {
 					ar.ParallelRecover(err)
@@ -266,7 +266,7 @@ func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
 
 func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, *Error) {
 	if fromLocalOrRemote && tracker == nil {
-		return nil, nil, NewErrorf(ErrFrameworkInternalError, "IDTrackerInfo: IDTrackerInfo is nil.").AddStack(e)
+		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "IDTrackerInfo: IDTrackerInfo is nil.").AddStack(e)
 	}
 	e.lock.RLock()
 	atom, hasAtom := e.atoms[name]
@@ -281,7 +281,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	// Auto data persistence.
 	persistence, ok := e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
-		return nil, nil, NewErrorf(ErrAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
+		return nil, nil, NewErrorf(ErrCodeAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
 	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, false, fromLocalOrRemote)
 }
@@ -339,7 +339,7 @@ func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tr
 	// re-resolve onto a Started node instead of silently anchoring a new atom
 	// on a node that is trying to empty out.
 	if p := e.cosmosLocal.process; p != nil && p.isDraining() {
-		return nil, nil, NewErrorf(ErrCosmosNodeDraining,
+		return nil, nil, NewErrorf(ErrCodeCosmosNodeDraining,
 			"Element: SpawnAtom rejected, node is draining. element=(%s),atom=(%s)", e.atomos.id.Element, name).AddStack(e)
 	}
 	// Auto data persistence.
@@ -357,7 +357,7 @@ func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tr
 func (e *ElementLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
-		return nil, NewErrorf(ErrElementMessageHandlerNotExists,
+		return nil, NewErrorf(ErrCodeElementMessageHandlerNotExists,
 			"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e)
 	}
 	return e.atomos.onSyncMessaging(fromID, name, handler, in)
@@ -369,7 +369,7 @@ func (e *ElementLocal) onAsyncMessaging(fromID ID, name string, startupID, async
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
 			e.atomos.log.coreError("Element: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
+			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists, "Element: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
 		}
 		return
 	}
@@ -401,7 +401,7 @@ func (e *ElementLocal) onFnCallback(callback *atomosCallback) {
 func (e *ElementLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		return NewErrorf(ErrAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
+		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
 		return err.AddStack(e)
@@ -483,7 +483,7 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Stopping recovers from panic.").AddPanicStack(e, 3, r, data)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Element: Stopping recovers from panic.").AddPanicStack(e, 3, r, data)
 			} else {
 				err = err.AddPanicStack(e, 3, r, data)
 			}
@@ -507,14 +507,14 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	// Auto Save
 	persistence, ok = e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
-		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
+		err = NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence,
 			"Element: onStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		goto autoLoad
 	}
 	elemPersistence = persistence.ElementAutoData()
 	if elemPersistence == nil {
-		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
+		err = NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence,
 			"Element: onStopping, saving data error, no element auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		return err
@@ -545,7 +545,7 @@ autoLoad:
 
 func (e *ElementLocal) elementAtomSpawn(callerID ID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
-		return nil, nil, NewErrorf(ErrFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
+		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
 	// Fixed:
@@ -609,7 +609,7 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock
 	}
 
 	if spawnOrGet {
-		return oldAtom, nil, NewErrorf(ErrAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
+		return oldAtom, nil, NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
 	}
 
 	if fromLocalOrRemote {
@@ -824,7 +824,7 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 				}
 			}()
 			if err == nil {
-				err = NewErrorf(ErrFrameworkRecoverFromPanic, "Element: Spawn recovers from panic.").AddPanicStack(e, 3, r)
+				err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Element: Spawn recovers from panic.").AddPanicStack(e, 3, r)
 			} else {
 				err = err.AddPanicStack(e, 3, r)
 			}
@@ -883,7 +883,7 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 func (e *ElementLocal) getAtomFromRemote(name string, callerInstanceID uint64) (*AtomLocal, *Error) {
 	// Strict policy: a remote call must carry a real instance_id.
 	if callerInstanceID == 0 {
-		return nil, NewErrorf(ErrAtomInstanceMismatch,
+		return nil, NewErrorf(ErrCodeAtomInstanceMismatch,
 			"Element: Remote call missing instance_id (legacy client?). name=(%s)", name).AddStack(e)
 	}
 	e.lock.RLock()
@@ -891,7 +891,7 @@ func (e *ElementLocal) getAtomFromRemote(name string, callerInstanceID uint64) (
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
 		if atom.atomos.instanceID != callerInstanceID {
-			return nil, NewErrorf(ErrAtomInstanceMismatch,
+			return nil, NewErrorf(ErrCodeAtomInstanceMismatch,
 				"Element: Atom instance mismatch. name=(%s),caller_inst=(%d),live_inst=(%d)",
 				name, callerInstanceID, atom.atomos.instanceID).AddStack(e)
 		}
@@ -900,7 +900,7 @@ func (e *ElementLocal) getAtomFromRemote(name string, callerInstanceID uint64) (
 	// No live instance under this name. Do NOT implicitly respawn for a remote
 	// caller: the caller's epoch is necessarily stale (any respawn would yield a
 	// new instanceID), so the caller must rebind.
-	return nil, NewErrorf(ErrAtomInstanceMismatch,
+	return nil, NewErrorf(ErrCodeAtomInstanceMismatch,
 		"Element: Atom not live and caller epoch is stale. name=(%s),caller_inst=(%d)",
 		name, callerInstanceID).AddStack(e)
 }

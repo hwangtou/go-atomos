@@ -194,7 +194,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	var callbackInvoked, callbackConsumed reproCounter // 成功消费(非清账终结)次数
 	startupID, asyncID := atomA.atomos.asyncSet(func(out proto.Message, err *Error) {
 		callbackInvoked.add()
-		if err == nil || err.GetCode() != ErrAsyncCallbackCancelledByHalt {
+		if err == nil || err.GetCode() != ErrCodeAsyncCallbackCancelledByHalt {
 			callbackConsumed.add()
 		}
 	})
@@ -225,7 +225,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	// P3 清账断言: 在途回调在停机时以 ErrAsyncCallbackCancelledByHalt 终结,而非静默丢失
 	if pendingInvoked != 1 {
 		t.Errorf("清账未生效: 在途回调应被终结调用 1 次,实际 %d 次", pendingInvoked)
-	} else if pendingCode != ErrAsyncCallbackCancelledByHalt {
+	} else if pendingCode != ErrCodeAsyncCallbackCancelledByHalt {
 		t.Errorf("清账错误码不符: 期望 ErrAsyncCallbackCancelledByHalt,实际 %d", pendingCode)
 	} else {
 		t.Log("✅ 清账生效: 在途回调以 ErrAsyncCallbackCancelledByHalt 终结")
@@ -297,7 +297,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	}
 	if got := lostCallback.get(); got != 1 {
 		t.Errorf("停机后注册的回调应同步终结 1 次,实际 %d 次", got)
-	} else if lostErrCode.get() != ErrAsyncCallbackCancelledByHalt {
+	} else if lostErrCode.get() != ErrCodeAsyncCallbackCancelledByHalt {
 		t.Errorf("停机后注册的回调错误码不符: 期望 ErrAsyncCallbackCancelledByHalt,实际 %d", lostErrCode.get())
 	} else {
 		t.Log("✅ 清账后到达的注册被同步确定性终结(无泄漏、无静默丢失)")

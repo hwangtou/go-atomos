@@ -310,7 +310,7 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
 	}
 	var reply *mailReply
 	if timeout == 0 {
@@ -321,14 +321,14 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 	case <-time.After(timeout):
 		if a.mailbox.removeMail(m.mail) {
 			releaseMail(m.mail)
-			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+			return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		} else {
-			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
+			return nil, NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
 		}
 	}
 	// Wait channel must be empty before delete a mail.
 	if reply == nil {
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Message reply is invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos: Message reply is invalid.").AddStack(nil)
 	}
 	resp = reply.resp
 	err = reply.err
@@ -342,7 +342,7 @@ func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id I
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrFrameworkRecoverFromPanic, "Atomos: Message wait invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos: Message wait invalid.").AddStack(nil)
 	}
 
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
@@ -355,9 +355,9 @@ func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id I
 	case <-time.After(timeout):
 		if a.mailbox.removeMail(m.mail) {
 			releaseMail(m.mail)
-			return nil, NewErrorf(ErrAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+			return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		} else {
-			return nil, NewErrorf(ErrAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+			return nil, NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
 		}
 	}
 	// Wait channel must be empty before delete a mail.

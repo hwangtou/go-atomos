@@ -53,8 +53,8 @@ func WithRebind[R any](resolve func() (ID, *Error), call func(ID) (R, *Error)) (
 // stale and a re-resolve may yield a usable target.
 func shouldRebind(code int64) bool {
 	switch code {
-	case ErrAtomInstanceMismatch, ErrAtomNotExists,
-		ErrCosmosRemoteConnectFailed, ErrCosmosNodeDraining:
+	case ErrCodeAtomInstanceMismatch, ErrCodeAtomNotExists,
+		ErrCodeCosmosRemoteConnectFailed, ErrCodeCosmosNodeDraining:
 		return true
 	}
 	return false

@@ -129,7 +129,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 		dataT, _ := data.(*ForTestData)
 		e, ok := a.(ForTestAtomosElement)
 		if !ok {
-			return NewErrorf(ErrElementNotImplemented, "Element not implemented, type=(%T)", a)
+			return NewErrorf(ErrCodeElementNotImplemented, "Element not implemented, type=(%T)", a)
 		}
 		return e.Spawn(s, dataT)
 	}
@@ -138,7 +138,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 		dataT, _ := data.(*ForTestData)
 		atom, ok := a.(ForTestAtomosAtom)
 		if !ok {
-			return NewErrorf(ErrAtomNotImplemented, "Atom not implemented, type=(%T)", a)
+			return NewErrorf(ErrCodeAtomNotImplemented, "Atom not implemented, type=(%T)", a)
 		}
 		return atom.Spawn(s, argT, dataT)
 	}

@@ -215,7 +215,7 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
-		return NewError(ErrFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
+		return NewError(ErrCodeFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
 	mb.mutex.Unlock()
@@ -483,7 +483,7 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 	}()
 	if mb.goID == 0 {
 		mb.logging.pushFrameworkFatalLog("Mailbox: Failed to get goID.")
-		wait <- NewError(ErrFrameworkInternalError, "Failed to get goID.").AddStack(nil)
+		wait <- NewError(ErrCodeFrameworkInternalError, "Failed to get goID.").AddStack(nil)
 		return
 	}
 
