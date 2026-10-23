@@ -451,15 +451,33 @@ func TestAtomosTaskManager_AddToQueue(t *testing.T) {
 	}
 
 	// Test pushToHead task
+	// 先用一个阻塞任务占住 mailbox 消费者,使后续 pushToHead 任务在队列中堆积;
+	// 否则消费者与压入循环并发,执行顺序与分配计数都不确定(基线上即因此 flaky)。
+	started := make(chan struct{})
+	blockCh := make(chan struct{})
+	wait.Add(1)
+	blockHelper := createTaskHelper(at, at.atomos.mailbox, nil, func(taskID uint64) func() {
+		close(started)
+		<-blockCh
+		return func() {
+			wait.Done()
+		}
+	}, nil)
+	blockHelper.buildAtomosTask()
+	blockTask := blockHelper.atomosTask
+	if blockTask.id != 6 {
+		t.Fatalf("Expected blocking task ID to be 6, got %d", blockTask.id)
+	}
+	am := allocBaseAtomosMail()
+	initTaskQueueMail(am, at.closureInfo(-1), blockHelper)
+	at.addToQueue(at.atomos.mailbox, blockTask)
+	<-started
+
 	j := 0
-	exeID := 0
 	for ; i < 10; i++ {
 		i := i
 		helper := createTaskHelper(at, at.atomos.mailbox, nil, func(taskID uint64) func() {
 			t.Logf("PushToHead Task executed with ID: %d", taskID)
-			if exeID == 0 {
-				exeID = int(taskID)
-			}
 			doneList = append(doneList, taskID)
 			return func() {
 				wait.Done()
@@ -469,8 +487,8 @@ func TestAtomosTaskManager_AddToQueue(t *testing.T) {
 		})
 		helper.buildAtomosTask()
 		task := helper.atomosTask
-		if task.id != uint64(i+1) {
-			t.Fatalf("Expected pushToHead task ID to be %d, got %d", uint64(i+1), task.id)
+		if task.id != uint64(i+2) {
+			t.Fatalf("Expected pushToHead task ID to be %d, got %d", uint64(i+2), task.id)
 		}
 
 		am := allocBaseAtomosMail()
@@ -479,35 +497,27 @@ func TestAtomosTaskManager_AddToQueue(t *testing.T) {
 		wait.Add(1)
 		at.addToQueue(at.atomos.mailbox, task)
 
-		if getAllocMailDebugNum() != j+1 {
-			t.Fatalf("Expected %d allocated mails after initializing pushToHead task queue mail, got %d", i+1, getAllocMailDebugNum())
+		// mailbox 被阻塞任务占住,压入的邮件不会被消费:
+		// 已分配邮件 = 阻塞任务 1 + 已压入 j+1,只允许多(异步日志邮件)不允许少。
+		if num := getAllocMailDebugNum(); num < j+2 {
+			t.Fatalf("Expected at least %d allocated mails after initializing pushToHead task queue mail, got %d", j+2, num)
 		}
 		j++
 	}
+	// 放行阻塞任务,堆积的 pushToHead 任务按 LIFO 顺序执行。
+	close(blockCh)
 	wait.Wait()
 	if len(doneList) != 10 {
 		t.Fatalf("Expected 10 tasks to be done, got %d", len(doneList))
 	}
-	var wishList []uint64
-	if exeID != 10 {
-		wishList = doneList[6:]
-	} else {
-		wishList = doneList[5:]
-	}
-	for idx := range wishList {
-		if idx == 0 {
-			continue
-		}
-		if wishList[idx] >= wishList[idx-1] {
-			t.Fatalf("Expected pushToHead tasks to execute in reverse order, but got %v", wishList)
+	for idx, taskID := range doneList[5:] {
+		expectedID := uint64(11 - idx)
+		if taskID != expectedID {
+			t.Fatalf("Expected pushToHead tasks to execute in reverse order, but got %v", doneList[5:])
 		}
 	}
-	for {
-		if getAllocMailDebugNum() != 0 {
-			<-time.After(time.Millisecond)
-		} else {
-			break
-		}
+	if n := waitAllocMailDebugZero(time.Second); n != 0 {
+		t.Fatal("Expected 0 allocated mails after processing all tasks, got ", n)
 	}
 	t.Log("All pushToHead tasks completed successfully.")
 
