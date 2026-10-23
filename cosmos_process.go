@@ -400,7 +400,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 		}()
 		defer func() {
 			ext := []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}
-			if err := p.local.atomos.PushKillMail(p.local, ext); err != nil {
+			if err := p.local.atomos.PushKillMail(p.local, ext...); err != nil {
 				p.local.coreLog().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
@@ -620,7 +620,7 @@ func (p *CosmosProcess) Stop() error {
 		}()
 		defer func() {
 			ext := []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}
-			if err := p.local.atomos.PushKillMail(p.local, ext); err != nil {
+			if err := p.local.atomos.PushKillMail(p.local, ext...); err != nil {
 				p.local.coreLog().coreFatal("CosmosProcess: Push kill mail failed. err=(%+v)", err)
 			}
 		}()
@@ -942,7 +942,7 @@ func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 // When preparing the cluster locally fails, if the local has been loaded successfully, do the local cleanup work.
 func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
 	ext := []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}
-	if err := p.local.atomos.PushKillMail(p.local, ext); err != nil {
+	if err := p.local.atomos.PushKillMail(p.local, ext...); err != nil {
 		p.local.coreLog().coreFatal("CosmosProcess: Failed to kill local cosmos. err=(%v)", err)
 	}
 }

@@ -379,12 +379,12 @@ func (c *CosmosRemote) IdleTime() time.Duration {
 	return c.remote.IdleTime()
 }
 
-func (c *CosmosRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return c.remote.PushSyncMessage(callerID, name, in, ext)
+func (c *CosmosRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return c.remote.PushSyncMessage(callerID, name, in, ext...)
 }
 
-func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return c.remote.PushAsyncMessage(callerID, name, in, callback, ext)
+func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return c.remote.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 func (c *CosmosRemote) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
@@ -402,11 +402,11 @@ func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return nil, nil
 }
 
-func (c *CosmosRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (c *CosmosRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	return NewError(ErrCodeCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
+func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
 	return NewError(ErrCodeCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
 

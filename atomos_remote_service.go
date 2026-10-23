@@ -235,7 +235,7 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		}
 
 		// Sync messaging.
-		out, serr := id.SyncMessagingByName(callerID, req.Message, in, createExtForCosmosArgs(req.CosmosArgs))
+		out, serr := id.SyncMessagingByName(callerID, req.Message, in, createExtForCosmosArgs(req.CosmosArgs)...)
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
@@ -310,7 +310,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 	}
 
 	//a.process.logging.PushLogging(callerID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 2: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callerID, id, req.StartupId, req.AsyncId, req.Message, in))
-	if err := id.AsyncMessagingByName(callerID, req.Message, in, callback, createExtForCosmosArgs(req.CosmosArgs)); err != nil {
+	if err := id.AsyncMessagingByName(callerID, req.Message, in, callback, createExtForCosmosArgs(req.CosmosArgs)...); err != nil {
 		rsp.Error = asError(err).AddStack(a.process.local)
 		return rsp, nil
 	}
@@ -407,7 +407,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 		return rsp, nil
 	}
 	// Kill atom.
-	if kerr := atom.Kill(callerID, cosmosArgs); kerr != nil {
+	if kerr := atom.Kill(callerID, cosmosArgs...); kerr != nil {
 		rsp.Error = asError(kerr).AddStack(a.process.local)
 	}
 	return rsp, nil

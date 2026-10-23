@@ -51,7 +51,7 @@ func TestIDRouting_CurrentSwitchBreaksExistingCalls(t *testing.T) {
 	t.Logf("Spawned atom on target, id=%s", atomID.GetIDInfo().Info())
 
 	// 2. 验证：当前 current 指向 target，调用成功
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 	if err != nil {
 		t.Fatalf("Call BEFORE current switch should succeed, got err=%v", err)
 	}
@@ -82,7 +82,7 @@ func TestIDRouting_CurrentSwitchBreaksExistingCalls(t *testing.T) {
 	}()
 
 	// 4. 用同一个 atomID 再调用 —— 这就是核心断言
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 
 	// === 核心断言（阶段1-2改造后：正向） ===
 	// 改造前（已删除）：err != nil，current 切换导致请求到错误节点（存量断裂）
@@ -125,7 +125,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 	}
 
 	// 2. 调用一次确认正常工作
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 	if err != nil {
 		t.Fatalf("Call before pin invalidation should succeed: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 
 	// 4. 再调用 —— getCli 应检测到 pinned Shutdown，清除 pin，降级
 	//    （此时 current 也指向已关闭的连接，所以调用会失败——但这正是我们要验证的"降级行为已触发"）
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 
 	// 验证 pin 已被清除（降级已触发）
 	if atomRemote.remote.getPinnedConn() != nil {
@@ -261,7 +261,7 @@ func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
 		t.Fatalf("SpawnAtom failed: %v", err)
 	}
 	// 确认调用成功
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 	if err != nil {
 		t.Fatalf("Call before drain should succeed: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
 	targetRemote.mutex.Unlock()
 
 	// 3. 存量调用（pinned）—— 应仍成功，因为 pinned 连接不受 refresh 影响
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 	if err != nil {
 		t.Fatalf("[核心] Call AFTER drain should still succeed (pinned conn): %v", err)
 	}
@@ -351,7 +351,7 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 	t.Log("[核心验证] Local spawn on draining node rejected with ErrCosmosNodeDraining.")
 
 	// 5. 存量 atom 的调用不受 drain 影响（与 TestDrain_ExistingCallsSurviveNewTrafficRedirects 互补）
-	if _, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil); err != nil {
+	if _, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}); err != nil {
 		t.Fatalf("Existing atom call during drain should succeed: %v", err)
 	}
 	t.Log("[核心验证] Existing atom still callable during drain.")

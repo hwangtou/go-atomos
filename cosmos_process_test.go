@@ -44,7 +44,7 @@ func newTestCosmosProcessWithoutCluster(t *testing.T, cosmosName, cosmosNode str
 	// and breaks other tests' allocation-debug assertions.
 	t.Cleanup(func() {
 		if p.local.atomos.mailbox.isRunning() {
-			if err := p.local.atomos.PushKillMail(p.local, nil); err != nil {
+			if err := p.local.atomos.PushKillMail(p.local); err != nil {
 				t.Logf("Cleanup: PushKillMail local atomos failed: %v", err)
 			}
 			for deadline := time.Now().Add(5 * time.Second); p.local.atomos.mailbox.isRunning() && time.Now().Before(deadline); {

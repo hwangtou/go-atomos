@@ -41,7 +41,7 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 	}
 
 	// 确认调用成功
-	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+	_, err = atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 	if err != nil {
 		t.Fatalf("Call before kill should succeed: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 	go func() {
 		// 给一点时间让 gRPC 感知连接断开
 		time.Sleep(100 * time.Millisecond)
-		_, e := atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1}, nil)
+		_, e := atomID.SyncMessagingByName(cluster.sourceProcess.local, "Greeting", &ForTestGreetingI{Mode: 1})
 		done <- e
 	}()
 

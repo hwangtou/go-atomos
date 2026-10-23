@@ -103,12 +103,12 @@ func (a *AtomRemote) IdleTime() time.Duration {
 	return a.remote.IdleTime()
 }
 
-func (a *AtomRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return a.remote.PushSyncMessage(callerID, name, in, ext)
+func (a *AtomRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return a.remote.PushSyncMessage(callerID, name, in, ext...)
 }
 
-func (a *AtomRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return a.remote.PushAsyncMessage(callerID, name, in, callback, ext)
+func (a *AtomRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return a.remote.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder) {
@@ -122,11 +122,11 @@ func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder)
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (a *AtomRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
-	return a.remote.Kill(callerID, ext)
+func (a *AtomRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
+	return a.remote.Kill(callerID, ext...)
 }
 
-func (a *AtomRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
+func (a *AtomRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
 	return NewErrorf(ErrCodeAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 

@@ -44,12 +44,12 @@ func (c *CosmosLocal) IdleTime() time.Duration {
 	return c.atomos.idleTime()
 }
 
-func (c *CosmosLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return c.atomos.PushSyncMessage(callerID, name, in, ext)
+func (c *CosmosLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return c.atomos.PushSyncMessage(callerID, name, in, ext...)
 }
 
-func (c *CosmosLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return c.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+func (c *CosmosLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return c.atomos.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 func (c *CosmosLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
@@ -60,11 +60,11 @@ func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder
 	return nil, nil
 }
 
-func (c *CosmosLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (c *CosmosLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	return NewError(ErrCodeMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
 }
 
-func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
+func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
 	return NewError(ErrCodeMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
 }
 
@@ -300,7 +300,7 @@ func (c *CosmosLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 			continue
 		}
 		ext := []ArgsForBaseAtomos{&argBaseAtomosWaitKilled{}}
-		if perr := elem.atomos.PushKillMail(c, ext); perr != nil {
+		if perr := elem.atomos.PushKillMail(c, ext...); perr != nil {
 			c.Log().Error("Cosmos: Exiting kill element error. element=(%s),err=(%v)", name, perr)
 		}
 	}
@@ -413,7 +413,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	if err != nil {
 		for _, elem := range loaded {
 			ext := []ArgsForBaseAtomos{&argBaseAtomosWaitKilled{}}
-			if e := elem.atomos.PushKillMail(c, ext); e != nil {
+			if e := elem.atomos.PushKillMail(c, ext...); e != nil {
 				c.Log().Fatal("Cosmos: Spawning element failed, kill failed. name=(%s),err=(%v)", elem.atomos.id.Element, asError(e).AddStack(c))
 			}
 		}

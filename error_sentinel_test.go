@@ -129,7 +129,7 @@ func TestPublicAPISuccessReturnsUntypedNil(t *testing.T) {
 		}
 		defer gotID.Release()
 
-		if err := atomID.Kill(p.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+		if err := atomID.Kill(p.local, ArgBaseAtomosWaitKilled()); err != nil {
 			t.Fatalf("Kill returned non-nil error on success: %#v", err)
 		}
 	})

@@ -217,7 +217,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	}
 
 	// T3: Kill 实例 A(等价于空闲 1 分钟 KillSelf)
-	if err := atomA.Kill(process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+	if err := atomA.Kill(process.local, ArgBaseAtomosWaitKilled()); err != nil {
 		t.Fatalf("kill atom failed: %v", err)
 	}
 	time.Sleep(200 * time.Millisecond)

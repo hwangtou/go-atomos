@@ -203,7 +203,7 @@ func (a *BaseAtomos) GetGoID() uint64 {
 	return a.mailbox.goID
 }
 
-func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err error) {
+func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (reply proto.Message, err error) {
 	if from == nil {
 		return nil, NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -271,7 +271,7 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 	return reply, errOrNil(ierr.AddStack(nil))
 }
 
-func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, callback func(reply proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
+func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, callback func(reply proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -333,7 +333,7 @@ func (a *BaseAtomos) PushAsyncMessageCallback(callerID ID, name string, startupI
 	//deallocAtomosMail(am)
 }
 
-func (a *BaseAtomos) PushKillMail(from ID, ext []ArgsForBaseAtomos) (err error) {
+func (a *BaseAtomos) PushKillMail(from ID, ext ...ArgsForBaseAtomos) (err error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -362,7 +362,7 @@ func (a *BaseAtomos) PushKillMail(from ID, ext []ArgsForBaseAtomos) (err error) 
 	return nil
 }
 
-func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) (err error) {
+func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) (err error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}

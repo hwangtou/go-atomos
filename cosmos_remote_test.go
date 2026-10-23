@@ -375,18 +375,18 @@ func (stubID) String() string           { return "stub" }
 func (stubID) Cosmos() CosmosNode       { return nil }
 func (stubID) State() BaseAtomosState   { return 0 }
 func (stubID) IdleTime() time.Duration  { return 0 }
-func (stubID) SyncMessagingByName(ID, string, proto.Message, []ArgsForBaseAtomos) (proto.Message, error) {
+func (stubID) SyncMessagingByName(ID, string, proto.Message, ...ArgsForBaseAtomos) (proto.Message, error) {
 	return nil, nil
 }
-func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message, error), []ArgsForBaseAtomos) error {
+func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message, error), ...ArgsForBaseAtomos) error {
 	return nil
 }
 func (stubID) asyncSet(func(proto.Message, error)) (uint64, uint64) { return 0, 0 }
 func (stubID) asyncCallback(ID, string, uint64, uint64, proto.Message, error) {
 }
 func (stubID) DecoderByName(string) (MessageDecoder, MessageDecoder) { return nil, nil }
-func (stubID) Kill(ID, []ArgsForBaseAtomos) error                    { return nil }
-func (stubID) SendWormhole(ID, BaseAtomosWormhole, []ArgsForBaseAtomos) error {
+func (stubID) Kill(ID, ...ArgsForBaseAtomos) error                    { return nil }
+func (stubID) SendWormhole(ID, BaseAtomosWormhole, ...ArgsForBaseAtomos) error {
 	return nil
 }
 func (stubID) getGoID() uint64 { return 0 }

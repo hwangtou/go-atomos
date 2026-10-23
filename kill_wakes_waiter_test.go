@@ -129,7 +129,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 
 	// G1: 执行中的长耗时 sync(占住 mailbox)。
 	go func() {
-		out, err := victim.SyncMessagingByName(process.local, "block", nil, nil)
+		out, err := victim.SyncMessagingByName(process.local, "block", nil)
 		blockResult <- syncResult{out, err}
 	}()
 	// 等 block handler 真正进入(在 mailbox goroutine 上执行)。
@@ -141,7 +141,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 
 	// G2: 排队中的 sync(等 block 完成才会被处理——除非 kill 先触发停机)。
 	go func() {
-		out, err := victim.SyncMessagingByName(process.local, "noop", nil, nil)
+		out, err := victim.SyncMessagingByName(process.local, "noop", nil)
 		noopResult <- syncResult{out, err}
 	}()
 	// 给 G2 一点时间上送邮件进队列。
@@ -150,7 +150,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	// G3: kill 插到队首(在 noop 之前),并等待停机完成。
 	go func() {
 		killResult <- victim.Kill(process.local,
-			[]ArgsForBaseAtomos{ArgBaseAtomosAppendToHead(), ArgBaseAtomosWaitKilled()})
+			ArgBaseAtomosAppendToHead(), ArgBaseAtomosWaitKilled())
 	}()
 	time.Sleep(50 * time.Millisecond)
 

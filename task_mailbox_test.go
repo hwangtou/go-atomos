@@ -393,7 +393,7 @@ func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *t
 		if !ba.mailbox.isRunning() {
 			return
 		}
-		if err := ba.PushKillMail(p.local, nil); err != nil {
+		if err := ba.PushKillMail(p.local); err != nil {
 			t.Logf("Cleanup: PushKillMail failed: %v", err)
 			return
 		}

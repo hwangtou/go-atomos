@@ -154,7 +154,7 @@ func (a *BaseRemote) IdleTime() time.Duration {
 	return time.Duration(rsp.IdleTime)
 }
 
-func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err error) {
+func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (reply proto.Message, err error) {
 	helper := createBaseAtomosHelper(BaseAtomosMailSync, ext)
 	if helper.hasErrors() {
 		return nil, helper.getError()
@@ -196,7 +196,7 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 	return reply, nil
 }
 
-func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
+func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
 		if callback != nil {
@@ -296,7 +296,7 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 	}
 }
 
-func (a *BaseRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (a *BaseRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	helper := createBaseAtomosHelper(BaseAtomosMailKill, ext)
 	if helper.hasErrors() {
 		return helper.getError()

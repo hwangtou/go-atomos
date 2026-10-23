@@ -55,7 +55,7 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, e
 	}
 	m.ElementID = e
 
-	rsp, err := m.ElementID.SyncMessagingByName(callerID, m.Name, in, ext)
+	rsp, err := m.ElementID.SyncMessagingByName(callerID, m.Name, in, ext...)
 	out, herr := m.handleReply(rsp, asError(err))
 	return out, errOrNil(herr)
 }
@@ -69,12 +69,12 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	m.ElementID = e
 
 	if callback == nil {
-		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, nil, ext)
+		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, nil, ext...)
 	} else {
 		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err error) {
 			out, herr := m.handleReply(message, asError(err))
 			callback(out, errOrNil(herr))
-		}, ext)
+		}, ext...)
 	}
 }
 
@@ -86,7 +86,7 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext 
 	}
 	m.AtomID = a
 
-	rsp, err := m.AtomID.SyncMessagingByName(callerID, m.Name, in, ext)
+	rsp, err := m.AtomID.SyncMessagingByName(callerID, m.Name, in, ext...)
 	out, herr := m.handleReply(rsp, asError(err))
 	return out, errOrNil(herr)
 }
@@ -100,7 +100,7 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	m.AtomID = a
 
 	if callback == nil {
-		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, nil, ext)
+		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, nil, ext...)
 	} else {
 		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err error) {
 			herr := asError(err)
@@ -109,7 +109,7 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 			}
 			out, rerr := m.handleReply(message, herr)
 			callback(out, errOrNil(rerr))
-		}, ext)
+		}, ext...)
 	}
 }
 

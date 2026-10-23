@@ -34,7 +34,7 @@ var baMap sync.Map
 //	wg.Add(2)
 //	ba1.atomos.task.AddToAtomosQueue(func(taskID uint64) {
 //		<-time.After(time.Millisecond)
-//		_, err := ba2.atomos.PushSyncMessage(ba1, "test_message_from_ba1_to_ba2", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
+//		_, err := ba2.atomos.PushSyncMessage(ba1, "test_message_from_ba1_to_ba2", nil, ArgBaseAtomosTimeout(10 * time.Millisecond))
 //		if err == nil || err.Code != ErrAtomosPushTimeoutReject {
 //			t.Errorf("ba1 PushSyncMessage to ba2 failed: %v", err)
 //		}
@@ -42,7 +42,7 @@ var baMap sync.Map
 //	})
 //	ba2.atomos.task.AddToAtomosQueue(func(taskID uint64) {
 //		<-time.After(time.Millisecond)
-//		_, err := ba1.atomos.PushSyncMessage(ba2, "test_message_from_ba2_to_ba1", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
+//		_, err := ba1.atomos.PushSyncMessage(ba2, "test_message_from_ba2_to_ba1", nil, ArgBaseAtomosTimeout(10 * time.Millisecond))
 //		if err == nil || err.Code != ErrAtomosPushTimeoutReject {
 //			t.Errorf("ba2 PushSyncMessage to ba1 expected timeout error, got: %v", err)
 //		}
@@ -70,7 +70,7 @@ var baMap sync.Map
 //	// Test deadlock: ba1->ba2->ba1 chain.
 //	wg.Add(1)
 //	ba1.atomos.task.AddToAtomosQueue(func(taskID uint64) {
-//		res, err := ba2.atomos.PushSyncMessage(ba1, "test_deadlock_ba1_ba2_ba1_chain_1", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
+//		res, err := ba2.atomos.PushSyncMessage(ba1, "test_deadlock_ba1_ba2_ba1_chain_1", nil, ArgBaseAtomosTimeout(10 * time.Millisecond))
 //		if err != nil {
 //			t.Fatalf("ba1 PushSyncMessage failed: %v", err)
 //		}
@@ -99,7 +99,7 @@ var baMap sync.Map
 //	// Test deadlock: ba1->ba1
 //	wg.Add(1)
 //	ba1.atomos.task.AddToAtomosQueue(func(taskID uint64) {
-//		_, err := ba1.atomos.PushSyncMessage(ba1, "test_deadlock_ba1_ba1_chain", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
+//		_, err := ba1.atomos.PushSyncMessage(ba1, "test_deadlock_ba1_ba1_chain", nil, ArgBaseAtomosTimeout(10 * time.Millisecond))
 //		if err == nil || err.Code != ErrAtomosPushTimeoutReject {
 //			t.Errorf("ba1 PushSyncMessage to ba1 expected timeout error, got: %v", err)
 //		}
@@ -114,12 +114,12 @@ type testBaseAtomosDeadlockMailboxBaseAtomos struct {
 	atomos *BaseAtomos
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -158,12 +158,12 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) DecoderByName(name string) (in
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -200,7 +200,7 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onSyncMessaging(fromID ID, nam
 			panic("ba2 not found in baMap")
 		}
 		ba2 := ba2Interface.(*testBaseAtomosDeadlockMailboxBaseAtomos)
-		_, err := ba2.atomos.PushSyncMessage(t, "test_deadlock_ba1_ba2_ba1_chain_2", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
+		_, err := ba2.atomos.PushSyncMessage(t, "test_deadlock_ba1_ba2_ba1_chain_2", nil, ArgBaseAtomosTimeout(10 * time.Millisecond))
 		if err == nil || CodeOf(err) != ErrCodeAtomosPushTimeoutReject {
 			t.t.Errorf("ba2 PushSyncMessage to ba1 in chain expected timeout error, got: %v", err)
 		}

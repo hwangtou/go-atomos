@@ -105,7 +105,7 @@ func TestAsyncClearingRecoversPanickingCallback(t *testing.T) {
 		normalCalled++
 	})
 
-	if err := atom.Kill(process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+	if err := atom.Kill(process.local, ArgBaseAtomosWaitKilled()); err != nil {
 		t.Fatalf("kill atom failed: %v", err)
 	}
 	time.Sleep(200 * time.Millisecond)
@@ -156,7 +156,7 @@ func TestAsyncSetRaceWithHalt(t *testing.T) {
 	}
 	time.Sleep(2 * time.Millisecond) // 让部分注册先落地,制造注册/清账交错
 
-	_ = atom.Kill(process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()})
+	_ = atom.Kill(process.local, ArgBaseAtomosWaitKilled())
 	wg.Wait()
 	time.Sleep(300 * time.Millisecond)
 

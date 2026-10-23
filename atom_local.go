@@ -103,14 +103,14 @@ func (a *AtomLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return a.atomos.PushSyncMessage(callerID, name, in, ext)
+func (a *AtomLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return a.atomos.PushSyncMessage(callerID, name, in, ext...)
 }
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return a.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+func (a *AtomLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return a.atomos.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 // asyncCallback
@@ -132,7 +132,7 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (a *AtomLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	dev := a.element.elemImpl.Developer
 	elemAuth, ok := dev.(ElementAuthorization)
 	if ok && elemAuth != nil {
@@ -141,11 +141,11 @@ func (a *AtomLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 		}
 	}
 
-	return a.atomos.PushKillMail(callerID, ext)
+	return a.atomos.PushKillMail(callerID, ext...)
 }
 
-func (a *AtomLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
-	return a.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
+func (a *AtomLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
+	return a.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext...)
 }
 
 func (a *AtomLocal) getGoID() uint64 {
@@ -178,7 +178,7 @@ func (a *AtomLocal) CosmosMain() *CosmosLocal {
 // KillSelf
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
-	if err := a.atomos.PushKillMail(a, nil); err != nil {
+	if err := a.atomos.PushKillMail(a); err != nil {
 		a.Log().Error("Atom: KillSelf failed. err=(%v)", asError(err).AddStack(a))
 		return
 	}

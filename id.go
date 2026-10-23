@@ -29,11 +29,11 @@ type ID interface {
 
 	// SyncMessagingByName 同步调用
 	// Sync call
-	SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error)
+	SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error)
 
 	// AsyncMessagingByName 异步调用
 	// Async call
-	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error)
+	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error)
 
 	// DecoderByName 获得某个消息的解码器
 	// Get decoder of a message
@@ -41,12 +41,12 @@ type ID interface {
 
 	// Kill 从其它Atom或者main发送Kill消息。
 	// Send Kill message from other Atom or main.
-	Kill(callerID ID, ext []ArgsForBaseAtomos) error
+	Kill(callerID ID, ext ...ArgsForBaseAtomos) error
 
 	// SendWormhole
 	// 发送Wormhole消息。
 	// Send Wormhole message.
-	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error
+	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error
 }
 
 // idInternal is the framework-internal extension of ID. Every ID produced by

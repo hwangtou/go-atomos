@@ -31,7 +31,7 @@ func (g *drainGate) expire(t *testing.T) bool {
 		t.Logf("空闲到期但在途回调 %d 个,推迟自杀(%d/%d)", g.atom.atomos.AsyncCallbackPending(), g.drainTried, maxDrainDefers)
 		return true
 	}
-	if err := g.atom.Kill(g.process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+	if err := g.atom.Kill(g.process.local, ArgBaseAtomosWaitKilled()); err != nil {
 		t.Fatalf("KillSelf failed: %v", err)
 	}
 	return false

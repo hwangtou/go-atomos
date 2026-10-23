@@ -48,8 +48,7 @@ func TestBaseAtomos_LifeCycle(t *testing.T) {
 	// Sync Messaging test
 	out, err := tba.SyncMessagingByName(process.local,
 		testCaseBaseAtomosSyncMessaging1Name,
-		&Strings{Ss: []string{testCaseBaseAtomosSyncMessaging1In}},
-		nil)
+		&Strings{Ss: []string{testCaseBaseAtomosSyncMessaging1In}})
 	if err != nil {
 		t.Fatalf("Failed to start BaseAtomos: %v", err)
 	}
@@ -72,8 +71,7 @@ func TestBaseAtomos_LifeCycle(t *testing.T) {
 				t.Log("Async Messaging output correct")
 			}
 			asyncDone <- true
-		},
-		nil)
+		})
 	if err != nil {
 		t.Fatalf("Failed to start Async Messaging: %v", err)
 	}
@@ -82,7 +80,7 @@ func TestBaseAtomos_LifeCycle(t *testing.T) {
 
 	// Kill
 	if err := tba.Kill(process.local,
-		[]ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+		ArgBaseAtomosWaitKilled()); err != nil {
 		t.Fatalf("Failed to kill BaseAtomos: %v", err)
 	}
 	if tba.State() != BaseAtomosHalt {
@@ -155,12 +153,12 @@ func (t *testBaseAtomos) IdleTime() time.Duration {
 	return t.atomos.idleTime()
 }
 
-func (t *testBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return t.atomos.PushSyncMessage(callerID, name, in, ext)
+func (t *testBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return t.atomos.PushSyncMessage(callerID, name, in, ext...)
 }
 
-func (t *testBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return t.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+func (t *testBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return t.atomos.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 func (t *testBaseAtomos) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
@@ -177,12 +175,12 @@ func (t *testBaseAtomos) DecoderByName(name string) (in, out MessageDecoder) {
 	panic("not implemented")
 }
 
-func (t *testBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
-	return t.atomos.PushKillMail(callerID, ext)
+func (t *testBaseAtomos) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
+	return t.atomos.PushKillMail(callerID, ext...)
 }
 
-func (t *testBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
-	return t.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
+func (t *testBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
+	return t.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext...)
 }
 
 func (t *testBaseAtomos) getGoID() uint64 {

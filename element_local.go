@@ -113,14 +113,14 @@ func (e *ElementLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
-func (e *ElementLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
-	return e.atomos.PushSyncMessage(callerID, name, in, ext)
+func (e *ElementLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error) {
+	return e.atomos.PushSyncMessage(callerID, name, in, ext...)
 }
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Element的消息处理函数。
-func (e *ElementLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
-	return e.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
+func (e *ElementLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	return e.atomos.PushAsyncMessage(callerID, name, in, callback, ext...)
 }
 
 // asyncCallback
@@ -138,12 +138,12 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
+func (e *ElementLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 	return NewError(ErrCodeFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
 }
 
-func (e *ElementLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
-	return e.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
+func (e *ElementLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
+	return e.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext...)
 }
 
 func (e *ElementLocal) getGoID() uint64 {
@@ -176,7 +176,7 @@ func (e *ElementLocal) CosmosMain() *CosmosLocal {
 // KillSelf
 // Atom kill itself from inner
 func (e *ElementLocal) KillSelf() {
-	if err := e.atomos.PushKillMail(e, nil); err != nil {
+	if err := e.atomos.PushKillMail(e); err != nil {
 		e.Log().Error("Element: KillSelf failed. err=(%v)", asError(err).AddStack(e))
 		return
 	}
@@ -264,7 +264,7 @@ func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
 
 // Implementation of Element
 
-func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, error) {
+func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	if fromLocalOrRemote && tracker == nil {
 		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "IDTrackerInfo: IDTrackerInfo is nil.").AddStack(e)
 	}
@@ -456,10 +456,10 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 			}()
 			defer exitWG.Done()
 			defer func() { <-sem }() // 任务完成，释放信号量的一个槽位。
-			err = a.atomos.PushKillMail(e, []ArgsForBaseAtomos{
+			err = a.atomos.PushKillMail(e,
 				&argBaseAtomosWaitKilled{},
 				&argBaseAtomosTimeout{timeout: stopTimeout},
-			})
+			)
 			if err != nil {
 				e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", n, err)
 			}

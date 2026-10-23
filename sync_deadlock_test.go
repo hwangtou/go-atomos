@@ -47,7 +47,7 @@ func TestDeadlock_SelfCall(t *testing.T) {
 		// Use a short timeout to fail fast if deadlock detection is broken.
 		_, err = atomID.SyncMessagingByName(p.local, "Greeting",
 			&ForTestGreetingI{Mode: 2},
-			[]ArgsForBaseAtomos{ArgBaseAtomosTimeout(2 * time.Second)})
+			ArgBaseAtomosTimeout(2 * time.Second))
 		if err == nil {
 			t.Fatal("expected ErrIDFirstSyncCallDeadlock from self-call, got nil")
 		}
@@ -85,7 +85,7 @@ func TestDeadlock_Cycle(t *testing.T) {
 		// Trigger A's mode-3 → A calls B → B calls back A → deadlock detected.
 		_, err = atomAID.SyncMessagingByName(p.local, "Greeting",
 			&ForTestGreetingI{Mode: 3},
-			[]ArgsForBaseAtomos{ArgBaseAtomosTimeout(2 * time.Second)})
+			ArgBaseAtomosTimeout(2 * time.Second))
 		if err == nil {
 			t.Fatal("expected ErrIDFirstSyncCallDeadlock from cycle, got nil")
 		}
@@ -115,7 +115,7 @@ func TestDeadlock_NoFalsePositive(t *testing.T) {
 		}
 		out, err := atomID.SyncMessagingByName(p.local, "Greeting",
 			&ForTestGreetingI{Mode: 1},
-			[]ArgsForBaseAtomos{ArgBaseAtomosTimeout(5 * time.Second)})
+			ArgBaseAtomosTimeout(5 * time.Second))
 		if err != nil {
 			t.Fatalf("normal sync call should succeed, got: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestDeadlock_TimeoutStillWorks(t *testing.T) {
 		}
 		_, err = atomID.SyncMessagingByName(p.local, "Greeting",
 			&ForTestGreetingI{Mode: 1},
-			[]ArgsForBaseAtomos{ArgBaseAtomosTimeout(50 * time.Millisecond)})
+			ArgBaseAtomosTimeout(50 * time.Millisecond))
 		if err == nil {
 			t.Fatal("expected timeout error, got nil")
 		}
