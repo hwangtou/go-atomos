@@ -795,7 +795,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 			switch value := remainMail.data.(type) {
 			case *mailExitCommand:
 				{
-					a.log.Info("Atomos: Stopping meets mail exit command. mail=(%v)", remainMail)
+					a.log.Info("Atomos: Stopping meets mail exit command. mailID=(%d)", remainMail.id)
 					remainAtomMail := unwrapBaseAtomosFromKillMail(value)
 					switch remainAtomMail.mailType {
 					case BaseAtomosMailKill:
@@ -807,7 +807,10 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 			case *baseAtomosMail:
 				{
 					remainAtomMail := value
-					err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mail=(%v),mail=(%v)", remainMail, remainAtomMail).AddStack(nil)
+					// 注意:不能用 %v/%+v 打印 remainMail/remainAtomMail——fmt 反射会读到
+					// baseAtomosMail.mutex,而发送方 goroutine 正在 waitReply 里操作同一把锁,
+					// 构成数据竞争。这里只记录标量字段。
+					err := NewErrorf(ErrAtomosIsStopping, "Atomos: Stopping. mailID=(%d),mailType=(%d),name=(%s)", remainMail.id, remainAtomMail.mailType, remainAtomMail.name).AddStack(nil)
 					//defer deallocAtomosMail(remainAtomMail)
 					switch remainAtomMail.mailType {
 					case BaseAtomosMailKill:
@@ -818,16 +821,16 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 						// TODO ? Mail dealloc in AtomCore.pushMessageMail.
 					case BaseAtomosMailAsync:
 						if remainAtomMail.asyncID != 0 {
-							a.log.Info("Atomos: Stopping so async message mail will callback with error. id=(%s),mail=(%+v)", a.String(), remainAtomMail)
+							a.log.Info("Atomos: Stopping so async message mail will callback with error. id=(%s),mailID=(%d),name=(%s),asyncID=(%d)", a.String(), remainMail.id, remainAtomMail.name, remainAtomMail.asyncID)
 							remainAtomMail.from.asyncCallback(a.impl, remainAtomMail.name, remainAtomMail.startupID, remainAtomMail.asyncID, nil, err)
 						}
 					case BaseAtomosMailOnAsyncCallback:
-						a.log.Info("Atomos: Stopping so async message callback mail will log but cannot callback. id=(%s),mail=(%+v)", a.String(), remainAtomMail)
+						a.log.Info("Atomos: Stopping so async message callback mail will log but cannot callback. id=(%s),mailID=(%d),name=(%s),asyncID=(%d)", a.String(), remainMail.id, remainAtomMail.name, remainAtomMail.asyncID)
 					case BaseAtomosMailTask:
 						// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
 						// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
 						// but it's impossible to add task after locking.
-						a.log.Info("Atomos: Stopping task mails have been sent after start closing. id=(%s),mail=(%+v)", a.String(), remainMail)
+						a.log.Info("Atomos: Stopping task mails have been sent after start closing. id=(%s),mailID=(%d)", a.String(), remainMail.id)
 						if err := a.task.cancelTask(remainMail.id, true, value.atomosTask); err == nil {
 							cancels = append(cancels, remainMail.id)
 						}
