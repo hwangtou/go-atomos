@@ -189,7 +189,7 @@ func (t *testBaseAtomos) getGoID() uint64 {
 	return t.atomos.GetGoID()
 }
 
-func (t *testBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (t *testBaseAtomos) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	t.t.Log("Sync Messaging test received:", fromID, name, in)
 	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 		switch name {
@@ -202,10 +202,10 @@ func (t *testBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Messag
 			panic("not implemented" + name)
 		}
 	}
-	return t.atomos.OnSyncMessaging(fromID, name, handler, in)
+	return t.atomos.onSyncMessaging(fromID, name, handler, in)
 }
 
-func (t *testBaseAtomos) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (t *testBaseAtomos) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	t.t.Log("Async Messaging test received:", fromID, name, asyncID, in)
 	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
 		switch name {
@@ -218,24 +218,24 @@ func (t *testBaseAtomos) OnAsyncMessaging(fromID ID, name string, startupID, asy
 			panic("not implemented" + name)
 		}
 	}
-	t.atomos.OnAsyncMessaging(fromID, t, name, handler, startupID, asyncID, in)
+	t.atomos.onAsyncMessaging(fromID, t, name, handler, startupID, asyncID, in)
 }
 
-func (t *testBaseAtomos) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (t *testBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
 	t.t.Log("Async Messaging test received:", asyncID, in)
 }
 
-func (t *testBaseAtomos) OnFnCallback(callback *atomosCallback) {
+func (t *testBaseAtomos) onFnCallback(callback *atomosCallback) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomos) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (t *testBaseAtomos) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomos) OnStopping(from ID, cancelled []uint64) *Error {
+func (t *testBaseAtomos) onStopping(from ID, cancelled []uint64) *Error {
 	return nil
 }
 

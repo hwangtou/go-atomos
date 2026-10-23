@@ -354,33 +354,33 @@ func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tr
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (e *ElementLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (e *ElementLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrElementMessageHandlerNotExists,
 			"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e)
 	}
-	return e.atomos.OnSyncMessaging(fromID, name, handler, in)
+	return e.atomos.onSyncMessaging(fromID, name, handler, in)
 }
 
-func (e *ElementLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (e *ElementLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
-			e.atomos.log.coreError("Element: OnAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
+			e.atomos.log.coreError("Element: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
+			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Element: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
 		}
 		return
 	}
-	e.atomos.OnAsyncMessaging(fromID, e, name, handler, startupID, asyncID, in)
+	e.atomos.onAsyncMessaging(fromID, e, name, handler, startupID, asyncID, in)
 }
 
-func (e *ElementLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
-	e.atomos.OnAsyncMessagingCallback(asyncID, in, err)
+func (e *ElementLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+	e.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
-func (e *ElementLocal) OnFnCallback(callback *atomosCallback) {
+func (e *ElementLocal) onFnCallback(callback *atomosCallback) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -398,7 +398,7 @@ func (e *ElementLocal) OnFnCallback(callback *atomosCallback) {
 	callback.callback()
 }
 
-func (e *ElementLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (e *ElementLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
@@ -409,7 +409,7 @@ func (e *ElementLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	return nil
 }
 
-func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	// Send Kill to all atoms.
 	var stopTimeout, stopGap time.Duration
 	elemExit, ok := e.elemImpl.Developer.(ElementAtomExit)
@@ -439,7 +439,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		if !has || atom == nil {
 			continue
 		}
-		e.Log().Info("Element: OnStopping, killing atom. name=(%s)", name)
+		e.Log().Info("Element: onStopping, killing atom. name=(%s)", name)
 
 		// 获取信号量的一个槽位。如果信号量已满，则这里将阻塞，直到信号量中有可用的槽位。
 		sem <- struct{}{}
@@ -450,7 +450,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 			var err *Error
 			defer func() {
 				if r := recover(); r != nil {
-					e.Log().Fatal("Element: OnStopping, killing atom recovers from panic. err=(%v)", err.AddPanicStack(e, 3, r))
+					e.Log().Fatal("Element: onStopping, killing atom recovers from panic. err=(%v)", err.AddPanicStack(e, 3, r))
 				}
 			}()
 			defer exitWG.Done()
@@ -468,7 +468,7 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 		}
 	}
 	exitWG.Wait()
-	e.Log().Info("Element: OnStopping, all atoms killed. element=(%s)", e.atomos.id.Element)
+	e.Log().Info("Element: onStopping, all atoms killed. element=(%s)", e.atomos.id.Element)
 
 	// Element
 	var save bool
@@ -508,19 +508,19 @@ func (e *ElementLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
 	persistence, ok = e.elemImpl.Developer.(AutoData)
 	if !ok || persistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"Element: OnStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
+			"Element: onStopping, saving data error, no auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		goto autoLoad
 	}
 	elemPersistence = persistence.ElementAutoData()
 	if elemPersistence == nil {
 		err = NewErrorf(ErrAtomKillElementNotImplementAutoDataPersistence,
-			"Element: OnStopping, saving data error, no element auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
+			"Element: onStopping, saving data error, no element auto data persistence. id=(%s)", e.GetIDInfo().Info()).AddStack(e)
 		e.Log().Fatal(err.Error())
 		return err
 	}
 	if err = elemPersistence.SetElementData(data); err != nil {
-		e.Log().Error("Element: OnStopping, saving data failed, set atom data error. id=(%s),instance=(%+v),err=(%s)",
+		e.Log().Error("Element: onStopping, saving data failed, set atom data error. id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		goto autoLoad
 	}
@@ -533,7 +533,7 @@ autoLoad:
 		return nil
 	}
 	if err = pa.Unload(); err != nil {
-		e.Log().Error("Element: OnStopping, unload failed. id=(%s),instance=(%+v),err=(%s)",
+		e.Log().Error("Element: onStopping, unload failed. id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		return err.AddStack(e)
 	}

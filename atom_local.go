@@ -235,33 +235,33 @@ func (a *AtomLocal) Persistence() AtomAutoData {
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (a *AtomLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (a *AtomLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
 		return nil, NewErrorf(ErrAtomMessageHandlerNotExists,
 			"Atom: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a)
 	}
-	return a.atomos.OnSyncMessaging(fromID, name, handler, in)
+	return a.atomos.onSyncMessaging(fromID, name, handler, in)
 }
 
-func (a *AtomLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (a *AtomLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
-			a.atomos.log.coreError("Atom: OnAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
+			a.atomos.log.coreError("Atom: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
+			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
 		}
 		return
 	}
-	a.atomos.OnAsyncMessaging(fromID, a, name, handler, startupID, asyncID, in)
+	a.atomos.onAsyncMessaging(fromID, a, name, handler, startupID, asyncID, in)
 }
 
-func (a *AtomLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
-	a.atomos.OnAsyncMessagingCallback(asyncID, in, err)
+func (a *AtomLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+	a.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
-func (a *AtomLocal) OnFnCallback(callback *atomosCallback) {
+func (a *AtomLocal) onFnCallback(callback *atomosCallback) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -279,7 +279,7 @@ func (a *AtomLocal) OnFnCallback(callback *atomosCallback) {
 	callback.callback()
 }
 
-func (a *AtomLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (a *AtomLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		return NewErrorf(ErrAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
@@ -293,7 +293,7 @@ func (a *AtomLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 // 有状态的Atom会在Halt被调用之后调用AtomSaver函数保存状态，期间Atom状态为Stopping。
 // Stateful Atom will save data after Stopping method has been called, while is doing this, Atom is set to Stopping.
 
-func (a *AtomLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (a *AtomLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	var save bool
 	var data proto.Message
 	defer func() {

@@ -235,24 +235,24 @@ func (c *CosmosLocal) Halt(from ID, cancelled []uint64) (save bool, data proto.M
 // 邮箱控制器相关
 // Mailbox Handler
 
-func (c *CosmosLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (c *CosmosLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	return nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos message.").AddStack(c)
 }
 
-func (c *CosmosLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (c *CosmosLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	fromInternal, err := asIDInternal(fromID)
 	if err != nil {
-		c.atomos.log.coreError("Cosmos: OnAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", err)
+		c.atomos.log.coreError("Cosmos: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", err)
 		return
 	}
 	fromInternal.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
 }
 
-func (c *CosmosLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
-	c.atomos.OnAsyncMessagingCallback(asyncID, in, err)
+func (c *CosmosLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+	c.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
-func (c *CosmosLocal) OnFnCallback(callback *atomosCallback) {
+func (c *CosmosLocal) onFnCallback(callback *atomosCallback) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
@@ -270,7 +270,7 @@ func (c *CosmosLocal) OnFnCallback(callback *atomosCallback) {
 	callback.callback()
 }
 
-func (c *CosmosLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (c *CosmosLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
 		err := NewErrorf(ErrAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
@@ -283,7 +283,7 @@ func (c *CosmosLocal) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	return nil
 }
 
-func (c *CosmosLocal) OnStopping(from ID, cancelled []uint64) (err *Error) {
+func (c *CosmosLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
 
 	// runnable is nil in bare test fixtures (and cannot contain elements then);

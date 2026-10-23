@@ -412,45 +412,45 @@ func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *t
 
 // baseAtomosHolder
 
-func (tba *testTaskMailboxBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (tba *testTaskMailboxBaseAtomos) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (tba *testTaskMailboxBaseAtomos) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (tba *testTaskMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnFnCallback(callback *atomosCallback) {
+func (tba *testTaskMailboxBaseAtomos) onFnCallback(callback *atomosCallback) {
 	defer func() {
 		if r := recover(); r != nil {
 			defer func() {
 				if r2 := recover(); r2 != nil {
-					tba.t.Logf("Recovered in OnFnCallback recoverFn: %v\n%s", r2, string(debug.Stack()))
+					tba.t.Logf("Recovered in onFnCallback recoverFn: %v\n%s", r2, string(debug.Stack()))
 				}
 			}()
 			if f := callback.recoverFn; f != nil {
 				f(r)
 			} else {
-				tba.t.Logf("Recovered in OnFnCallback: %v\n%s", r, string(debug.Stack()))
+				tba.t.Logf("Recovered in onFnCallback: %v\n%s", r, string(debug.Stack()))
 			}
 		}
 	}()
 	callback.callback()
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (tba *testTaskMailboxBaseAtomos) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	panic("implement me")
 }
 
-func (tba *testTaskMailboxBaseAtomos) OnStopping(from ID, cancelled []uint64) *Error {
-	tba.t.Logf("OnStopping: from=(%v),cancelled=(%v)", from, cancelled)
+func (tba *testTaskMailboxBaseAtomos) onStopping(from ID, cancelled []uint64) *Error {
+	tba.t.Logf("onStopping: from=(%v),cancelled=(%v)", from, cancelled)
 	return nil
 }
 

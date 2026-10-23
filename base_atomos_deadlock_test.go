@@ -186,7 +186,7 @@ func newTestBaseAtomosDeadlockMailboxBaseAtomos(t *testing.T, p *CosmosProcess, 
 	return tba
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	switch name {
 	case "test_deadlock_ba1_ba2_ba1_chain_1":
 		if fromID.GetIDInfo().Atom != "test_atomos_1" {
@@ -217,27 +217,27 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnSyncMessaging(fromID ID, nam
 	panic("not supported")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnFnCallback(callback *atomosCallback) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onFnCallback(callback *atomosCallback) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) OnStopping(from ID, cancelled []uint64) *Error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onStopping(from ID, cancelled []uint64) *Error {
 	//TODO implement me
 	panic("implement me")
 }
