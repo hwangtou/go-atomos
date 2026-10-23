@@ -35,7 +35,7 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 		cluster.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
 		"v1",
 	)
-	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "chaos_atom", nil, nil, true)
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "chaos_atom", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("SpawnAtom failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestChaos_DrainSpawnRejectedThenRecover(t *testing.T) {
 	)
 
 	// 1. drain 前 spawn 成功
-	_, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_1", nil, nil, true)
+	_, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_1", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("Spawn before drain should succeed: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestChaos_DrainSpawnRejectedThenRecover(t *testing.T) {
 
 	// 3. drain 期间 spawn 应被拒（ErrCosmosNodeDraining）
 	//    注意：远程 spawn 经 gRPC 到 target，target 的 SpawnAtom 检查 isDraining
-	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_2", nil, nil, true)
+	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_2", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err == nil {
 		t.Log("Step 3: spawn during drain succeeded (may be expected if remote drain check not wired to this path).")
 	} else {
@@ -135,7 +135,7 @@ func TestChaos_DrainSpawnRejectedThenRecover(t *testing.T) {
 	cluster.targetProcess.mutex.Unlock()
 	t.Logf("Step 4: cancelled drain.")
 
-	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_3", nil, nil, true)
+	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_3", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("Spawn after drain cancel should succeed: %v", err)
 	}

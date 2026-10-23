@@ -87,7 +87,7 @@ func TestAsyncClearingRecoversPanickingCallback(t *testing.T) {
 	logger := &reproLogger{}
 	process, elem := startClearCosmos(t, logger)
 
-	atomID, _, err := elem.SpawnAtom(process.local, "p1", &Config{Cosmos: "arg"}, nil, false)
+	atomID, _, err := elem.SpawnAtom(process.local, "p1", &Config{Cosmos: "arg"}, nil)
 	if err != nil {
 		t.Fatalf("spawn atom failed: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestAsyncSetRaceWithHalt(t *testing.T) {
 	logger := &reproLogger{}
 	process, elem := startClearCosmos(t, logger)
 
-	atomID, _, err := elem.SpawnAtom(process.local, "p2", &Config{Cosmos: "arg"}, nil, false)
+	atomID, _, err := elem.SpawnAtom(process.local, "p2", &Config{Cosmos: "arg"}, nil)
 	if err != nil {
 		t.Fatalf("spawn atom failed: %v", err)
 	}

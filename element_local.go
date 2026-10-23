@@ -264,7 +264,8 @@ func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
 
 // Implementation of Element
 
-func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+	fromLocalOrRemote := argsFromLocalOrRemote(args)
 	if fromLocalOrRemote && tracker == nil {
 		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "IDTrackerInfo: IDTrackerInfo is nil.").AddStack(e)
 	}
@@ -333,7 +334,8 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return info
 }
 
-func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+	fromLocalOrRemote := argsFromLocalOrRemote(args)
 	// Reject new atoms while the node is draining. Routing already steers new
 	// traffic away from Draining nodes, but callers with stale routes or pinned
 	// connections can still land a spawn here — refuse it so the caller can

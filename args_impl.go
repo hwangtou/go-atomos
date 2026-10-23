@@ -13,6 +13,8 @@ const (
 	ArgTypeBaseAtomosAppendToHead ArgType = 3
 	ArgTypeBaseAtomosWaitKilled   ArgType = 4
 	ArgTypeBaseAtomosWithAny      ArgType = 5
+	ArgTypeBaseAtomosFromLocalOnly  ArgType = 6
+	ArgTypeBaseAtomosFromRemoteOnly ArgType = 7
 
 	// ArgsForTask
 
@@ -25,6 +27,21 @@ const (
 
 	// ArgsForSpawn
 )
+
+// argsFromLocalOrRemote reports whether args carry a user-originated routing
+// mark (ArgBaseAtomosFromLocalOnly or ArgBaseAtomosFromRemoteOnly).
+func argsFromLocalOrRemote(args []ArgsForBaseAtomos) bool {
+	for _, a := range args {
+		if a == nil {
+			continue
+		}
+		switch a.getArgType() {
+		case ArgTypeBaseAtomosFromLocalOnly, ArgTypeBaseAtomosFromRemoteOnly:
+			return true
+		}
+	}
+	return false
+}
 
 type ArgsInterfaces interface {
 	getArgType() ArgType
@@ -78,6 +95,22 @@ func (ArgBaseAtomosWithAny) getArgType() ArgType {
 	return ArgTypeBaseAtomosWithAny
 }
 func (ArgBaseAtomosWithAny) argForBaseAtomos() {}
+
+// BaseAtomosFromLocalOnly / BaseAtomosFromRemoteOnly
+
+type argBaseAtomosFromLocalOnly struct{}
+
+func (argBaseAtomosFromLocalOnly) getArgType() ArgType {
+	return ArgTypeBaseAtomosFromLocalOnly
+}
+func (argBaseAtomosFromLocalOnly) argForBaseAtomos() {}
+
+type argBaseAtomosFromRemoteOnly struct{}
+
+func (argBaseAtomosFromRemoteOnly) getArgType() ArgType {
+	return ArgTypeBaseAtomosFromRemoteOnly
+}
+func (argBaseAtomosFromRemoteOnly) argForBaseAtomos() {}
 
 // For Task
 

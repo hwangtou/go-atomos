@@ -181,7 +181,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T0: 首次 Spawn player1(生产对应玩家注册:SpawnAtom 带 arg,AutoData 元素必需)
 	spawnArg := &Config{Cosmos: "spawnArg"}
-	atomIDA, _, serr := elem.SpawnAtom(process.local, reproAtomName, spawnArg, nil, false)
+	atomIDA, _, serr := elem.SpawnAtom(process.local, reproAtomName, spawnArg, nil)
 	if serr != nil {
 		t.Fatalf("spawn atom failed: %v", serr)
 	}
@@ -258,7 +258,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T4: 模拟用户核心侧按名字再取(getAtomFromRemote)→ Halt 状态下按旧数据重生新实例 B
 	// GetAtomData 返回上次保存的数据即可通过;这里让 GetAtomData 有数据:
-	atomIDB, _, gerr := elem.GetAtomID(reproAtomName, nil, false, nil)
+	atomIDB, _, gerr := elem.GetAtomID(reproAtomName, nil)
 	if gerr != nil {
 		t.Fatalf("respawn atom failed: %v", gerr)
 	}

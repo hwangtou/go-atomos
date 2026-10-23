@@ -35,7 +35,7 @@ func TestDeadlock_SelfCall(t *testing.T) {
 		const atomName = "deadlock_self"
 		spawnTestAtom(t, elem, atomName)
 
-		atomID, _, err := elem.GetAtomID(atomName, NewIDTrackerInfoFromLocalGoroutine(3), true)
+		atomID, _, err := elem.GetAtomID(atomName, NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
 		if err != nil {
 			t.Fatalf("GetAtomID: %v", err)
 		}
@@ -78,7 +78,7 @@ func TestDeadlock_Cycle(t *testing.T) {
 		implA.cyclePeer = atomB
 		implB.cyclePeer = atomA
 
-		atomAID, _, err := elem.GetAtomID(atomA, NewIDTrackerInfoFromLocalGoroutine(3), true)
+		atomAID, _, err := elem.GetAtomID(atomA, NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
 		if err != nil {
 			t.Fatalf("GetAtomID(A): %v", err)
 		}
@@ -109,7 +109,7 @@ func TestDeadlock_NoFalsePositive(t *testing.T) {
 		}
 		// Simple: call an atom with mode=1 (normal reply). No nested sync call.
 		spawnTestAtom(t, elem, "nofalsepos")
-		atomID, _, err := elem.GetAtomID("nofalsepos", NewIDTrackerInfoFromLocalGoroutine(3), true)
+		atomID, _, err := elem.GetAtomID("nofalsepos", NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
 		if err != nil {
 			t.Fatalf("GetAtomID: %v", err)
 		}
@@ -141,7 +141,7 @@ func TestDeadlock_TimeoutStillWorks(t *testing.T) {
 		impl := spawnTestAtom(t, elem, "timeout_atom")
 		impl.greetingWait = 300 * time.Millisecond // handler sleeps longer than the timeout
 
-		atomID, _, err := elem.GetAtomID("timeout_atom", NewIDTrackerInfoFromLocalGoroutine(3), true)
+		atomID, _, err := elem.GetAtomID("timeout_atom", NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
 		if err != nil {
 			t.Fatalf("GetAtomID: %v", err)
 		}

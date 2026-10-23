@@ -167,7 +167,7 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBase
 	if ierr != nil {
 		return nil, nil, ierr.AddStack(c)
 	}
-	id, tracker, gerr := e.GetAtomID(name, c.newLocalIDTrackerInfo(), true)
+	id, tracker, gerr := e.GetAtomID(name, c.newLocalIDTrackerInfo(), ArgBaseAtomosFromLocalOnly())
 	if gerr != nil {
 		return nil, nil, asError(gerr).AddStack(c)
 	}
@@ -179,7 +179,7 @@ func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, ar
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.SpawnAtom(callerID, name, arg, c.newLocalIDTrackerInfo(), true)
+	return e.SpawnAtom(callerID, name, arg, c.newLocalIDTrackerInfo(), ArgBaseAtomosFromLocalOnly())
 }
 
 // newLocalIDTrackerInfo returns a non-nil IDTrackerInfo for a local spawn/get,

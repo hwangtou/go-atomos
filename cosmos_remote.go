@@ -438,7 +438,7 @@ func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...ArgsForBaseAto
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	id, tracker, gerr := element.GetAtomID(name, nil, false)
+	id, tracker, gerr := element.GetAtomID(name, nil)
 	if gerr != nil {
 		return nil, nil, asError(gerr).AddStack(nil)
 	}
@@ -450,7 +450,7 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 	if err != nil {
 		return nil, nil, err
 	}
-	id, tracker, serr := element.SpawnAtom(callerID, name, arg, nil, false)
+	id, tracker, serr := element.SpawnAtom(callerID, name, arg, nil)
 	if serr != nil {
 		return nil, nil, asError(serr).AddStack(nil)
 	}

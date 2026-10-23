@@ -38,6 +38,32 @@ func NewArgBaseAtomosWithAny(any any) ArgsForBaseAtomos {
 	return ArgBaseAtomosWithAny{Any: any}
 }
 
+// ArgBaseAtomosFromLocalOnly marks an Element.GetAtomID/SpawnAtom call as
+// user-originated from a local caller: the framework tracks an IDTracker
+// reference for the returned ID (tracker must be non-nil).
+// 创建一个参数，标记 Element.GetAtomID/SpawnAtom 调用来自本地用户调用：
+// 框架为返回的 ID 跟踪 IDTracker 引用（tracker 必须非 nil）。
+// Example usage:
+// elem.GetAtomID(name, tracker, atomos.ArgBaseAtomosFromLocalOnly())
+func ArgBaseAtomosFromLocalOnly() ArgsForBaseAtomos {
+	return argBaseAtomosFromLocalOnly{}
+}
+
+// ArgBaseAtomosFromRemoteOnly marks an Element.GetAtomID/SpawnAtom call as
+// user-originated from a remote caller. It is equivalent to
+// ArgBaseAtomosFromLocalOnly in the local Element implementation and is
+// ignored by remote Element implementations; when neither mark is given the
+// call is treated as framework-internal (no tracker tracking), which keeps
+// the previous fromLocalOrRemote=false behavior.
+// 创建一个参数，标记 Element.GetAtomID/SpawnAtom 调用来自远程用户调用。
+// 在本地 Element 实现中与 ArgBaseAtomosFromLocalOnly 等价；远程 Element 实现忽略之；
+// 缺省（两者都不给）按框架内部调用处理（不跟踪 tracker），保持原 fromLocalOrRemote=false 的行为。
+// Example usage:
+// elem.SpawnAtom(callerID, name, arg, tracker, atomos.ArgBaseAtomosFromRemoteOnly())
+func ArgBaseAtomosFromRemoteOnly() ArgsForBaseAtomos {
+	return argBaseAtomosFromRemoteOnly{}
+}
+
 // Task
 
 // ArgTaskMark creates an argument that specifies a marking string for the task.

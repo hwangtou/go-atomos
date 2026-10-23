@@ -43,7 +43,7 @@ func TestAsyncDrainWindow(t *testing.T) {
 	svc := &atomosRemoteService{process: process}
 
 	// ---- 阶段一:推迟窗口内回复到达,回调被正常消费 ----
-	atomID, _, err := elem.SpawnAtom(process.local, "drain1", &Config{Cosmos: "arg"}, nil, false)
+	atomID, _, err := elem.SpawnAtom(process.local, "drain1", &Config{Cosmos: "arg"}, nil)
 	if err != nil {
 		t.Fatalf("spawn atom failed: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestAsyncDrainWindow(t *testing.T) {
 	t.Log("✅ 阶段一通过: 推迟窗口内回复被消费,窗口关闭后正常回收,无 handler not found")
 
 	// ---- 阶段二:连续推迟至额度用尽,残余回调被清账终结 ----
-	atomID2, _, err := elem.SpawnAtom(process.local, "drain2", &Config{Cosmos: "arg"}, nil, false)
+	atomID2, _, err := elem.SpawnAtom(process.local, "drain2", &Config{Cosmos: "arg"}, nil)
 	if err != nil {
 		t.Fatalf("spawn atom failed: %v", err)
 	}

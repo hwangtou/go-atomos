@@ -128,7 +128,7 @@ func (e *ElementRemote) getGoID() uint64 {
 
 // Implementation of Element
 
-func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -190,7 +190,7 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return map[string]string{}
 }
 
-func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)

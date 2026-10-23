@@ -63,7 +63,7 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 		return rsp, nil
 	}
 	// Get atom.
-	atom, _, err := elem.GetAtomID(req.Atom, nil, false)
+	atom, _, err := elem.GetAtomID(req.Atom, nil)
 	//a.process.logging.PushLogging(elem.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("GetAtomID: element=(%s) atom=(%s) atom=(%v) err=(%v)", req.Element, req.Atom, atom, err))
 	if err != nil {
 		rsp.Error = asError(err).AddStack(a.process.local)
@@ -168,7 +168,7 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		}
 	}
 
-	atom, _, serr := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
+	atom, _, serr := elem.SpawnAtom(callerID, req.Atom, in, nil)
 	if atom != nil {
 		rsp.Id = atom.GetIDInfo()
 	}
@@ -401,7 +401,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 	cosmosArgs := createExtForCosmosArgs(req.CosmosArgs)
 
 	// Get atom.
-	atom, _, gerr := elem.GetAtomID(req.Id.Atom, nil, false, nil)
+	atom, _, gerr := elem.GetAtomID(req.Id.Atom, nil)
 	if gerr != nil {
 		rsp.Error = asError(gerr).AddStack(a.process.local)
 		return rsp, nil
@@ -484,7 +484,7 @@ func (a *atomosRemoteService) getLocalIDFromIDInfo(idInfo *IDInfo) ID {
 	if idInfo.Type != IDType_Atom {
 		return nil
 	}
-	atom, _, _ := elem.GetAtomID(idInfo.Atom, nil, false, nil)
+	atom, _, _ := elem.GetAtomID(idInfo.Atom, nil)
 	return atom
 }
 

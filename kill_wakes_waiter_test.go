@@ -110,7 +110,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 		t.Fatalf("get element failed: %v", err.Message)
 	}
 
-	id, _, serr := elem.SpawnAtom(process.local, "victim", &Config{Cosmos: "arg"}, nil, false)
+	id, _, serr := elem.SpawnAtom(process.local, "victim", &Config{Cosmos: "arg"}, nil)
 	if serr != nil {
 		t.Fatalf("spawn atom failed: %v", serr)
 	}

@@ -40,7 +40,7 @@ func TestIDRouting_CurrentSwitchBreaksExistingCalls(t *testing.T) {
 		"route_test_atom",
 		nil,
 		nil,
-		true,
+		ArgBaseAtomosFromLocalOnly(),
 	)
 	if err != nil {
 		t.Fatalf("SpawnAtom failed: %v", err)
@@ -119,7 +119,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 		cluster.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
 		"v1",
 	)
-	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "failover_test_atom", nil, nil, true)
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "failover_test_atom", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("SpawnAtom failed: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
 		cluster.sourceProcess.local.runnable.implements[ForTestAtomosName].Interface,
 		"v1",
 	)
-	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "ed_atom", nil, nil, true)
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "ed_atom", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("SpawnAtom failed: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 	)
 
 	// 1. drain 前 spawn 应成功（同时让 target 持有存量 atom，drain watcher 不会退出）
-	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_keep", nil, nil, true)
+	atomID, _, err := sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_keep", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {
 		t.Fatalf("SpawnAtom before drain should succeed: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 	}
 
 	// 3. drain 后经 pinned 连接的远程 spawn 必须被本地拒绝
-	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_new", nil, nil, true)
+	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "dr_atom_new", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err == nil {
 		t.Fatal("[核心] SpawnAtom on draining node should be rejected, but succeeded")
 	}
@@ -344,7 +344,7 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 	if gerr != nil {
 		t.Fatalf("getLocalElement failed: %v", gerr)
 	}
-	_, _, lerr := localElem.SpawnAtom(cluster.targetProcess.local, "dr_atom_local", nil, nil, true)
+	_, _, lerr := localElem.SpawnAtom(cluster.targetProcess.local, "dr_atom_local", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if lerr == nil || CodeOf(lerr) != ErrCodeCosmosNodeDraining {
 		t.Fatalf("Local spawn on draining node should be rejected with ErrCosmosNodeDraining, got (%v)", lerr)
 	}

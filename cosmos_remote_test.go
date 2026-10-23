@@ -182,7 +182,7 @@ func TestCosmosRemote_InstanceMismatchOnRespawn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getLocalElement on target: %v", err)
 	}
-	targetAtom, _, gerr := elem.GetAtomID(atomName, nil, false)
+	targetAtom, _, gerr := elem.GetAtomID(atomName, nil)
 	if gerr != nil {
 		t.Fatalf("target GetAtomID: %v", gerr)
 	}
