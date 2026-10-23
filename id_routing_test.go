@@ -132,7 +132,7 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 	t.Logf("Call before pin invalidation succeeded.")
 
 	// 3. 取出 pinned 连接并 Close 它（模拟节点重启：旧连接关闭，但 current 仍指向 target 的新连接）
-	atomRemote := atomID.(*AtomRemoteInSourceProcess).AtomRemote
+	atomRemote := atomID.(*atomRemoteInSourceProcess).AtomRemote
 	pinned := atomRemote.remote.getPinnedConn()
 	if pinned == nil {
 		t.Fatal("pinnedConn should be set after SpawnAtom")

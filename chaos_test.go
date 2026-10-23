@@ -75,7 +75,7 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 	}
 
 	// 4. 验证 pinned 连接已被 validPinnedConn 检测并清除（降级触发）
-	atomRemote := atomID.(*AtomRemoteInSourceProcess).AtomRemote
+	atomRemote := atomID.(*atomRemoteInSourceProcess).AtomRemote
 	pinned := atomRemote.remote.getPinnedConn()
 	if pinned != nil {
 		// pinned 可能还没被清除（取决于 gRPC 是否已标记 Shutdown），这不是硬性断言

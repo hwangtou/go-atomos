@@ -10,13 +10,13 @@ import (
 // optimise: elementRemote 中的 atomRemote map 存在内存泄漏（无释放操作）
 // 经观察，version 和 callerCounter 无实际用途，考虑到这点，AtomRemote 可作为无状态结构（内存占用也不大），不再需要缓存，随用随创建
 
-// AtomRemoteInSourceProcess 创建用于发送的目标AtomRemote
-type AtomRemoteInSourceProcess struct {
+// atomRemoteInSourceProcess 创建用于发送的目标AtomRemote
+type atomRemoteInSourceProcess struct {
 	*AtomRemote
 }
 
 func newAtomRemoteInSourceProcess(e *ElementRemote, info *IDInfo) ID {
-	return &AtomRemoteInSourceProcess{
+	return &atomRemoteInSourceProcess{
 		AtomRemote: &AtomRemote{
 			remote:  newBaseRemote(e.cosmos, info),
 			element: e,
@@ -29,7 +29,7 @@ func newAtomRemoteInSourceProcess(e *ElementRemote, info *IDInfo) ID {
 // after CosmosRemote.current switches. The conn should be the one the caller
 // used to resolve this atom (e.remote.getCliConn() at creation time).
 func newAtomRemoteInSourceProcessWithPinnedConn(e *ElementRemote, info *IDInfo, conn *grpc.ClientConn) ID {
-	return &AtomRemoteInSourceProcess{
+	return &atomRemoteInSourceProcess{
 		AtomRemote: &AtomRemote{
 			remote:  newBaseRemoteWithPinnedConn(e.cosmos, info, conn),
 			element: e,
@@ -37,26 +37,26 @@ func newAtomRemoteInSourceProcessWithPinnedConn(e *ElementRemote, info *IDInfo, 
 	}
 }
 
-func (a *AtomRemoteInSourceProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *atomRemoteInSourceProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
 	// BUG: asyncSet should never be called on a source-process remote ID.
 	// It exists only to satisfy the ID interface. Returning zeros so callers
 	// get a safe no-op rather than a process crash.
 	return 0, 0
 }
 
-func (a *AtomRemoteInSourceProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *atomRemoteInSourceProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
 	a.remote.PushAsyncMessageCallback(a, callbackID, name, startupID, asyncID, reply, err)
 }
 
-// AtomRemoteInTargetProcess 创建用于接收自的目标AtomRemote，用于atomos_remote_service.go。
-type AtomRemoteInTargetProcess struct {
+// atomRemoteInTargetProcess 创建用于接收自的目标AtomRemote，用于atomos_remote_service.go。
+type atomRemoteInTargetProcess struct {
 	*AtomRemote
 	startupID uint64
 	asyncID   uint64
 }
 
 func newAtomRemoteInTargetProcess(e *ElementRemote, info *IDInfo, startupID, asyncID uint64) ID {
-	return &AtomRemoteInTargetProcess{
+	return &atomRemoteInTargetProcess{
 		AtomRemote: &AtomRemote{
 			remote:  newBaseRemote(e.cosmos, info),
 			element: e,
@@ -66,11 +66,11 @@ func newAtomRemoteInTargetProcess(e *ElementRemote, info *IDInfo, startupID, asy
 	}
 }
 
-func (a *AtomRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *atomRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
 	return a.startupID, a.asyncID
 }
 
-func (a *AtomRemoteInTargetProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *atomRemoteInTargetProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
 	a.remote.PushAsyncMessageCallback(a, callbackID, name, startupID, asyncID, reply, err)
 }
 

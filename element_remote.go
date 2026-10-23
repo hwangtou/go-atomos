@@ -11,13 +11,13 @@ import (
 // 远程的Element实现。
 // Implement of remote Element.
 
-// ElementRemoteFromSource 创建用于发送的目标ElementRemote
-type ElementRemoteFromSource struct {
+// elementRemoteFromSource 创建用于发送的目标ElementRemote
+type elementRemoteFromSource struct {
 	*ElementRemote
 }
 
-func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterface, version string) *ElementRemoteFromSource {
-	return &ElementRemoteFromSource{
+func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterface, version string) *elementRemoteFromSource {
+	return &elementRemoteFromSource{
 		ElementRemote: &ElementRemote{
 			cosmos:  c,
 			remote:  newBaseRemote(c, info),
@@ -28,37 +28,37 @@ func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterfa
 	}
 }
 
-func (e *ElementRemoteFromSource) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (e *elementRemoteFromSource) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
 	// BUG: asyncSet should never be called on a source-process remote ID.
 	// It exists only to satisfy the ID interface. Returning zeros so callers
 	// get a safe no-op rather than a process crash.
 	return 0, 0
 }
 
-func (e *ElementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (e *elementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
 	e.remote.PushAsyncMessageCallback(e, callerID, name, startupID, asyncID, reply, err)
 }
 
-// ElementRemoteInTargetProcess 创建用于接收的目标ElementRemote，用于atomos_remote_service.go。
-type ElementRemoteInTargetProcess struct {
+// elementRemoteInTargetProcess 创建用于接收的目标ElementRemote，用于atomos_remote_service.go。
+type elementRemoteInTargetProcess struct {
 	*ElementRemote
 	startupID uint64
 	asyncID   uint64
 }
 
 func newElementRemoteInTargetProcess(elem *ElementRemote, startupID, asyncID uint64) ID {
-	return &ElementRemoteInTargetProcess{
+	return &elementRemoteInTargetProcess{
 		ElementRemote: elem,
 		startupID:     startupID,
 		asyncID:       asyncID,
 	}
 }
 
-func (e *ElementRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (e *elementRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
 	return e.startupID, e.asyncID
 }
 
-func (e *ElementRemoteInTargetProcess) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (e *elementRemoteInTargetProcess) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
 	e.remote.PushAsyncMessageCallback(e, callerID, name, startupID, asyncID, reply, err)
 }
 

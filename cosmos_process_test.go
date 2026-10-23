@@ -145,7 +145,7 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 		client:  sourceConn,
 		version: "",
 	}
-	sourceToTarget.elements = map[string]*ElementRemoteFromSource{
+	sourceToTarget.elements = map[string]*elementRemoteFromSource{
 		ForTestAtomosName: newElementRemoteFromSource(
 			sourceToTarget,
 			// Element-level IDInfo (NOT the node-level remote.info): the
@@ -179,7 +179,7 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 		client:  targetConn,
 		version: "",
 	}
-	targetToSource.elements = map[string]*ElementRemoteFromSource{
+	targetToSource.elements = map[string]*elementRemoteFromSource{
 		ForTestAtomosName: newElementRemoteFromSource(
 			targetToSource,
 			// Element-level IDInfo, see source→target block above for rationale.

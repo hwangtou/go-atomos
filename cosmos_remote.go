@@ -23,7 +23,7 @@ type CosmosRemote struct {
 	current *cosmosRemoteVersion
 	version map[string]*cosmosRemoteVersion
 
-	elements map[string]*ElementRemoteFromSource
+	elements map[string]*elementRemoteFromSource
 
 	// watchers are DeathWatch callbacks fired when this remote node departs
 	// (its version key is deleted from etcd). Guarded by mutex. Entries may be
@@ -38,7 +38,7 @@ func newCosmosRemoteFromNodeInfo(process *CosmosProcess, info *CosmosNodeVersion
 		enable:   false,
 		current:  nil,
 		version:  map[string]*cosmosRemoteVersion{},
-		elements: map[string]*ElementRemoteFromSource{},
+		elements: map[string]*elementRemoteFromSource{},
 	}
 	c.remote = newBaseRemote(c, info.Id)
 	return c
@@ -51,7 +51,7 @@ func newCosmosRemoteFromLockInfo(process *CosmosProcess, lock *CosmosNodeVersion
 		enable:   false,
 		current:  nil,
 		version:  map[string]*cosmosRemoteVersion{},
-		elements: map[string]*ElementRemoteFromSource{},
+		elements: map[string]*elementRemoteFromSource{},
 	}
 	c.remote = newBaseRemote(c, nil)
 	return c
@@ -94,18 +94,18 @@ func (c *CosmosRemote) AddDeathWatch(cb DeathWatchCallback) (cancel func()) {
 	}
 }
 
-type CosmosRemoteInTargetProcess struct {
+type cosmosRemoteInTargetProcess struct {
 	*CosmosRemote
 	startupID uint64
 	asyncID   uint64
 }
 
-func (c *CosmosRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (c *cosmosRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
 	return c.startupID, c.asyncID
 }
 
-func newCosmosRemoteInTargetProcess(cosmos *CosmosRemote, startupID, asyncID uint64) *CosmosRemoteInTargetProcess {
-	return &CosmosRemoteInTargetProcess{
+func newCosmosRemoteInTargetProcess(cosmos *CosmosRemote, startupID, asyncID uint64) *cosmosRemoteInTargetProcess {
+	return &cosmosRemoteInTargetProcess{
 		CosmosRemote: cosmos,
 		startupID:    startupID,
 		asyncID:      asyncID,
@@ -346,7 +346,7 @@ func (c *CosmosRemote) getCurrentClient() *grpc.ClientConn {
 	return client
 }
 
-func (c *CosmosRemote) getElement(name string) (*ElementRemoteFromSource, *Error) {
+func (c *CosmosRemote) getElement(name string) (*elementRemoteFromSource, *Error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 

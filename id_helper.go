@@ -62,7 +62,7 @@ func shouldRebind(code int64) bool {
 
 // releaseID releases the IDTracker carried by an ID, if any. Generated IDs
 // (*<Svc>AtomID/*<Svc>ElementID) embed *IDTracker (promoting Release), so they
-// satisfy ReleasableID; remote IDs (AtomRemoteInSourceProcess, etc.) do not,
+// satisfy ReleasableID; remote IDs (atomRemoteInSourceProcess, etc.) do not,
 // and their tracker is nil — Release is a no-op there. Safe to call on any ID.
 func releaseID(id ID) {
 	if r, ok := id.(ReleasableID); ok {
