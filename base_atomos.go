@@ -9,9 +9,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// BaseAtomosHolder Atomos持有者
+// baseAtomosHolder Atomos持有者
 // Base Atomos Holder
-type BaseAtomosHolder interface {
+type baseAtomosHolder interface {
 	// OnSyncMessaging
 	// 收到消息
 	OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error)
@@ -115,7 +115,7 @@ type BaseAtomos struct {
 	mailbox *mailBox
 
 	// 持有者
-	holder BaseAtomosHolder
+	holder baseAtomosHolder
 	// 实际上运行的对象
 	instance Atomos
 
@@ -147,7 +147,7 @@ type asyncCallbackWrap struct {
 	now time.Time
 }
 
-func NewBaseAtomos(impl ID, id *IDInfo, lv LogLevel, holder BaseAtomosHolder, inst Atomos, process *CosmosProcess) *BaseAtomos {
+func newBaseAtomos(impl ID, id *IDInfo, lv LogLevel, holder baseAtomosHolder, inst Atomos, process *CosmosProcess) *BaseAtomos {
 	a := &BaseAtomos{
 		process:          process,
 		impl:             impl,

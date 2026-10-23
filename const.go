@@ -9,22 +9,22 @@ const (
 
 const (
 	udsConnReadBufSize  = 1024
-	ShouldArgumentClone = false
+	shouldArgumentClone = false
 
 	ElementBroadcastName = "Broadcast"
 
-	// ConfigKeyLogStdout is a key in Config.Customize that, when set to "1",
+	// configKeyLogStdout is a key in Config.Customize that, when set to "1",
 	// forces all logging to stdout/stderr instead of files. Set via
 	// ATOMOS_LOG_STDOUT env var, YAML log-std field, or Docker auto-detection.
-	ConfigKeyLogStdout = "_log_stdout"
+	configKeyLogStdout = "_log_stdout"
 
-	GRPCServerInitialWindowSize     = 1024 * 128      // 128K
-	GRPCServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M
-	GRPCServerWriteBufferSize       = 1024 * 32       // 32K
-	GRPCServerReadBufferSize        = 1024 * 32       // 32K
+	grpcServerInitialWindowSize     = 1024 * 128      // 128K
+	grpcServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M
+	grpcServerWriteBufferSize       = 1024 * 32       // 32K
+	grpcServerReadBufferSize        = 1024 * 32       // 32K
 
-	GRPCClientInitialWindowSize     = 1024 * 128      // 128K
-	GRPCClientInitialConnWindowSize = 1024 * 1024 * 1 // 1M
-	GRPCClientWriteBufferSize       = 1024 * 32       // 32K
-	GRPCClientReadBufferSize        = 1024 * 32       // 32K
+	grpcClientInitialWindowSize     = 1024 * 128      // 128K
+	grpcClientInitialConnWindowSize = 1024 * 1024 * 1 // 1M
+	grpcClientWriteBufferSize       = 1024 * 32       // 32K
+	grpcClientReadBufferSize        = 1024 * 32       // 32K
 )

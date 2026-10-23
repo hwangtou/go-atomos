@@ -60,7 +60,7 @@ func (l *AppLoggingToConsole) Close() {}
 // shouldLogToStdout returns true when the runtime configuration or container
 // environment indicates that logs should go to stdout/stderr instead of files.
 func shouldLogToStdout(conf *Config) bool {
-	if v, ok := conf.Customize[ConfigKeyLogStdout]; ok && string(v) == "1" {
+	if v, ok := conf.Customize[configKeyLogStdout]; ok && string(v) == "1" {
 		return true
 	}
 	if isRunningInDocker() {

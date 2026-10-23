@@ -110,14 +110,14 @@ type atomosCallback struct {
 func allocBaseAtomosMail() *baseAtomosMail {
 	am := &baseAtomosMail{}
 	am.mail = allocMail()
-	initMail(am.mail, DefaultMailID, am)
+	initMail(am.mail, defaultMailID, am)
 	return am
 }
 
 func allocBaseAtomosKillMail() (*mailExitCommand, *baseAtomosMail, *mail) {
 	am := &baseAtomosMail{}
 	am.mail = allocMail()
-	em := initKillMail(am.mail, DefaultMailID, am, nil)
+	em := initKillMail(am.mail, defaultMailID, am, nil)
 	return em, am, am.mail
 }
 
@@ -158,7 +158,7 @@ func initBaseAtomosMailSync(am *baseAtomosMail, from ID, name string, arg proto.
 	// crosses goroutine boundaries (caller -> mailbox), so we clone it by
 	// default to prevent the handler from mutating the caller's message.
 	if arg != nil {
-		if ShouldArgumentClone {
+		if shouldArgumentClone {
 			am.arg = proto.Clone(arg)
 		} else {
 			am.arg = arg
@@ -174,7 +174,7 @@ func initBaseAtomosMailAsync(am *baseAtomosMail, from ID, name string, startupID
 	am.from = from
 	am.name = name
 	if arg != nil {
-		if ShouldArgumentClone {
+		if shouldArgumentClone {
 			am.arg = proto.Clone(arg)
 		} else {
 			am.arg = arg
@@ -222,7 +222,7 @@ func initTaskQueueMail(am *baseAtomosMail, name string, helper *taskHelper) {
 }
 
 func initCallbackMail(am *baseAtomosMail, name string, callback func(), recoverFn func(any)) {
-	am.mail.id = DefaultMailID
+	am.mail.id = defaultMailID
 	am.mailType = BaseAtomosMailTaskCallback
 
 	am.name = name
@@ -236,7 +236,7 @@ func initCallbackMail(am *baseAtomosMail, name string, callback func(), recoverF
 // 虫洞邮件
 // Reload Mail
 func initWormholeMail(am *baseAtomosMail, from ID, wormhole BaseAtomosWormhole) {
-	am.mail.id = DefaultMailID
+	am.mail.id = defaultMailID
 	am.mailType = BaseAtomosMailWormhole
 	am.from = from
 	am.name = ""
@@ -249,7 +249,7 @@ func initWormholeMail(am *baseAtomosMail, from ID, wormhole BaseAtomosWormhole) 
 // 终止邮件
 // Stopping Mail
 func initAtomosKillMail(am *baseAtomosMail, from ID) {
-	am.mail.id = DefaultMailID
+	am.mail.id = defaultMailID
 	am.mailType = BaseAtomosMailKill
 	am.from = from
 	am.name = ""

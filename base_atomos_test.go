@@ -107,7 +107,7 @@ func newBaseAtomosForTest(t *testing.T, id *IDInfo, process *CosmosProcess) *tes
 		process: process,
 	}
 	ti := &testInstance{}
-	ba := NewBaseAtomos(tba, id, LogLevel_Debug, tba, ti, process)
+	ba := newBaseAtomos(tba, id, LogLevel_Debug, tba, ti, process)
 	tba.atomos = ba
 	tba.instance = ti
 	if err := tba.atomos.start(func() *Error {

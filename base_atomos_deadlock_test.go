@@ -175,7 +175,7 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) getGoID() uint64 {
 
 func newTestBaseAtomosDeadlockMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *testBaseAtomosDeadlockMailboxBaseAtomos {
 	tba := &testBaseAtomosDeadlockMailboxBaseAtomos{}
-	ba := NewBaseAtomos(tba, id, LogLevel_Debug, tba, tba, p)
+	ba := newBaseAtomos(tba, id, LogLevel_Debug, tba, tba, p)
 	if err := ba.start(func() *Error {
 		return nil
 	}); err != nil {

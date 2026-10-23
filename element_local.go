@@ -74,7 +74,7 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 	} else {
 		logLevel = runnable.config.LogLevel
 	}
-	e.atomos = NewBaseAtomos(e, id, logLevel, e, impl.Developer.ElementConstructor(), main.process)
+	e.atomos = newBaseAtomos(e, id, logLevel, e, impl.Developer.ElementConstructor(), main.process)
 
 	// 如果实现了ElementCustomizeAtomInitNum接口，那么就使用接口中定义的数量。
 	if atomsInitNum, ok := impl.Developer.(ElementAtomInitNum); ok {

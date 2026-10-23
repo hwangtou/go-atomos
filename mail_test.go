@@ -121,7 +121,7 @@ func TestMailbox_LifeCycle(t *testing.T) {
 		// consumes (and releases) pushed mails concurrently, so any exact or
 		// bounded count here is inherently nondeterministic. Allocation
 		// tracking is verified by waitAllocMailDebugZero at the end.
-		initMail(m, DefaultMailID, nil)
+		initMail(m, defaultMailID, nil)
 		h.mb.pushTail(m)
 	}
 	wg.Wait()
@@ -134,7 +134,7 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	if !h.mb.isRunning() {
 		t.Fatal("TestMailbox_Smoke: Mailbox is not running before sending exit mail.")
 	}
-	initKillMail(m, DefaultMailID, nil, nil)
+	initKillMail(m, defaultMailID, nil, nil)
 	h.mb.pushHead(m)
 	wg.Wait()
 	if h.mb.isRunning() {
@@ -239,7 +239,7 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		if getAllocMailDebugNum() == 0 {
 			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 		}
-		initMail(m, DefaultMailID, i)
+		initMail(m, defaultMailID, i)
 		h.mb.pushTail(m)
 		sendWait.Done()
 		if gap := int32(i+1) - int32(h.mb.getNum()); gap < 0 || gap > 1 {
@@ -261,7 +261,7 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		if getAllocMailDebugNum() == 0 {
 			t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 		}
-		initMail(m, DefaultMailID, i)
+		initMail(m, defaultMailID, i)
 		h.mb.pushTail(m)
 		sendWait.Done()
 	}
@@ -271,7 +271,7 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 	if getAllocMailDebugNum() == 0 {
 		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
 	}
-	initKillMail(m, DefaultMailID, nil, nil)
+	initKillMail(m, defaultMailID, nil, nil)
 	h.mb.pushHead(m)
 	close(killPushed)
 	wg.Wait()
@@ -1131,7 +1131,7 @@ func TestMailBox_StopIfNoMail(t *testing.T) {
 
 	// Push a mail to mailbox
 	m := allocMail()
-	initMail(m, DefaultMailID, nil)
+	initMail(m, defaultMailID, nil)
 	h.mb.pushTail(m)
 	if killed := h.mb.stopIfNoMail(nil); killed {
 		t.Fatalf("TestMailBox_StopIfNoMail: StopIfNoMail returned killed=true but there is a mail.")
@@ -1343,7 +1343,7 @@ func testMailBoxHelper(t *testing.T, n, waiters int) {
 		go func() {
 			for i := 0; i < n; i++ {
 				m := allocMail()
-				initMail(m, DefaultMailID, nil)
+				initMail(m, defaultMailID, nil)
 				h.mb.pushTail(m)
 			}
 		}()
@@ -1353,7 +1353,7 @@ func testMailBoxHelper(t *testing.T, n, waiters int) {
 	// Send exit mail
 	wg.Add(1)
 	killMail := allocMail()
-	initKillMail(killMail, DefaultMailID, nil, nil)
+	initKillMail(killMail, defaultMailID, nil, nil)
 	killMail.data = &mailExitCommand{}
 	h.mb.pushHead(killMail)
 	wg.Wait()
@@ -1463,7 +1463,7 @@ func benchmarkMailBox(b *testing.B, waiters int) {
 		go func() {
 			for i := 0; i < b.N; i++ {
 				m := allocMail()
-				initMail(m, DefaultMailID, nil)
+				initMail(m, defaultMailID, nil)
 				mb.pushTail(m)
 			}
 		}()
@@ -1471,7 +1471,7 @@ func benchmarkMailBox(b *testing.B, waiters int) {
 	h.wg.Wait()
 	h.wg.Add(1)
 	killMail := allocMail()
-	initKillMail(killMail, DefaultMailID, nil, nil)
+	initKillMail(killMail, defaultMailID, nil, nil)
 	killMail.data = &mailExitCommand{}
 	mb.pushHead(killMail)
 	h.wg.Wait()

@@ -177,7 +177,7 @@ var loggingLogMailPool = sync.Pool{
 func allocLoggingMail() (*LogMail, *mail) {
 	lm := loggingLogMailPool.Get().(*LogMail)
 	m := allocMail()
-	initMail(m, DefaultMailID, lm)
+	initMail(m, defaultMailID, lm)
 	return lm, m
 }
 
@@ -187,7 +187,7 @@ func allocLoggingMail() (*LogMail, *mail) {
 // mail.data.onDone is set
 func allocLoggingKillMail(onDone func()) *mail {
 	m := allocMail()
-	initKillMail(m, DefaultMailID, nil, onDone)
+	initKillMail(m, defaultMailID, nil, onDone)
 	return m
 }
 

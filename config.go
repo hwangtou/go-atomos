@@ -49,7 +49,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 		Customize:      map[string][]byte{},
 	}
 	if strings.ToLower(y.LogSTD) == "true" {
-		conf.Customize[ConfigKeyLogStdout] = []byte("1")
+		conf.Customize[configKeyLogStdout] = []byte("1")
 	}
 	if cluster := y.EnableCluster; cluster != nil {
 		conf.EnableCluster = &CosmosClusterConfig{
@@ -200,7 +200,7 @@ func applyEnvOverrides(conf *Config) {
 		conf.LogPath = v
 	}
 	if v := os.Getenv("ATOMOS_LOG_STDOUT"); v == "true" || v == "1" {
-		conf.Customize[ConfigKeyLogStdout] = []byte("1")
+		conf.Customize[configKeyLogStdout] = []byte("1")
 	}
 	if v := os.Getenv("ATOMOS_ETCD_ENDPOINTS"); v != "" {
 		if conf.EnableCluster == nil {

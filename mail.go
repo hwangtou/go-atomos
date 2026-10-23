@@ -11,7 +11,7 @@ import (
 
 // Mail
 
-const DefaultMailID = 0
+const defaultMailID = 0
 
 type mail struct {
 	next *mail
@@ -411,7 +411,7 @@ func (mb *mailBox) removeMail(dm *mail) (ok bool) {
 //	mb.running = false
 //
 //	m := allocMail()
-//	initKillMail(m, DefaultMailID, nil, onDone)
+//	initKillMail(m, defaultMailID, nil, onDone)
 //
 //	mb.num += 1
 //	if mb.head == nil {
@@ -439,7 +439,7 @@ func (mb *mailBox) stopIfNoMail(onDone func()) (killed bool) {
 	mb.running = false
 
 	m := allocMail()
-	initKillMail(m, DefaultMailID, nil, onDone)
+	initKillMail(m, defaultMailID, nil, onDone)
 
 	mb.num += 1
 	if mb.head == nil {

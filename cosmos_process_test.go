@@ -31,7 +31,7 @@ func newTestCosmosProcessWithoutCluster(t *testing.T, cosmosName, cosmosNode str
 		t.Fatalf("Failed to init logging: %v", err)
 	}
 	p.local.process = p
-	p.local.atomos = NewBaseAtomos(p.local, id, LogLevel_Debug, p.local, p.local, p)
+	p.local.atomos = newBaseAtomos(p.local, id, LogLevel_Debug, p.local, p.local, p)
 	if err := p.local.atomos.start(func() *Error {
 		return nil
 	}); err != nil {

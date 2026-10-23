@@ -379,7 +379,7 @@ func (tba *testTaskMailboxBaseAtomos) mapSnapshot() (cancelled, executed, callba
 
 func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *testTaskMailboxBaseAtomos {
 	tba := &testTaskMailboxBaseAtomos{}
-	ba := NewBaseAtomos(nil, id, LogLevel_Debug, tba, tba, p)
+	ba := newBaseAtomos(nil, id, LogLevel_Debug, tba, tba, p)
 	if err := ba.start(func() *Error {
 		return nil
 	}); err != nil {
@@ -410,7 +410,7 @@ func newTestTaskMailboxBaseAtomos(t *testing.T, p *CosmosProcess, id *IDInfo) *t
 	return tba
 }
 
-// BaseAtomosHolder
+// baseAtomosHolder
 
 func (tba *testTaskMailboxBaseAtomos) OnSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	//TODO implement me

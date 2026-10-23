@@ -151,7 +151,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 		mutex:    sync.RWMutex{},
 		elements: map[string]*ElementLocal{},
 	}
-	p.local.atomos = NewBaseAtomos(p.local, id, LogLevel_Info, p.local, p.local, p)
+	p.local.atomos = newBaseAtomos(p.local, id, LogLevel_Info, p.local, p.local, p)
 	if err := p.local.atomos.start(func() *Error { return nil }); err != nil {
 		return err.AddStack(nil)
 	}
@@ -832,10 +832,10 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		// Try to start grpc server.
 		var svr *grpc.Server
 		var publicOption = []grpc.ServerOption{
-			grpc.InitialWindowSize(GRPCServerInitialWindowSize),
-			grpc.InitialConnWindowSize(GRPCServerInitialConnWindowSize),
-			grpc.WriteBufferSize(GRPCServerWriteBufferSize),
-			grpc.ReadBufferSize(GRPCServerReadBufferSize),
+			grpc.InitialWindowSize(grpcServerInitialWindowSize),
+			grpc.InitialConnWindowSize(grpcServerInitialConnWindowSize),
+			grpc.WriteBufferSize(grpcServerWriteBufferSize),
+			grpc.ReadBufferSize(grpcServerReadBufferSize),
 		}
 		if isTLS {
 			opts := []grpc.ServerOption{
