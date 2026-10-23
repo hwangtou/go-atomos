@@ -129,11 +129,13 @@ func TestMailbox_LifeCycle(t *testing.T) {
 	// Kill
 	wg.Add(1)
 	m := allocMail()
+	// running 状态必须在 push kill 之前断言——push 之后 mailbox goroutine
+	// 随时可能处理 kill 并置 running=false,此后断言 running==true 逻辑上不成立。
+	if !h.mb.isRunning() {
+		t.Fatal("TestMailbox_Smoke: Mailbox is not running before sending exit mail.")
+	}
 	initKillMail(m, DefaultMailID, nil, nil)
 	h.mb.pushHead(m)
-	if !h.mb.isRunning() {
-		t.Fatal("TestMailbox_Smoke: Mailbox is not running after sending exit mail.")
-	}
 	wg.Wait()
 	if h.mb.isRunning() {
 		t.Fatal("TestMailbox_Smoke: Mailbox is still running after stopped.")
