@@ -102,10 +102,10 @@ func (x *Config) ValidateCosmosNodeConfig() *Error {
 	if x == nil {
 		return NewError(ErrCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}
-	if !CheckCosmosName(x.Cosmos) {
+	if !checkCosmosName(x.Cosmos) {
 		return NewErrorf(ErrCosmosConfigInvalid, "Cosmos name invalid or empty. cosmos=(%s)", x.Cosmos).AddStack(nil)
 	}
-	if !CheckNodeName(x.Node) {
+	if !checkNodeName(x.Node) {
 		return NewErrorf(ErrCosmosConfigInvalid, "Node name invalid or empty. node=(%s)", x.Node).AddStack(nil)
 	}
 	return nil
@@ -113,7 +113,7 @@ func (x *Config) ValidateCosmosNodeConfig() *Error {
 
 // Checkers
 
-func CheckCosmosName(cosmosName string) bool {
+func checkCosmosName(cosmosName string) bool {
 	if cosmosName == "" {
 		return false
 	}
@@ -125,7 +125,7 @@ func CheckCosmosName(cosmosName string) bool {
 	return true
 }
 
-func CheckNodeName(nodeName string) bool {
+func checkNodeName(nodeName string) bool {
 	if nodeName == "" {
 		return false
 	}

@@ -20,9 +20,9 @@ func TestUtilProtoMessageIterate(t *testing.T) {
 		Level:   LogLevel_Info,
 		Message: "test message",
 	}
-	m := UtilProtoMessageIterate(lm)
+	m := utilProtoMessageIterate(lm)
 	if len(m) != 8 {
-		t.Fatalf("UtilProtoMessageIterate: invalid length. length=(%d)", len(m))
+		t.Fatalf("utilProtoMessageIterate: invalid length. length=(%d)", len(m))
 	}
 	left, _ := json.Marshal(m)
 	right, _ := json.Marshal(map[string]any{
@@ -37,7 +37,7 @@ func TestUtilProtoMessageIterate(t *testing.T) {
 	})
 	if bytes.Compare(left, right) != 0 {
 		t.Logf("\n%s\n%s", string(left), string(right))
-		t.Fatalf("UtilProtoMessageIterate: invalid map. map=(%v)", m)
+		t.Fatalf("utilProtoMessageIterate: invalid map. map=(%v)", m)
 	}
-	t.Logf("UtilProtoMessageIterate: success")
+	t.Logf("utilProtoMessageIterate: success")
 }

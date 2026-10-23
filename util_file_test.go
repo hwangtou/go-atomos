@@ -85,7 +85,7 @@ func TestUtilFileEnsureDirectory(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "Test UtilFileEnsureDirectory",
+			name: "Test utilFileEnsureDirectory",
 			args: args{
 				dir:            path.Join(os.TempDir(), "test"),
 				perm:           0774,
@@ -94,7 +94,7 @@ func TestUtilFileEnsureDirectory(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "Test UtilFileEnsureDirectory",
+			name: "Test utilFileEnsureDirectory",
 			args: args{
 				dir:            path.Join(os.TempDir(), "test"),
 				perm:           0774,
@@ -103,40 +103,40 @@ func TestUtilFileEnsureDirectory(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "Test UtilFileEnsureDirectory file exists",
+			name: "Test utilFileEnsureDirectory file exists",
 			args: args{
 				dir:            path.Join(os.TempDir(), "test"),
 				perm:           0774,
 				ensureWritable: true,
 				prev: func() {
 					if er := os.MkdirAll(path.Join(os.TempDir(), "test"), 0774); er != nil {
-						t.Errorf("UtilFileEnsureDirectory() = %v, want %v", er, nil)
+						t.Errorf("utilFileEnsureDirectory() = %v, want %v", er, nil)
 					}
 				},
 			},
 		},
 		{
-			name: "Test UtilFileEnsureDirectory file exists and is not directory",
+			name: "Test utilFileEnsureDirectory file exists and is not directory",
 			args: args{
 				dir:            path.Join(os.TempDir(), "test"),
 				perm:           0774,
 				ensureWritable: true,
 				prev: func() {
 					if er := os.WriteFile(path.Join(os.TempDir(), "test"), []byte{}, 0774); er != nil {
-						t.Errorf("UtilFileEnsureDirectory() = %v, want %v", er, nil)
+						t.Errorf("utilFileEnsureDirectory() = %v, want %v", er, nil)
 					}
 				},
 			},
-			wantErr: "UtilFileEnsureDirectory: Path is not directory. dir=",
+			wantErr: "utilFileEnsureDirectory: utilPath is not directory. dir=",
 		},
 		{
-			name: "Test UtilFileEnsureDirectory permission denied",
+			name: "Test utilFileEnsureDirectory permission denied",
 			args: args{
 				dir:            path.Join(os.TempDir(), "test"),
 				perm:           0664,
 				ensureWritable: true,
 			},
-			wantErr: "UtilFileEnsureDirectory: Cannot write test file. dir=",
+			wantErr: "utilFileEnsureDirectory: Cannot write test file. dir=",
 		},
 	}
 	for _, tt := range tests {
@@ -145,20 +145,20 @@ func TestUtilFileEnsureDirectory(t *testing.T) {
 				tt.args.prev()
 			}
 
-			got := UtilFileEnsureDirectory(tt.args.dir, tt.args.perm, tt.args.ensureWritable)
+			got := utilFileEnsureDirectory(tt.args.dir, tt.args.perm, tt.args.ensureWritable)
 			if got == nil {
 				if tt.wantErr != "" {
-					t.Errorf("UtilFileEnsureDirectory() = %v, want %v", got, tt.wantErr)
+					t.Errorf("utilFileEnsureDirectory() = %v, want %v", got, tt.wantErr)
 				}
 			} else {
 				if tt.wantErr == "" {
-					t.Errorf("UtilFileEnsureDirectory() = %v, want %v", got, nil)
+					t.Errorf("utilFileEnsureDirectory() = %v, want %v", got, nil)
 				} else if !strings.Contains(got.Error(), tt.wantErr) {
-					t.Errorf("UtilFileEnsureDirectory() = %v, want %v", got, tt.wantErr)
+					t.Errorf("utilFileEnsureDirectory() = %v, want %v", got, tt.wantErr)
 				}
 			}
 			if er := os.RemoveAll(tt.args.dir); er != nil {
-				t.Errorf("UtilFileEnsureDirectory() = %v, want %v", er, nil)
+				t.Errorf("utilFileEnsureDirectory() = %v, want %v", er, nil)
 			}
 
 			if tt.args.post != nil {
@@ -181,41 +181,41 @@ func TestUtilFileGetDirectorySize(t *testing.T) {
 		want1 *Error
 	}{
 		{
-			name: "Test UtilFileGetDirectorySize",
+			name: "Test utilFileGetDirectorySize",
 			args: args{
 				dir: path.Join(os.TempDir(), "test"),
 				prev: func() {
 					if er := os.MkdirAll(path.Join(os.TempDir(), "test"), 0774); er != nil {
-						t.Errorf("UtilFileGetDirectorySize() = %v, want %v", er, nil)
+						t.Errorf("utilFileGetDirectorySize() = %v, want %v", er, nil)
 					}
 				},
 				post: func() {
 					if er := os.RemoveAll(path.Join(os.TempDir(), "test")); er != nil {
-						t.Errorf("UtilFileGetDirectorySize() = %v, want %v", er, nil)
+						t.Errorf("utilFileGetDirectorySize() = %v, want %v", er, nil)
 					}
 				},
 			},
 			want: 64,
 		},
 		{
-			name: "Test UtilFileGetDirectorySize",
+			name: "Test utilFileGetDirectorySize",
 			args: args{
 				dir: path.Join(os.TempDir(), "test"),
 				prev: func() {
 					if er := os.MkdirAll(path.Join(os.TempDir(), "test"), 0774); er != nil {
-						t.Errorf("UtilFileGetDirectorySize() = %v, want %v", er, nil)
+						t.Errorf("utilFileGetDirectorySize() = %v, want %v", er, nil)
 					}
-					gen := NewUtilStringRandomStringGenerator()
+					gen := newUtilStringRandomStringGenerator()
 					for i := 0; i < 10; i++ {
 						buf := []byte(gen.RandomString(1000))
 						if er := os.WriteFile(path.Join(os.TempDir(), "test", "test_"+strconv.Itoa(i)), buf, 0774); er != nil {
-							t.Errorf("UtilFileGetDirectorySize() = %v, want %v", er, nil)
+							t.Errorf("utilFileGetDirectorySize() = %v, want %v", er, nil)
 						}
 					}
 				},
 				post: func() {
 					if er := os.RemoveAll(path.Join(os.TempDir(), "test")); er != nil {
-						t.Errorf("UtilFileGetDirectorySize() = %v, want %v", er, nil)
+						t.Errorf("utilFileGetDirectorySize() = %v, want %v", er, nil)
 					}
 				},
 			},
@@ -228,12 +228,12 @@ func TestUtilFileGetDirectorySize(t *testing.T) {
 				tt.args.prev()
 			}
 
-			got, got1 := UtilFileGetDirectorySize(tt.args.dir)
+			got, got1 := utilFileGetDirectorySize(tt.args.dir)
 			if got != tt.want {
-				t.Errorf("UtilFileGetDirectorySize() got = %v, want %v", got, tt.want)
+				t.Errorf("utilFileGetDirectorySize() got = %v, want %v", got, tt.want)
 			}
 			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("UtilFileGetDirectorySize() got1 = %v, want %v", got1, tt.want1)
+				t.Errorf("utilFileGetDirectorySize() got1 = %v, want %v", got1, tt.want1)
 			}
 
 			if tt.args.post != nil {

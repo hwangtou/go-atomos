@@ -2,7 +2,7 @@ package atomos
 
 import "reflect"
 
-func UtilDiffMaps[K comparable, T any](left, right map[K]T) (added, updated, removed, changed map[K]T) {
+func utilDiffMaps[K comparable, T any](left, right map[K]T) (added, updated, removed, changed map[K]T) {
 	added = make(map[K]T)
 	updated = make(map[K]T)
 	removed = make(map[K]T)

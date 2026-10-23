@@ -30,20 +30,20 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		return nil, NewErrorf(ErrRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
 	}
 	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
-	if err := UtilFileEnsureDirectory(wd, os.ModePerm|os.ModeDir, true); err != nil {
+	if err := utilFileEnsureDirectory(wd, os.ModePerm|os.ModeDir, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Join log, run, etc path with os separator.
 	logPath := path.Join(wd, "log")
 	runPath := path.Join(wd, "run")
 	etcPath := path.Join(wd, "etc")
-	if err := UtilFileEnsureDirectory(logPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(logPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := UtilFileEnsureDirectory(runPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(runPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := UtilFileEnsureDirectory(etcPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(etcPath, 0777, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	logMaxSize := AppLoggingDefaultMaxSize
@@ -179,18 +179,18 @@ func (a *App) NewCosmosProcess() (*CosmosProcess, *Error) {
 // Parent & Child Process
 
 func IsParentProcess() bool {
-	return os.Getenv(GetEnvAppKey()) != "1"
+	return os.Getenv(getEnvAppKey()) != "1"
 }
 
-func GetEnvAppKey() string {
+func getEnvAppKey() string {
 	return fmt.Sprintf("_GO_ATOMOS_APP")
 }
 
-func GetEnvAccessLogKey() string {
+func getEnvAccessLogKey() string {
 	return fmt.Sprintf("_ACCESS_LOG")
 }
 
-func GetEnvErrorLogKey() string {
+func getEnvErrorLogKey() string {
 	return fmt.Sprintf("_ERROR_LOG")
 }
 
@@ -215,9 +215,9 @@ func (a *App) ForkAppProcess() *Error {
 	}
 
 	a.env.env = os.Environ()
-	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAppKey(), "1"))
-	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvAccessLogKey(), a.logging.getCurAccessLogName()))
-	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", GetEnvErrorLogKey(), a.logging.getCurErrorLogName()))
+	a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", getEnvAppKey(), "1"))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", getEnvAccessLogKey(), a.logging.getCurAccessLogName()))
+	//a.env.env = append(a.env.env, fmt.Sprintf("%s=%s", getEnvErrorLogKey(), a.logging.getCurErrorLogName()))
 
 	// Fork Process
 	attr := &os.ProcAttr{

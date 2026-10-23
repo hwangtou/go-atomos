@@ -5,13 +5,13 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func UtilProtoMessageIterate(message proto.Message) map[string]any {
+func utilProtoMessageIterate(message proto.Message) map[string]any {
 	all := make(map[string]any)
-	utilProtoMessageIterate(message.ProtoReflect(), "", all)
+	utilProtoMessageIterateFields(message.ProtoReflect(), "", all)
 	return all
 }
 
-func utilProtoMessageIterate(message protoreflect.Message, prefix string, all map[string]any) {
+func utilProtoMessageIterateFields(message protoreflect.Message, prefix string, all map[string]any) {
 	if prefix != "" {
 		prefix += "."
 	}
@@ -19,7 +19,7 @@ func utilProtoMessageIterate(message protoreflect.Message, prefix string, all ma
 		// Check if the field is of message type (embedded message)
 		if fd.Kind() == protoreflect.MessageKind {
 			// Handle single embedded messages
-			utilProtoMessageIterate(v.Message(), prefix+string(fd.Name()), all)
+			utilProtoMessageIterateFields(v.Message(), prefix+string(fd.Name()), all)
 		} else {
 			// Print field information for non-message fields
 			all[prefix+string(fd.Name())] = v.Interface()

@@ -98,8 +98,8 @@ func TestUtilFileSizeToString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := UtilFileSizeToString(tt.args.size, tt.args.precision); got != tt.want {
-				t.Errorf("UtilFileSizeToString() = %v, want %v", got, tt.want)
+			if got := utilFileSizeToString(tt.args.size, tt.args.precision); got != tt.want {
+				t.Errorf("utilFileSizeToString() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -121,7 +121,7 @@ func TestStringToDiskSize(t *testing.T) {
 				sizeStr: "",
 			},
 			want:    0,
-			wantErr: NewError(ErrFrameworkIncorrectUsage, "UtilStringToFileSize: The string should not be empty."),
+			wantErr: NewError(ErrFrameworkIncorrectUsage, "utilStringToFileSize: The string should not be empty."),
 		},
 		{
 			name: "TestStringToDiskSize-1",
@@ -289,17 +289,17 @@ func TestStringToDiskSize(t *testing.T) {
 				sizeStr: "1.0.1GB",
 			},
 			want:    0,
-			wantErr: NewErrorf(ErrFrameworkIncorrectUsage, "UtilStringToFileSize: Invalid size string. size=(1.0.1GB)"),
+			wantErr: NewErrorf(ErrFrameworkIncorrectUsage, "utilStringToFileSize: Invalid size string. size=(1.0.1GB)"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, got1 := UtilStringToFileSize(tt.args.sizeStr)
+			got, got1 := utilStringToFileSize(tt.args.sizeStr)
 			if got != tt.want {
-				t.Errorf("UtilStringToFileSize() got = %v, want %v", got, tt.want)
+				t.Errorf("utilStringToFileSize() got = %v, want %v", got, tt.want)
 			}
 			if !reflect.DeepEqual(got1, tt.wantErr) {
-				t.Errorf("UtilStringToFileSize() got1 = %v, want %v", got1, tt.wantErr)
+				t.Errorf("utilStringToFileSize() got1 = %v, want %v", got1, tt.wantErr)
 			}
 		})
 	}

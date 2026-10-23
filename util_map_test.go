@@ -18,7 +18,7 @@ func TestUtilDiffMaps(t *testing.T) {
 		"key3": 4,
 		"key5": 5,
 	}
-	added, updated, removed, changed := UtilDiffMaps(map1, map2)
+	added, updated, removed, changed := utilDiffMaps(map1, map2)
 	if !reflect.DeepEqual(changed, map[string]interface{}{
 		"key3": 4,
 		"key4": 4,

@@ -10,42 +10,42 @@ import (
 	"time"
 )
 
-const UtilStringAZaz09 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-const UtilStringAZaz09Len = len(UtilStringAZaz09)
+const utilStringAZaz09 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+const utilStringAZaz09Len = len(utilStringAZaz09)
 
-type UtilStringRandomStringGenerator struct {
+type utilStringRandomStringGenerator struct {
 	sync.Mutex
 	rand *rand.Rand
 }
 
-func NewUtilStringRandomStringGenerator() *UtilStringRandomStringGenerator {
-	return &UtilStringRandomStringGenerator{
+func newUtilStringRandomStringGenerator() *utilStringRandomStringGenerator {
+	return &utilStringRandomStringGenerator{
 		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
-func (u *UtilStringRandomStringGenerator) RandomString(length int) string {
+func (u *utilStringRandomStringGenerator) RandomString(length int) string {
 	u.Lock()
 	defer u.Unlock()
 	str := make([]byte, length)
 	for i := 0; i < length; i++ {
-		str[i] = UtilStringAZaz09[u.rand.Intn(UtilStringAZaz09Len-1)]
+		str[i] = utilStringAZaz09[u.rand.Intn(utilStringAZaz09Len-1)]
 	}
 	return string(str)
 }
 
-type UtilStringHashGenerator struct {
+type utilStringHashGenerator struct {
 	sync.Mutex
 	hash hash.Hash
 }
 
-func NewUtilStringHashSHA256Generator() *UtilStringHashGenerator {
-	return &UtilStringHashGenerator{
+func newUtilStringHashSHA256Generator() *utilStringHashGenerator {
+	return &utilStringHashGenerator{
 		hash: sha256.New(),
 	}
 }
 
-func (u *UtilStringHashGenerator) Gen(content string) (string, *Error) {
+func (u *utilStringHashGenerator) Gen(content string) (string, *Error) {
 	u.Lock()
 	defer u.Unlock()
 	// Get the hash of the pre-generated file content.
@@ -62,7 +62,7 @@ func (u *UtilStringHashGenerator) Gen(content string) (string, *Error) {
 	return hashString, nil
 }
 
-func (u *UtilStringHashGenerator) GenAny(content any) (string, *Error) {
+func (u *utilStringHashGenerator) GenAny(content any) (string, *Error) {
 	buf, er := json.Marshal(content)
 	if er != nil {
 		return "", NewErrorf(ErrUtilStringHashSHA256Failed, "UtilStringHashSHA256: Failed to marshal content. err=(%v)", er).AddStack(nil)
