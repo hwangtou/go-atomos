@@ -25,20 +25,20 @@ type CosmosNode interface {
 	CosmosIsLocal() bool
 
 	// CosmosGetElementID returns the ID for the named Element on this node.
-	CosmosGetElementID(elem string, args ...ArgsForBaseAtomos) (ID, *Error)
+	CosmosGetElementID(elem string, args ...ArgsForBaseAtomos) (ID, error)
 
 	// CosmosGetAtomID returns the ID for a specific Atom on this node.
 	// The returned IDTracker must be released via defer tracker.Release()
 	// when done to allow the Atom to be garbage-collected.
-	CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error)
+	CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, error)
 
 	// CosmosSpawnAtom creates a new Atom with the given name and argument.
 	// If an Atom with this name already exists and is running, returns ErrAtomSpawningAnExistedAtom.
-	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error)
+	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, error)
 
 	// ElementBroadcast sends an asynchronous broadcast to every Element on this
 	// node that has a handler registered for the "Broadcast" message.
-	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error)
+	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err error)
 }
 
 // CosmosRunnable is the application builder. Every Atomos process creates one,
@@ -64,12 +64,12 @@ type CosmosRunnable struct {
 	spawningHook func(id *IDInfo)
 	spawnHook    func(id *IDInfo)
 	stoppingHook func(id *IDInfo)
-	haltedHook   func(id *IDInfo, err *Error, mt *AtomosMessageTrackerExporter)
+	haltedHook   func(id *IDInfo, err error, mt *AtomosMessageTrackerExporter)
 
 	// Error hooks invoked when framework-level events occur.
 	messageTimeoutHook func(id *IDInfo, timeout time.Duration, message string, args proto.Message)
-	recoverHook        func(id *IDInfo, err *Error)
-	newErrorHook       func(err *Error)
+	recoverHook        func(id *IDInfo, err error)
+	newErrorHook       func(err error)
 
 	// Per-process settings applied to the CosmosProcess at Start. Nil fields
 	// keep the CosmosProcess defaults.
@@ -81,13 +81,13 @@ type CosmosRunnable struct {
 
 // Check 检查CosmosRunnable是否正确构造。
 // Check if CosmosRunnable is constructed correctly.
-func (r *CosmosRunnable) Check() *Error {
+func (r *CosmosRunnable) Check() error {
 	// Config
 	if r.config == nil {
 		return NewError(ErrCodeRunnableConfigNotFound, "Runnable: Config not found.").AddStack(nil)
 	}
 	if err := r.config.Check(); err != nil {
-		return err.AddStack(nil)
+		return asError(err).AddStack(nil)
 	}
 	// Implements
 	if r.implements == nil {
@@ -194,7 +194,7 @@ func (r *CosmosRunnable) SetStoppingHook(hook func(id *IDInfo)) *CosmosRunnable 
 	return r
 }
 
-func (r *CosmosRunnable) SetHaltedHook(hook func(id *IDInfo, err *Error, mt *AtomosMessageTrackerExporter)) *CosmosRunnable {
+func (r *CosmosRunnable) SetHaltedHook(hook func(id *IDInfo, err error, mt *AtomosMessageTrackerExporter)) *CosmosRunnable {
 	r.haltedHook = hook
 	return r
 }
@@ -204,12 +204,12 @@ func (r *CosmosRunnable) SetMessageTimeoutHook(hook func(id *IDInfo, timeout tim
 	return r
 }
 
-func (r *CosmosRunnable) SetRecoverHook(hook func(id *IDInfo, err *Error)) *CosmosRunnable {
+func (r *CosmosRunnable) SetRecoverHook(hook func(id *IDInfo, err error)) *CosmosRunnable {
 	r.recoverHook = hook
 	return r
 }
 
-func (r *CosmosRunnable) SetNewErrorHook(hook func(err *Error)) *CosmosRunnable {
+func (r *CosmosRunnable) SetNewErrorHook(hook func(err error)) *CosmosRunnable {
 	r.newErrorHook = hook
 	return r
 }

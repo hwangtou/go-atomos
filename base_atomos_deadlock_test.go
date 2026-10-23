@@ -114,22 +114,22 @@ type testBaseAtomosDeadlockMailboxBaseAtomos struct {
 	atomos *BaseAtomos
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -158,12 +158,12 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) DecoderByName(name string) (in
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -201,7 +201,7 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onSyncMessaging(fromID ID, nam
 		}
 		ba2 := ba2Interface.(*testBaseAtomosDeadlockMailboxBaseAtomos)
 		_, err := ba2.atomos.PushSyncMessage(t, "test_deadlock_ba1_ba2_ba1_chain_2", nil, []ArgsForBaseAtomos{ArgBaseAtomosTimeout(10 * time.Millisecond)})
-		if err == nil || err.Code != ErrCodeAtomosPushTimeoutReject {
+		if err == nil || CodeOf(err) != ErrCodeAtomosPushTimeoutReject {
 			t.t.Errorf("ba2 PushSyncMessage to ba1 in chain expected timeout error, got: %v", err)
 		}
 		t.t.Log("test_deadlock_ba1_ba2_ba1_chain_1 ok")
@@ -222,7 +222,7 @@ func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onAsyncMessaging(fromID ID, na
 	panic("implement me")
 }
 
-func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (t *testBaseAtomosDeadlockMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	//TODO implement me
 	panic("implement me")
 }

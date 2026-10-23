@@ -57,7 +57,7 @@ type testRunnableElement struct {
 	self ElementSelfID
 }
 
-func (t *testRunnableElement) Spawn(self ElementSelfID, data *ForTestData, _ ...ArgsForBaseAtomos) *Error {
+func (t *testRunnableElement) Spawn(self ElementSelfID, data *ForTestData, _ ...ArgsForBaseAtomos) error {
 	t.self = self
 	return nil
 }
@@ -70,7 +70,7 @@ func (t *testRunnableElement) Halt(from ID, cancelled []uint64) (save bool, data
 	return false, nil
 }
 
-func (t *testRunnableElement) SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err *Error) {
+func (t *testRunnableElement) SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -88,7 +88,7 @@ type testRunnableAtom struct {
 	haltWait   time.Duration
 }
 
-func (t *testRunnableAtom) Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, _ ...ArgsForBaseAtomos) *Error {
+func (t *testRunnableAtom) Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, _ ...ArgsForBaseAtomos) error {
 	t.self = self
 	return nil
 }
@@ -108,7 +108,7 @@ func (t *testRunnableAtom) Halt(from ID, cancelled []uint64) (save bool, data pr
 	return false, nil
 }
 
-func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err *Error) {
+func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err error) {
 	if t.greetingNotify != nil {
 		t.greetingNotify <- struct{}{}
 	}
@@ -124,12 +124,12 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		// wait-graph before blocking. Without detection this would hang 10s.
 		selfID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.self.GetIDInfo().Atom)
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		defer selfID.Release()
 		_, e = selfID.Greeting(t.self, &ForTestGreetingI{Mode: 1})
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		out = &ForTestGreetingO{}
 	case 3:
@@ -141,13 +141,13 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		}
 		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		defer peerID.Release()
 		// Call the peer; the peer's Greeting(mode=4) calls back here.
 		_, e = peerID.Greeting(t.self, &ForTestGreetingI{Mode: 4})
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		out = &ForTestGreetingO{}
 	case 4:
@@ -158,12 +158,12 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		}
 		peerID, e := GetForTestAtomosAtomID(t.self.Cosmos(), t.cyclePeer)
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		defer peerID.Release()
 		_, e = peerID.Greeting(t.self, &ForTestGreetingI{Mode: 1})
 		if e != nil {
-			return nil, e.AddStack(t.self)
+			return nil, asError(e).AddStack(t.self)
 		}
 		out = &ForTestGreetingO{}
 	default:
@@ -174,16 +174,16 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 
 type testMainScript struct{}
 
-func (t *testMainScript) OnBoot(local *CosmosProcess) *Error {
+func (t *testMainScript) OnBoot(local *CosmosProcess) error {
 	local.local.Log().Info("OnBoot")
 	return nil
 }
 
-func (t *testMainScript) OnStartUp(local *CosmosProcess) *Error {
+func (t *testMainScript) OnStartUp(local *CosmosProcess) error {
 	local.local.Log().Info("OnStartUp")
 	return nil
 }
 
-func (t *testMainScript) OnShutdown() *Error {
+func (t *testMainScript) OnShutdown() error {
 	return nil
 }

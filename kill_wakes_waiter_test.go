@@ -25,10 +25,10 @@ func (a *kwAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Messag
 	return false, nil
 }
 
-func (a *kwAtom) GetAtomData(name string) (proto.Message, *Error) {
+func (a *kwAtom) GetAtomData(name string) (proto.Message, error) {
 	return &Config{Cosmos: "data:" + name}, nil
 }
-func (a *kwAtom) SetAtomData(name string, data proto.Message) *Error { return nil }
+func (a *kwAtom) SetAtomData(name string, data proto.Message) error { return nil }
 
 type kwDev struct{}
 
@@ -39,9 +39,9 @@ func (d *kwDev) ElementAutoData() ElementAutoData   { return nil }
 
 type kwMainScript struct{}
 
-func (s *kwMainScript) OnBoot(local *CosmosProcess) *Error    { return nil }
-func (s *kwMainScript) OnStartUp(local *CosmosProcess) *Error { return nil }
-func (s *kwMainScript) OnShutdown() *Error                    { return nil }
+func (s *kwMainScript) OnBoot(local *CosmosProcess) error    { return nil }
+func (s *kwMainScript) OnStartUp(local *CosmosProcess) error { return nil }
+func (s *kwMainScript) OnShutdown() error                    { return nil }
 
 // Kill 唤醒在途 sync waiter。
 // victim 的 block handler 占住 mailbox;随后到达的 noop 排队。此时 Kill(AppendToHead+
@@ -61,10 +61,10 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	dev := &kwDev{}
 	elemImpl := NewImplementationFromDeveloper(dev)
 	elemImpl.Interface = NewInterfaceFromDeveloper(kwElemName, dev)
-	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
-	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
 
@@ -74,11 +74,11 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	elemImpl.ElementHandlers = map[string]MessageHandler{}
 	elemImpl.AtomHandlers = map[string]MessageHandler{
 		// 普通消息,用于充当排队中的 sync 调用。
-		"noop": func(from ID, to Atomos, in proto.Message) (proto.Message, *Error) {
+		"noop": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
 			return &String{S: "ok"}, nil
 		},
 		// block:进入后通知测试,阻塞直到测试放行。用于制造"执行中"的 atom。
-		"block": func(from ID, to Atomos, in proto.Message) (proto.Message, *Error) {
+		"block": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
 			entered <- struct{}{}
 			<-blockCh
 			return &String{S: "ok"}, nil
@@ -99,7 +99,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 		for _, e := range logger.errs {
 			t.Logf(" captured error log: %s", e)
 		}
-		t.Fatalf("process start failed: %v", err.Message)
+		t.Fatalf("process start failed: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = process.Stop()
@@ -110,9 +110,9 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 		t.Fatalf("get element failed: %v", err.Message)
 	}
 
-	id, _, err := elem.SpawnAtom(process.local, "victim", &Config{Cosmos: "arg"}, nil, false)
-	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+	id, _, serr := elem.SpawnAtom(process.local, "victim", &Config{Cosmos: "arg"}, nil, false)
+	if serr != nil {
+		t.Fatalf("spawn atom failed: %v", serr)
 	}
 	victim, ok := id.(*AtomLocal)
 	if !ok {
@@ -121,11 +121,11 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 
 	type syncResult struct {
 		out proto.Message
-		err *Error
+		err error
 	}
 	blockResult := make(chan syncResult, 1)
 	noopResult := make(chan syncResult, 1)
-	killResult := make(chan *Error, 1)
+	killResult := make(chan error, 1)
 
 	// G1: 执行中的长耗时 sync(占住 mailbox)。
 	go func() {
@@ -172,8 +172,8 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	case res := <-noopResult:
 		if res.err == nil {
 			t.Fatal("Expected queued noop call to be woken with error, got nil error")
-		} else if res.err.Code != ErrCodeAtomosIsStopping {
-			t.Fatalf("Expected queued noop error code ErrAtomosIsStopping, got=(%d) err=(%v)", res.err.Code, res.err)
+		} else if CodeOf(res.err) != ErrCodeAtomosIsStopping {
+			t.Fatalf("Expected queued noop error code ErrAtomosIsStopping, got=(%d) err=(%v)", CodeOf(res.err), res.err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Queued noop sync waiter was not woken by kill (deadlock)")

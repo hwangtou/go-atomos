@@ -22,28 +22,28 @@ package atomos
 //
 // Example (typical remote call with automatic rebind):
 //
-//	out, err := atomos.WithRebind(func() (atomos.ID, *atomos.Error) {
+//	out, err := atomos.WithRebind(func() (atomos.ID, error) {
 //	    id, e := api.GetXxxAtomID(node, name)
 //	    return id, e
-//	}, func(id atomos.ID) (*XxxO, *atomos.Error) {
+//	}, func(id atomos.ID) (*XxxO, error) {
 //	    return id.(*api.XxxAtomID).Method(caller, in)
 //	})
-func WithRebind[R any](resolve func() (ID, *Error), call func(ID) (R, *Error)) (R, *Error) {
+func WithRebind[R any](resolve func() (ID, error), call func(ID) (R, error)) (R, error) {
 	var zero R
 	id, err := resolve()
 	if err != nil {
-		return zero, err.AddStack(nil)
+		return zero, asError(err).AddStack(nil)
 	}
 	defer releaseID(id)
 	out, err := call(id)
-	if err == nil || !shouldRebind(err.Code) {
+	if err == nil || !shouldRebind(CodeOf(err)) {
 		return out, err
 	}
 	// Rebind: re-resolve and retry once. The deferred releaseID(id) above still
 	// runs for the stale ID; this call uses a freshly resolved one.
 	id2, rerr := resolve()
 	if rerr != nil {
-		return zero, rerr.AddStack(nil)
+		return zero, asError(rerr).AddStack(nil)
 	}
 	defer releaseID(id2)
 	return call(id2)

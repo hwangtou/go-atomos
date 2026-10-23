@@ -28,14 +28,14 @@ func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterfa
 	}
 }
 
-func (e *elementRemoteFromSource) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (e *elementRemoteFromSource) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	// BUG: asyncSet should never be called on a source-process remote ID.
 	// It exists only to satisfy the ID interface. Returning zeros so callers
 	// get a safe no-op rather than a process crash.
 	return 0, 0
 }
 
-func (e *elementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (e *elementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	e.remote.PushAsyncMessageCallback(e, callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -54,11 +54,11 @@ func newElementRemoteInTargetProcess(elem *ElementRemote, startupID, asyncID uin
 	}
 }
 
-func (e *elementRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (e *elementRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return e.startupID, e.asyncID
 }
 
-func (e *elementRemoteInTargetProcess) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (e *elementRemoteInTargetProcess) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	e.remote.PushAsyncMessageCallback(e, callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -94,11 +94,11 @@ func (e *ElementRemote) IdleTime() time.Duration {
 	return e.remote.IdleTime()
 }
 
-func (e *ElementRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (e *ElementRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return e.remote.PushSyncMessage(callerID, name, in, ext)
 }
 
-func (e *ElementRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (e *ElementRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return e.remote.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
@@ -113,11 +113,11 @@ func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecod
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (e *ElementRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(nil)
 }
 
-func (e *ElementRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (e *ElementRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return NewErrorf(ErrCodeElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
 }
 
@@ -128,7 +128,7 @@ func (e *ElementRemote) getGoID() uint64 {
 
 // Implementation of Element
 
-func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, error) {
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -190,7 +190,7 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return map[string]string{}
 }
 
-func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)

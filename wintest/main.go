@@ -40,7 +40,7 @@ type winElement struct {
 
 func (e *winElement) String() string { return e.self.String() }
 
-func (e *winElement) Spawn(self atomos.ElementSelfID, _ *atomos.Nil, _ ...atomos.ArgsForBaseAtomos) *atomos.Error {
+func (e *winElement) Spawn(self atomos.ElementSelfID, _ *atomos.Nil, _ ...atomos.ArgsForBaseAtomos) error {
 	e.self = self
 	self.Log().Info("[WINTEST] Element spawned")
 	return nil
@@ -56,7 +56,7 @@ type winAtom struct {
 
 func (a *winAtom) String() string { return a.self.String() }
 
-func (a *winAtom) Spawn(self atomos.AtomSelfID, _ *atomos.Nil, _ *atomos.Nil, _ ...atomos.ArgsForBaseAtomos) *atomos.Error {
+func (a *winAtom) Spawn(self atomos.AtomSelfID, _ *atomos.Nil, _ *atomos.Nil, _ ...atomos.ArgsForBaseAtomos) error {
 	a.self = self
 	self.Log().Info("[WINTEST] Atom spawned: %s", self.String())
 	return nil
@@ -73,12 +73,12 @@ func (a *winAtom) Halt(_ atomos.ID, _ []uint64) (bool, proto.Message) {
 
 type winMain struct{}
 
-func (m *winMain) OnBoot(_ *atomos.CosmosProcess) *atomos.Error {
+func (m *winMain) OnBoot(_ *atomos.CosmosProcess) error {
 	fmt.Println("[WINTEST] OnBoot OK")
 	return nil
 }
 
-func (m *winMain) OnStartUp(p *atomos.CosmosProcess) *atomos.Error {
+func (m *winMain) OnStartUp(p *atomos.CosmosProcess) error {
 	fmt.Println("[WINTEST] OnStartUp OK")
 	// 验证 element/atom spawn
 	fmt.Println("[WINTEST] Spawning test atom...")
@@ -93,7 +93,7 @@ func (m *winMain) OnStartUp(p *atomos.CosmosProcess) *atomos.Error {
 	return nil
 }
 
-func (m *winMain) OnShutdown() *atomos.Error {
+func (m *winMain) OnShutdown() error {
 	fmt.Println("[WINTEST] OnShutdown OK")
 	return nil
 }
@@ -121,10 +121,10 @@ func main() {
 	impl.Interface = atomos.NewInterfaceFromDeveloper("WinTest", dev)
 	// NewInterfaceFromDeveloper 不填 Spawner（正常由 protoc 生成代码填充），
 	// 这里手动设置，否则 spawn 时会 panic（nil func call）。
-	impl.Interface.ElementSpawner = func(self atomos.ElementSelfID, a atomos.Atomos, data proto.Message, _ ...atomos.ArgsForBaseAtomos) *atomos.Error {
+	impl.Interface.ElementSpawner = func(self atomos.ElementSelfID, a atomos.Atomos, data proto.Message, _ ...atomos.ArgsForBaseAtomos) error {
 		return a.(*winElement).Spawn(self, &atomos.Nil{})
 	}
-	impl.Interface.AtomSpawner = func(self atomos.AtomSelfID, a atomos.Atomos, arg, data proto.Message, _ ...atomos.ArgsForBaseAtomos) *atomos.Error {
+	impl.Interface.AtomSpawner = func(self atomos.AtomSelfID, a atomos.Atomos, arg, data proto.Message, _ ...atomos.ArgsForBaseAtomos) error {
 		// arg/data 可能是 nil 或 *atomos.Nil，不强制断言
 		return a.(*winAtom).Spawn(self, &atomos.Nil{}, &atomos.Nil{})
 	}

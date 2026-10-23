@@ -422,7 +422,7 @@ func (tba *testTaskMailboxBaseAtomos) onAsyncMessaging(fromID ID, name string, s
 	panic("implement me")
 }
 
-func (tba *testTaskMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (tba *testTaskMailboxBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	//TODO implement me
 	panic("implement me")
 }

@@ -6,11 +6,10 @@ package leak
 // stub types so the testdata compiles standalone.
 type IDTracker struct{}
 type ID struct{}
-type Error struct{}
 type SelfID struct{}
 type CosmosNode interface {
-	CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error)
-	CosmosSpawnAtom(caller SelfID, elem, name string, arg any) (ID, *IDTracker, *Error)
+	CosmosGetAtomID(elem, name string) (ID, *IDTracker, error)
+	CosmosSpawnAtom(caller SelfID, elem, name string, arg any) (ID, *IDTracker, error)
 }
 
 // BAD: tracker assigned, no defer Release / WithID / WithRebind.
@@ -33,8 +32,8 @@ func leakSpawn(node CosmosNode, self SelfID) {
 
 // BAD: generated-style free function Get<Svc>AtomID, no release. For generated
 // factories the releasable is index 0 (the ID embeds *IDTracker).
-func GetFooAtomID(node any, name string) (*FooAtomID, *Error) { return nil, nil }
-func SpawnFooAtom(self SelfID, node any, name string, arg any) (*FooAtomID, *Error) {
+func GetFooAtomID(node any, name string) (*FooAtomID, error) { return nil, nil }
+func SpawnFooAtom(self SelfID, node any, name string, arg any) (*FooAtomID, error) {
 	return nil, nil
 }
 

@@ -22,10 +22,10 @@ func (a *clearAtom) String() string { return "clearAtom:" + a.name }
 func (a *clearAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Message) {
 	return false, nil
 }
-func (a *clearAtom) GetAtomData(name string) (proto.Message, *Error) {
+func (a *clearAtom) GetAtomData(name string) (proto.Message, error) {
 	return &Config{Cosmos: "data:" + name}, nil
 }
-func (a *clearAtom) SetAtomData(name string, data proto.Message) *Error { return nil }
+func (a *clearAtom) SetAtomData(name string, data proto.Message) error { return nil }
 
 type clearDev struct{}
 
@@ -36,9 +36,9 @@ func (d *clearDev) ElementAutoData() ElementAutoData   { return nil }
 
 type clearScript struct{}
 
-func (s *clearScript) OnBoot(*CosmosProcess) *Error    { return nil }
-func (s *clearScript) OnStartUp(*CosmosProcess) *Error { return nil }
-func (s *clearScript) OnShutdown() *Error              { return nil }
+func (s *clearScript) OnBoot(*CosmosProcess) error    { return nil }
+func (s *clearScript) OnStartUp(*CosmosProcess) error { return nil }
+func (s *clearScript) OnShutdown() error              { return nil }
 
 func startClearCosmos(t *testing.T, logger *reproLogger) (*CosmosProcess, *ElementLocal) {
 	t.Helper()
@@ -50,10 +50,10 @@ func startClearCosmos(t *testing.T, logger *reproLogger) (*CosmosProcess, *Eleme
 	dev := &clearDev{}
 	elemImpl := NewImplementationFromDeveloper(dev)
 	elemImpl.Interface = NewInterfaceFromDeveloper("ClearElem", dev)
-	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
-	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
 	elemImpl.ElementHandlers = map[string]MessageHandler{}
@@ -70,7 +70,7 @@ func startClearCosmos(t *testing.T, logger *reproLogger) (*CosmosProcess, *Eleme
 		AddElementImplementation(elemImpl, true)
 
 	if err := process.Start(runnable); err != nil {
-		t.Fatalf("process start failed: %v", err.Message)
+		t.Fatalf("process start failed: %v", err)
 	}
 	elem, err := process.local.getLocalElement("ClearElem")
 	if err != nil {
@@ -89,7 +89,7 @@ func TestAsyncClearingRecoversPanickingCallback(t *testing.T) {
 
 	atomID, _, err := elem.SpawnAtom(process.local, "p1", &Config{Cosmos: "arg"}, nil, false)
 	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+		t.Fatalf("spawn atom failed: %v", err)
 	}
 	atom, ok := atomID.(*AtomLocal)
 	if !ok {
@@ -97,16 +97,16 @@ func TestAsyncClearingRecoversPanickingCallback(t *testing.T) {
 	}
 
 	panicCalled, normalCalled := 0, 0
-	atom.atomos.asyncSet(func(out proto.Message, err *Error) {
+	atom.atomos.asyncSet(func(out proto.Message, err error) {
 		panicCalled++
 		panic("boom: 清账回调 panic")
 	})
-	atom.atomos.asyncSet(func(out proto.Message, err *Error) {
+	atom.atomos.asyncSet(func(out proto.Message, err error) {
 		normalCalled++
 	})
 
 	if err := atom.Kill(process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
-		t.Fatalf("kill atom failed: %v", err.Message)
+		t.Fatalf("kill atom failed: %v", err)
 	}
 	time.Sleep(200 * time.Millisecond)
 
@@ -132,7 +132,7 @@ func TestAsyncSetRaceWithHalt(t *testing.T) {
 
 	atomID, _, err := elem.SpawnAtom(process.local, "p2", &Config{Cosmos: "arg"}, nil, false)
 	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+		t.Fatalf("spawn atom failed: %v", err)
 	}
 	atom, ok := atomID.(*AtomLocal)
 	if !ok {
@@ -147,7 +147,7 @@ func TestAsyncSetRaceWithHalt(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			atom.atomos.asyncSet(func(out proto.Message, err *Error) {
+			atom.atomos.asyncSet(func(out proto.Message, err error) {
 				mu.Lock()
 				invoked++
 				mu.Unlock()

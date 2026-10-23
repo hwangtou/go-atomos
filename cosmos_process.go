@@ -253,7 +253,7 @@ func (p *CosmosProcess) waitChain(from, to uint64) string {
 
 // Start 启动进程
 // 检查runnable是否合法，再根据配置获取网络监听信息，并尝试监听。
-func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
+func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 	// Check if in prepare state.
 	if err := func() *Error {
 		if p == nil {
@@ -284,7 +284,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 
 		// 检查runnable是否合法。
 		// Check if runnable is valid.
-		if err = runnable.Check(); err != nil {
+		if err = asError(runnable.Check()); err != nil {
 			return err.AddStack(p.local)
 		}
 		p.local.runnable = runnable
@@ -452,7 +452,7 @@ func (p *CosmosProcess) isDraining() bool {
 //
 // deadline <= 0 means use the default (1h). The drain runs in a background
 // goroutine; this method returns immediately after marking the state.
-func (p *CosmosProcess) Drain(deadline time.Duration) *Error {
+func (p *CosmosProcess) Drain(deadline time.Duration) error {
 	if p == nil {
 		return NewError(ErrCodeCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
 	}
@@ -578,7 +578,7 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 
 // Stop 停止进程
 // 检查进程状态，如果是运行中，则调用OnShutdown，然后关闭网络监听。
-func (p *CosmosProcess) Stop() *Error {
+func (p *CosmosProcess) Stop() error {
 	// Guard against a nil receiver — a process that was never initialized
 	// would panic on Stop. Return an error instead.
 	if p == nil {
@@ -652,7 +652,7 @@ func (p *CosmosProcess) Stop() *Error {
 	// leaves late log writes racing with whatever the caller does next.
 	p.local.atomos.mailbox.waitExit(5 * time.Second)
 	p.logging.logBox.waitExit(5 * time.Second)
-	return err
+	return errOrNil(err)
 }
 
 func (p *CosmosProcess) mainScriptOnBootProtect() (err *Error) {
@@ -662,7 +662,7 @@ func (p *CosmosProcess) mainScriptOnBootProtect() (err *Error) {
 			p.local.coreLog().coreFatal("CosmosProcess: Main script boot failed. err=(%+v)", err)
 		}
 	}()
-	if err = p.local.runnable.mainScript.OnBoot(p); err != nil {
+	if err = asError(p.local.runnable.mainScript.OnBoot(p)); err != nil {
 		return err.AddStack(p.local)
 	}
 	return nil
@@ -675,7 +675,7 @@ func (p *CosmosProcess) mainScriptOnStartUpProtect() (err *Error) {
 			p.local.coreLog().coreFatal("CosmosProcess: Main script startup failed. err=(%+v)", r)
 		}
 	}()
-	if err = p.local.runnable.mainScript.OnStartUp(p); err != nil {
+	if err = asError(p.local.runnable.mainScript.OnStartUp(p)); err != nil {
 		return err.AddStack(p.local)
 	}
 	return nil
@@ -688,7 +688,7 @@ func (p *CosmosProcess) mainScriptOnShutdownProtect() (err *Error) {
 			p.local.coreLog().coreFatal("CosmosProcess: Main script shutdown failed. err=(%+v)", r)
 		}
 	}()
-	if err = p.local.runnable.mainScript.OnShutdown(); err != nil {
+	if err = asError(p.local.runnable.mainScript.OnShutdown()); err != nil {
 		return err.AddStack(p.local)
 	}
 	return nil
@@ -1044,7 +1044,7 @@ func (p *CosmosProcess) onIDHalted(id *IDInfo, err *Error, mt atomosMessageTrack
 	p.local.coreLog().coreInfo("Tracker: Halted. id=(%s),err=(%v)", id.Info(), err)
 	if haltedHook != nil {
 		exporter := mt.Export()
-		haltedHook(id, err, exporter)
+		haltedHook(id, errOrNil(err), exporter)
 	}
 }
 
@@ -1070,7 +1070,7 @@ func (p *CosmosProcess) onRecoverHook(id *IDInfo, err *Error) {
 	if recoverHook == nil {
 		return
 	}
-	recoverHook(id, err)
+	recoverHook(id, errOrNil(err))
 }
 
 func (p *CosmosProcess) onNewError(err *Error) {
@@ -1082,5 +1082,5 @@ func (p *CosmosProcess) onNewError(err *Error) {
 	if newErrorHook == nil {
 		return
 	}
-	newErrorHook(err)
+	newErrorHook(errOrNil(err))
 }

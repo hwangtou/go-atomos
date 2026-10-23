@@ -18,7 +18,7 @@ type MessengerType interface {
 
 func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 	return &IOMessageDecoder{
-		InDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+		InDec: func(buf []byte, isProtoOrJson bool) (proto.Message, error) {
 			ci := proto.Clone(i)
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, ci); err != nil {
@@ -31,7 +31,7 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 			}
 			return ci, nil
 		},
-		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, *Error) {
+		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, error) {
 			ci := proto.Clone(i)
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, ci); err != nil {
@@ -47,7 +47,7 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 	}
 }
 
-func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, ext ...ArgsForBaseAtomos) (OUT, *Error) {
+func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, ext ...ArgsForBaseAtomos) (OUT, error) {
 	// Check arguments.
 	var nilID OUT
 	if callerID == nil {
@@ -55,10 +55,12 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncElement(e E, callerID SelfID, in IN, e
 	}
 	m.ElementID = e
 
-	return m.handleReply(m.ElementID.SyncMessagingByName(callerID, m.Name, in, ext))
+	rsp, err := m.ElementID.SyncMessagingByName(callerID, m.Name, in, ext)
+	out, herr := m.handleReply(rsp, asError(err))
+	return out, errOrNil(herr)
 }
 
-func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, callback func(OUT, *Error), ext ...ArgsForBaseAtomos) *Error {
+func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, callback func(OUT, error), ext ...ArgsForBaseAtomos) error {
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
@@ -69,13 +71,14 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	if callback == nil {
 		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, nil, ext)
 	} else {
-		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err *Error) {
-			callback(m.handleReply(message, err))
+		return m.ElementID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err error) {
+			out, herr := m.handleReply(message, asError(err))
+			callback(out, errOrNil(herr))
 		}, ext)
 	}
 }
 
-func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext ...ArgsForBaseAtomos) (OUT, *Error) {
+func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext ...ArgsForBaseAtomos) (OUT, error) {
 	// Check arguments.
 	var nilID OUT
 	if callerID == nil {
@@ -83,10 +86,12 @@ func (m Messenger[E, A, AT, IN, OUT]) SyncAtom(a A, callerID SelfID, in IN, ext 
 	}
 	m.AtomID = a
 
-	return m.handleReply(m.AtomID.SyncMessagingByName(callerID, m.Name, in, ext))
+	rsp, err := m.AtomID.SyncMessagingByName(callerID, m.Name, in, ext)
+	out, herr := m.handleReply(rsp, asError(err))
+	return out, errOrNil(herr)
 }
 
-func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, callback func(OUT, *Error), ext ...ArgsForBaseAtomos) *Error {
+func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, callback func(OUT, error), ext ...ArgsForBaseAtomos) error {
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
@@ -97,8 +102,13 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	if callback == nil {
 		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, nil, ext)
 	} else {
-		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err *Error) {
-			callback(m.handleReply(message, err.AddStack(nil)))
+		return m.AtomID.AsyncMessagingByName(callerID, m.Name, in, func(message proto.Message, err error) {
+			herr := asError(err)
+			if herr != nil {
+				herr = herr.AddStack(nil)
+			}
+			out, rerr := m.handleReply(message, herr)
+			callback(out, errOrNil(rerr))
 		}, ext)
 	}
 }

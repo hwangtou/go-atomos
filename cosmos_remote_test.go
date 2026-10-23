@@ -104,7 +104,7 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 
 	// Async Messaging test
 	callbackCh := make(chan struct{})
-	startupID, asyncID := cluster.sourceProcess.local.asyncSet(func(out proto.Message, err *Error) {
+	startupID, asyncID := cluster.sourceProcess.local.asyncSet(func(out proto.Message, err error) {
 		t.Logf("CosmosRemote: AsyncMessagingByName callback executed. out=(%v) err=(%v)", out, err)
 		callbackCh <- struct{}{}
 	})
@@ -182,9 +182,9 @@ func TestCosmosRemote_InstanceMismatchOnRespawn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getLocalElement on target: %v", err)
 	}
-	targetAtom, _, err := elem.GetAtomID(atomName, nil, false)
-	if err != nil {
-		t.Fatalf("target GetAtomID: %v", err)
+	targetAtom, _, gerr := elem.GetAtomID(atomName, nil, false)
+	if gerr != nil {
+		t.Fatalf("target GetAtomID: %v", gerr)
 	}
 	oldImpl := targetAtom.(*AtomLocal).atomos.instance.(*testRunnableAtom)
 	oldImpl.haltNotify = make(chan struct{}, 1)
@@ -283,9 +283,9 @@ func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
 // this test exercises the WithRebind retry logic directly with a stub ID/call.
 func TestWithRebind_RetriesOnInstanceMismatch(t *testing.T) {
 	calls := 0
-	out, err := WithRebind(func() (ID, *Error) {
+	out, err := WithRebind(func() (ID, error) {
 		return stubID{}, nil
-	}, func(id ID) (string, *Error) {
+	}, func(id ID) (string, error) {
 		calls++
 		if calls == 1 {
 			return "", NewError(ErrCodeAtomInstanceMismatch, "stale").AddStack(nil)
@@ -307,9 +307,9 @@ func TestWithRebind_RetriesOnInstanceMismatch(t *testing.T) {
 // success without retrying.
 func TestWithRebind_NoRetryOnSuccess(t *testing.T) {
 	calls := 0
-	out, err := WithRebind(func() (ID, *Error) {
+	out, err := WithRebind(func() (ID, error) {
 		return stubID{}, nil
-	}, func(id ID) (string, *Error) {
+	}, func(id ID) (string, error) {
 		calls++
 		return "ok", nil
 	})
@@ -329,17 +329,17 @@ func TestWithRebind_NoRetryOnSuccess(t *testing.T) {
 func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
 	sentinel := NewError(ErrCodeFrameworkInternalError, "sentinel business error").AddStack(nil)
 	calls := 0
-	_, err := WithRebind(func() (ID, *Error) {
+	_, err := WithRebind(func() (ID, error) {
 		return stubID{}, nil
-	}, func(id ID) (string, *Error) {
+	}, func(id ID) (string, error) {
 		calls++
 		return "", sentinel
 	})
 	if err == nil {
 		t.Fatal("expected the sentinel error back")
 	}
-	if err.Code != sentinel.Code {
-		t.Fatalf("expected sentinel error code %d, got %d", sentinel.Code, err.Code)
+	if CodeOf(err) != sentinel.Code {
+		t.Fatalf("expected sentinel error code %d, got %d", sentinel.Code, CodeOf(err))
 	}
 	if calls != 1 {
 		t.Fatalf("expected exactly 1 call (no retry on unrelated error), got %d", calls)
@@ -351,13 +351,13 @@ func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
 func TestWithRebind_ResolveErrorNoCall(t *testing.T) {
 	resolveErr := NewError(ErrCodeCosmosRemoteConnectFailed, "no node").AddStack(nil)
 	calls := 0
-	_, err := WithRebind(func() (ID, *Error) {
+	_, err := WithRebind(func() (ID, error) {
 		return nil, resolveErr
-	}, func(id ID) (string, *Error) {
+	}, func(id ID) (string, error) {
 		calls++
 		return "", nil
 	})
-	if err == nil || err.Code != resolveErr.Code {
+	if err == nil || CodeOf(err) != resolveErr.Code {
 		t.Fatalf("expected resolve error back, got %v", err)
 	}
 	if calls != 0 {
@@ -375,18 +375,18 @@ func (stubID) String() string           { return "stub" }
 func (stubID) Cosmos() CosmosNode       { return nil }
 func (stubID) State() BaseAtomosState   { return 0 }
 func (stubID) IdleTime() time.Duration  { return 0 }
-func (stubID) SyncMessagingByName(ID, string, proto.Message, []ArgsForBaseAtomos) (proto.Message, *Error) {
+func (stubID) SyncMessagingByName(ID, string, proto.Message, []ArgsForBaseAtomos) (proto.Message, error) {
 	return nil, nil
 }
-func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message, *Error), []ArgsForBaseAtomos) *Error {
+func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message, error), []ArgsForBaseAtomos) error {
 	return nil
 }
-func (stubID) asyncSet(func(proto.Message, *Error)) (uint64, uint64) { return 0, 0 }
-func (stubID) asyncCallback(ID, string, uint64, uint64, proto.Message, *Error) {
+func (stubID) asyncSet(func(proto.Message, error)) (uint64, uint64) { return 0, 0 }
+func (stubID) asyncCallback(ID, string, uint64, uint64, proto.Message, error) {
 }
 func (stubID) DecoderByName(string) (MessageDecoder, MessageDecoder) { return nil, nil }
-func (stubID) Kill(ID, []ArgsForBaseAtomos) *Error                    { return nil }
-func (stubID) SendWormhole(ID, BaseAtomosWormhole, []ArgsForBaseAtomos) *Error {
+func (stubID) Kill(ID, []ArgsForBaseAtomos) error                    { return nil }
+func (stubID) SendWormhole(ID, BaseAtomosWormhole, []ArgsForBaseAtomos) error {
 	return nil
 }
 func (stubID) getGoID() uint64 { return 0 }
@@ -610,9 +610,9 @@ func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
 	}
 
 	// Verify the atom actually materialized on the TARGET node.
-	targetElem, err := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
-	if err != nil {
-		t.Fatalf("getLocalElement on target: %v", err)
+	targetElem, gerr := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
+	if gerr != nil {
+		t.Fatalf("getLocalElement on target: %v", gerr)
 	}
 	targetElem.lock.RLock()
 	_, spawned := targetElem.atoms[atomName]

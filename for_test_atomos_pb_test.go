@@ -17,9 +17,9 @@ const ForTestAtomosName = "ForTestAtomos"
 type ForTestAtomosElement interface {
 	Atomos
 	// Element-level (using explicit option)
-	Spawn(self ElementSelfID, data *ForTestData, args ...ArgsForBaseAtomos) *Error
+	Spawn(self ElementSelfID, data *ForTestData, args ...ArgsForBaseAtomos) error
 
-	SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err *Error)
+	SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error)
 }
 
 // ForTestAtomosAtom is the atomos implements of ForTestAtomos atom.
@@ -28,9 +28,9 @@ type ForTestAtomosAtom interface {
 	Atomos
 
 	// Atom-level (using explicit option)
-	Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, args ...ArgsForBaseAtomos) *Error
+	Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, args ...ArgsForBaseAtomos) error
 
-	Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err *Error)
+	Greeting(from ID, in *ForTestGreetingI) (out *ForTestGreetingO, err error)
 }
 
 ////////////////////////////////////
@@ -45,7 +45,7 @@ type ForTestAtomosElementID struct {
 }
 
 // Get element id of a node.
-func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, *Error) {
+func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, error) {
 	ca, err := c.CosmosGetElementID(ForTestAtomosName)
 	if err != nil {
 		return nil, err
@@ -54,12 +54,12 @@ func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, *Error) {
 }
 
 // Sync
-func (c *ForTestAtomosElementID) SayHello(callerID SelfID, in *ForTestHelloI, ext ...ArgsForBaseAtomos) (out *ForTestHelloO, err *Error) {
+func (c *ForTestAtomosElementID) SayHello(callerID SelfID, in *ForTestHelloI, ext ...ArgsForBaseAtomos) (out *ForTestHelloO, err error) {
 	return forTestAtomosElementMessengerValue.SayHello().SyncElement(c, callerID, in, ext...)
 }
 
 // Async
-func (c *ForTestAtomosElementID) AsyncSayHello(callerID SelfID, in *ForTestHelloI, callback func(out *ForTestHelloO, err *Error), ext ...ArgsForBaseAtomos) {
+func (c *ForTestAtomosElementID) AsyncSayHello(callerID SelfID, in *ForTestHelloI, callback func(out *ForTestHelloO, err error), ext ...ArgsForBaseAtomos) {
 	forTestAtomosElementMessengerValue.SayHello().AsyncElement(c, callerID, in, callback, ext...)
 }
 
@@ -71,16 +71,16 @@ type ForTestAtomosAtomID struct {
 }
 
 // Create (spawn) an atom in a node and return the AtomID.
-func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg) (*ForTestAtomosAtomID, *Error) {
+func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg) (*ForTestAtomosAtomID, error) {
 	id, tracker, err := c.CosmosSpawnAtom(caller, ForTestAtomosName, name, arg)
 	if id == nil {
-		return nil, err.AddStack(nil)
+		return nil, err
 	}
 	return &ForTestAtomosAtomID{id, tracker}, err
 }
 
 // Get atom id of a node.
-func GetForTestAtomosAtomID(c CosmosNode, name string) (*ForTestAtomosAtomID, *Error) {
+func GetForTestAtomosAtomID(c CosmosNode, name string) (*ForTestAtomosAtomID, error) {
 	ca, tracker, err := c.CosmosGetAtomID(ForTestAtomosName, name)
 	if err != nil {
 		return nil, err
@@ -89,12 +89,12 @@ func GetForTestAtomosAtomID(c CosmosNode, name string) (*ForTestAtomosAtomID, *E
 }
 
 // Sync
-func (c *ForTestAtomosAtomID) Greeting(callerID SelfID, in *ForTestGreetingI, ext ...ArgsForBaseAtomos) (out *ForTestGreetingO, err *Error) {
+func (c *ForTestAtomosAtomID) Greeting(callerID SelfID, in *ForTestGreetingI, ext ...ArgsForBaseAtomos) (out *ForTestGreetingO, err error) {
 	return forTestAtomosAtomMessengerValue.Greeting().SyncAtom(c, callerID, in, ext...)
 }
 
 // Async
-func (c *ForTestAtomosAtomID) AsyncGreeting(callerID SelfID, in *ForTestGreetingI, callback func(out *ForTestGreetingO, err *Error), ext ...ArgsForBaseAtomos) {
+func (c *ForTestAtomosAtomID) AsyncGreeting(callerID SelfID, in *ForTestGreetingI, callback func(out *ForTestGreetingO, err error), ext ...ArgsForBaseAtomos) {
 	forTestAtomosAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
@@ -104,7 +104,7 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 	elem := NewImplementationFromDeveloper(dev)
 	elem.Interface = GetForTestAtomosInterface(dev)
 	elem.ElementHandlers = map[string]MessageHandler{
-		"SayHello": func(from ID, to Atomos, in proto.Message) (proto.Message, *Error) {
+		"SayHello": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
 			a, i, err := forTestAtomosElementMessengerValue.SayHello().ExecuteAtom(to, in)
 			if err != nil {
 				return nil, err.AddStack(nil)
@@ -113,7 +113,7 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 		},
 	}
 	elem.AtomHandlers = map[string]MessageHandler{
-		"Greeting": func(from ID, to Atomos, in proto.Message) (proto.Message, *Error) {
+		"Greeting": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
 			a, i, err := forTestAtomosAtomMessengerValue.Greeting().ExecuteAtom(to, in)
 			if err != nil {
 				return nil, err.AddStack(nil)
@@ -125,7 +125,7 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 }
 func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(ForTestAtomosName, dev)
-	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		dataT, _ := data.(*ForTestData)
 		e, ok := a.(ForTestAtomosElement)
 		if !ok {
@@ -133,7 +133,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 		}
 		return e.Spawn(s, dataT)
 	}
-	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elem.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) error {
 		argT, _ := arg.(*ForTestSpawnArg)
 		dataT, _ := data.(*ForTestData)
 		atom, ok := a.(ForTestAtomosAtom)

@@ -103,20 +103,20 @@ func (a *AtomLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (a *AtomLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return a.atomos.PushSyncMessage(callerID, name, in, ext)
 }
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Atom的消息处理函数。
-func (a *AtomLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (a *AtomLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return a.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
 // asyncCallback
 // 内部使用，仅供ID实现调用。
 // Internal use only, for ID implementation only.
-func (a *AtomLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *AtomLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	a.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -132,19 +132,19 @@ func (a *AtomLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder) 
 // 从另一个AtomLocal，或者从Main Script发送Kill消息给Atom。
 // write Kill signal from other AtomLocal or from Main Script.
 // 如果不实现ElementCustomizeAuthorization，则说明没有Kill的ID限制。
-func (a *AtomLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (a *AtomLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	dev := a.element.elemImpl.Developer
 	elemAuth, ok := dev.(ElementAuthorization)
 	if ok && elemAuth != nil {
 		if err := elemAuth.AtomCanKill(callerID); err != nil {
-			return err.AddStack(a)
+			return asError(err).AddStack(a)
 		}
 	}
 
 	return a.atomos.PushKillMail(callerID, ext)
 }
 
-func (a *AtomLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (a *AtomLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return a.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
 }
 
@@ -179,7 +179,7 @@ func (a *AtomLocal) CosmosMain() *CosmosLocal {
 // Atom kill itself from inner
 func (a *AtomLocal) KillSelf() {
 	if err := a.atomos.PushKillMail(a, nil); err != nil {
-		a.Log().Error("Atom: KillSelf failed. err=(%v)", err.AddStack(a))
+		a.Log().Error("Atom: KillSelf failed. err=(%v)", asError(err).AddStack(a))
 		return
 	}
 	a.Log().Info("Atom: KillSelf.")
@@ -218,7 +218,7 @@ func (a *AtomLocal) Config() map[string][]byte {
 	return a.element.cosmosLocal.runnable.config.Customize
 }
 
-func (a *AtomLocal) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *AtomLocal) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return a.atomos.asyncSet(callback)
 }
 
@@ -257,7 +257,7 @@ func (a *AtomLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID 
 	a.atomos.onAsyncMessaging(fromID, a, name, handler, startupID, asyncID, in)
 }
 
-func (a *AtomLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (a *AtomLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	a.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
@@ -285,7 +285,7 @@ func (a *AtomLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
-		return err.AddStack(a)
+		return asError(err).AddStack(a)
 	}
 	return nil
 }
@@ -343,7 +343,7 @@ func (a *AtomLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 		return NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
-	if err = atomPersistence.SetAtomData(a.atomos.id.Atom, data); err != nil {
+	if err = asError(atomPersistence.SetAtomData(a.atomos.id.Atom, data)); err != nil {
 		a.Log().Fatal("Atom: Stopping save data error. id=(%s),element=(%+v),data=(%v),err=(%v)", a.atomos.GetIDInfo().Info(), a.element, data, err)
 		return err.AddStack(a, data)
 	}
@@ -382,20 +382,21 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
-	if persistence != nil {
-		atomPersistence := persistence.AtomAutoData()
-		if atomPersistence != nil {
-			name := a.atomos.id.Atom
-			data, err = atomPersistence.GetAtomData(name)
-			if err != nil {
-				return err.AddStack(a)
-			}
-			if data == nil && arg == nil {
-				return NewErrorf(ErrCodeAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
+		if persistence != nil {
+			atomPersistence := persistence.AtomAutoData()
+			if atomPersistence != nil {
+				name := a.atomos.id.Atom
+				var derr error
+				data, derr = atomPersistence.GetAtomData(name)
+				if err = asError(derr); err != nil {
+					return err.AddStack(a)
+				}
+				if data == nil && arg == nil {
+					return NewErrorf(ErrCodeAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
+				}
 			}
 		}
-	}
-	if err = current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...); err != nil {
+	if err = asError(current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...)); err != nil {
 		return err.AddStack(a)
 	}
 	return nil

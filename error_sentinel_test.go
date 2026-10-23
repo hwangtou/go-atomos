@@ -106,3 +106,31 @@ func TestSentinelsMatchCodes(t *testing.T) {
 		}
 	}
 }
+
+// TestPublicAPISuccessReturnsUntypedNil guards the v3 error-semantics
+// contract: a successful public API call must return a genuine nil error,
+// never a typed nil *Error boxed in an error interface (a typed nil would
+// make `err == nil` false on the success path).
+func TestPublicAPISuccessReturnsUntypedNil(t *testing.T) {
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		atomID, err := SpawnForTestAtomosAtom(p.local, p.local, "nil_check_atom", &ForTestSpawnArg{})
+		if err != nil {
+			t.Fatalf("SpawnForTestAtomosAtom returned non-nil error on success: %#v", err)
+		}
+		defer atomID.Release()
+
+		if _, err := atomID.Greeting(p.local, &ForTestGreetingI{Mode: 1}); err != nil {
+			t.Fatalf("Greeting returned non-nil error on success: %#v", err)
+		}
+
+		gotID, err := GetForTestAtomosAtomID(p.local, "nil_check_atom")
+		if err != nil {
+			t.Fatalf("GetForTestAtomosAtomID returned non-nil error on success: %#v", err)
+		}
+		defer gotID.Release()
+
+		if err := atomID.Kill(p.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
+			t.Fatalf("Kill returned non-nil error on success: %#v", err)
+		}
+	})
+}

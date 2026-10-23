@@ -152,6 +152,15 @@ const (
 - 生成器同步改造：生成的 Element/Atom 接口返回值从 `*Error` 改为 `error`（v3 生成器与 v3 框架绑定发布）。
 - `*Error` 继续导出（用户需要构造业务错误），但 `NewError/NewErrorf` 返回 `*Error` 的签名保留。
 
+### 3.3 实施状态（v3.0-alpha2 已落地）
+
+- 错误码：`error_code.go` 全部 131 个常量已改为显式字面值（0–130），`error_code_snapshot_test.go` 以硬编码快照 + 唯一性校验冻结（CI 级别防改号）。
+- 旧 `ErrXxx` 常量全量改名 `ErrCodeXxx`（AST 级标识符重写，注释/字符串/注释掉的测试不受影响）。
+- `error_sentinel.go`：`(*Error).Is` 按 `Code` 匹配；20 个哨兵变量（`ErrAtomNotExists`、`ErrAtomIsRunning`、`ErrCosmosNodeDraining` 等，沿用旧 `Err` 名占用位）；`CodeOf(err)`（非 `*Error` 返回 `ErrCodeUnknown = -1`，对 typed-nil 安全）；`IsAtomExist` 保留但标记 Deprecated。哨兵为按需清单而非全量 130 个，后续按用户场景增补。
+- 公开 API 全部改返回 `error`：`ID`/`CosmosNode`/`Element` 四方法族、`CosmosMainScript`、`ElementLoader`、`AtomAutoData`/`ElementAutoData`、`AtomosAcceptWormhole`/`AtomosRecover`、`MessageHandler`/`MessageDecoder`/`ElementSpawner`/`AtomSpawner`、`CosmosRunnable` 的 hook 与 Setter、`Config.Check`、`App`、`CosmosProcess.Start/Stop/Drain`、`WithRebind`、Task/Messenger 族等。内核路径（mailbox、task manager、remote service）仍用 `*Error`，边界经 `asError`（入）/`errOrNil`（出）转换，杜绝 typed-nil 外泄；`TestPublicAPISuccessReturnsUntypedNil` 锁定成功路径必归真 nil。
+- 生成器 `protoc-gen-go-atomos` 模板同步改造，`for_test.proto` fixture 已重新生成；`cmd/atomos-vet` testdata 同步适配。
+- 门禁：`build ./...` + `vet ./...` + `GOOS=windows build ./...` + 全量测试通过。
+
 ## 4. 参数与签名统一（P1）
 
 ### 4.1 现状

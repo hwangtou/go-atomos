@@ -100,7 +100,7 @@ type cosmosRemoteInTargetProcess struct {
 	asyncID   uint64
 }
 
-func (c *cosmosRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (c *cosmosRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return c.startupID, c.asyncID
 }
 
@@ -379,22 +379,22 @@ func (c *CosmosRemote) IdleTime() time.Duration {
 	return c.remote.IdleTime()
 }
 
-func (c *CosmosRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (c *CosmosRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return c.remote.PushSyncMessage(callerID, name, in, ext)
 }
 
-func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return c.remote.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
-func (c *CosmosRemote) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (c *CosmosRemote) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	// BUG: asyncSet should never be called on a CosmosRemote.
 	// It exists only to satisfy the ID interface. Returning zeros so callers
 	// get a safe no-op rather than a process crash.
 	return 0, 0
 }
 
-func (c *CosmosRemote) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (c *CosmosRemote) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	c.remote.PushAsyncMessageCallback(c, callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -402,11 +402,11 @@ func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return nil, nil
 }
 
-func (c *CosmosRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (c *CosmosRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
-func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
 
@@ -425,7 +425,7 @@ func (c *CosmosRemote) CosmosIsLocal() bool {
 	return false
 }
 
-func (c *CosmosRemote) CosmosGetElementID(elem string, args ...ArgsForBaseAtomos) (ID, *Error) {
+func (c *CosmosRemote) CosmosGetElementID(elem string, args ...ArgsForBaseAtomos) (ID, error) {
 	id, err := c.getElement(elem)
 	if err != nil {
 		return nil, err.AddStack(nil)
@@ -433,34 +433,34 @@ func (c *CosmosRemote) CosmosGetElementID(elem string, args ...ArgsForBaseAtomos
 	return id, nil
 }
 
-func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
-	id, tracker, err := element.GetAtomID(name, nil, false)
-	if err != nil {
-		return nil, nil, err.AddStack(nil)
+	id, tracker, gerr := element.GetAtomID(name, nil, false)
+	if gerr != nil {
+		return nil, nil, asError(gerr).AddStack(nil)
 	}
 	return id, tracker, nil
 }
 
-func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err
 	}
-	id, tracker, err := element.SpawnAtom(callerID, name, arg, nil, false)
-	if err != nil {
-		return nil, nil, err.AddStack(nil)
+	id, tracker, serr := element.SpawnAtom(callerID, name, arg, nil, false)
+	if serr != nil {
+		return nil, nil, asError(serr).AddStack(nil)
 	}
 	return id, tracker, nil
 }
 
-func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
-	cli, ctx, cancel, err := c.remote.getCli(atomosClientTimeout)
-	if err != nil {
-		return err.AddStack(nil)
+func (c *CosmosRemote) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err error) {
+	cli, ctx, cancel, cerr := c.remote.getCli(atomosClientTimeout)
+	if cerr != nil {
+		return cerr.AddStack(nil)
 	}
 	defer cancel()
 

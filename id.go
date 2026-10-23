@@ -29,11 +29,11 @@ type ID interface {
 
 	// SyncMessagingByName 同步调用
 	// Sync call
-	SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error)
+	SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error)
 
 	// AsyncMessagingByName 异步调用
 	// Async call
-	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error)
+	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error)
 
 	// DecoderByName 获得某个消息的解码器
 	// Get decoder of a message
@@ -41,12 +41,12 @@ type ID interface {
 
 	// Kill 从其它Atom或者main发送Kill消息。
 	// Send Kill message from other Atom or main.
-	Kill(callerID ID, ext []ArgsForBaseAtomos) *Error
+	Kill(callerID ID, ext []ArgsForBaseAtomos) error
 
 	// SendWormhole
 	// 发送Wormhole消息。
 	// Send Wormhole message.
-	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error
+	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error
 }
 
 // idInternal is the framework-internal extension of ID. Every ID produced by
@@ -57,9 +57,9 @@ type idInternal interface {
 	ID
 
 	// asyncSet registers an async reply callback on the caller side.
-	asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64)
+	asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64)
 	// asyncCallback delivers an async reply to the caller's registered callback.
-	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error)
+	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err error)
 	// getGoID returns the GoID of the mailbox goroutine of this ID.
 	getGoID() uint64
 }

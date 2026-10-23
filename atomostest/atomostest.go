@@ -35,7 +35,7 @@ func Run(t *testing.T, runnable *atomos.CosmosRunnable, opts ...atomos.RunOption
 
 	runnable.SetConfig(app.GetConfig())
 	if err := process.Start(runnable); err != nil {
-		t.Fatalf("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		t.Fatalf("App: Runnable starts failed, now exiting. err=(%v)", err)
 	}
 	t.Log("App: Started.")
 }

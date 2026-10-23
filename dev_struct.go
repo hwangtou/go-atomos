@@ -45,7 +45,7 @@ type ElementImplementation struct {
 	AtomHandlers    map[string]MessageHandler
 }
 
-type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error)
+type MessageHandler func(from ID, to Atomos, in proto.Message) (out proto.Message, err error)
 
 // ElementInterface
 // 从*.proto文件生成到*_atomos.pb.go文件中的，ElementInterface对象。
@@ -74,6 +74,6 @@ type IOMessageDecoder struct {
 	InDec  MessageDecoder
 	OutDec MessageDecoder
 }
-type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, *Error)
-type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error
-type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error
+type MessageDecoder func(buf []byte, protoOrJSON bool) (proto.Message, error)
+type ElementSpawner func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error
+type AtomSpawner func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) error

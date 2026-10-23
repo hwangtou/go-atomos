@@ -23,29 +23,29 @@ type Task interface {
 }
 
 type TaskDeprecated interface {
-	Add(fn TaskFn) (id uint64, err *Error)
-	AddAfter(d time.Duration, fn TaskFn) (id uint64, err *Error)
-	AddCrontab(spec string, fn TaskFn) (entryID uint64, err *Error)
+	Add(fn TaskFn) (id uint64, err error)
+	AddAfter(d time.Duration, fn TaskFn) (id uint64, err error)
+	AddCrontab(spec string, fn TaskFn) (entryID uint64, err error)
 
-	Cancel(id uint64) *Error
-	CancelCrontab(entryID uint64) (err *Error)
+	Cancel(id uint64) error
+	CancelCrontab(entryID uint64) (err error)
 }
 
 type TaskQueue interface {
 	// AddToAtomosQueue
 	// 添加任务到Atomos的任务队列，并返回一个取消函数。和Task.Add类似，但不返回任务ID。
 	// Append task to Atomos task queue, and return a cancel function.
-	AddToAtomosQueue(task TaskFn, ext ...ArgsForTask) (cancel func(reason string) *Error)
+	AddToAtomosQueue(task TaskFn, ext ...ArgsForTask) (cancel func(reason string) error)
 
 	// AddToSerialQueue
 	// 添加任务到指定名称的串行任务队列，并返回一个取消函数。如果该队列不存在，则创建一个新的队列；当队列为空时，删除该队列。
 	// Append task to a named serial task queue, and return a cancel function. If the queue does not exist, create a new one; when the queue is empty, delete the queue.
-	AddToSerialQueue(queueName string, workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error)
+	AddToSerialQueue(queueName string, workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) error)
 
 	// AddToConcurrentQueue
 	// 添加任务到并行任务队列，并返回一个取消函数。每一个并行任务都是独立的一个goroutine。
 	// Append task to a concurrent task queue, and return a cancel function. Each concurrent task is an independent goroutine.
-	AddToConcurrentQueue(workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error)
+	AddToConcurrentQueue(workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) error)
 
 	// HasMarking
 	// 检查任务队列中是否存在指定标记的任务。
@@ -196,7 +196,7 @@ func (at *atomosTaskManager) stopUnlock() {
 // Add
 // 添加任务，并返回可以用于取消的任务id。
 // Append task, and return a cancellable task id.
-func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error) {
+func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrCodeAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -228,7 +228,7 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err *Error)
 // AddAfter
 // 指定时间后添加任务，并返回可以用于取消的任务id。
 // Append task after duration, and return a cancellable task id.
-func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (id uint64, err *Error) {
+func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (id uint64, err error) {
 	if taskClosure == nil {
 		return 0, NewErrorf(ErrCodeAtomosTaskInvalidFn, "AtomosTask: Task closure is nil.").AddStack(nil)
 	}
@@ -305,7 +305,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 	return curID, nil
 }
 
-func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err *Error) {
+func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err error) {
 	c := func() *cron.Cron {
 		at.mutex.Lock()
 		defer at.mutex.Unlock()
@@ -330,7 +330,7 @@ func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryI
 // Cancel
 // 取消任务。
 // Cancel task.
-func (at *atomosTaskManager) Cancel(id uint64) *Error {
+func (at *atomosTaskManager) Cancel(id uint64) error {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
@@ -341,7 +341,7 @@ func (at *atomosTaskManager) Cancel(id uint64) *Error {
 	return nil
 }
 
-func (at *atomosTaskManager) CancelCrontab(entryID uint64) (err *Error) {
+func (at *atomosTaskManager) CancelCrontab(entryID uint64) (err error) {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 	if at.cron == nil {

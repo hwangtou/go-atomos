@@ -32,7 +32,7 @@ func (g *drainGate) expire(t *testing.T) bool {
 		return true
 	}
 	if err := g.atom.Kill(g.process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
-		t.Fatalf("KillSelf failed: %v", err.Message)
+		t.Fatalf("KillSelf failed: %v", err)
 	}
 	return false
 }
@@ -45,13 +45,13 @@ func TestAsyncDrainWindow(t *testing.T) {
 	// ---- 阶段一:推迟窗口内回复到达,回调被正常消费 ----
 	atomID, _, err := elem.SpawnAtom(process.local, "drain1", &Config{Cosmos: "arg"}, nil, false)
 	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+		t.Fatalf("spawn atom failed: %v", err)
 	}
 	atom := atomID.(*AtomLocal)
 	gate := &drainGate{atom: atom, process: process}
 
 	var consumed reproCounter
-	startupID, asyncID := atom.atomos.asyncSet(func(out proto.Message, err *Error) {
+	startupID, asyncID := atom.atomos.asyncSet(func(out proto.Message, err error) {
 		consumed.add()
 	})
 
@@ -90,14 +90,14 @@ func TestAsyncDrainWindow(t *testing.T) {
 	// ---- 阶段二:连续推迟至额度用尽,残余回调被清账终结 ----
 	atomID2, _, err := elem.SpawnAtom(process.local, "drain2", &Config{Cosmos: "arg"}, nil, false)
 	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+		t.Fatalf("spawn atom failed: %v", err)
 	}
 	atom2 := atomID2.(*AtomLocal)
 	gate2 := &drainGate{atom: atom2, process: process}
 
 	var cancelled reproCounter
 	var cancelledCode reproErrCode
-	atom2.atomos.asyncSet(func(out proto.Message, err *Error) {
+	atom2.atomos.asyncSet(func(out proto.Message, err error) {
 		cancelled.add()
 		if err != nil {
 			cancelledCode.set(err)

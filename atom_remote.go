@@ -37,14 +37,14 @@ func newAtomRemoteInSourceProcessWithPinnedConn(e *ElementRemote, info *IDInfo, 
 	}
 }
 
-func (a *atomRemoteInSourceProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *atomRemoteInSourceProcess) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	// BUG: asyncSet should never be called on a source-process remote ID.
 	// It exists only to satisfy the ID interface. Returning zeros so callers
 	// get a safe no-op rather than a process crash.
 	return 0, 0
 }
 
-func (a *atomRemoteInSourceProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *atomRemoteInSourceProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	a.remote.PushAsyncMessageCallback(a, callbackID, name, startupID, asyncID, reply, err)
 }
 
@@ -66,11 +66,11 @@ func newAtomRemoteInTargetProcess(e *ElementRemote, info *IDInfo, startupID, asy
 	}
 }
 
-func (a *atomRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *atomRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return a.startupID, a.asyncID
 }
 
-func (a *atomRemoteInTargetProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *atomRemoteInTargetProcess) asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	a.remote.PushAsyncMessageCallback(a, callbackID, name, startupID, asyncID, reply, err)
 }
 
@@ -103,11 +103,11 @@ func (a *AtomRemote) IdleTime() time.Duration {
 	return a.remote.IdleTime()
 }
 
-func (a *AtomRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (a *AtomRemote) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return a.remote.PushSyncMessage(callerID, name, in, ext)
 }
 
-func (a *AtomRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (a *AtomRemote) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return a.remote.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
@@ -122,11 +122,11 @@ func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder)
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (a *AtomRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (a *AtomRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return a.remote.Kill(callerID, ext)
 }
 
-func (a *AtomRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (a *AtomRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return NewErrorf(ErrCodeAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 

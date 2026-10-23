@@ -63,7 +63,7 @@ func TestBaseAtomos_LifeCycle(t *testing.T) {
 	err = tba.AsyncMessagingByName(process.local,
 		testCaseBaseAtomosAsyncMessaging1Name,
 		&Strings{Ss: []string{testCaseBaseAtomosAsyncMessaging1In}},
-		func(out proto.Message, err *Error) {
+		func(out proto.Message, err error) {
 			if err != nil {
 				t.Errorf("Async Messaging returned error: %v", err)
 			} else if out.(*Strings).Ss[0] != testCaseBaseAtomosAsyncMessaging1Out {
@@ -155,20 +155,20 @@ func (t *testBaseAtomos) IdleTime() time.Duration {
 	return t.atomos.idleTime()
 }
 
-func (t *testBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (t *testBaseAtomos) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return t.atomos.PushSyncMessage(callerID, name, in, ext)
 }
 
-func (t *testBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (t *testBaseAtomos) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return t.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
-func (t *testBaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (t *testBaseAtomos) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	t.t.Log("asyncSet called")
 	return t.atomos.asyncSet(callback)
 }
 
-func (t *testBaseAtomos) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (t *testBaseAtomos) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	t.t.Log("asyncCallback called:", callerID, name, asyncID, reply, err)
 	t.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
 }
@@ -177,11 +177,11 @@ func (t *testBaseAtomos) DecoderByName(name string) (in, out MessageDecoder) {
 	panic("not implemented")
 }
 
-func (t *testBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (t *testBaseAtomos) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return t.atomos.PushKillMail(callerID, ext)
 }
 
-func (t *testBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (t *testBaseAtomos) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return t.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
 }
 
@@ -191,7 +191,7 @@ func (t *testBaseAtomos) getGoID() uint64 {
 
 func (t *testBaseAtomos) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	t.t.Log("Sync Messaging test received:", fromID, name, in)
-	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err error) {
 		switch name {
 		case testCaseBaseAtomosSyncMessaging1Name:
 			if in.(*Strings).Ss[0] != testCaseBaseAtomosSyncMessaging1In {
@@ -207,7 +207,7 @@ func (t *testBaseAtomos) onSyncMessaging(fromID ID, name string, in proto.Messag
 
 func (t *testBaseAtomos) onAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	t.t.Log("Async Messaging test received:", fromID, name, asyncID, in)
-	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err *Error) {
+	handler := func(from ID, to Atomos, in proto.Message) (out proto.Message, err error) {
 		switch name {
 		case testCaseBaseAtomosAsyncMessaging1Name:
 			if in.(*Strings).Ss[0] != testCaseBaseAtomosAsyncMessaging1In {
@@ -221,7 +221,7 @@ func (t *testBaseAtomos) onAsyncMessaging(fromID ID, name string, startupID, asy
 	t.atomos.onAsyncMessaging(fromID, t, name, handler, startupID, asyncID, in)
 }
 
-func (t *testBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (t *testBaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	t.t.Log("Async Messaging test received:", asyncID, in)
 }
 

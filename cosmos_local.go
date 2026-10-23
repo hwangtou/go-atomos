@@ -44,15 +44,15 @@ func (c *CosmosLocal) IdleTime() time.Duration {
 	return c.atomos.idleTime()
 }
 
-func (c *CosmosLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (c *CosmosLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return c.atomos.PushSyncMessage(callerID, name, in, ext)
 }
 
-func (c *CosmosLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (c *CosmosLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return c.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
-func (c *CosmosLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (c *CosmosLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	c.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -60,11 +60,11 @@ func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder
 	return nil, nil
 }
 
-func (c *CosmosLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (c *CosmosLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
 }
 
-func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
 }
 
@@ -140,7 +140,7 @@ func (c *CosmosLocal) Config() map[string][]byte {
 	return c.runnable.config.Customize
 }
 
-func (c *CosmosLocal) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (c *CosmosLocal) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return c.atomos.asyncSet(callback)
 }
 
@@ -154,7 +154,7 @@ func (c *CosmosLocal) CosmosIsLocal() bool {
 	return true
 }
 
-func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForBaseAtomos) (ID, *Error) {
+func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForBaseAtomos) (ID, error) {
 	e, err := c.getGlobalElement(elemName, "")
 	if err != nil {
 		return nil, err.AddStack(c)
@@ -162,19 +162,19 @@ func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForBaseAto
 	return e, nil
 }
 
-func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBaseAtomos) (id ID, tracker *IDTracker, err *Error) {
-	e, err := c.getGlobalElement(elemName, name)
-	if err != nil {
-		return nil, nil, err.AddStack(c)
+func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBaseAtomos) (id ID, tracker *IDTracker, err error) {
+	e, ierr := c.getGlobalElement(elemName, name)
+	if ierr != nil {
+		return nil, nil, ierr.AddStack(c)
 	}
-	id, tracker, err = e.GetAtomID(name, c.newLocalIDTrackerInfo(), true)
-	if err != nil {
-		return nil, nil, err.AddStack(c)
+	id, tracker, gerr := e.GetAtomID(name, c.newLocalIDTrackerInfo(), true)
+	if gerr != nil {
+		return nil, nil, asError(gerr).AddStack(c)
 	}
 	return id, tracker, nil
 }
 
-func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
@@ -198,10 +198,10 @@ func (c *CosmosLocal) newLocalIDTrackerInfo() *IDTrackerInfo {
 	return &IDTrackerInfo{}
 }
 
-func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err *Error) {
-	elems, err := c.getLocalAllElements()
-	if err != nil {
-		return err.AddStack(c)
+func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err error) {
+	elems, ierr := c.getLocalAllElements()
+	if ierr != nil {
+		return ierr.AddStack(c)
 	}
 	for _, elem := range elems {
 		if elem.elemImpl == nil {
@@ -214,7 +214,7 @@ func (c *CosmosLocal) ElementBroadcast(callerID ID, key, contentType string, con
 			Key:           key,
 			ContentType:   contentType,
 			ContentBuffer: contentBuffer,
-		}, func(message proto.Message, err *Error) {
+		}, func(message proto.Message, err error) {
 			if err != nil {
 				c.Log().Error("Cosmos: ElementBroadcast error. err=(%v)", err)
 			}
@@ -248,7 +248,7 @@ func (c *CosmosLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncI
 	fromInternal.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrCodeMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
 }
 
-func (c *CosmosLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (c *CosmosLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	c.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
@@ -278,7 +278,7 @@ func (c *CosmosLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 		return err
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
-		return err.AddStack(c)
+		return asError(err).AddStack(c)
 	}
 	return nil
 }
@@ -300,8 +300,8 @@ func (c *CosmosLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 			continue
 		}
 		ext := []ArgsForBaseAtomos{&argBaseAtomosWaitKilled{}}
-		if err = elem.atomos.PushKillMail(c, ext); err != nil {
-			c.Log().Error("Cosmos: Exiting kill element error. element=(%s),err=(%v)", name, err.Message)
+		if perr := elem.atomos.PushKillMail(c, ext); perr != nil {
+			c.Log().Error("Cosmos: Exiting kill element error. element=(%s),err=(%v)", name, perr)
 		}
 	}
 
@@ -414,7 +414,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 		for _, elem := range loaded {
 			ext := []ArgsForBaseAtomos{&argBaseAtomosWaitKilled{}}
 			if e := elem.atomos.PushKillMail(c, ext); e != nil {
-				c.Log().Fatal("Cosmos: Spawning element failed, kill failed. name=(%s),err=(%v)", elem.atomos.id.Element, e.AddStack(c))
+				c.Log().Fatal("Cosmos: Spawning element failed, kill failed. name=(%s),err=(%v)", elem.atomos.id.Element, asError(e).AddStack(c))
 			}
 		}
 		c.Log().Fatal("Cosmos: Spawning element has rollback.")

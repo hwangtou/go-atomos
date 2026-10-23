@@ -17,7 +17,7 @@ type Element interface {
 	// GetAtomID
 	// 通过Atom名称获取指定的Atom的ID。
 	// Get AtomID by name of Atom.
-	GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, *Error)
+	GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, error)
 
 	// 该Element的Atom数量信息。
 	// Atom number information of this Element.
@@ -29,5 +29,5 @@ type Element interface {
 	// SpawnAtom
 	// 启动（自旋）一个Atom。
 	// Spawn (spin) an Atom.
-	SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error)
+	SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error)
 }

@@ -20,14 +20,14 @@ const (
 // AddToAtomosQueue
 // 添加任务到Atomos的任务队列，并返回一个取消函数。和Task.Add类似，但不返回任务ID。
 // Append task to Atomos task queue, and return a cancel function.
-func (at *atomosTaskManager) AddToAtomosQueue(workerFn TaskFn, ext ...ArgsForTask) (cancel func(reason string) *Error) {
+func (at *atomosTaskManager) AddToAtomosQueue(workerFn TaskFn, ext ...ArgsForTask) (cancel func(reason string) error) {
 	return at.addToAtomos(at.atomos.mailbox, workerFn, nil, ext...)
 }
 
 // AddToSerialQueue
 // 添加任务到指定名称的串行任务队列，并返回一个取消函数。如果该队列不存在，则创建一个新的队列；当队列为空时，删除该队列。
 // Append task to a named serial task queue, and return a cancel function. If the queue does not exist, create a new one; when the queue is empty, delete the queue.
-func (at *atomosTaskManager) AddToSerialQueue(queueName string, workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error) {
+func (at *atomosTaskManager) AddToSerialQueue(queueName string, workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) error) {
 	mailbox := at.getTaskSerialMailbox(queueName)
 	return at.addToAtomos(mailbox.mailbox, nil, workerFn, ext...)
 }
@@ -35,7 +35,7 @@ func (at *atomosTaskManager) AddToSerialQueue(queueName string, workerFn TaskFnW
 // AddToConcurrentQueue
 // 添加任务到并行任务队列，并返回一个取消函数。每一个并行任务都是独立的一个goroutine。
 // Append task to a concurrent task queue, and return a cancel function. Each concurrent task is an independent goroutine.
-func (at *atomosTaskManager) AddToConcurrentQueue(workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error) {
+func (at *atomosTaskManager) AddToConcurrentQueue(workerFn TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) error) {
 	mailbox := at.newTaskSerialMailboxForConcurrent()
 	return at.addToAtomos(mailbox.mailbox, nil, workerFn, ext...)
 }
@@ -51,11 +51,11 @@ func (at *atomosTaskManager) HasMarking(mark string) bool {
 	return false
 }
 
-func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) *Error) {
+func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnWithCallback, ext ...ArgsForTask) (cancel func(reason string) error) {
 	helper := createTaskHelper(at, mailbox, t, tCb, ext)
 	if helper.hasErrors() {
 		helper.errorHelper(at, helper.getErrorReason())
-		return func(reason string) *Error { return nil }
+		return func(reason string) error { return nil }
 	}
 	helper.buildAtomosTask()
 
@@ -68,7 +68,7 @@ func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnW
 		task.timer = time.AfterFunc(helper.delay, func() {
 			at.delayAddToQueue(mailbox, task)
 		})
-		return func(reason string) *Error {
+		return func(reason string) error {
 			if err := at.cancelTaskQueue(task, false, reason); err != nil {
 				at.atomos.log.Error("atomosTaskManager: Cancel task %d failed because %s", task.id, err.Error())
 				return err.AddStack(nil)
@@ -79,7 +79,7 @@ func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnW
 		task.cronEID = at.getCron().Schedule(helper.cronSchedule, cron.FuncJob(func() {
 			at.delayAddToQueue(mailbox, task)
 		}))
-		return func(reason string) *Error {
+		return func(reason string) error {
 			if err := at.cancelTaskQueue(task, false, reason); err != nil {
 				at.atomos.log.Error("atomosTaskManager: Cancel task %d failed because %s", task.id, err.Error())
 				return err.AddStack(nil)
@@ -148,7 +148,7 @@ func (at *atomosTaskManager) delayAddToQueue(mailbox *mailBox, t *atomosTask) {
 	}
 }
 
-func (at *atomosTaskManager) addToQueue(mailbox *mailBox, task *atomosTask) (cancel func(reason string) *Error) {
+func (at *atomosTaskManager) addToQueue(mailbox *mailBox, task *atomosTask) (cancel func(reason string) error) {
 	ok := false
 	am := task.atomosMail
 	if task.helper.appendToHead {
@@ -160,9 +160,9 @@ func (at *atomosTaskManager) addToQueue(mailbox *mailBox, task *atomosTask) (can
 		reason := "Failed to add task to Atomos mailbox"
 		task.helper.errorHelper(at, reason)
 		releaseMail(am.mail)
-		return func(reason string) *Error { return nil }
+		return func(reason string) error { return nil }
 	}
-	return func(reason string) *Error {
+	return func(reason string) error {
 		if err := at.cancelTaskQueue(task, false, reason); err != nil {
 			at.atomos.log.Error("atomosTaskManager: Cancel task %d failed because %s", task.id, err.Error())
 			return err.AddStack(nil)

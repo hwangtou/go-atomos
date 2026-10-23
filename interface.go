@@ -36,9 +36,9 @@ import (
 //                 Use for initial Atoms, scheduled jobs, etc.
 //  3. OnShutdown — called when the process is stopping. Use for graceful cleanup.
 type CosmosMainScript interface {
-	OnBoot(local *CosmosProcess) *Error
-	OnStartUp(local *CosmosProcess) *Error
-	OnShutdown() *Error
+	OnBoot(local *CosmosProcess) error
+	OnStartUp(local *CosmosProcess) error
+	OnShutdown() error
 }
 
 // ElementDeveloper is the factory interface for creating actor instances.
@@ -66,8 +66,8 @@ type ElementDeveloper interface {
 // Load is called before the Element's data is fetched via AutoData.
 // Unload is called after the Element halts and its data has been saved.
 type ElementLoader interface {
-	Load(self ElementSelfID, config map[string][]byte, args ...ArgsForBaseAtomos) *Error
-	Unload() *Error
+	Load(self ElementSelfID, config map[string][]byte, args ...ArgsForBaseAtomos) error
+	Unload() error
 }
 
 // ━━━ Data Persistence Interfaces ━━━
@@ -91,8 +91,8 @@ type AutoData interface {
 // previously saved state (first spawn).
 // SetAtomData is called after a stateful Halt.
 type AtomAutoData interface {
-	GetAtomData(name string) (proto.Message, *Error)
-	SetAtomData(name string, data proto.Message) *Error
+	GetAtomData(name string) (proto.Message, error)
+	SetAtomData(name string, data proto.Message) error
 }
 
 // ElementAutoData reads and writes Element-level state.
@@ -100,8 +100,8 @@ type AtomAutoData interface {
 // is no previously saved state.
 // SetElementData is called after a stateful Element Halt.
 type ElementAutoData interface {
-	GetElementData() (proto.Message, *Error)
-	SetElementData(data proto.Message) *Error
+	GetElementData() (proto.Message, error)
+	SetElementData(data proto.Message) error
 }
 
 // ━━━ Lifecycle Interfaces ━━━
@@ -126,9 +126,9 @@ type ElementAtomExit interface {
 
 // ElementAuthorization gates cross-actor kill operations.
 // When implemented, Atom.Kill will call AtomCanKill before proceeding.
-// Return nil to allow the kill, or an *Error to deny it.
+// Return nil to allow the kill, or an error to deny it.
 type ElementAuthorization interface {
-	AtomCanKill(ID) *Error
+	AtomCanKill(ID) error
 }
 
 // ━━━ Metadata Interfaces ━━━
@@ -161,19 +161,19 @@ type ElementLogLevel interface {
 // between actors. If not implemented, SendWormhole to this actor returns
 // ErrAtomosNotSupportWormhole.
 type AtomosAcceptWormhole interface {
-	AcceptWormhole(fromID ID, wormhole BaseAtomosWormhole) *Error
+	AcceptWormhole(fromID ID, wormhole BaseAtomosWormhole) error
 }
 
 // AtomosRecover gives an actor visibility into panics that occur during
 // its lifecycle. When implemented, the corresponding method is called
 // instead of the default Fatal-log-and-continue behavior.
 //
-// Each method receives the *Error that captures the panic stack and reason.
+// Each method receives the error that captures the panic stack and reason.
 // Use this to implement custom alerting, metrics, or graceful degradation.
 type AtomosRecover interface {
-	ParallelRecover(err *Error)
-	SpawnRecover(arg proto.Message, err *Error)
-	MessageRecover(name string, arg proto.Message, err *Error)
-	TaskRecover(taskID uint64, name string, arg proto.Message, err *Error)
-	StopRecover(err *Error)
+	ParallelRecover(err error)
+	SpawnRecover(arg proto.Message, err error)
+	MessageRecover(name string, arg proto.Message, err error)
+	TaskRecover(taskID uint64, name string, arg proto.Message, err error)
+	StopRecover(err error)
 }

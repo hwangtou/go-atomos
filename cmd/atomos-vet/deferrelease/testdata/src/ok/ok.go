@@ -3,21 +3,20 @@ package ok
 
 type IDTracker struct{}
 type ID struct{}
-type Error struct{}
 type SelfID struct{}
 type CosmosNode interface {
-	CosmosGetAtomID(elem, name string) (ID, *IDTracker, *Error)
-	CosmosSpawnAtom(caller SelfID, elem, name string, arg any) (ID, *IDTracker, *Error)
+	CosmosGetAtomID(elem, name string) (ID, *IDTracker, error)
+	CosmosSpawnAtom(caller SelfID, elem, name string, arg any) (ID, *IDTracker, error)
 }
 
 func (t *IDTracker) Release() {}
 
 // WithID/WithRebind stubs matching the framework's release-path helpers.
-func WithID[R any](tr *IDTracker, fn func() (R, *Error)) (R, *Error) {
+func WithID[R any](tr *IDTracker, fn func() (R, error)) (R, error) {
 	defer tr.Release()
 	return fn()
 }
-func WithRebind[R any](resolve func() (ID, *Error), call func(ID) (R, *Error)) (R, *Error) {
+func WithRebind[R any](resolve func() (ID, error), call func(ID) (R, error)) (R, error) {
 	var zero R
 	id, e := resolve()
 	if e != nil {
@@ -26,9 +25,9 @@ func WithRebind[R any](resolve func() (ID, *Error), call func(ID) (R, *Error)) (
 	return call(id)
 }
 
-func GetFooAtomID(node any, name string) (*FooAtomID, *Error) { return nil, nil }
-func GetFooElementID(node any) (*FooElementID, *Error)        { return nil, nil }
-func SpawnFooAtom(self SelfID, node any, name string, arg any) (*FooAtomID, *Error) {
+func GetFooAtomID(node any, name string) (*FooAtomID, error) { return nil, nil }
+func GetFooElementID(node any) (*FooElementID, error)        { return nil, nil }
+func SpawnFooAtom(self SelfID, node any, name string, arg any) (*FooAtomID, error) {
 	return nil, nil
 }
 
@@ -55,15 +54,15 @@ func okWithID(node CosmosNode) {
 	if err != nil {
 		return
 	}
-	_, _ = WithID(tr, func() (struct{}, *Error) { return struct{}{}, nil })
+	_, _ = WithID(tr, func() (struct{}, error) { return struct{}{}, nil })
 }
 
 // GOOD: WithRebind wraps the resolve/call.
 func okWithRebind(node CosmosNode) {
-	_, _ = WithRebind(func() (ID, *Error) {
+	_, _ = WithRebind(func() (ID, error) {
 		id, _, e := node.CosmosGetAtomID("elem", "atom")
 		return id, e
-	}, func(id ID) (struct{}, *Error) {
+	}, func(id ID) (struct{}, error) {
 		return struct{}{}, nil
 	})
 }

@@ -25,7 +25,7 @@ type App struct {
 	logging appLogging
 }
 
-func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, *Error) {
+func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node string, logLevel LogLevel, customize map[string][]byte) (*App, error) {
 	if len(os.Args) < 1 {
 		return nil, NewErrorf(ErrCodeRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
 	}
@@ -67,7 +67,7 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 
 	// Choose logging backend: console for Docker/env-var-opt-in, file otherwise.
 	var logging appLogging
-	var err *Error
+	var err error
 	if shouldLogToStdout(config) {
 		logging = NewAppLoggingToConsole()
 	} else {
@@ -75,11 +75,11 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		if logMaxSize == 0 {
 			logMaxSize = AppLoggingDefaultMaxSize
 		}
-		logging, err = NewAppLoggingToFile(config.LogPath, logMaxSize, 10, func(err *Error) {
-			log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+		logging, err = NewAppLoggingToFile(config.LogPath, logMaxSize, 10, func(err error) {
+			log.Printf("App: Logging error. err=(%v)", err)
 		})
 		if err != nil {
-			return nil, err.AddStack(nil)
+			return nil, asError(err).AddStack(nil)
 		}
 	}
 	return &App{
@@ -97,11 +97,11 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 	}, nil
 }
 
-func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable) (*App, *Error) {
+func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable) (*App, error) {
 	// Load Config.
 	conf, err := NewCosmosNodeConfigFromYamlPath(configPath, runnable)
 	if err != nil {
-		return nil, err.AddStack(nil)
+		return nil, asError(err).AddStack(nil)
 	}
 	// Choose logging backend: console for Docker/env-var-opt-in, file otherwise.
 	var logging appLogging
@@ -112,11 +112,11 @@ func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable)
 		if logSize == 0 {
 			logSize = AppLoggingDefaultMaxSize
 		}
-		logging, err = NewAppLoggingToFile(conf.LogPath, logSize, 10, func(err *Error) {
-			log.Printf("App: Logging error. err=(%v)", err.AddStack(nil))
+		logging, err = NewAppLoggingToFile(conf.LogPath, logSize, 10, func(err error) {
+			log.Printf("App: Logging error. err=(%v)", err)
 		})
 		if err != nil {
-			return nil, err.AddStack(nil)
+			return nil, asError(err).AddStack(nil)
 		}
 	}
 	return &App{
@@ -134,7 +134,7 @@ func NewCosmosNodeAppWithConfigPath(configPath string, runnable *CosmosRunnable)
 	}, nil
 }
 
-func NewCosmosNodeAppWithTest(config *Config, t *testing.T) (*App, *Error) {
+func NewCosmosNodeAppWithTest(config *Config, t *testing.T) (*App, error) {
 	return &App{
 		config: config,
 		env: &appEnv{
@@ -152,10 +152,11 @@ func NewCosmosNodeAppWithTest(config *Config, t *testing.T) (*App, *Error) {
 
 // Check
 
-func (a *App) Check() (isRunning bool, processID int, err *Error) {
+func (a *App) Check() (isRunning bool, processID int, err error) {
 	// Env
-	if isRunning, processID, err = a.env.check(); err != nil {
-		return isRunning, processID, err.AddStack(nil)
+	isRunning, processID, cerr := a.env.check()
+	if cerr != nil {
+		return isRunning, processID, cerr.AddStack(nil)
 	}
 	return false, 0, nil
 }
@@ -167,7 +168,7 @@ func (a *App) GetConfig() *Config {
 // NewCosmosProcess creates the CosmosProcess runtime bound to this app's
 // config and logging backend. Run creates one automatically; direct use is
 // intended for the atomostest package and advanced embedding scenarios.
-func (a *App) NewCosmosProcess() (*CosmosProcess, *Error) {
+func (a *App) NewCosmosProcess() (*CosmosProcess, error) {
 	process, err := newCosmosProcess(a.config.Cosmos, a.config.Node, a.logging)
 	if err != nil {
 		return nil, err.AddStack(nil)
@@ -196,7 +197,7 @@ func getEnvErrorLogKey() string {
 
 // Parent
 
-func (a *App) ForkAppProcess() *Error {
+func (a *App) ForkAppProcess() error {
 	var proc *os.Process
 	execPath, er := os.Executable()
 	if er != nil {
@@ -236,7 +237,7 @@ func (a *App) ForkAppProcess() *Error {
 
 // Child
 
-func (a *App) LaunchApp() *Error {
+func (a *App) LaunchApp() error {
 	if err := a.env.daemon(); err != nil {
 		return err.AddStack(nil)
 	}

@@ -22,7 +22,7 @@ type baseAtomosHolder interface {
 
 	// onAsyncMessagingCallback
 	// 收到异步消息回调
-	onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error)
+	onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error)
 
 	onFnCallback(*atomosCallback)
 
@@ -143,7 +143,7 @@ type BaseAtomos struct {
 }
 
 type asyncCallbackWrap struct {
-	fn  func(out proto.Message, err *Error)
+	fn  func(out proto.Message, err error)
 	now time.Time
 }
 
@@ -203,7 +203,7 @@ func (a *BaseAtomos) GetGoID() uint64 {
 	return a.mailbox.goID
 }
 
-func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err *Error) {
+func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err error) {
 	if from == nil {
 		return nil, NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -259,19 +259,19 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
 
-	replyInterface, err := am.waitReply(a, helper)
+	replyInterface, ierr := am.waitReply(a, helper)
 	removeEdge()
-	if err != nil && err.Code == ErrCodeAtomosIsNotRunning {
-		return nil, err.AddStack(nil)
+	if ierr != nil && ierr.Code == ErrCodeAtomosIsNotRunning {
+		return nil, ierr.AddStack(nil)
 	}
 	reply, ok = replyInterface.(proto.Message)
 	if !ok {
-		return nil, err.AddStack(nil)
+		return nil, errOrNil(ierr.AddStack(nil))
 	}
-	return reply, err.AddStack(nil)
+	return reply, errOrNil(ierr.AddStack(nil))
 }
 
-func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, callback func(reply proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, callback func(reply proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -318,13 +318,13 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 	return nil
 }
 
-func (a *BaseAtomos) PushAsyncMessageCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *BaseAtomos) PushAsyncMessageCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	if asyncID == 0 {
 		a.Log().Debug("PushAsyncMessageCallback called with empty asyncID. name=(%s),reply=(%v),err=(%v)")
 		return
 	}
 	am := allocBaseAtomosMail()
-	initAsyncMessageCallbackMail(am, callerID, name, startupID, asyncID, reply, err)
+	initAsyncMessageCallbackMail(am, callerID, name, startupID, asyncID, reply, asError(err))
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
 		a.log.logging.pushFrameworkErrorLog("PushAsyncMessageCallback: Atomos is not running. name=(%s),args=(%v)", name, reply)
@@ -333,7 +333,7 @@ func (a *BaseAtomos) PushAsyncMessageCallback(callerID ID, name string, startupI
 	//deallocAtomosMail(am)
 }
 
-func (a *BaseAtomos) PushKillMail(from ID, ext []ArgsForBaseAtomos) (err *Error) {
+func (a *BaseAtomos) PushKillMail(from ID, ext []ArgsForBaseAtomos) (err error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -356,13 +356,13 @@ func (a *BaseAtomos) PushKillMail(from ID, ext []ArgsForBaseAtomos) (err *Error)
 		return NewErrorf(ErrCodeAtomosIsNotRunning, "Atomos is not running. from=(%s),wait=(%v)", from, helper.waitKilled).AddStack(nil)
 	}
 	if helper.waitKilled {
-		_, err = am.waitReply(a, helper)
-		return err.AddStack(nil)
+		_, ierr := am.waitReply(a, helper)
+		return errOrNil(ierr.AddStack(nil))
 	}
 	return nil
 }
 
-func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) (err *Error) {
+func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) (err error) {
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
@@ -384,10 +384,10 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWo
 	if !ok {
 		return NewErrorf(ErrCodeAtomosIsNotRunning, "Atomos is not running. from=(%s),wormhole=(%v)", from, wormhole).AddStack(nil)
 	}
-	_, err = am.waitReply(a, helper)
+	_, ierr := am.waitReply(a, helper)
 
 	//deallocAtomosMail(am)
-	return err.AddStack(nil)
+	return errOrNil(ierr.AddStack(nil))
 }
 
 func (a *BaseAtomos) PushTaskCallbackMail(name string, callback func(), recoverFn func(any)) {
@@ -433,7 +433,9 @@ func (a *BaseAtomos) onSyncMessaging(fromID ID, name string, handler MessageHand
 				a.process.onRecoverHook(a.id, err)
 			}
 		}()
-		out, err = handler(fromID, a.instance, in)
+		var herr error
+		out, herr = handler(fromID, a.instance, in)
+		err = asError(herr)
 		if err != nil {
 			err = err.AddStack(nil)
 		}
@@ -472,7 +474,9 @@ func (a *BaseAtomos) onAsyncMessaging(fromID, toID ID, name string, handler Mess
 				a.process.onRecoverHook(a.id, err)
 			}
 		}()
-		out, err = handler(fromID, a.instance, in)
+		var herr error
+		out, herr = handler(fromID, a.instance, in)
+		err = asError(herr)
 		if err != nil {
 			err = err.AddStack(nil)
 		}
@@ -480,12 +484,12 @@ func (a *BaseAtomos) onAsyncMessaging(fromID, toID ID, name string, handler Mess
 		if intErr != nil {
 			a.log.coreFatal("BaseAtomos: onAsyncMessaging caller ID invalid, reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(toID, name, startupID, asyncID, out, err)
+			fromInternal.asyncCallback(toID, name, startupID, asyncID, out, errOrNil(err))
 		}
 	}()
 }
 
-func (a *BaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (a *BaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	if asyncID == 0 {
 		a.Log().Error("BaseAtomos: onAsyncMessagingCallback called with asyncID zero. in=(%v),err=(%v)", in, err)
 		return
@@ -501,7 +505,7 @@ func (a *BaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, 
 	handler(in, err)
 }
 
-func (a *BaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (a *BaseAtomos) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	// state 在 mailbox 锁内快照,避免与 setStopping/setHalted 的加锁写构成数据竞争
 	state := a.GetState()
 	a.asyncCallMutex.Lock()
@@ -531,7 +535,7 @@ func (a *BaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (sta
 
 // asyncTerminateSync 清账后到达的注册:在调用方 goroutine 上同步终结回调(带 recover),
 // 语义与停机清账一致——丢失的回调确定性以错误终结,而非静默消亡。
-func (a *BaseAtomos) asyncTerminateSync(fn func(out proto.Message, err *Error)) {
+func (a *BaseAtomos) asyncTerminateSync(fn func(out proto.Message, err error)) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.Log().Error("BaseAtomos: late async callback panics on terminate. err=(%v)", r)
@@ -541,7 +545,7 @@ func (a *BaseAtomos) asyncTerminateSync(fn func(out proto.Message, err *Error)) 
 		"BaseAtomos: Async callback cancelled by halt (late registration). atom=(%s),instance=(%d)", a.id.Info(), a.instanceID).AddStack(nil))
 }
 
-func (a *BaseAtomos) asyncPop(asyncID uint64) func(out proto.Message, err *Error) {
+func (a *BaseAtomos) asyncPop(asyncID uint64) func(out proto.Message, err error) {
 	a.asyncCallMutex.Lock()
 	defer a.asyncCallMutex.Unlock()
 	callback, ok := a.asyncCallbackMap[asyncID]
@@ -568,7 +572,7 @@ func (a *BaseAtomos) asyncCancelAll() {
 	// 先落 cleared 标记:并发的 asyncSet 在锁上排队,拿到锁后看到标记即走同步终结路径,
 	// 从根上关闭"清账快照之后插入、永不终结"的泄漏窗口
 	a.asyncCleared = true
-	pending := make([]func(out proto.Message, err *Error), 0, len(a.asyncCallbackMap))
+	pending := make([]func(out proto.Message, err error), 0, len(a.asyncCallbackMap))
 	for id, wrap := range a.asyncCallbackMap {
 		if wrap.fn != nil {
 			pending = append(pending, wrap.fn)
@@ -738,7 +742,7 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 			a.setBusy(name, am.arg)
 			defer a.setWaiting(name)
 
-			a.holder.onAsyncMessagingCallback(am.asyncID, am.arg, am.err)
+			a.holder.onAsyncMessagingCallback(am.asyncID, am.arg, errOrNil(am.err))
 		}
 	case BaseAtomosMailTask:
 		{

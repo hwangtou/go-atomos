@@ -113,20 +113,20 @@ func (e *ElementLocal) IdleTime() time.Duration {
 
 // SyncMessagingByName
 // 同步调用，通过名字调用Element的消息处理函数。
-func (e *ElementLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err *Error) {
+func (e *ElementLocal) SyncMessagingByName(callerID ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (out proto.Message, err error) {
 	return e.atomos.PushSyncMessage(callerID, name, in, ext)
 }
 
 // AsyncMessagingByName
 // 异步调用，通过名字调用Element的消息处理函数。
-func (e *ElementLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (e *ElementLocal) AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(proto.Message, error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	return e.atomos.PushAsyncMessage(callerID, name, in, callback, ext)
 }
 
 // asyncCallback
 // 内部使用，仅供ID实现调用。
 // Internal use only, for ID implementation only.
-func (e *ElementLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (e *ElementLocal) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	e.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)
 }
 
@@ -138,11 +138,11 @@ func (e *ElementLocal) DecoderByName(name string) (MessageDecoder, MessageDecode
 	return decoderFn.InDec, decoderFn.OutDec
 }
 
-func (e *ElementLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (e *ElementLocal) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	return NewError(ErrCodeFrameworkIncorrectUsage, "Element: Cannot kill an element.").AddStack(e)
 }
 
-func (e *ElementLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error {
+func (e *ElementLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) error {
 	return e.atomos.PushWormholeMailAndWaitReply(callerID, wormhole, ext)
 }
 
@@ -177,7 +177,7 @@ func (e *ElementLocal) CosmosMain() *CosmosLocal {
 // Atom kill itself from inner
 func (e *ElementLocal) KillSelf() {
 	if err := e.atomos.PushKillMail(e, nil); err != nil {
-		e.Log().Error("Element: KillSelf failed. err=(%v)", err.AddStack(e))
+		e.Log().Error("Element: KillSelf failed. err=(%v)", asError(err).AddStack(e))
 		return
 	}
 	e.Log().Info("Element: KillSelf.")
@@ -216,7 +216,7 @@ func (e *ElementLocal) Config() map[string][]byte {
 	return e.cosmosLocal.runnable.config.Customize
 }
 
-func (e *ElementLocal) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+func (e *ElementLocal) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return e.atomos.asyncSet(callback)
 }
 
@@ -264,7 +264,7 @@ func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
 
 // Implementation of Element
 
-func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...any) (ID, *IDTracker, error) {
 	if fromLocalOrRemote && tracker == nil {
 		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "IDTrackerInfo: IDTrackerInfo is nil.").AddStack(e)
 	}
@@ -283,7 +283,8 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, fromLocalO
 	if !ok || persistence == nil {
 		return nil, nil, NewErrorf(ErrCodeAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
-	return e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, false, fromLocalOrRemote)
+	atom, t, serr := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, false, fromLocalOrRemote)
+	return atom, t, errOrNil(serr)
 }
 
 func (e *ElementLocal) GetAtomsNum() int {
@@ -332,7 +333,7 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 	return info
 }
 
-func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, *Error) {
+func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	// Reject new atoms while the node is draining. Routing already steers new
 	// traffic away from Draining nodes, but callers with stale routes or pinned
 	// connections can still land a spawn here — refuse it so the caller can
@@ -376,7 +377,7 @@ func (e *ElementLocal) onAsyncMessaging(fromID ID, name string, startupID, async
 	e.atomos.onAsyncMessaging(fromID, e, name, handler, startupID, asyncID, in)
 }
 
-func (e *ElementLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {
+func (e *ElementLocal) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
 	e.atomos.onAsyncMessagingCallback(asyncID, in, err)
 }
 
@@ -404,7 +405,7 @@ func (e *ElementLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
-		return err.AddStack(e)
+		return asError(err).AddStack(e)
 	}
 	return nil
 }
@@ -447,10 +448,10 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 
 		// 启动一个goroutine来处理任务
 		go func(a *AtomLocal, n string) {
-			var err *Error
+			var err error
 			defer func() {
 				if r := recover(); r != nil {
-					e.Log().Fatal("Element: onStopping, killing atom recovers from panic. err=(%v)", err.AddPanicStack(e, 3, r))
+					e.Log().Fatal("Element: onStopping, killing atom recovers from panic. err=(%v)", asError(err).AddPanicStack(e, 3, r))
 				}
 			}()
 			defer exitWG.Done()
@@ -519,7 +520,7 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 		e.Log().Fatal(err.Error())
 		return err
 	}
-	if err = elemPersistence.SetElementData(data); err != nil {
+	if err = asError(elemPersistence.SetElementData(data)); err != nil {
 		e.Log().Error("Element: onStopping, saving data failed, set atom data error. id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		goto autoLoad
@@ -532,7 +533,7 @@ autoLoad:
 	if !ok || pa == nil {
 		return nil
 	}
-	if err = pa.Unload(); err != nil {
+	if err = asError(pa.Unload()); err != nil {
 		e.Log().Error("Element: onStopping, unload failed. id=(%s),instance=(%+v),err=(%s)",
 			e.GetIDInfo().Info(), e.atomos.String(), err.AddStack(e))
 		return err.AddStack(e)
@@ -846,7 +847,7 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
 	pa, ok := current.Developer.(ElementLoader)
 	if ok && pa != nil {
-		if err = pa.Load(e, runnable.config.Customize, args...); err != nil {
+		if err = asError(pa.Load(e, runnable.config.Customize, args...)); err != nil {
 			return err.AddStack(e)
 		}
 	}
@@ -854,14 +855,15 @@ func (e *ElementLocal) cosmosElementSpawn(c *CosmosLocal, runnable *CosmosRunnab
 	if ok && persistence != nil {
 		elemPersistence := persistence.ElementAutoData()
 		if elemPersistence != nil {
-			data, err = elemPersistence.GetElementData()
-			if err != nil {
+			var gerr error
+			data, gerr = elemPersistence.GetElementData()
+			if err = asError(gerr); err != nil {
 				return err.AddStack(e)
 			}
 		}
 	}
-	if err := current.Interface.ElementSpawner(e, e.atomos.instance, data, args...); err != nil {
-		return err.AddStack(e)
+	if serr := current.Interface.ElementSpawner(e, e.atomos.instance, data, args...); serr != nil {
+		return asError(serr).AddStack(e)
 	}
 	return nil
 }

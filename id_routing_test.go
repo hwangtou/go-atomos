@@ -334,8 +334,8 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 	if err == nil {
 		t.Fatal("[核心] SpawnAtom on draining node should be rejected, but succeeded")
 	}
-	if err.Code != ErrCodeCosmosNodeDraining {
-		t.Fatalf("[核心] expected ErrCosmosNodeDraining, got code=(%v) err=(%v)", err.Code, err)
+	if CodeOf(err) != ErrCodeCosmosNodeDraining {
+		t.Fatalf("[核心] expected ErrCosmosNodeDraining, got code=(%v) err=(%v)", CodeOf(err), err)
 	}
 	t.Log("[核心验证] Remote spawn on draining node rejected with ErrCosmosNodeDraining.")
 
@@ -345,7 +345,7 @@ func TestDrain_SpawnRejectedWhenDraining(t *testing.T) {
 		t.Fatalf("getLocalElement failed: %v", gerr)
 	}
 	_, _, lerr := localElem.SpawnAtom(cluster.targetProcess.local, "dr_atom_local", nil, nil, true)
-	if lerr == nil || lerr.Code != ErrCodeCosmosNodeDraining {
+	if lerr == nil || CodeOf(lerr) != ErrCodeCosmosNodeDraining {
 		t.Fatalf("Local spawn on draining node should be rejected with ErrCosmosNodeDraining, got (%v)", lerr)
 	}
 	t.Log("[核心验证] Local spawn on draining node rejected with ErrCosmosNodeDraining.")

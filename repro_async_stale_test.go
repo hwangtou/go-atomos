@@ -77,7 +77,7 @@ type reproErrCode struct {
 	v  int64
 }
 
-func (c *reproErrCode) set(err *Error) { c.mu.Lock(); c.v = err.GetCode(); c.mu.Unlock() }
+func (c *reproErrCode) set(err error) { c.mu.Lock(); c.v = CodeOf(err); c.mu.Unlock() }
 func (c *reproErrCode) get() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -109,13 +109,13 @@ func (a *reproAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Mes
 var reproStore = map[string]proto.Message{}
 
 // AtomAutoData:使 getAtomFromRemote 在 atom 不存在时自动重 Spawn(与生产对端业务行为一致)
-func (a *reproAtom) GetAtomData(name string) (proto.Message, *Error) {
+func (a *reproAtom) GetAtomData(name string) (proto.Message, error) {
 	if d, ok := reproStore[name]; ok {
 		return d, nil
 	}
 	return &Config{Cosmos: "data:" + name}, nil
 }
-func (a *reproAtom) SetAtomData(name string, data proto.Message) *Error {
+func (a *reproAtom) SetAtomData(name string, data proto.Message) error {
 	reproStore[name] = data
 	return nil
 }
@@ -129,9 +129,9 @@ func (d *reproDev) ElementAutoData() ElementAutoData   { return nil }
 
 type reproMainScript struct{}
 
-func (s *reproMainScript) OnBoot(local *CosmosProcess) *Error    { return nil }
-func (s *reproMainScript) OnStartUp(local *CosmosProcess) *Error { return nil }
-func (s *reproMainScript) OnShutdown() *Error                    { return nil }
+func (s *reproMainScript) OnBoot(local *CosmosProcess) error    { return nil }
+func (s *reproMainScript) OnStartUp(local *CosmosProcess) error { return nil }
+func (s *reproMainScript) OnShutdown() error                    { return nil }
 
 // ---- 复现 ----
 
@@ -145,10 +145,10 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	dev := &reproDev{}
 	elemImpl := NewImplementationFromDeveloper(dev)
 	elemImpl.Interface = NewInterfaceFromDeveloper(reproElemName, dev)
-	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
-	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) *Error {
+	elemImpl.Interface.AtomSpawner = func(s AtomSelfID, a Atomos, arg, data proto.Message, args ...ArgsForBaseAtomos) error {
 		return nil
 	}
 	elemImpl.ElementHandlers = map[string]MessageHandler{}
@@ -168,7 +168,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 		for _, e := range logger.errs {
 			t.Logf(" captured error log: %s", e)
 		}
-		t.Fatalf("process start failed: %v", err.Message)
+		t.Fatalf("process start failed: %v", err)
 	}
 	defer func() {
 		_ = process.Stop()
@@ -181,9 +181,9 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T0: 首次 Spawn player1(生产对应玩家注册:SpawnAtom 带 arg,AutoData 元素必需)
 	spawnArg := &Config{Cosmos: "spawnArg"}
-	atomIDA, _, err := elem.SpawnAtom(process.local, reproAtomName, spawnArg, nil, false)
-	if err != nil {
-		t.Fatalf("spawn atom failed: %v", err.Message)
+	atomIDA, _, serr := elem.SpawnAtom(process.local, reproAtomName, spawnArg, nil, false)
+	if serr != nil {
+		t.Fatalf("spawn atom failed: %v", serr)
 	}
 	atomA, ok := atomIDA.(*AtomLocal)
 	if !ok {
@@ -192,9 +192,9 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T1: 实例 A 注册异步回调(等价于业务异步请求经 PushAsyncMessage 的 asyncSet)
 	var callbackInvoked, callbackConsumed reproCounter // 成功消费(非清账终结)次数
-	startupID, asyncID := atomA.atomos.asyncSet(func(out proto.Message, err *Error) {
+	startupID, asyncID := atomA.atomos.asyncSet(func(out proto.Message, err error) {
 		callbackInvoked.add()
-		if err == nil || err.GetCode() != ErrCodeAsyncCallbackCancelledByHalt {
+		if err == nil || CodeOf(err) != ErrCodeAsyncCallbackCancelledByHalt {
 			callbackConsumed.add()
 		}
 	})
@@ -206,10 +206,10 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	// T1.5: 注册一个"在途"回调(不投递回复)——验证 Kill 时清账终结
 	pendingInvoked := 0
 	pendingCode := int64(0)
-	atomA.atomos.asyncSet(func(out proto.Message, err *Error) {
+	atomA.atomos.asyncSet(func(out proto.Message, err error) {
 		pendingInvoked++
 		if err != nil {
-			pendingCode = err.GetCode()
+			pendingCode = CodeOf(err)
 		}
 	})
 	if n := atomA.atomos.AsyncCallbackPending(); n != 2 {
@@ -218,7 +218,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T3: Kill 实例 A(等价于空闲 1 分钟 KillSelf)
 	if err := atomA.Kill(process.local, []ArgsForBaseAtomos{ArgBaseAtomosWaitKilled()}); err != nil {
-		t.Fatalf("kill atom failed: %v", err.Message)
+		t.Fatalf("kill atom failed: %v", err)
 	}
 	time.Sleep(200 * time.Millisecond)
 
@@ -239,7 +239,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	// 清账完成后到达的注册:不再入表静默丢失,而是同步以 ErrAsyncCallbackCancelledByHalt 终结
 	var lostCallback reproCounter
 	var lostErrCode reproErrCode
-	atomA.atomos.asyncSet(func(out proto.Message, err *Error) {
+	atomA.atomos.asyncSet(func(out proto.Message, err error) {
 		lostCallback.add()
 		if err != nil {
 			lostErrCode.set(err)
@@ -258,9 +258,9 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// T4: 模拟用户核心侧按名字再取(getAtomFromRemote)→ Halt 状态下按旧数据重生新实例 B
 	// GetAtomData 返回上次保存的数据即可通过;这里让 GetAtomData 有数据:
-	atomIDB, _, err := elem.GetAtomID(reproAtomName, nil, false, nil)
-	if err != nil {
-		t.Fatalf("respawn atom failed: %v", err.Message)
+	atomIDB, _, gerr := elem.GetAtomID(reproAtomName, nil, false, nil)
+	if gerr != nil {
+		t.Fatalf("respawn atom failed: %v", gerr)
 	}
 	if atomIDB == atomIDA {
 		t.Fatalf("expected new atom instance after recycle")
@@ -305,7 +305,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 
 	// 对照组: 同一实例注册并投递 → 回调恰好一次,无报错
 	var callbackInvoked2 reproCounter
-	_, asyncID2 := atomIDB.(*AtomLocal).atomos.asyncSet(func(out proto.Message, err *Error) {
+	_, asyncID2 := atomIDB.(*AtomLocal).atomos.asyncSet(func(out proto.Message, err error) {
 		callbackInvoked2.add()
 	})
 	callbackID.(idInternal).asyncCallback(callbackID, "ReproAsync", startupID, asyncID2, nil, nil)

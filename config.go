@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, *Error) {
+func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) (*Config, error) {
 	dat, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, NewErrorf(ErrCodeCosmosConfigInvalid, "Read failed, err=(%v)", err).AddStack(nil)
@@ -84,7 +84,7 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 
 // ValidateSupervisorConfig validates the supervisor (cluster) section of the
 // config. Returns nil when clustering is disabled.
-func (x *Config) ValidateSupervisorConfig() *Error {
+func (x *Config) ValidateSupervisorConfig() error {
 	if x == nil {
 		return NewError(ErrCodeCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}
@@ -98,7 +98,7 @@ func (x *Config) ValidateSupervisorConfig() *Error {
 }
 
 // ValidateCosmosNodeConfig validates the node-level fields (names, paths).
-func (x *Config) ValidateCosmosNodeConfig() *Error {
+func (x *Config) ValidateCosmosNodeConfig() error {
 	if x == nil {
 		return NewError(ErrCodeCosmosConfigInvalid, "Config is nil").AddStack(nil)
 	}

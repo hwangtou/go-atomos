@@ -78,7 +78,7 @@ type AppLoggingToFile struct {
 	// Auto Cleanup
 	autoCleanup bool
 	// Error Handler
-	errHandler func(*Error)
+	errHandler func(error)
 
 	// writeMu serializes all file writes and rotations.
 	//
@@ -104,7 +104,7 @@ type AppLoggingToFile struct {
 // logFileMaxSize: the max size of a log file. If it is 0, then it is 10MB.
 // logPathMaxRatio: the max size of the log path. If it is 0, then it is 30 times of logFileMaxSize. If it is -1, then auto cleanup is off. Use a number more than 2 is recommended.
 // errHandler: the error handler. If it is nil, then the error will be ignored.
-func NewAppLoggingToFile(logPath string, logFileMaxSize, logPathMaxRatio int64, errHandler func(*Error)) (*AppLoggingToFile, *Error) {
+func NewAppLoggingToFile(logPath string, logFileMaxSize, logPathMaxRatio int64, errHandler func(error)) (*AppLoggingToFile, error) {
 	if err := utilFileEnsureDirectory(logPath, AppLoggingPathPerm, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
@@ -229,7 +229,7 @@ func (l *AppLoggingToFile) checkLogPathSize() *Error {
 
 func (l *AppLoggingToFile) onError(err *Error) {
 	if l.errHandler != nil {
-		l.errHandler(err)
+		l.errHandler(errOrNil(err))
 	}
 }
 

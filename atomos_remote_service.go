@@ -45,7 +45,7 @@ func (a *atomosRemoteService) DrainNode(ctx context.Context, req *CosmosRemoteDr
 		deadline = time.Duration(req.GetDeadlineSec()) * time.Second
 	}
 	if err := a.process.Drain(deadline); err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+		rsp.Error = asError(err).AddStack(a.process.local)
 		return rsp, nil
 	}
 	return rsp, nil
@@ -57,16 +57,16 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 	}()
 	rsp := &CosmosRemoteGetAtomIDRsp{}
 	// Get element.
-	elem, err := a.process.local.getLocalElement(req.Element)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+	elem, ierr := a.process.local.getLocalElement(req.Element)
+	if ierr != nil {
+		rsp.Error = ierr.AddStack(a.process.local)
 		return rsp, nil
 	}
 	// Get atom.
 	atom, _, err := elem.GetAtomID(req.Atom, nil, false)
 	//a.process.logging.PushLogging(elem.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("GetAtomID: element=(%s) atom=(%s) atom=(%v) err=(%v)", req.Element, req.Atom, atom, err))
 	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+		rsp.Error = asError(err).AddStack(a.process.local)
 		return rsp, nil
 	}
 
@@ -168,12 +168,12 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 		}
 	}
 
-	atom, _, err := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
+	atom, _, serr := elem.SpawnAtom(callerID, req.Atom, in, nil, false)
 	if atom != nil {
 		rsp.Id = atom.GetIDInfo()
 	}
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+	if serr != nil {
+		rsp.Error = asError(serr).AddStack(a.process.local)
 	}
 
 	return rsp, nil
@@ -235,12 +235,12 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 		}
 
 		// Sync messaging.
-		out, err := id.SyncMessagingByName(callerID, req.Message, in, createExtForCosmosArgs(req.CosmosArgs))
+		out, serr := id.SyncMessagingByName(callerID, req.Message, in, createExtForCosmosArgs(req.CosmosArgs))
 		if out != nil {
 			rsp.Reply, _ = anypb.New(out)
 		}
-		if err != nil {
-			rsp.Error = err.AddStack(a.process.local)
+		if serr != nil {
+			rsp.Error = asError(serr).AddStack(a.process.local)
 		}
 		return rsp, nil
 	default:
@@ -302,16 +302,16 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 	}
 
 	// Async messaging.
-	var callback func(message proto.Message, err *Error)
+	var callback func(message proto.Message, err error)
 	if req.AsyncId != 0 {
-		callback = func(message proto.Message, err *Error) {
+		callback = func(message proto.Message, err error) {
 			a.process.logging.PushLogging(callerID.GetIDInfo(), LogLevel_CoreFatal, "Should not execute callback of async messaging because async id is not 0. This should never happen.")
 		}
 	}
 
 	//a.process.logging.PushLogging(callerID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 2: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callerID, id, req.StartupId, req.AsyncId, req.Message, in))
 	if err := id.AsyncMessagingByName(callerID, req.Message, in, callback, createExtForCosmosArgs(req.CosmosArgs)); err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+		rsp.Error = asError(err).AddStack(a.process.local)
 		return rsp, nil
 	}
 	return rsp, nil
@@ -377,7 +377,7 @@ func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *C
 		rsp.Error = err.AddStack(nil)
 		return rsp, nil
 	}
-	callbackIDInternal.asyncCallback(toID, req.Message, req.StartupId, req.AsyncId, in, req.Error)
+	callbackIDInternal.asyncCallback(toID, req.Message, req.StartupId, req.AsyncId, in, errOrNil(req.Error))
 	return rsp, nil
 }
 
@@ -401,15 +401,14 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 	cosmosArgs := createExtForCosmosArgs(req.CosmosArgs)
 
 	// Get atom.
-	atom, _, err := elem.GetAtomID(req.Id.Atom, nil, false, nil)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+	atom, _, gerr := elem.GetAtomID(req.Id.Atom, nil, false, nil)
+	if gerr != nil {
+		rsp.Error = asError(gerr).AddStack(a.process.local)
 		return rsp, nil
 	}
 	// Kill atom.
-	err = atom.Kill(callerID, cosmosArgs)
-	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+	if kerr := atom.Kill(callerID, cosmosArgs); kerr != nil {
+		rsp.Error = asError(kerr).AddStack(a.process.local)
 	}
 	return rsp, nil
 }
@@ -427,7 +426,7 @@ func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosR
 	}
 	err := a.process.local.ElementBroadcast(callerID, req.Key, req.ContentType, req.ContentBuffer)
 	if err != nil {
-		rsp.Error = err.AddStack(a.process.local)
+		rsp.Error = asError(err).AddStack(a.process.local)
 	}
 	return rsp, nil
 }

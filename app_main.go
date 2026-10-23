@@ -87,7 +87,7 @@ func Run(runnable *CosmosRunnable, opts ...RunOption) {
 	}
 
 	var app *App
-	var err *Error
+	var err error
 	if rc.useWorkingPath {
 		if rc.workingPath == "" {
 			if wd, er := os.Getwd(); er == nil {
@@ -169,7 +169,7 @@ func boolFlag(b *bool) bool {
 	return *b
 }
 
-func logAndExit(process *CosmosProcess, format string, err *Error) {
+func logAndExit(process *CosmosProcess, format string, err error) {
 	msg := fmt.Sprintf(format, err)
 	process.Self().coreLog().coreFatal(msg)
 	log.Print(msg)
@@ -210,12 +210,12 @@ func launchAndRun(app *App, process *CosmosProcess, runnable *CosmosRunnable) {
 	}()
 	runnable.SetConfig(app.config)
 	if err := process.Start(runnable); err != nil {
-		process.Self().coreLog().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		process.Self().coreLog().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", asError(err).AddStack(nil))
 		return
 	}
 	process.Self().coreLog().coreInfo("App: Started.")
 	<-app.WaitExitApp()
 	if err := process.Stop(); err != nil {
-		process.Self().coreLog().coreFatal("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
+		process.Self().coreLog().coreFatal("App: Runnable stops with error. err=(%v)", asError(err).AddStack(nil))
 	}
 }

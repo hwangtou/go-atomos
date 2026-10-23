@@ -154,15 +154,15 @@ func (a *BaseRemote) IdleTime() time.Duration {
 	return time.Duration(rsp.IdleTime)
 }
 
-func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err *Error) {
+func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext []ArgsForBaseAtomos) (reply proto.Message, err error) {
 	helper := createBaseAtomosHelper(BaseAtomosMailSync, ext)
 	if helper.hasErrors() {
 		return nil, helper.getError()
 	}
 
-	client, ctx, cancel, err := a.getCli(helper.timeout)
-	if err != nil {
-		return nil, err.AddStack(nil)
+	client, ctx, cancel, cerr := a.getCli(helper.timeout)
+	if cerr != nil {
+		return nil, cerr.AddStack(nil)
 	}
 	defer cancel()
 
@@ -191,12 +191,12 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 		}
 	}
 	if rsp.Error != nil {
-		err = rsp.Error.AddStack(nil)
+		return reply, rsp.Error.AddStack(nil)
 	}
-	return reply, err
+	return reply, nil
 }
 
-func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error) {
+func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext []ArgsForBaseAtomos) (errBeforeExec error) {
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
 		if callback != nil {
@@ -217,9 +217,9 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		}
 	}
 
-	client, ctx, cancel, err := a.getCli(helper.timeout)
-	if err != nil {
-		return err.AddStack(nil)
+	client, ctx, cancel, cerr := a.getCli(helper.timeout)
+	if cerr != nil {
+		return cerr.AddStack(nil)
 	}
 	defer cancel()
 
@@ -255,16 +255,16 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 	return nil
 }
 
-func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error) {
+func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	if asyncID == 0 {
 		//a.cosmos.process.logging.pushFrameworkInfoLog("PushAsyncMessageCallback called with empty asyncID. from=(%v),to=(%v),name=(%s),reply=(%v),err=(%v)", callbackID, toID, name, reply, err)
 		return
 	}
 	//a.cosmos.process.logging.PushLogging(callbackID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 3: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callbackID, toID, startupID, asyncID, name, reply))
-	cli, ctx, cancel, err := a.getCli(atomosClientTimeout)
-	if err != nil {
+	cli, ctx, cancel, cerr := a.getCli(atomosClientTimeout)
+	if cerr != nil {
 		// TODO: need retry?
-		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback getCli error. name=(%s),reply=(%v),err=(%v),cliErr=(%v)", name, reply, err, err)
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback getCli error. name=(%s),reply=(%v),err=(%v),cliErr=(%v)", name, reply, err, cerr)
 		return
 	}
 	defer cancel()
@@ -285,7 +285,7 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 		AsyncId:    asyncID,
 		Message:    name,
 		Args:       anyReply,
-		Error:      err,
+		Error:      asError(err),
 	})
 	if er != nil {
 		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response error. name=(%s),reply=(%v),err=(%v),respErr=(%v)", name, reply, err, er)
@@ -296,15 +296,15 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 	}
 }
 
-func (a *BaseRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) *Error {
+func (a *BaseRemote) Kill(callerID ID, ext []ArgsForBaseAtomos) error {
 	helper := createBaseAtomosHelper(BaseAtomosMailKill, ext)
 	if helper.hasErrors() {
 		return helper.getError()
 	}
 
-	cli, ctx, cancel, err := a.getCli(helper.timeout)
-	if err != nil {
-		return err.AddStack(nil)
+	cli, ctx, cancel, cerr := a.getCli(helper.timeout)
+	if cerr != nil {
+		return cerr.AddStack(nil)
 	}
 	defer cancel()
 

@@ -11,12 +11,12 @@ import (
 	"strings"
 )
 
-func (x *Config) Check() *Error {
+func (x *Config) Check() error {
 	if err := x.ValidateCosmosNodeConfig(); err != nil {
-		return err.AddStack(nil)
+		return asError(err).AddStack(nil)
 	}
 	if err := x.ValidateSupervisorConfig(); err != nil {
-		return err.AddStack(nil)
+		return asError(err).AddStack(nil)
 	}
 	return nil
 }
@@ -72,6 +72,30 @@ func NewErrorf(code int64, format string, args ...interface{}) *Error {
 		Message:    fmt.Sprintf(format, args...),
 		CallStacks: nil,
 	}
+}
+
+// errOrNil converts a nil *Error to a nil error interface. Returning a nil
+// *Error through an error-typed API boundary would produce a non-nil
+// interface holding a nil pointer (the typed-nil trap), breaking
+// "err != nil" checks; every such boundary must go through errOrNil.
+func errOrNil(err *Error) error {
+	if err == nil {
+		return nil
+	}
+	return err
+}
+
+// asError converts an error-typed value back to *Error for framework-internal
+// handling (stacks, code inspection). A non-*Error value — one constructed
+// outside the framework — is wrapped with the reserved ErrCodeUnknown code.
+func asError(err error) *Error {
+	if err == nil {
+		return nil
+	}
+	if e, ok := err.(*Error); ok {
+		return e
+	}
+	return NewError(ErrCodeUnknown, err.Error())
 }
 
 func (x *Error) AddPanicStack(id SelfID, skip int, reason interface{}, args ...interface{}) *Error {
