@@ -49,7 +49,7 @@ type CosmosNode interface {
 //	runnable := &atomos.CosmosRunnable{}
 //	runnable.SetConfig(config).
 //	         SetMainScript(myScript).
-//	         AddElementImplementation(myElementImpl, true)
+//	         AddElementImplementationWithSpawn(myElementImpl)
 //	atomos.Main(*runnable)
 type CosmosRunnable struct {
 	config       *Config
@@ -102,7 +102,19 @@ func (r *CosmosRunnable) Check() error {
 
 // AddElementImplementation CosmosRunnable构造器方法，用于添加ElementImplementation（实现）。
 // Construct method of CosmosRunnable, uses to add ElementImplementation.
-func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation, setSpawn bool) *CosmosRunnable {
+func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
+	return r.addElementImplementation(i, false)
+}
+
+// AddElementImplementationWithSpawn 与 AddElementImplementation 相同，并额外将该
+// Element 标记为 spawn 入口（等价于再调用 SetElementSpawn）。
+// AddElementImplementationWithSpawn is AddElementImplementation plus marking the
+// Element as a spawn entry (equivalent to also calling SetElementSpawn).
+func (r *CosmosRunnable) AddElementImplementationWithSpawn(i *ElementImplementation) *CosmosRunnable {
+	return r.addElementImplementation(i, true)
+}
+
+func (r *CosmosRunnable) addElementImplementation(i *ElementImplementation, setSpawn bool) *CosmosRunnable {
 	//r.AddElementInterface(i.Interface)
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}

@@ -132,7 +132,7 @@ func main() {
 	runnable := &atomos.CosmosRunnable{}
 	runnable.
 		SetMainScript(&winMain{}).
-		AddElementImplementation(impl, true)
+		AddElementImplementationWithSpawn(impl)
 
 	// standalone 模式（Windows 不走 fork daemon）
 	os.Setenv("ATOMOS_STANDALONE", "true")

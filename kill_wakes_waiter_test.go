@@ -93,7 +93,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 			EnableElements: []string{kwElemName},
 		}).
 		SetMainScript(&kwMainScript{}).
-		AddElementImplementation(elemImpl, true)
+		AddElementImplementationWithSpawn(elemImpl)
 
 	if err := process.Start(runnable); err != nil {
 		for _, e := range logger.errs {

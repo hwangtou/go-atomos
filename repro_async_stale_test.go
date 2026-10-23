@@ -7,7 +7,7 @@ package atomos
 //
 // 移植自生产副本 repro_async_stale_test.go,适配当前仓库测试基建:
 // 使用 newCosmosProcess 直接建进程(不走 InitCosmosProcess 单例),
-// AddElementImplementation 带 setSpawn 参数,Spawner 闭包带 args 变参。
+// AddElementImplementationWithSpawn 标记 spawn 入口,Spawner 闭包带 args 变参。
 
 import (
 	"strings"
@@ -162,7 +162,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 			EnableElements: []string{reproElemName},
 		}).
 		SetMainScript(&reproMainScript{}).
-		AddElementImplementation(elemImpl, true)
+		AddElementImplementationWithSpawn(elemImpl)
 
 	if err := process.Start(runnable); err != nil {
 		for _, e := range logger.errs {

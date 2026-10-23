@@ -38,7 +38,7 @@ func newTestCosmosRunnable(id *IDInfo) *CosmosRunnable {
 		newErrorHook:       nil,
 	}
 	r.
-		AddElementImplementation(GetForTestAtomosImplement(&testRunnableDev{}), true).
+		AddElementImplementationWithSpawn(GetForTestAtomosImplement(&testRunnableDev{})).
 		SetMainScript(&testMainScript{})
 	return r
 }
