@@ -134,6 +134,10 @@ type BaseAtomos struct {
 	asyncCallMutex   sync.Mutex
 	asyncCallbackID  uint64
 	asyncCallbackMap map[uint64]asyncCallbackWrap
+	// asyncCleared 标记停机清账已完成:此后到达的 asyncSet 不再入表(避免清账后插入成为
+	// 永不终结的泄漏条目),改为同步以 ErrAsyncCallbackCancelledByHalt 终结回调。
+	// 由 asyncCallMutex 保护。
+	asyncCleared bool
 
 	stoppingChan chan bool
 }
@@ -274,8 +278,17 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 	var startupID, asyncID uint64
 	if callback != nil {
 		startupID, asyncID = from.asyncSet(callback)
-		if startupID == 0 || asyncID == 0 {
-			a.log.coreFatal("PushAsyncMessage: asyncSet returns zero ID, but it should not happen. startupID=(%d),asyncID=(%d)", startupID, asyncID)
+		// asyncID==0 表示发送方实例已完成停机清账:回调已被同步以
+		// ErrAsyncCallbackCancelledByHalt 终结。此时不得再投递消息——
+		// 否则调用方以为已取消,消息却在对端真实执行。返回 nil:回调已被终结,
+		// 调用方不会挂起,正常路径(asyncID 从 1 开始递增)不受影响。
+		if asyncID == 0 {
+			return nil
+		}
+		if startupID == 0 {
+			// 不应发生;coreFatal 后同样不得投递,避免调用方以为已取消而消息真实执行。
+			a.log.coreFatal("PushAsyncMessage: asyncSet returns zero startupID, but it should not happen. startupID=(%d),asyncID=(%d)", startupID, asyncID)
+			return nil
 		}
 	}
 
@@ -464,22 +477,53 @@ func (a *BaseAtomos) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, 
 	}
 	handler := a.asyncPop(asyncID)
 	if handler == nil {
-		a.Log().Error("BaseAtomos: OnAsyncMessagingCallback handler not found. asyncID=(%d),in=(%v),err=(%v)", asyncID, in, err)
+		// instance 为当前实例 id：与 asyncSet 日志中的注册实例比对，
+		// 不一致即说明回复落到了同名的新实例（注册实例已换代或已死）。
+		a.Log().Error("BaseAtomos: OnAsyncMessagingCallback handler not found. asyncID=(%d),instance=(%d),in=(%v),err=(%v)", asyncID, a.instanceID, in, err)
 		return
 	}
+	a.Log().Debug("BaseAtomos: OnAsyncMessagingCallback consumed. asyncID=(%d),instance=(%d)", asyncID, a.instanceID)
 	handler(in, err)
 }
 
 func (a *BaseAtomos) asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64) {
+	// state 在 mailbox 锁内快照,避免与 setStopping/setHalted 的加锁写构成数据竞争
+	state := a.GetState()
 	a.asyncCallMutex.Lock()
-	defer a.asyncCallMutex.Unlock()
+	// 停机清账已完成:不入表(否则成为清账后插入的泄漏条目),同步以专用错误码终结回调
+	if a.asyncCleared {
+		a.asyncCallMutex.Unlock()
+		a.Log().Warn("BaseAtomos: asyncSet on halted atom, terminate with cancelled error. instance=(%d),name=(%s)", a.instanceID, a.id.Info())
+		a.asyncTerminateSync(callback)
+		return a.process.startupID, 0
+	}
 	a.asyncCallbackID += 1
 	asyncID := a.asyncCallbackID
 	a.asyncCallbackMap[asyncID] = asyncCallbackWrap{
 		fn:  callback,
 		now: time.Now(),
 	}
+	a.asyncCallMutex.Unlock()
+	// 记录注册实例的 id 与状态：若实例已 Halt（发送方持有已死实例的 ID），
+	// 回调必然丢失，直接打 Warn 便于发现。
+	if state == BaseAtomosHalt {
+		a.Log().Warn("BaseAtomos: asyncSet on halted atom, callback will be lost. asyncID=(%d),instance=(%d),name=(%s)", asyncID, a.instanceID, a.id.Info())
+	} else {
+		a.Log().Debug("BaseAtomos: asyncSet registered. asyncID=(%d),instance=(%d),state=(%d),name=(%s)", asyncID, a.instanceID, state, a.id.Info())
+	}
 	return a.process.startupID, asyncID
+}
+
+// asyncTerminateSync 清账后到达的注册:在调用方 goroutine 上同步终结回调(带 recover),
+// 语义与停机清账一致——丢失的回调确定性以错误终结,而非静默消亡。
+func (a *BaseAtomos) asyncTerminateSync(fn func(out proto.Message, err *Error)) {
+	defer func() {
+		if r := recover(); r != nil {
+			a.Log().Error("BaseAtomos: late async callback panics on terminate. err=(%v)", r)
+		}
+	}()
+	fn(nil, NewErrorf(ErrAsyncCallbackCancelledByHalt,
+		"BaseAtomos: Async callback cancelled by halt (late registration). atom=(%s),instance=(%d)", a.id.Info(), a.instanceID).AddStack(nil))
 }
 
 func (a *BaseAtomos) asyncPop(asyncID uint64) func(out proto.Message, err *Error) {
@@ -491,6 +535,48 @@ func (a *BaseAtomos) asyncPop(asyncID uint64) func(out proto.Message, err *Error
 		return callback.fn
 	}
 	return nil
+}
+
+// AsyncCallbackPending 返回在途异步回调数量。业务侧(如空闲清理定时器)
+// 可在 KillSelf 前调用,非空时推迟自杀,给在途回复留排空窗口。
+func (a *BaseAtomos) AsyncCallbackPending() int {
+	a.asyncCallMutex.Lock()
+	defer a.asyncCallMutex.Unlock()
+	return len(a.asyncCallbackMap)
+}
+
+// asyncCancelAll 在 atom 停机时清账:把所有在途回调以 ErrAsyncCallbackCancelledByHalt 终结,
+// 避免"回调闭包随实例静默消亡"。每个回调独立 recover,回调 panic 不得阻断停机流程。
+// 同时收编 PushAsyncMessage 发送失败路径注册后无人消费的 map 泄漏条目。
+func (a *BaseAtomos) asyncCancelAll() {
+	a.asyncCallMutex.Lock()
+	// 先落 cleared 标记:并发的 asyncSet 在锁上排队,拿到锁后看到标记即走同步终结路径,
+	// 从根上关闭"清账快照之后插入、永不终结"的泄漏窗口
+	a.asyncCleared = true
+	pending := make([]func(out proto.Message, err *Error), 0, len(a.asyncCallbackMap))
+	for id, wrap := range a.asyncCallbackMap {
+		if wrap.fn != nil {
+			pending = append(pending, wrap.fn)
+		}
+		delete(a.asyncCallbackMap, id)
+	}
+	a.asyncCallMutex.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+	a.Log().Info("BaseAtomos: cancel pending async callbacks on halt. count=(%d)", len(pending))
+	err := NewErrorf(ErrAsyncCallbackCancelledByHalt,
+		"BaseAtomos: Async callback cancelled by halt. atom=(%s),instance=(%d)", a.id.Info(), a.instanceID).AddStack(nil)
+	for _, fn := range pending {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					a.Log().Error("BaseAtomos: pending async callback panics on cancel. err=(%v)", r)
+				}
+			}()
+			fn(nil, err)
+		}()
+	}
 }
 
 // State
@@ -680,23 +766,13 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 
 	// Fail any outstanding async callbacks. Once this atomos is halting it will
 	// never receive replies for them, so without this cleanup each entry (which
-	// captures the caller's closure) would leak forever. Invoke each callback
-	// with an "not running" error, then drop the entry.
-	a.asyncCallMutex.Lock()
-	for id, wrap := range a.asyncCallbackMap {
-		delete(a.asyncCallbackMap, id)
-		a.asyncCallMutex.Unlock()
-		if wrap.fn != nil {
-			func() {
-				defer func() {
-					_ = recover()
-				}()
-				wrap.fn(nil, NewError(ErrAtomosIsNotRunning, "Atomos: Halted before async reply received.").AddStack(nil))
-			}()
-		}
-		a.asyncCallMutex.Lock()
-	}
-	a.asyncCallMutex.Unlock()
+	// captures the caller's closure) would leak forever. Terminate each callback
+	// with ErrAsyncCallbackCancelledByHalt, then drop the entry; a callback that
+	// panics must not interrupt the clearing.
+	// 停机清账:在途回调逐一以 ErrAsyncCallbackCancelledByHalt 同步终结。
+	// 注意:清账发生在 setStopping 之前(保持本线既有顺序),asyncCancelAll 会先落
+	// asyncCleared 标记,此后到达的注册一律在 asyncSet 内同步终结,不依赖停机状态。
+	a.asyncCancelAll()
 
 	a.task.stopLock()
 	defer a.task.stopUnlock()
