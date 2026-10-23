@@ -3,6 +3,7 @@ package atomos
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -151,8 +152,11 @@ func (x *Error) Error() string {
 	return x.Message
 }
 
+// IsAtomExist reports whether x carries the ErrCodeAtomIsRunning code.
+//
+// Deprecated: use errors.Is(err, ErrAtomIsRunning) instead.
 func (x *Error) IsAtomExist() bool {
-	return x.Code == ErrCodeAtomIsRunning
+	return errors.Is(x, ErrAtomIsRunning)
 }
 
 func (x *Error) Scan(value interface{}) error {
