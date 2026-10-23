@@ -345,12 +345,12 @@ const file_for_test_proto_rawDesc = "" +
 	"\bTestMode\x12\b\n" +
 	"\x04None\x10\x00\x12\x18\n" +
 	"\x14SyncSelfCallDeadlock\x10\x01\"\x12\n" +
-	"\x10ForTestGreetingO2\x81\x02\n" +
-	"\rForTestAtomos\x122\n" +
-	"\fElementSpawn\x12\v.atomos.Nil\x1a\x13.atomos.ForTestData\"\x00\x12A\n" +
-	"\x0fElementSayHello\x12\x15.atomos.ForTestHelloI\x1a\x15.atomos.ForTestHelloO\"\x00\x127\n" +
-	"\x05Spawn\x12\x17.atomos.ForTestSpawnArg\x1a\x13.atomos.ForTestData\"\x00\x12@\n" +
-	"\bGreeting\x12\x18.atomos.ForTestGreetingI\x1a\x18.atomos.ForTestGreetingO\"\x00B&Z$github.com/hwangtou/go-atomos;atomosb\x06proto3"
+	"\x10ForTestGreetingO2\x91\x02\n" +
+	"\rForTestAtomos\x126\n" +
+	"\fElementSpawn\x12\v.atomos.Nil\x1a\x13.atomos.ForTestData\"\x04\x88\xb5\x18\x03\x12E\n" +
+	"\x0fElementSayHello\x12\x15.atomos.ForTestHelloI\x1a\x15.atomos.ForTestHelloO\"\x04\x88\xb5\x18\x01\x12;\n" +
+	"\x05Spawn\x12\x17.atomos.ForTestSpawnArg\x1a\x13.atomos.ForTestData\"\x04\x88\xb5\x18\x04\x12D\n" +
+	"\bGreeting\x12\x18.atomos.ForTestGreetingI\x1a\x18.atomos.ForTestGreetingO\"\x04\x88\xb5\x18\x02B&Z$github.com/hwangtou/go-atomos;atomosb\x06proto3"
 
 var (
 	file_for_test_proto_rawDescOnce sync.Once

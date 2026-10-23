@@ -5,6 +5,15 @@ option go_package = "github.com/hwangtou/go-atomos;atomos";
 
 import "atomos.proto";
 
+// NOTE: this file backs the framework's own tests only. After regenerating
+// with
+//   protoc -I. --go_out=. --go_opt=paths=source_relative \
+//     --go-atomos_out=. --go-atomos_opt=paths=source_relative for_test.proto
+// rename the outputs to for_test_pb_test.go and for_test_atomos_pb_test.go so
+// the ForTest* symbols stay out of the production export surface (they cannot
+// move to an internal/testatom subpackage: in-package tests importing a
+// subpackage that imports atomos would be an import cycle).
+
 // ForTestData is the spawn-time data for both Element and Atom.
 message ForTestData {
   string name = 1;
