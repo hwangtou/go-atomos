@@ -448,6 +448,9 @@ func (p *CosmosProcess) Drain(deadline time.Duration) *Error {
 	}
 	p.draining = true
 	p.drainCancel = make(chan struct{})
+	// drainCancel 会被 Stop 并发地 close 并置 nil(锁内)。watcher 里再读这个字段
+	// 会与置 nil 构成数据竞争,因此在锁内快照,按参数传给 watcher。
+	drainCancel := p.drainCancel
 	p.mutex.Unlock()
 
 	if deadline <= 0 {
@@ -463,13 +466,15 @@ func (p *CosmosProcess) Drain(deadline time.Duration) *Error {
 		}
 	}
 
-	go p.drainWatcher(deadline)
+	go p.drainWatcher(deadline, drainCancel)
 	return nil
 }
 
 // drainWatcher polls active atom count and triggers graceful exit when all
-// elements reach zero, or force-stops after the deadline.
-func (p *CosmosProcess) drainWatcher(deadline time.Duration) {
+// elements reach zero, or force-stops after the deadline. drainCancel 是 Drain
+// 时快照的取消通道:Stop 关闭它即退出,不直接读 p.drainCancel(该字段会被 Stop
+// 并发置 nil)。
+func (p *CosmosProcess) drainWatcher(deadline time.Duration, drainCancel chan struct{}) {
 	defer func() {
 		if r := recover(); r != nil {
 			p.local.Log().coreError("CosmosProcess: drainWatcher panicked. reason=(%v)", r)
@@ -482,7 +487,7 @@ func (p *CosmosProcess) drainWatcher(deadline time.Duration) {
 
 	for {
 		select {
-		case <-p.drainCancel:
+		case <-drainCancel:
 			p.local.Log().coreInfo("CosmosProcess: Drain cancelled by Stop(). Exiting drainWatcher.")
 			return
 		case <-ticker.C:
