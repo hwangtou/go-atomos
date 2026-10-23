@@ -28,6 +28,11 @@ type CosmosProcess struct {
 
 	startupID uint64
 
+	// app is the owning App, set when the process is created via
+	// App.NewCosmosProcess. Nil for processes constructed directly in tests;
+	// exitAfterDrain falls back to Stop in that case.
+	app *App
+
 	// instanceSeq is a process-global monotonic counter assigning a unique
 	// instanceID to every BaseAtomos (every atom spawn, element, cosmos).
 	// instanceID distinguishes a respawned atom instance from its predecessor
@@ -107,7 +112,7 @@ const (
 )
 
 // newCosmosProcess 创建进程
-// 该函数只能被InitCosmosProcess调用。
+// Callers: App.NewCosmosProcess (production/atomostest) and test fixtures.
 func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ...any) (*CosmosProcess, *Error) {
 	process := &CosmosProcess{}
 	if err := process.init(cosmosName, cosmosNode, logging, args...); err != nil {
@@ -284,6 +289,19 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) *Error {
 		}
 		p.local.runnable = runnable
 
+		// Apply per-process settings carried by the runnable. Unset options
+		// keep the CosmosProcess defaults established in init.
+		if runnable.messageTimeoutTracer != nil {
+			p.messageTimeoutTracer = *runnable.messageTimeoutTracer
+			p.messageTimeoutDefault = runnable.messageTimeoutDefault
+		}
+		if runnable.muteKeepaliveLog != nil {
+			p.muteKeepaliveLog = *runnable.muteKeepaliveLog
+		}
+		if runnable.idTrackerDebug != nil {
+			p.idTrackerDebug = *runnable.idTrackerDebug
+		}
+
 		// 启动时初始化脚本。
 		if err := p.mainScriptOnBootProtect(); err != nil {
 			p.local.Log().coreFatal("CosmosProcess: Main script boot failed. err=(%s)", err.Message)
@@ -414,10 +432,12 @@ func (p *CosmosProcess) stopFromOtherNodeAfterResponse() {
 	p.logging.stop()
 }
 
-// drainState marks whether the process has entered drain mode.
-// Guarded by p.mutex alongside p.state.
-var drainCheckInterval = 5 * time.Second
-var drainDefaultDeadline = 1 * time.Hour
+// Drain tuning constants. Never mutated at runtime (verified across the repo),
+// so they are constants rather than package-level variables.
+const (
+	drainCheckInterval   = 5 * time.Second
+	drainDefaultDeadline = 1 * time.Hour
+)
 
 // isDraining reports whether the process has entered drain mode. Spawn paths
 // check this to reject new atoms locally (see ElementLocal.SpawnAtom).
@@ -520,8 +540,8 @@ func (p *CosmosProcess) countActiveAtoms() int {
 
 // exitAfterDrain triggers graceful shutdown via the app's exit channel.
 func (p *CosmosProcess) exitAfterDrain() {
-	if app != nil {
-		app.ExitApp()
+	if p.app != nil {
+		p.app.ExitApp()
 	} else {
 		// No app context (e.g. test); stop directly.
 		p.Stop()
@@ -559,8 +579,8 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 // Stop 停止进程
 // 检查进程状态，如果是运行中，则调用OnShutdown，然后关闭网络监听。
 func (p *CosmosProcess) Stop() *Error {
-	// BUG: Guard against nil receiver — if sharedCosmosProcess was never initialized,
-	// calling Stop would panic. Return an error instead.
+	// Guard against a nil receiver — a process that was never initialized
+	// would panic on Stop. Return an error instead.
 	if p == nil {
 		return NewError(ErrCosmosProcessHasNotInitialized, "CosmosProcess: Process has not initialized.").AddStack(nil)
 	}
@@ -675,8 +695,8 @@ func (p *CosmosProcess) mainScriptOnShutdownProtect() (err *Error) {
 }
 
 func (p *CosmosProcess) Self() *CosmosLocal {
-	// BUG: Guard against nil receiver — callers may hold a nil *CosmosProcess
-	// if sharedCosmosProcess was never initialized.
+	// Guard against a nil receiver — callers may hold a nil *CosmosProcess if
+	// the process was never initialized.
 	if p == nil {
 		return nil
 	}
@@ -702,13 +722,17 @@ func (p *CosmosProcess) IsHealthy() bool {
 	return p.IsRunning()
 }
 
-func RecoveryMiddleware() grpc.UnaryServerInterceptor {
+// recoveryMiddleware returns a gRPC unary interceptor that recovers panics in
+// remote-service handlers and reports them through this process's logging.
+// It replaces the former package-level RecoveryMiddleware, which depended on
+// the deleted sharedCosmosProcess singleton.
+func (p *CosmosProcess) recoveryMiddleware() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				if sharedCosmosProcess != nil {
-					// BUG: Recover() needs a SelfID; use the local cosmos as the ID for consistent logging.
-					Recover(sharedCosmosProcess.Self())
+				if p != nil {
+					// Recover() needs a SelfID; use the local cosmos as the ID for consistent logging.
+					Recover(p.Self())
 				} else {
 					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
 				}
@@ -816,13 +840,13 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		if isTLS {
 			opts := []grpc.ServerOption{
 				*serverOption,
-				grpc.UnaryInterceptor(RecoveryMiddleware()),
+				grpc.UnaryInterceptor(p.recoveryMiddleware()),
 			}
 			opts = append(opts, publicOption...)
 			svr = grpc.NewServer(opts...)
 		} else {
 			opts := []grpc.ServerOption{
-				grpc.UnaryInterceptor(RecoveryMiddleware()),
+				grpc.UnaryInterceptor(p.recoveryMiddleware()),
 			}
 			opts = append(opts, publicOption...)
 			svr = grpc.NewServer(opts...)

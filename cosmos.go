@@ -70,6 +70,13 @@ type CosmosRunnable struct {
 	messageTimeoutHook func(id *IDInfo, timeout time.Duration, message string, args proto.Message)
 	recoverHook        func(id *IDInfo, err *Error)
 	newErrorHook       func(err *Error)
+
+	// Per-process settings applied to the CosmosProcess at Start. Nil fields
+	// keep the CosmosProcess defaults.
+	messageTimeoutTracer  *bool
+	messageTimeoutDefault time.Duration
+	muteKeepaliveLog      *bool
+	idTrackerDebug        *bool
 }
 
 // Check 检查CosmosRunnable是否正确构造。
@@ -129,6 +136,34 @@ func (r *CosmosRunnable) SetElementSpawn(name string) *CosmosRunnable {
 // Construct method of CosmosRunnable, uses to set Config.
 func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 	r.config = config
+	return r
+}
+
+// GetConfig returns the Config currently set on the runnable (nil if unset).
+func (r *CosmosRunnable) GetConfig() *Config {
+	return r.config
+}
+
+// SetMessageTimeoutTracer enables or disables the message timeout tracer on
+// the CosmosProcess started with this runnable. When enabled, messages that
+// exceed timeout are reported via the message timeout hook.
+func (r *CosmosRunnable) SetMessageTimeoutTracer(v bool, timeout time.Duration) *CosmosRunnable {
+	r.messageTimeoutTracer = &v
+	r.messageTimeoutDefault = timeout
+	return r
+}
+
+// SetMuteKeepaliveLog silences or un-silences the periodic etcd keepalive log
+// messages on the CosmosProcess started with this runnable.
+func (r *CosmosRunnable) SetMuteKeepaliveLog(b bool) *CosmosRunnable {
+	r.muteKeepaliveLog = &b
+	return r
+}
+
+// SetIDTrackerDebug toggles IDTracker debug diagnostics on the CosmosProcess
+// started with this runnable. See CosmosProcess.idTrackerDebug.
+func (r *CosmosRunnable) SetIDTrackerDebug(v bool) *CosmosRunnable {
+	r.idTrackerDebug = &v
 	return r
 }
 

@@ -164,6 +164,18 @@ func (a *App) GetConfig() *Config {
 	return a.config
 }
 
+// NewCosmosProcess creates the CosmosProcess runtime bound to this app's
+// config and logging backend. Run creates one automatically; direct use is
+// intended for the atomostest package and advanced embedding scenarios.
+func (a *App) NewCosmosProcess() (*CosmosProcess, *Error) {
+	process, err := newCosmosProcess(a.config.Cosmos, a.config.Node, a.logging)
+	if err != nil {
+		return nil, err.AddStack(nil)
+	}
+	process.app = a
+	return process, nil
+}
+
 // Parent & Child Process
 
 func IsParentProcess() bool {
