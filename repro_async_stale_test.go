@@ -283,7 +283,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 		t.Fatalf("解析到旧实例 A,预期换代后的 B")
 	}
 	t.Logf("回复按名字解析到实例 B=%p (A=%p)", callbackID, atomIDA)
-	callbackID.asyncCallback(callbackID, "ReproAsync", startupID, asyncID, nil, nil)
+	callbackID.(idInternal).asyncCallback(callbackID, "ReproAsync", startupID, asyncID, nil, nil)
 	time.Sleep(200 * time.Millisecond)
 
 	// T6 断言: 报出 handler not found(带 instance 便于与注册实例比对),且回调未被消费
@@ -308,7 +308,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	_, asyncID2 := atomIDB.(*AtomLocal).atomos.asyncSet(func(out proto.Message, err *Error) {
 		callbackInvoked2.add()
 	})
-	callbackID.asyncCallback(callbackID, "ReproAsync", startupID, asyncID2, nil, nil)
+	callbackID.(idInternal).asyncCallback(callbackID, "ReproAsync", startupID, asyncID2, nil, nil)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && callbackInvoked2.get() == 0 {
 		time.Sleep(50 * time.Millisecond)

@@ -247,7 +247,11 @@ func (a *AtomLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) (o
 func (a *AtomLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
-		fromID.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
+		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
+			a.atomos.log.coreError("Atom: OnAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
+		} else {
+			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrAtomMessageHandlerNotExists, "Atom: OnAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
+		}
 		return
 	}
 	a.atomos.OnAsyncMessaging(fromID, a, name, handler, startupID, asyncID, in)

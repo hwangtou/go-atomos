@@ -225,7 +225,11 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 
 	var startupID, asyncID uint64
 	if callback != nil {
-		startupID, asyncID = callerID.asyncSet(callback)
+		callerInternal, intErr := asIDInternal(callerID)
+		if intErr != nil {
+			return intErr.AddStack(nil)
+		}
+		startupID, asyncID = callerInternal.asyncSet(callback)
 		if startupID != a.cosmos.process.startupID {
 			// This should never happen, just in case.
 			a.cosmos.process.logging.pushFrameworkFatalLog("BaseRemote: AsyncMessagingByName asyncSet returned unexpected startupID. expected=(%d) actual=(%d)", a.cosmos.process.startupID, startupID)

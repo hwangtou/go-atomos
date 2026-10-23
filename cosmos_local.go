@@ -78,6 +78,12 @@ func (c *CosmosLocal) Log() Logging {
 	return c.atomos.Log()
 }
 
+// coreLog returns the internal logging extension of the local cosmos logger.
+// Framework loggers are always *atomosLogging, so no assertion is needed.
+func (c *CosmosLocal) coreLog() loggingInternal {
+	return &c.atomos.log
+}
+
 func (c *CosmosLocal) Task() Task {
 	return c.atomos.Task()
 }
@@ -234,7 +240,12 @@ func (c *CosmosLocal) OnSyncMessaging(fromID ID, name string, in proto.Message) 
 }
 
 func (c *CosmosLocal) OnAsyncMessaging(fromID ID, name string, startupID, asyncID uint64, in proto.Message) {
-	fromID.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
+	fromInternal, err := asIDInternal(fromID)
+	if err != nil {
+		c.atomos.log.coreError("Cosmos: OnAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", err)
+		return
+	}
+	fromInternal.asyncCallback(c, name, startupID, asyncID, nil, NewError(ErrMainCannotMessage, "Cosmos: Cannot send cosmos async message.").AddStack(c))
 }
 
 func (c *CosmosLocal) OnAsyncMessagingCallback(asyncID uint64, in proto.Message, err *Error) {

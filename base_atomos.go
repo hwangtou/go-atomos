@@ -188,6 +188,12 @@ func (a *BaseAtomos) Log() Logging {
 	return &a.log
 }
 
+// coreLog returns the internal logging extension of this atomos's logger.
+// Framework loggers are always *atomosLogging, so no assertion is needed.
+func (a *BaseAtomos) coreLog() loggingInternal {
+	return &a.log
+}
+
 func (a *BaseAtomos) Task() Task {
 	return &a.task
 }
@@ -277,7 +283,11 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 
 	var startupID, asyncID uint64
 	if callback != nil {
-		startupID, asyncID = from.asyncSet(callback)
+		fromInternal, intErr := asIDInternal(from)
+		if intErr != nil {
+			return intErr.AddStack(nil)
+		}
+		startupID, asyncID = fromInternal.asyncSet(callback)
 		// asyncID==0 表示发送方实例已完成停机清账:回调已被同步以
 		// ErrAsyncCallbackCancelledByHalt 终结。此时不得再投递消息——
 		// 否则调用方以为已取消,消息却在对端真实执行。返回 nil:回调已被终结,
@@ -396,7 +406,7 @@ func (a *BaseAtomos) PushTaskCallbackMail(name string, callback func(), recoverF
 
 func (a *BaseAtomos) OnSyncMessaging(fromID ID, name string, handler MessageHandler, in proto.Message) (out proto.Message, err *Error) {
 	if fromID == nil {
-		a.Log().coreFatal("BaseAtomos: OnSyncMessaging called with nil fromID, but it should not happen.")
+		a.coreLog().coreFatal("BaseAtomos: OnSyncMessaging called with nil fromID, but it should not happen.")
 		return nil, NewErrorf(ErrFrameworkInternalError, "BaseAtomos: OnSyncMessaging called with nil fromID, but it should not happen.").AddStack(nil)
 	}
 
@@ -433,7 +443,7 @@ func (a *BaseAtomos) OnSyncMessaging(fromID ID, name string, handler MessageHand
 
 func (a *BaseAtomos) OnAsyncMessaging(fromID, toID ID, name string, handler MessageHandler, startupID, asyncID uint64, in proto.Message) {
 	if fromID == nil {
-		a.Log().coreFatal("BaseAtomos: OnAsyncMessaging called with nil fromID, but it should not happen.")
+		a.coreLog().coreFatal("BaseAtomos: OnAsyncMessaging called with nil fromID, but it should not happen.")
 		return
 	}
 
@@ -466,7 +476,12 @@ func (a *BaseAtomos) OnAsyncMessaging(fromID, toID ID, name string, handler Mess
 		if err != nil {
 			err = err.AddStack(nil)
 		}
-		fromID.asyncCallback(toID, name, startupID, asyncID, out, err)
+		fromInternal, intErr := asIDInternal(fromID)
+		if intErr != nil {
+			a.log.coreFatal("BaseAtomos: OnAsyncMessaging caller ID invalid, reply dropped. err=(%v)", intErr)
+		} else {
+			fromInternal.asyncCallback(toID, name, startupID, asyncID, out, err)
+		}
 	}()
 }
 
@@ -858,7 +873,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 					case BaseAtomosMailAsync:
 						if remainAtomMail.asyncID != 0 {
 							a.log.Info("Atomos: Stopping so async message mail will callback with error. id=(%s),mailID=(%d),name=(%s),asyncID=(%d)", a.String(), remainMail.id, remainAtomMail.name, remainAtomMail.asyncID)
-							remainAtomMail.from.asyncCallback(a.impl, remainAtomMail.name, remainAtomMail.startupID, remainAtomMail.asyncID, nil, err)
+							if fromInternal, intErr := asIDInternal(remainAtomMail.from); intErr != nil {
+								a.log.coreError("Atomos: Stopping async reply dropped, caller ID invalid. err=(%v)", intErr)
+							} else {
+								fromInternal.asyncCallback(a.impl, remainAtomMail.name, remainAtomMail.startupID, remainAtomMail.asyncID, nil, err)
+							}
 						}
 					case BaseAtomosMailOnAsyncCallback:
 						a.log.Info("Atomos: Stopping so async message callback mail will log but cannot callback. id=(%s),mailID=(%d),name=(%s),asyncID=(%d)", a.String(), remainMail.id, remainAtomMail.name, remainAtomMail.asyncID)

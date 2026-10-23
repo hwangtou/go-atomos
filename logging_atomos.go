@@ -9,7 +9,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type LoggingService interface {
+// loggingService is the process-wide logging sink. It is unexported: it is a
+// framework-internal contract, not a user-facing extension point.
+type loggingService interface {
 	PushLogging(id *IDInfo, level LogLevel, msg string)
 	pushFrameworkInfoLog(format string, args ...any)
 	pushFrameworkErrorLog(format string, args ...any)

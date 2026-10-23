@@ -6,6 +6,8 @@ import (
 	"io"
 )
 
+// Logging is the public logging contract of the framework. It contains only
+// exported methods, so external packages can implement it (e.g. mocks).
 type Logging interface {
 	io.Writer
 
@@ -14,11 +16,19 @@ type Logging interface {
 	Debug(format string, args ...interface{})
 	Info(format string, args ...interface{})
 	Warn(format string, args ...interface{})
-	coreInfo(format string, args ...interface{})
 
 	Error(format string, args ...interface{})
-	coreError(format string, args ...interface{})
 	Fatal(format string, args ...interface{})
+}
+
+// loggingInternal is the framework-internal extension of Logging with the
+// core-level channels used for framework diagnostics. Framework-provided
+// loggers always implement it; user code never needs to.
+type loggingInternal interface {
+	Logging
+
+	coreInfo(format string, args ...interface{})
+	coreError(format string, args ...interface{})
 	coreFatal(format string, args ...interface{})
 }
 

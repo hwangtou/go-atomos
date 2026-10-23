@@ -128,7 +128,9 @@ func releaseMail(m *mail) {
 
 // Mailbox
 
-type MailboxHandler interface {
+// mailboxHandler is the internal contract between a mailBox and its owner. It
+// is unexported: mailboxes are a framework implementation detail.
+type mailboxHandler interface {
 	mailboxOnStartUp(fn func() *Error) *Error
 	mailboxOnReceive(mail *mail)
 	mailboxOnStop(stopMail, remainMails *mail, num uint32) *Error
@@ -148,7 +150,7 @@ type mailBox struct {
 	mutex   sync.Mutex
 	cond    *sync.Cond
 	running bool
-	handler MailboxHandler
+	handler mailboxHandler
 	head    *mail
 	tail    *mail
 	num     uint32
@@ -158,7 +160,7 @@ type mailBox struct {
 	goID uint64
 }
 
-func newMailBox(name string, handler MailboxHandler, logging *loggingAtomos) *mailBox {
+func newMailBox(name string, handler mailboxHandler, logging *loggingAtomos) *mailBox {
 	mb := &mailBox{
 		name:    name,
 		mutex:   sync.Mutex{},

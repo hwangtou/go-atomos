@@ -139,7 +139,7 @@ func (c *CosmosRemote) refresh() {
 		if v.getInfo().GetState() == ClusterNodeState_Started {
 			c.current = v
 			c.enable = true
-			c.process.local.Log().coreInfo("CosmosRemote: refresh picked Started version=(%s) over Draining/Stopping current=(%s).", key, currentKey)
+			c.process.local.coreLog().coreInfo("CosmosRemote: refresh picked Started version=(%s) over Draining/Stopping current=(%s).", key, currentKey)
 			return
 		}
 	}
@@ -171,7 +171,7 @@ func (c *CosmosRemote) etcdDeleteLock() {
 }
 
 func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().coreInfo("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.coreLog().coreInfo("CosmosRemote: Connect info version created. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -183,7 +183,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 			e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 			if !has {
-				c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.coreLog().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				c.elements[elemName] = newElementRemoteFromSource(c, idInfo, e.Interface, version)
 			}
@@ -193,7 +193,7 @@ func (c *CosmosRemote) etcdCreateVersion(info *CosmosNodeVersionInfo, version st
 }
 
 func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version string) {
-	c.process.local.Log().coreInfo("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
+	c.process.local.coreLog().coreInfo("CosmosRemote: Connect info version updated. node=(%s),version=(%s),state=(%v),addr=(%s)",
 		info.Node, version, info.State, info.Address)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -207,7 +207,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 				//e, has := c.process.local.runnable.interfaces[elemName] // It's ok, because the interface will never be changed.
 				e, has := c.process.local.runnable.implements[elemName] // It's ok, because the interface will never be changed.
 				if !has {
-					c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+					c.process.local.coreLog().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 				} else {
 					c.elements[elemName] = newElementRemoteFromSource(c, idInfo, e.Interface, version)
 				}
@@ -229,7 +229,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 		// rebuild, otherwise gRPC would silently reconnect to the new process
 		// while we keep state bound to the old generation.
 		oldVersion.setDisable()
-		c.process.local.Log().coreInfo("CosmosRemote: Connect info version replaced. version=(%s),addr=(%s=>%s),startup=(%d=>%d)",
+		c.process.local.coreLog().coreInfo("CosmosRemote: Connect info version replaced. version=(%s),addr=(%s=>%s),startup=(%d=>%d)",
 			version, oldInfo.Address, info.Address, oldInfo.StartupId, info.StartupId)
 		c.version[version] = newCosmosRemoteVersion(c.process, info, version)
 	} else {
@@ -248,7 +248,7 @@ func (c *CosmosRemote) etcdUpdateVersion(info *CosmosNodeVersionInfo, version st
 			//e, has := c.process.local.runnable.interfaces[elemName]
 			e, has := c.process.local.runnable.implements[elemName]
 			if !has {
-				c.process.local.Log().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
+				c.process.local.coreLog().coreError("CosmosRemote: Connect info element not supported. name=(%s)", elemName)
 			} else {
 				if oldElem, has := c.elements[elemName]; has {
 					oldElem.setDisable()
@@ -561,7 +561,7 @@ func (c *cosmosRemoteVersion) check() bool {
 		client, er = grpc.NewClient(info.Address, *c.process.cluster.grpcDialOption)
 	}
 	if er != nil {
-		c.process.local.Log().coreFatal("CosmosRemote: NewClient failed. addr=(%s),err=(%v)", info.Address, er)
+		c.process.local.coreLog().coreFatal("CosmosRemote: NewClient failed. addr=(%s),err=(%v)", info.Address, er)
 		return false
 	}
 	// grpc.NewClient connects lazily and ignores grpc.WithBlock. Preserve the
@@ -583,7 +583,7 @@ func (c *cosmosRemoteVersion) check() bool {
 			if conn != nil {
 				conn.Close()
 			}
-			c.process.local.Log().coreFatal("CosmosRemote: Connect failed. addr=(%s),state=(%v),conn=(%v),connEr=(%v)", info.Address, st, conn, connEr)
+			c.process.local.coreLog().coreFatal("CosmosRemote: Connect failed. addr=(%s),state=(%v),conn=(%v),connEr=(%v)", info.Address, st, conn, connEr)
 			return false
 		}
 	}
@@ -595,13 +595,13 @@ func (c *cosmosRemoteVersion) check() bool {
 	if !c.dialed {
 		c.dialMu.Unlock()
 		client.Close()
-		c.process.local.Log().coreInfo("CosmosRemote: Dial finished after disable, closing. addr=(%s)", info.Address)
+		c.process.local.coreLog().coreInfo("CosmosRemote: Dial finished after disable, closing. addr=(%s)", info.Address)
 		return false
 	}
 	c.client = client
 	c.avail = true
 	c.dialMu.Unlock()
-	c.process.local.Log().coreInfo("CosmosRemote: Dial. addr=(%s)", info.Address)
+	c.process.local.coreLog().coreInfo("CosmosRemote: Dial. addr=(%s)", info.Address)
 	return true
 }
 

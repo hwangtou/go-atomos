@@ -171,13 +171,13 @@ func boolFlag(b *bool) bool {
 
 func logAndExit(process *CosmosProcess, format string, err *Error) {
 	msg := fmt.Sprintf(format, err)
-	process.Self().Log().coreFatal(msg)
+	process.Self().coreLog().coreFatal(msg)
 	log.Print(msg)
 	os.Exit(1)
 }
 
 func logAndInfo(process *CosmosProcess, msg string) {
-	process.Self().Log().coreInfo(msg)
+	process.Self().coreLog().coreInfo(msg)
 	log.Print(msg)
 }
 
@@ -187,13 +187,13 @@ func checkAppOrExit(app *App, process *CosmosProcess) {
 	isRunning, processID, err := app.Check()
 	if err != nil && !isRunning {
 		msg := fmt.Sprintf("App: Check failed. err=(%v)", err)
-		process.Self().Log().coreFatal(msg)
+		process.Self().coreLog().coreFatal(msg)
 		log.Print(msg)
 		os.Exit(1)
 	}
 	if isRunning {
 		msg := fmt.Sprintf("App: App is already running. pid=(%d)", processID)
-		process.Self().Log().coreFatal(msg)
+		process.Self().coreLog().coreFatal(msg)
 		log.Print(msg)
 		os.Exit(1)
 	}
@@ -205,17 +205,17 @@ func launchAndRun(app *App, process *CosmosProcess, runnable *CosmosRunnable) {
 	}
 
 	defer func() {
-		process.Self().Log().coreInfo("App: Exiting.")
+		process.Self().coreLog().coreInfo("App: Exiting.")
 		app.close()
 	}()
 	runnable.SetConfig(app.config)
 	if err := process.Start(runnable); err != nil {
-		process.Self().Log().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
+		process.Self().coreLog().coreFatal("App: Runnable starts failed, now exiting. err=(%v)", err.AddStack(nil))
 		return
 	}
-	process.Self().Log().coreInfo("App: Started.")
+	process.Self().coreLog().coreInfo("App: Started.")
 	<-app.WaitExitApp()
 	if err := process.Stop(); err != nil {
-		process.Self().Log().coreFatal("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
+		process.Self().coreLog().coreFatal("App: Runnable stops with error. err=(%v)", err.AddStack(nil))
 	}
 }

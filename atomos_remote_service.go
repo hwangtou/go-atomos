@@ -372,7 +372,12 @@ func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *C
 	// do callback
 
 	//a.process.logging.PushLogging(callbackID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 4: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callbackID, toID, req.StartupId, req.AsyncId, req.Message, in))
-	callbackID.asyncCallback(toID, req.Message, req.StartupId, req.AsyncId, in, req.Error)
+	callbackIDInternal, err := asIDInternal(callbackID)
+	if err != nil {
+		rsp.Error = err.AddStack(nil)
+		return rsp, nil
+	}
+	callbackIDInternal.asyncCallback(toID, req.Message, req.StartupId, req.AsyncId, in, req.Error)
 	return rsp, nil
 }
 
@@ -484,6 +489,6 @@ func (a *atomosRemoteService) getLocalIDFromIDInfo(idInfo *IDInfo) ID {
 	return atom
 }
 
-func (a *atomosRemoteService) log() Logging {
-	return a.process.local.Log()
+func (a *atomosRemoteService) log() loggingInternal {
+	return a.process.local.coreLog()
 }

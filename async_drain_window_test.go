@@ -67,7 +67,7 @@ func TestAsyncDrainWindow(t *testing.T) {
 	if callbackID == nil {
 		t.Fatalf("按名字解析 callbackID 失败")
 	}
-	callbackID.asyncCallback(callbackID, "DrainAsync", startupID, asyncID, nil, nil)
+	callbackID.(idInternal).asyncCallback(callbackID, "DrainAsync", startupID, asyncID, nil, nil)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && consumed.get() == 0 {
 		time.Sleep(20 * time.Millisecond)

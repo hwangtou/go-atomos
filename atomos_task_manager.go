@@ -139,7 +139,7 @@ type atomosTask struct {
 // Atomos Task Manager
 // In charge of the management of the increase task id and the task holder.
 type atomosTaskManager struct {
-	log LoggingService
+	log loggingService
 
 	// AtomosCore实例的引用。
 	// Reference to Atomos instance.

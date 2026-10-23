@@ -35,13 +35,6 @@ type ID interface {
 	// Async call
 	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err *Error), ext []ArgsForBaseAtomos) (errBeforeExec *Error)
 
-	// asyncSet
-	// Internal use only
-	asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64)
-	// asyncCallback
-	// Internal use only
-	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error)
-
 	// DecoderByName 获得某个消息的解码器
 	// Get decoder of a message
 	DecoderByName(name string) (in, out MessageDecoder)
@@ -54,15 +47,32 @@ type ID interface {
 	// 发送Wormhole消息。
 	// Send Wormhole message.
 	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext []ArgsForBaseAtomos) *Error
+}
 
-	// Internal
+// idInternal is the framework-internal extension of ID. Every ID produced by
+// the framework implements it; user-implemented IDs (mocks) never need to.
+// Kernel paths that need these methods assert via asIDInternal and fail
+// explicitly with ErrFrameworkInvalidID instead of silently misbehaving.
+type idInternal interface {
+	ID
 
-	// 当前ID的邮箱GoID
-	// GoID of the mailbox of current ID.
+	// asyncSet registers an async reply callback on the caller side.
+	asyncSet(callback func(out proto.Message, err *Error)) (startupID, callbackID uint64)
+	// asyncCallback delivers an async reply to the caller's registered callback.
+	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err *Error)
+	// getGoID returns the GoID of the mailbox goroutine of this ID.
 	getGoID() uint64
+}
 
-	//pushAsyncMessageCallbackMailAndWaitReply(name string, in proto.Message, err *Error, callback func(out proto.Message, err *Error))
-	//asyncCallback(callerID SelfID, name string, reply proto.Message, err *Error, callback func(reply proto.Message, err *Error))
+// asIDInternal asserts that id carries the framework-internal extension. A
+// user-implemented ID reaching a kernel path is a programming error, so the
+// failure is reported explicitly with ErrFrameworkInvalidID.
+func asIDInternal(id ID) (idInternal, *Error) {
+	if ii, ok := id.(idInternal); ok {
+		return ii, nil
+	}
+	return nil, NewErrorf(ErrFrameworkInvalidID,
+		"ID: implementation %T does not provide the framework-internal ID extension; passing a user-implemented ID to framework kernel paths is a programming error.", id).AddStack(nil)
 }
 
 // ReleasableID 可以释放的ID，每当我们成功获得一个ID之后，都应该defer Release。
