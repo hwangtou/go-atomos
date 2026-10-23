@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package golden;
+option go_package = "github.com/hwangtou/go-atomos/protoc-gen-go-atomos/testdata/golden;golden";
+
+import "atomos.proto";
+
+// Golden input for the protoc-gen-go-atomos golden-file test. Covers all four
+// method categories via the explicit atomos_method option, plus the
+// name-prefix fallback convention (AtomosMethodAuto):
+//   "ElementSpawn" -> element spawn, "Spawn" -> atom spawn,
+//   "Element*" prefix -> element method, anything else -> atom method.
+// Regenerate the golden file with: go test ./protoc-gen-go-atomos/ -run TestGolden -update
+
+message GoldenData {
+  string name = 1;
+}
+message GoldenHelloI {
+  string message = 1;
+}
+message GoldenHelloO {
+  int32 id = 1;
+}
+message GoldenSpawnArg {
+  string name = 1;
+}
+message GoldenGreetingI {
+  int32 mode = 1;
+}
+message GoldenGreetingO {}
+
+// GoldenOption exercises explicit atomos_method options for every category.
+service GoldenOption {
+  rpc ElementSpawn (atomos.Nil) returns (GoldenData) {
+    option (atomos.atomos_method) = AtomosElementSpawn;
+  }
+  rpc SayHello (GoldenHelloI) returns (GoldenHelloO) {
+    option (atomos.atomos_method) = AtomosElementMethod;
+  }
+  rpc Spawn (GoldenSpawnArg) returns (GoldenData) {
+    option (atomos.atomos_method) = AtomosAtomSpawn;
+  }
+  rpc Greeting (GoldenGreetingI) returns (GoldenGreetingO) {
+    option (atomos.atomos_method) = AtomosAtomMethod;
+  }
+}
+
+// GoldenPrefix exercises the name-prefix fallback (no explicit option).
+service GoldenPrefix {
+  rpc ElementSpawn (atomos.Nil) returns (GoldenData);
+  rpc ElementEcho (GoldenHelloI) returns (GoldenHelloO);
+  rpc Spawn (GoldenSpawnArg) returns (GoldenData);
+  rpc Ping (GoldenGreetingI) returns (GoldenGreetingO);
+}
