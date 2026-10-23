@@ -2,8 +2,8 @@ package atomos
 
 // 复现正式服问题:同名 atom 换代后,过期的异步回复按名字路由落到新实例,
 // 新实例回调表中无此 asyncID → "OnAsyncMessagingCallback handler not found"。
-// 时序对应生产:trex 结算发 AsyncGameChanging/asyncSetRank → 空闲 1 分钟 KillSelf
-// → 玩家再进 Spawn 新实例 → user_core 执行完毕按名字回复 → 新实例报 handler not found。
+// 时序对应生产:业务结算方发出异步请求 → atom 空闲超时 KillSelf
+// → 同名 atom 被再次 Spawn 出新实例 → 对端服务执行完毕按名字回复 → 新实例报 handler not found。
 //
 // 移植自生产副本 repro_async_stale_test.go,适配当前仓库测试基建:
 // 使用 newCosmosProcess 直接建进程(不走 InitCosmosProcess 单例),
@@ -103,10 +103,10 @@ func (a *reproAtom) Halt(from ID, cancelled []uint64) (save bool, data proto.Mes
 	return false, nil
 }
 
-// 模拟 user_core 的持久化存储:已有该玩家的数据
+// 模拟对端业务的持久化存储:已有该名字的数据
 var reproStore = map[string]proto.Message{}
 
-// AtomAutoData:使 getAtomFromRemote 在 atom 不存在时自动重 Spawn(与生产 user_core 行为一致)
+// AtomAutoData:使 getAtomFromRemote 在 atom 不存在时自动重 Spawn(与生产对端业务行为一致)
 func (a *reproAtom) GetAtomData(name string) (proto.Message, *Error) {
 	if d, ok := reproStore[name]; ok {
 		return d, nil
@@ -232,8 +232,8 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 		t.Errorf("清账后 AsyncCallbackPending 应为 0,实际 %d", n)
 	}
 
-	// T3.5: 模拟长生命周期 Room 持有已死实例的 self 继续发异步请求
-	// (生产对应:trex Room 离线保留10分钟,绑定的 atom 已被1分钟空闲清理)
+	// T3.5: 模拟长生命周期业务对象(如房间)持有已死实例的 self 继续发异步请求
+	// (生产对应:业务对象离线保留时间较长,绑定的 atom 已被空闲清理)
 	// 清账完成后到达的注册:不再入表静默丢失,而是同步以 ErrAsyncCallbackCancelledByHalt 终结
 	var lostCallback reproCounter
 	var lostErrCode reproErrCode
@@ -265,7 +265,7 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	}
 	t.Logf("换代完成: A=%p -> B=%p (同名 %s)", atomIDA, atomIDB, reproAtomName)
 
-	// T5: 模拟 user_core 执行完毕,回复到达 trex 进程侧的处理(生产:gRPC AsyncOnMessageCallback)。
+	// T5: 模拟对端服务执行完毕,回复到达调用方进程侧的处理(生产:gRPC AsyncOnMessageCallback)。
 	// 集群环境才有的 ToId 解析(需 etcd 注册 remoteCosmos)与本 bug 无关,
 	// 从其后的等效点进入:按名字解析 callbackID(生产 getLocalIDFromIDInfo)→ asyncCallback 投递。
 	svc := &atomosRemoteService{process: process}
