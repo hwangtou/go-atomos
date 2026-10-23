@@ -184,6 +184,12 @@ const (
 6. 修正 args 文档示例；`ArgType` 枚举显式编号。
 7. `CosmosMain()` 返回 `*CosmosLocal` 具体类型 → 返回 `CosmosNode` 接口（id.go:85），需要本地能力处保留 `CosmosLocal` 类型断言辅助。
 
+### 4.3 实施状态（v3.0-alpha3 已落地）
+
+- **参数形态**：`ID.SyncMessagingByName/AsyncMessagingByName/Kill/SendWormhole` 与 `BaseAtomos/BaseRemote` 的 `Push*` 全部改为 `ext ...ArgsForBaseAtomos`，切片形态删除；`Element.GetAtomID` 的 `args ...any` 改为 `...ArgsForBaseAtomos`。注意迁移坑：显式传 `nil` 在可变参数下变成"含一个 nil 的切片"，会被 helper 判为非法参数（原先 nil 切片=无参），调用点须改为省略该参数。
+- **裸 bool 消除**：`Element.GetAtomID/SpawnAtom` 的 `fromLocalOrRemote bool` 删除，新增 `ArgBaseAtomosFromLocalOnly()`/`ArgBaseAtomosFromRemoteOnly()`（args_impl.go ArgType 6/7）。实现语义说明：该标记的实际作用是"用户发起的调用，框架需跟踪 IDTracker 引用"（ElementRemote 仍忽略，路由在 cosmos 层已定）；缺省（无标记）= 框架内部调用不跟踪，对应原 `false` 行为。`CosmosRunnable.AddElementImplementation(impl, setSpawn bool)` 拆为 `AddElementImplementation(impl)` + `AddElementImplementationWithSpawn(impl)`，内部共用 `addElementImplementation`。
+- **命名与细节**：`NewArgBaseAtomosWithAny` → `ArgBaseAtomosAny(v any)`，导出结构体 `ArgBaseAtomosWithAny` 取消导出；`IDTracker.ToString()` 删除、改 `String()`（fmt.Stringer，生成器为嵌入 ID+*IDTracker 的生成 ID 类型补显式 `String()` 消除 selector 歧义）；生产代码 `interface{}` 全改 `any`（生成的 pb 代码除外）；args.go 文档示例改可变参数形态并修正 `ArgTaskCancelCallback` 示例签名；`ArgType` 原本已是显式编号，无需改。`SelfID.CosmosMain()` 直接改返回 `CosmosNode`（影响面仅 3 个实现、无库内调用点，未采用降级方案）。
+
 ## 5. 导出面收敛（P1）
 
 ### 5.1 移入 `internal/` 或取消导出
@@ -214,6 +220,8 @@ const (
 - 修复遗留项：G7（`noExport` 首字母缩写）、G9（Spawn 签名 input/output 角色反直觉，v3 统一为 arg 在 input、data 在 output 并写入文档）、Messenger 泛型精简（O7，如改动可控）。
 - 生成器补 golden-file 测试，纳入 CI；消灭"插件版本与框架 API 脱节"（regen-proto SKILL.md 当前警告）的状态。
 
+实施状态（v3.0-alpha3 部分落地）：错误返回 `error`（alpha2 已完成）与 §4 参数形态适配（变参 ext、生成的 ID 类型显式 `String()` 消歧）已落地；**golden-file 测试已建**（`protoc-gen-go-atomos/golden_test.go` + `testdata/golden/`，in-process protogen 驱动 + protoc descriptor set，覆盖显式 option 与前缀回退共 8 种方法分类，`-update` 刷新），尚未纳入 CI。G7/G9/Messenger 泛型精简未做。
+
 ### 6.2 文档
 
 - 所有导出符号补**英文 godoc**（现有中文注释保留为内部实现注释或翻译，公开面统一英文，方便工具链与国际社区）。
@@ -241,7 +249,7 @@ const (
 |---|---|---|
 | v3.0-alpha1 | §1 入口与全局状态、§2 接口拆分、§5 导出面收敛 | 全量测试通过；`go vet` + atomos-vet 通过 |
 | v3.0-alpha2 | §3 错误语义（`error` 返回值 + `errors.Is` + 错误码冻结） | 全量测试适配；错误码 CI 检查脚本 |
-| v3.0-alpha3 | §4 参数统一 + §6.1 生成器 v3 + golden 测试 | for_test.proto 重新生成并编译运行 |
+| v3.0-alpha3 | §4 参数统一 + §6.1 生成器 v3 + golden 测试 | for_test.proto 重新生成并编译运行（golden 测试已建，CI 接入待做） |
 | v3.0-beta1 | §6.2 文档与 examples、§7 atomostest 基础 | hello_world 示例跑通 |
 | v3.0-rc1 | §8 协议改进（如纳入）、兼容性冒烟（v2/v3 节点共存灰度验证） | 双节点集成测试 |
 
