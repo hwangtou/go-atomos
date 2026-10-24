@@ -245,9 +245,47 @@ const (
 
 - gRPC 状态码映射：`Error.Code` 映射到标准 `codes.Code`（NotFound/FailedPrecondition/...），业务详情仍放响应体内；使监控与拦截器可识别失败。跨版本兼容策略：v3 节点同时写两处，读侧优先读 status。
 - `DrainNode` 等管理面 RPC 保留内嵌错误（管理面工具链友好优先）。
-- 协议加 `version` 握手字段的取舍：v3 暂缓，记录在案。
+- ~~协议加 `version` 握手字段的取舍：v3 暂缓，记录在案。~~ → 已升级为正式设计（2026-10-24，见 §8.1）。
 
 实施状态（v3.0-rc1 已落地前两项，握手字段维持暂缓）：映射表与互转在 `atomos_grpc_status.go`——`grpcCodeOfErrCode`（正向归类：不存在类→NotFound，状态拒绝类→FailedPrecondition，参数类→InvalidArgument，超时类→DeadlineExceeded，panic/内部类→Internal，其余→Unknown）、`grpcStatusFromError`（服务端双写：`*Error` proto 进 status details，响应体 Error 字段照填）、`grpcErrorToError`（客户端读侧：details 优先还原含 CallStacks 的完整 `*Error`，缺失时按 status code 反映射为代表性错误码，如 Unavailable→ErrCodeCosmosRemoteConnectFailed）。服务端接入点为 7 个调用类 RPC 的 wrapper（`callRspWithStatus`）；客户端接入点为 `BaseRemote.PushSyncMessage/PushAsyncMessage/Kill` 与 `ElementRemote.GetAtomID/SpawnAtom`。管理面 RPC（TryKilling/DrainNode/GetElementInfo/ElementBroadcast/AsyncOnMessageCallback）保持仅内嵌，代码注释已写明取舍。单测 `atomos_grpc_status_test.go` 覆盖映射表、status 往返（Code/CallStacks 不丢失）与反映射回退；`cosmos_remote_test.go` 的 raw-stub 集成测试已改为新契约（非 OK status + details 还原），兼作双写端到端覆盖。
+
+### 8.1 协议 version 握手设计（已定稿，待实施）
+
+目标：让 v3+ 节点在**运行时**知道对端说的哪一版协议，把"混部兼容"从静态矩阵
+（§10.1 的人工验证）变成可观测、可告警、最终可硬拒绝的机制。v2 节点无这些
+字段，按 proto3 未知字段跳过——所有字段**尾部追加**，遵守冻结规则。
+
+**字段（全部 append-only）**
+
+1. `CosmosNodeVersionInfo.protocol_version = 7`（uint32）——etcd 注册信息带上
+   协议版本。这是主握手通道：节点在 watch 到对端时即知版本，无需逐请求协商。
+   v3 填 3；缺省 0 视为 v2（v2 从不写该字段）。
+2. `CosmosArgs.protocol_version = 6`（uint32）——直连 gRPC 调用（不经 etcd 的
+   pinned 连接、灰度期手配地址）的逐请求兜底：请求方填自己版本，应答方借此
+   识别对端。与字段 1 冲突时以先到者为准并记日志。
+3. 错误码**不新增**：版本不匹配在观察期是日志 + 指标，不是错误。
+
+**语义分级（观察→告警→拒绝）**
+
+- **Phase 0（实施即生效）**：`atomosRemoteService` 收到请求时记录对端版本到
+  进程级 `remoteProtocolVersions` map（node→version），debug server `/metrics`
+  暴露 `atomos_remote_protocol_version{node=...}`，`/elements` 页展示。运营
+  第一次获得"我的集群里到底跑着哪些版本"的实时答案。
+- **Phase 1（下个 minor）**：检测到已知不兼容组合（依据 §10.1 矩阵维护的
+  不兼容清单）时打 `coreWarn` 并累加 `atomos_remote_incompatible_calls_total`。
+- **Phase 2（下个 major）**：不兼容组合直接拒绝连接/请求，错误码届时新增
+  （append-only，如 `ErrCodeCosmosRemoteProtocolIncompatible`）。何时进入
+  Phase 2 以灰度排查（§10.1 第 3 条）完成、v2 节点清零为前提。
+
+**为什么不做成协商（negotiation）**：协商要求双方都理解协商本身，v2 不理解；
+且本协议由 etcd 注册表提供带外真值，逐请求协商是冗余复杂度。填版本 + 观察已
+满足全部需求。
+
+**实施清单（一个 PR 的量）**：atomos.proto 两个尾部字段 + `atomos.pb.go` 重新
+生成（逐字节 diff 应仅含新字段）+ `trySettingClusterToCurrentAndKeepalive` 填
+写 etcd 侧版本 + `atomosRemoteService` 各 RPC 入口提取请求侧版本 +
+`remoteProtocolVersions` map + metrics/页面 + 单测（版本缺省=0 视为 v2）+
+`TestDeadlock_CrossNode*` 补断言（v3↔v3 链路版本往返正确）。
 
 ## 9. 实施顺序
 
