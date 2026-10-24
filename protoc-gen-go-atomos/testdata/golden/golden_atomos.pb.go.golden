@@ -163,7 +163,7 @@ func GetGoldenOptionInterface(dev go_atomos.ElementDeveloper) *go_atomos.Element
 type goldenOptionElementMessenger struct{}
 
 func (m goldenOptionElementMessenger) SayHello() go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO] {
-	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO]{nil, nil, "SayHello"}
+	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO]{Name: "SayHello"}
 }
 
 var goldenOptionElementMessengerValue goldenOptionElementMessenger
@@ -174,7 +174,7 @@ var goldenOptionElementValue GoldenOptionElement
 type goldenOptionAtomMessenger struct{}
 
 func (m goldenOptionAtomMessenger) Greeting() go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionAtom, *GoldenGreetingI, *GoldenGreetingO] {
-	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionAtom, *GoldenGreetingI, *GoldenGreetingO]{nil, nil, "Greeting"}
+	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionAtom, *GoldenGreetingI, *GoldenGreetingO]{Name: "Greeting"}
 }
 
 var goldenOptionAtomMessengerValue goldenOptionAtomMessenger
@@ -336,7 +336,7 @@ func GetGoldenPrefixInterface(dev go_atomos.ElementDeveloper) *go_atomos.Element
 type goldenPrefixElementMessenger struct{}
 
 func (m goldenPrefixElementMessenger) Echo() go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixElement, *GoldenHelloI, *GoldenHelloO] {
-	return go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixElement, *GoldenHelloI, *GoldenHelloO]{nil, nil, "Echo"}
+	return go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixElement, *GoldenHelloI, *GoldenHelloO]{Name: "Echo"}
 }
 
 var goldenPrefixElementMessengerValue goldenPrefixElementMessenger
@@ -347,7 +347,7 @@ var goldenPrefixElementValue GoldenPrefixElement
 type goldenPrefixAtomMessenger struct{}
 
 func (m goldenPrefixAtomMessenger) Ping() go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixAtom, *GoldenGreetingI, *GoldenGreetingO] {
-	return go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixAtom, *GoldenGreetingI, *GoldenGreetingO]{nil, nil, "Ping"}
+	return go_atomos.Messenger[*GoldenPrefixElementID, *GoldenPrefixAtomID, GoldenPrefixAtom, *GoldenGreetingI, *GoldenGreetingO]{Name: "Ping"}
 }
 
 var goldenPrefixAtomMessengerValue goldenPrefixAtomMessenger

@@ -38,6 +38,31 @@ func ArgBaseAtomosAny(v any) ArgsForBaseAtomos {
 	return argBaseAtomosWithAny{Any: v}
 }
 
+// ArgBaseAtomosAnyValue extracts the payload previously wrapped by
+// ArgBaseAtomosAny. It reports false if arg was not created by
+// ArgBaseAtomosAny (including nil).
+// 提取先前由 ArgBaseAtomosAny 包装的任意数据。若 arg 不是由
+// ArgBaseAtomosAny 创建（含 nil），返回 false。
+// Example usage (e.g. in ElementLoader.Load, to recognize a test context
+// passed through Spawn args):
+//
+//	for _, arg := range args {
+//		if v, ok := atomos.ArgBaseAtomosAnyValue(arg); ok {
+//			if t, isTest := v.(*testing.T); isTest { ... }
+//		}
+//	}
+func ArgBaseAtomosAnyValue(arg ArgsForBaseAtomos) (any, bool) {
+	switch a := arg.(type) {
+	case argBaseAtomosWithAny:
+		return a.Any, true
+	case *argBaseAtomosWithAny:
+		if a != nil {
+			return a.Any, true
+		}
+	}
+	return nil, false
+}
+
 // ArgBaseAtomosFromLocalOnly marks an Element.GetAtomID/SpawnAtom call as
 // user-originated from a local caller: the framework tracks an IDTracker
 // reference for the returned ID (tracker must be non-nil).

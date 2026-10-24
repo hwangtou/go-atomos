@@ -188,7 +188,7 @@ const (
 
 - **参数形态**：`ID.SyncMessagingByName/AsyncMessagingByName/Kill/SendWormhole` 与 `BaseAtomos/BaseRemote` 的 `Push*` 全部改为 `ext ...ArgsForBaseAtomos`，切片形态删除；`Element.GetAtomID` 的 `args ...any` 改为 `...ArgsForBaseAtomos`。注意迁移坑：显式传 `nil` 在可变参数下变成"含一个 nil 的切片"，会被 helper 判为非法参数（原先 nil 切片=无参），调用点须改为省略该参数。
 - **裸 bool 消除**：`Element.GetAtomID/SpawnAtom` 的 `fromLocalOrRemote bool` 删除，新增 `ArgBaseAtomosFromLocalOnly()`/`ArgBaseAtomosFromRemoteOnly()`（args_impl.go ArgType 6/7）。实现语义说明：该标记的实际作用是"用户发起的调用，框架需跟踪 IDTracker 引用"（ElementRemote 仍忽略，路由在 cosmos 层已定）；缺省（无标记）= 框架内部调用不跟踪，对应原 `false` 行为。`CosmosRunnable.AddElementImplementation(impl, setSpawn bool)` 拆为 `AddElementImplementation(impl)` + `AddElementImplementationWithSpawn(impl)`，内部共用 `addElementImplementation`。
-- **命名与细节**：`NewArgBaseAtomosWithAny` → `ArgBaseAtomosAny(v any)`，导出结构体 `ArgBaseAtomosWithAny` 取消导出；`IDTracker.ToString()` 删除、改 `String()`（fmt.Stringer，生成器为嵌入 ID+*IDTracker 的生成 ID 类型补显式 `String()` 消除 selector 歧义）；生产代码 `interface{}` 全改 `any`（生成的 pb 代码除外）；args.go 文档示例改可变参数形态并修正 `ArgTaskCancelCallback` 示例签名；`ArgType` 原本已是显式编号，无需改。`SelfID.CosmosMain()` 直接改返回 `CosmosNode`（影响面仅 3 个实现、无库内调用点，未采用降级方案）。
+- **命名与细节**：`NewArgBaseAtomosWithAny` → `ArgBaseAtomosAny(v any)`，导出结构体 `ArgBaseAtomosWithAny` 取消导出；取消导出后须保留回读能力，新增 `ArgBaseAtomosAnyValue(arg) (any, bool)` 读取器（Mexico-server 验证发现真实消费场景：ElementLoader.Load 从 Spawn args 回读 `*testing.T`/`*testing.B` 识别测试上下文，见 args.go）；`IDTracker.ToString()` 删除、改 `String()`（fmt.Stringer，生成器为嵌入 ID+*IDTracker 的生成 ID 类型补显式 `String()` 消除 selector 歧义）；生产代码 `interface{}` 全改 `any`（生成的 pb 代码除外）；args.go 文档示例改可变参数形态并修正 `ArgTaskCancelCallback` 示例签名；`ArgType` 原本已是显式编号，无需改。`SelfID.CosmosMain()` 直接改返回 `CosmosNode`（影响面仅 3 个实现、无库内调用点，未采用降级方案）。
 
 ## 5. 导出面收敛（P1）
 

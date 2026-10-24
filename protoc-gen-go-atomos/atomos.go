@@ -428,7 +428,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	for _, method := range elementMethods(service) {
 		elemFnName := elementMethodName(method)
 		g.P("func (m ", elementMessengerName, ") ", elemFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "] {")
-		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{nil, nil, \"", elemFnName, "\"}")
+		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementElementName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{Name: \"", elemFnName, "\"}")
 		g.P("}")
 	}
 	g.P("var ", elementMessengerValueName, " ", elementMessengerName)
@@ -441,7 +441,7 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	for _, method := range atomMethods(service) {
 		atomFnName := method.GoName
 		g.P("func (m ", atomMessengerName, ") ", atomFnName, "() ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "] {")
-		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{nil, nil, \"", atomFnName, "\"}")
+		g.P("return ", atomosPackage.Ident("Messenger"), "[*", elementIDName, ", *", atomIDName, ", ", elementAtomName, ", *", g.QualifiedGoIdent(method.Input.GoIdent), ", *", g.QualifiedGoIdent(method.Output.GoIdent), "]{Name: \"", atomFnName, "\"}")
 		g.P("}")
 	}
 	g.P("var ", atomMessengerValueName, " ", atomMessengerName)
