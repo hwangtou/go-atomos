@@ -287,6 +287,15 @@ const (
 `remoteProtocolVersions` map + metrics/页面 + 单测（版本缺省=0 视为 v2）+
 `TestDeadlock_CrossNode*` 补断言（v3↔v3 链路版本往返正确）。
 
+### 8.2 异步投递重试与 WAL outbox（设计提案，未排期）
+
+针对"gRPC 投递失败重试 + 发送进程重启不丢"两个场景的 durable outbox 提案：
+进程级内存重试器（Phase 0/1）+ 可选 WAL 持久化（Phase 2），重试错误三分类
+（可重试 / rebind / 永久），承诺"durable 请求 + best-effort 回复 + 消费端
+幂等"。协议侧预留 `CosmosRemoteAsyncMessagingByNameReq` 尾部 `message_id`
+字段（兼容性同 §10.2 先例）。设计全文与分阶段实施见
+`docs/DESIGN_RETRY_OUTBOX.md`。
+
 ## 9. 实施顺序
 
 | 阶段 | 内容 | 验证 |
