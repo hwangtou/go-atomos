@@ -535,6 +535,12 @@ func (p *Path) confirmOwnerAndMode(group *user.Group, perm os.FileMode) error {
 }
 
 func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) error {
+	// Refresh our own stat: callers typically created the parent directory
+	// moments ago, and a stale FileInfo made a second init run overwrite
+	// existing (possibly operator-edited) config files.
+	if er := p.Refresh(); er != nil {
+		return er
+	}
 	if p.exist() {
 		return nil
 	}
