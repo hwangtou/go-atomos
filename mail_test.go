@@ -166,6 +166,12 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 	// deterministic and avoids t.Fatal being called from the mailbox goroutine
 	// (FailNow -> runtime.Goexit would kill the mailbox loop and deadlock wg).
 	killPushed := make(chan struct{})
+	// mail0Held is closed when the phase-2 mail-0 handler has STARTED, proving
+	// mail 0 was popped. Without it the main goroutine could pushHead(kill)
+	// before the mailbox goroutine ever popped mail 0 (scheduler delay under
+	// load); the kill would then be processed first and stop would see
+	// num=100 with mail 0 still queued — the flake this channel closes.
+	mail0Held := make(chan struct{})
 	var phase atomic.Int32
 	var errMu sync.Mutex
 	var errs []string
@@ -180,6 +186,11 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		recv: func(mail *mail) {
 			t.Log("TestMailBox_GetNum: Mail received.", mail)
 			if n := mail.data.(uint64); n == 0 {
+				if phase.Load() == 2 {
+					// Mail 0 of phase 2 is now provably popped; signal the
+					// main goroutine it may push the kill mail.
+					close(mail0Held)
+				}
 				t.Log("TestMailBox_GetNum: A waiting mail received, wait for all mails sent.")
 				sendWait.Wait()
 				if phase.Load() == 2 {
@@ -266,7 +277,9 @@ func TestMailBox_GetNum_ConsumeSlow(t *testing.T) {
 		sendWait.Done()
 	}
 
-	// kill mail
+	// kill mail — only after mail 0 is provably popped and holding the
+	// mailbox, so the kill lands BEHIND it deterministically.
+	<-mail0Held
 	m := allocMail()
 	if getAllocMailDebugNum() == 0 {
 		t.Fatal("TestMailBox_GetNum: Mail allocation tracking failed.", getAllocMailDebugNum())
