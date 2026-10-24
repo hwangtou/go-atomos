@@ -35,6 +35,20 @@ func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *Element
 	}
 }
 
+// AtomMessageConfigOf wraps empty in/out message prototypes into an
+// AtomMessageConfig (Any-wrapped, ready for Config.Messages). The generator
+// emits it for static schema fill; hand-written implementations can use it
+// too. Failures (unmarshalable prototypes cannot happen for proto messages)
+// degrade to an empty config entry.
+func AtomMessageConfigOf(in, out proto.Message) *AtomMessageConfig {
+	inAny, errIn := anypb.New(in)
+	outAny, errOut := anypb.New(out)
+	if errIn != nil || errOut != nil {
+		return &AtomMessageConfig{}
+	}
+	return &AtomMessageConfig{In: inAny, Out: outAny}
+}
+
 // fillElementMessages populates Config.Messages — the element's message
 // schema metadata — from the registered decoders: for every element/atom
 // message name, the in and out message types as Any-wrapped empty

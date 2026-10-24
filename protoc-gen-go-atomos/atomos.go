@@ -379,6 +379,20 @@ func genImplement(file *protogen.File, g *protogen.GeneratedFile, service *proto
 	g.P("func Get", elementName, "Interface(dev ", atomosPackage.Ident("ElementDeveloper"), ") *", atomosPackage.Ident("ElementInterface"), "{")
 	g.P("elem := ", atomosPackage.Ident("NewInterfaceFromDeveloper"), "(", elementName, "Name, dev)")
 
+	// Static schema metadata: Config.Messages filled from the method set, so
+	// the schema is available before any element spawns (the runtime
+	// fillElementMessages then sees a non-empty map and leaves it untouched).
+	g.P("elem.Config.Messages = map[string]*", atomosPackage.Ident("AtomMessageConfig"), "{")
+	for _, method := range elementMethods(service) {
+		elemName := elementMethodName(method)
+		g.P("\"", elemName, "\": ", atomosPackage.Ident("AtomMessageConfigOf"), "(&", g.QualifiedGoIdent(method.Input.GoIdent), "{}, &", g.QualifiedGoIdent(method.Output.GoIdent), "{}),")
+	}
+	for _, method := range atomMethods(service) {
+		methodName := method.GoName
+		g.P("\"", methodName, "\": ", atomosPackage.Ident("AtomMessageConfigOf"), "(&", g.QualifiedGoIdent(method.Input.GoIdent), "{}, &", g.QualifiedGoIdent(method.Output.GoIdent), "{}),")
+	}
+	g.P("}")
+
 	if spawn := elementSpawnMethod(service); spawn != nil {
 		g.P("elem.ElementSpawner = func(s ", atomosPackage.Ident("ElementSelfID"), ", a ", atomosPackage.Ident("Atomos"), ", data ", protobufPackage.Ident("Message"), ", args ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") error {")
 		g.P("dataT, _ := data.(*", g.QualifiedGoIdent(spawn.Output.GoIdent), ")")

@@ -129,6 +129,10 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 }
 func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(ForTestAtomosName, dev)
+	elem.Config.Messages = map[string]*AtomMessageConfig{
+		"SayHello": AtomMessageConfigOf(&ForTestHelloI{}, &ForTestHelloO{}),
+		"Greeting": AtomMessageConfigOf(&ForTestGreetingI{}, &ForTestGreetingO{}),
+	}
 	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		dataT, _ := data.(*ForTestData)
 		e, ok := a.(ForTestAtomosElement)
@@ -160,7 +164,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 type forTestAtomosElementMessenger struct{}
 
 func (m forTestAtomosElementMessenger) SayHello() Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO] {
-	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{nil, nil, "SayHello"}
+	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{Name: "SayHello"}
 }
 
 var forTestAtomosElementMessengerValue forTestAtomosElementMessenger
@@ -171,7 +175,7 @@ var forTestAtomosElementValue ForTestAtomosElement
 type forTestAtomosAtomMessenger struct{}
 
 func (m forTestAtomosAtomMessenger) Greeting() Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosAtom, *ForTestGreetingI, *ForTestGreetingO] {
-	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosAtom, *ForTestGreetingI, *ForTestGreetingO]{nil, nil, "Greeting"}
+	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosAtom, *ForTestGreetingI, *ForTestGreetingO]{Name: "Greeting"}
 }
 
 var forTestAtomosAtomMessengerValue forTestAtomosAtomMessenger

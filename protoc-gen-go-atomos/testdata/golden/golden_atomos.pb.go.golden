@@ -132,6 +132,10 @@ func GetGoldenOptionImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 }
 func GetGoldenOptionInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(GoldenOptionName, dev)
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"SayHello": go_atomos.AtomMessageConfigOf(&GoldenHelloI{}, &GoldenHelloO{}),
+		"Greeting": go_atomos.AtomMessageConfigOf(&GoldenGreetingI{}, &GoldenGreetingO{}),
+	}
 	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...go_atomos.ArgsForBaseAtomos) error {
 		dataT, _ := data.(*GoldenData)
 		e, ok := a.(GoldenOptionElement)
@@ -305,6 +309,10 @@ func GetGoldenPrefixImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 }
 func GetGoldenPrefixInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(GoldenPrefixName, dev)
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"Echo": go_atomos.AtomMessageConfigOf(&GoldenHelloI{}, &GoldenHelloO{}),
+		"Ping": go_atomos.AtomMessageConfigOf(&GoldenGreetingI{}, &GoldenGreetingO{}),
+	}
 	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...go_atomos.ArgsForBaseAtomos) error {
 		dataT, _ := data.(*GoldenData)
 		e, ok := a.(GoldenPrefixElement)
