@@ -276,6 +276,12 @@ func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnabl
 	return r
 }
 
+// GetRouter returns the global router set by SetRouter, or nil. Testkit
+// fixtures use it to install a default router only when none was provided.
+func (r *CosmosRunnable) GetRouter() CosmosMainGlobalRouter {
+	return r.mainRouter
+}
+
 // SetSpawningHook registers a hook invoked when an actor starts spawning.
 func (r *CosmosRunnable) SetSpawningHook(hook func(id *IDInfo)) *CosmosRunnable {
 	r.spawningHook = hook

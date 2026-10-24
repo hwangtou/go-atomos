@@ -25,6 +25,12 @@ const (
 	// customize map or the WithDebugServer Run option.
 	configKeyDebugServer = "_debug_server"
 
+	// configKeyClusterAdvertiseIP overrides the IP a cluster node advertises
+	// to peers via etcd. By default the first non-loopback IPv4 interface
+	// address is used; containers and test fixtures that communicate over
+	// loopback set this to e.g. "127.0.0.1".
+	configKeyClusterAdvertiseIP = "_cluster_advertise_ip"
+
 	grpcServerInitialWindowSize     = 1024 * 128      // 128K
 	grpcServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M
 	grpcServerWriteBufferSize       = 1024 * 32       // 32K

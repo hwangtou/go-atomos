@@ -48,6 +48,9 @@ import (
 // test-mode options; they are currently ignored.
 func Run(t *testing.T, runnable *atomos.CosmosRunnable, opts ...atomos.RunOption) *atomos.CosmosProcess {
 	t.Helper()
+	if runnable.GetConfig() == nil {
+		t.Fatal("Run: runnable carries no Config; call runnable.SetConfig(...) before Run")
+	}
 	t.Logf("Welcome to Atomos! pid=(%d)", os.Getpid())
 
 	app, err := atomos.NewCosmosNodeAppWithTest(runnable.GetConfig(), t)

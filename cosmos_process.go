@@ -961,18 +961,29 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	p.cluster.etcdVersion = time.Now().Unix()
 
 	// 获取本地IP地址，用于接受集群中其他节点的连接。
+	// An explicit _cluster_advertise_ip override wins (containers, loopback
+	// test fixtures); otherwise use the first non-loopback IPv4.
 	// Get the local IP address, for accepting connections from other nodes in the cluster.
-	addrList, er := net.InterfaceAddrs()
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
-	}
 	var ip string
-	for _, address := range addrList {
-		// check for IPv4 address
-		if ipNet, ok := address.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-			if ipNet.IP.To4() != nil {
-				ip = ipNet.IP.String()
-				break
+	if p.local.runnable != nil && p.local.runnable.config != nil {
+		if v, ok := p.local.runnable.config.Customize[configKeyClusterAdvertiseIP]; ok {
+			if candidate := net.ParseIP(strings.TrimSpace(string(v))); candidate != nil {
+				ip = candidate.String()
+			}
+		}
+	}
+	if ip == "" {
+		addrList, er := net.InterfaceAddrs()
+		if er != nil {
+			return NewErrorf(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
+		}
+		for _, address := range addrList {
+			// check for IPv4 address
+			if ipNet, ok := address.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+				if ipNet.IP.To4() != nil {
+					ip = ipNet.IP.String()
+					break
+				}
 			}
 		}
 	}
