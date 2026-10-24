@@ -14,3 +14,6 @@ protoc-gen-go-atomos/protoc-gen-go-atomos
 /supervisor/process_playground
 /atomos-vet
 .DS_Store
+
+# Compiled vet analyzer binary (make build-vet)
+cmd/atomos-vet/atomos-vet
