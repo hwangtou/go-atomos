@@ -97,6 +97,7 @@ type elementDebugInfo struct {
 	State       string
 	AtomsTotal  int
 	AtomsActive int
+	Messages    int
 	Atoms       []atomDebugInfo
 }
 
@@ -119,6 +120,9 @@ func (ds *debugServer) collect() []elementDebugInfo {
 			State:       elem.State().String(),
 			AtomsTotal:  elem.GetAtomsNum(),
 			AtomsActive: elem.GetActiveAtomsNum(),
+		}
+		if iface := elem.elemImpl.Interface; iface != nil && iface.Config != nil {
+			info.Messages = len(iface.Config.Messages)
 		}
 		for _, atom := range elem.GetAtoms() {
 			info.Atoms = append(info.Atoms, atomDebugInfo{
@@ -200,10 +204,10 @@ th,td{border:1px solid #999;padding:2px 8px;text-align:left}th{background:#eee}<
 	fmt.Fprintf(&b, "<p>pid=%d state=%s uptime=%s <a href=\"/metrics\">metrics</a> <a href=\"/debug/pprof/\">pprof</a></p>",
 		os.Getpid(), html.EscapeString(p.state.String()), time.Since(ds.started).Round(time.Second))
 
-	b.WriteString("<table><tr><th>element</th><th>state</th><th>atoms</th><th>active</th></tr>")
+	b.WriteString("<table><tr><th>element</th><th>state</th><th>atoms</th><th>active</th><th>messages</th></tr>")
 	for _, e := range elements {
-		fmt.Fprintf(&b, "<tr><td>%s</td><td>%s</td><td>%d</td><td>%d</td></tr>",
-			html.EscapeString(e.Name), html.EscapeString(e.State), e.AtomsTotal, e.AtomsActive)
+		fmt.Fprintf(&b, "<tr><td>%s</td><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>",
+			html.EscapeString(e.Name), html.EscapeString(e.State), e.AtomsTotal, e.AtomsActive, e.Messages)
 	}
 	b.WriteString("</table>")
 
@@ -280,6 +284,7 @@ func (ds *debugServer) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 		l := fmt.Sprintf("element=\"%s\"", promLabel(e.Name))
 		lmetric("atomos_element_atoms", "Total atoms registered on the element.", l, e.AtomsTotal)
 		lmetric("atomos_element_atoms_active", "Atoms in Spawning/Waiting/Busy state.", l, e.AtomsActive)
+		lmetric("atomos_element_messages", "Message names in the element schema (Config.Messages).", l, e.Messages)
 		for _, a := range e.Atoms {
 			la := fmt.Sprintf("element=\"%s\",atom=\"%s\"", promLabel(e.Name), promLabel(a.Name))
 			lmetric("atomos_atom_mails", "Mails currently queued in the atom mailbox.", la, a.MailNum)

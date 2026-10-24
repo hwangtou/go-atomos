@@ -74,6 +74,9 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 	} else {
 		logLevel = runnable.config.LogLevel
 	}
+	// Populate the element's message-schema metadata (Config.Messages) from
+	// the registered decoders; idempotent, no-op when already filled.
+	fillElementMessages(impl.Interface)
 	e.atomos = newBaseAtomos(e, id, logLevel, e, impl.Developer.ElementConstructor(), main.process)
 
 	// 如果实现了ElementCustomizeAtomInitNum接口，那么就使用接口中定义的数量。

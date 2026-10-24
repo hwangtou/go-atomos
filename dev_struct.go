@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // NewImplementationFromDeveloper
@@ -31,6 +32,40 @@ func NewInterfaceFromDeveloper(name string, implement ElementDeveloper) *Element
 		AtomSpawner:     nil,
 		ElementDecoders: nil,
 		AtomDecoders:    nil,
+	}
+}
+
+// fillElementMessages populates Config.Messages — the element's message
+// schema metadata — from the registered decoders: for every element/atom
+// message name, the in and out message types as Any-wrapped empty
+// instances. Consumed by introspection surfaces (debug server, future
+// management/MCP APIs). Idempotent: a non-empty map (hand- or
+// generator-filled) is left untouched, so element reload is safe.
+func fillElementMessages(iface *ElementInterface) {
+	if iface == nil || iface.Config == nil || len(iface.Config.Messages) > 0 {
+		return
+	}
+	put := func(name string, dec *IOMessageDecoder) {
+		if dec == nil || dec.InDec == nil || dec.OutDec == nil {
+			return
+		}
+		in, errIn := dec.InDec(nil, true)
+		out, errOut := dec.OutDec(nil, true)
+		if errIn != nil || errOut != nil || in == nil || out == nil {
+			return
+		}
+		inAny, errInAny := anypb.New(in)
+		outAny, errOutAny := anypb.New(out)
+		if errInAny != nil || errOutAny != nil {
+			return
+		}
+		iface.Config.Messages[name] = &AtomMessageConfig{In: inAny, Out: outAny}
+	}
+	for name, dec := range iface.ElementDecoders {
+		put(name, dec)
+	}
+	for name, dec := range iface.AtomDecoders {
+		put(name, dec)
 	}
 }
 

@@ -32,7 +32,7 @@ func (m Messenger[E, A, AT, IN, OUT]) Decoder(i IN, o OUT) *IOMessageDecoder {
 			return ci, nil
 		},
 		OutDec: func(buf []byte, isProtoOrJson bool) (proto.Message, error) {
-			ci := proto.Clone(i)
+			ci := proto.Clone(o)
 			if isProtoOrJson {
 				if err := proto.Unmarshal(buf, ci); err != nil {
 					return nil, NewErrorf(ErrCodeAtomMessageArgType, "Argument unmarshal failed, err=(%v)", err).AddStack(nil)
