@@ -1,0 +1,91 @@
+# Continuous integration for go-atomos.
+#
+# Mirrors the gates documented in AGENTS.md and the Makefile targets:
+# build + vet (stdlib and atomos-vet analyzers) + full test suite
+# (including the generator golden-file test), race detector (-count=2),
+# integration tests against an embedded etcd, and the Windows
+# cross-compile gate. protoc is not required: the golden test drives
+# protogen in-process against checked-in descriptor sets.
+
+name: CI
+
+on:
+  push:
+    branches: [master, v3]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build, vet & test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.24.x", stable]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            go.sum
+            supervisor/go.sum
+      - name: Build
+        run: go build ./...
+      - name: Vet (stdlib + atomos-vet)
+        run: make vet
+      - name: Test
+        run: go test ./... -count=1 -timeout 600s
+      - name: Test supervisor module
+        run: |
+          cd supervisor
+          go test ./... -count=1 -timeout 600s
+
+  race:
+    name: Race detector (-count=2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            go.sum
+            supervisor/go.sum
+      - name: Test with race detector, twice
+        run: make test-race
+
+  integration:
+    name: Integration (embedded etcd)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            go.sum
+            supervisor/go.sum
+      - name: Integration tests
+        run: make test-integration
+
+  cross-build:
+    name: Cross-compile (windows)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            go.sum
+            supervisor/go.sum
+      - name: Windows build gate
+        run: make cross-build

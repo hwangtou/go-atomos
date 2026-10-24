@@ -90,6 +90,12 @@ func newTestCosmosProcessSimulateCluster(t *testing.T, basePort int, cosmosName,
 	tc := &testCluster{
 		t: t,
 	}
+	// close() is idempotent (nils everything it stops), so tests that also
+	// `defer cluster.close()` are unaffected. The central cleanup matters for
+	// callers like newDeathWatchTestRemote that never closed the cluster:
+	// the leaked mailbox/logging goroutines keep calling t.Log after the test
+	// finished, which the race detector flags against tRunner teardown.
+	t.Cleanup(tc.close)
 	tc.sourcePort = basePort
 	tc.sourceProcess = newTestCosmosProcessAsClusterNode(t, cosmosName, cosmosNodePrefix+"_source")
 	tc.sourceServer = tc.newTestGRPCServer(tc.sourceProcess, tc.sourcePort)
