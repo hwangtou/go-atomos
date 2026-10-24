@@ -184,3 +184,12 @@ capture from the hook or an ops endpoint.
 | Hook + event | `cosmos.go` (`SetDeadlockHook`, `DeadlockEvent`), fire sites in detection/timeout paths |
 | Stack dump | `util_go.go` `DumpStacks` |
 | Tests | `sync_deadlock_test.go`, `sync_deadlock_crossnode_test.go`, `sync_deadlock_matrix_test.go` (exhaustive scenario matrix: ring shapes local/cross-node, invisible-wait variants, negatives) |
+
+## Planned follow-ups
+
+The defenses above make *callers* return with errors; they cannot see slow
+handlers before timeouts fire, un-wedge a blocked mailbox short of a process
+restart, or raise a hot atom's single-goroutine throughput ceiling. The
+planned countermeasures — mailbox/handler observability, a handler watchdog
+with atom rebuild, and hot-atom routing pools — are tracked in
+[DESIGN_BLOCKING_MITIGATION.md](DESIGN_BLOCKING_MITIGATION.md).
