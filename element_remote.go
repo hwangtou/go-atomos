@@ -140,7 +140,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 		Atom:    name,
 	})
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "ElementRemote: GetAtomID response error. err=(%v)", er).AddStack(nil)
+		return nil, nil, grpcErrorToError(er).AddStack(nil)
 	}
 	if rsp.Error != nil {
 		return nil, nil, rsp.Error.AddStack(nil)
@@ -212,7 +212,7 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 		Args:     anyArg,
 	})
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "ElementRemote: SpawnAtom response error. err=(%v)", er).AddStack(nil)
+		return nil, nil, grpcErrorToError(er).AddStack(nil)
 	}
 	if rsp.Error != nil && rsp.Id == nil {
 		return nil, nil, rsp.Error.AddStack(nil)

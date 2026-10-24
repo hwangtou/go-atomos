@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -20,17 +22,20 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	defer cancel()
 
 	// GetAtomID test not existing Element
+	// v3 contract (§8 double-write): a business failure returns a non-OK gRPC
+	// status carrying the *Error in its details; the response body is then
+	// unavailable to the client (the gRPC library drops it).
 	if rsp, er := cli.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
 		Element: "",
 		Atom:    "",
-	}); er != nil {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call failed. err=(%v)", er)
-	} else if rsp == nil || rsp.Id != nil || rsp.Error == nil {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid response: rsp=(%v)", rsp)
-	} else if rsp.Error.Code != ErrCodeMainElementNotFound {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid error code: rsp.Error.Code=(%v)", rsp.Error.Code)
+	}); er == nil {
+		t.Fatalf("CosmosRemote: GetAtomID should fail with a non-OK status. rsp=(%v)", rsp)
+	} else if st, _ := status.FromError(er); st.Code() != codes.NotFound {
+		t.Fatalf("CosmosRemote: GetAtomID status code=(%v), want NotFound", st.Code())
+	} else if restored := grpcErrorToError(er); restored.Code != ErrCodeMainElementNotFound {
+		t.Fatalf("CosmosRemote: GetAtomID restored error code=(%v), want ErrCodeMainElementNotFound", restored.Code)
 	} else {
-		t.Logf("CosmosRemote: GetAtomID gRPC call succeeded, rsp=(%v)", rsp)
+		t.Logf("CosmosRemote: GetAtomID failed as expected, status=(%v)", er)
 	}
 
 	// GetAtomID test get existing Element ForTest
@@ -38,14 +43,14 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	if rsp, er := cli.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{
 		Element: ForTestAtomosName,
 		Atom:    testAtom,
-	}); er != nil {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call failed. err=(%v)", er)
-	} else if rsp == nil || rsp.Id != nil || rsp.Error == nil {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid response: rsp=(%v)", rsp)
-	} else if rsp.Error.Code != ErrCodeAtomNotExists {
-		t.Fatalf("CosmosRemote: GetAtomID gRPC call returned invalid error code: rsp.Error.Code=(%v)", rsp.Error.Code)
+	}); er == nil {
+		t.Fatalf("CosmosRemote: GetAtomID should fail with a non-OK status. rsp=(%v)", rsp)
+	} else if st, _ := status.FromError(er); st.Code() != codes.NotFound {
+		t.Fatalf("CosmosRemote: GetAtomID status code=(%v), want NotFound", st.Code())
+	} else if restored := grpcErrorToError(er); restored.Code != ErrCodeAtomNotExists {
+		t.Fatalf("CosmosRemote: GetAtomID restored error code=(%v), want ErrCodeAtomNotExists", restored.Code)
 	} else {
-		t.Logf("CosmosRemote: GetAtomID gRPC call succeeded, rsp=(%v)", rsp)
+		t.Logf("CosmosRemote: GetAtomID failed as expected, status=(%v)", er)
 	}
 
 	// SpawnAtomID test existing Element ForTest
@@ -196,16 +201,20 @@ func TestCosmosRemote_InstanceMismatchOnRespawn(t *testing.T) {
 	}
 
 	// A sync call with the STALE instance_id must be rejected.
+	// v3 contract: the rejection arrives as a non-OK status (FailedPrecondition)
+	// whose details restore the full *Error including ErrCodeAtomInstanceMismatch.
 	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
 		To:         staleID, // carries the old instance_id
 		CosmosArgs: nil,
 		Message:    "Greeting",
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
-	}); er != nil {
-		t.Fatalf("Sync call transport error: %v", er)
-	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrCodeAtomInstanceMismatch {
-		t.Fatalf("Expected ErrAtomInstanceMismatch with stale instance_id, got rsp=%v", rsp)
+	}); er == nil {
+		t.Fatalf("Expected a non-OK status with stale instance_id, got rsp=%v", rsp)
+	} else if st, _ := status.FromError(er); st.Code() != codes.FailedPrecondition {
+		t.Fatalf("status code=(%v), want FailedPrecondition", st.Code())
+	} else if restored := grpcErrorToError(er); restored.Code != ErrCodeAtomInstanceMismatch {
+		t.Fatalf("restored code=(%d), want ErrCodeAtomInstanceMismatch", restored.Code)
 	}
 
 	// Rebind: re-GetAtomID yields the fresh instance_id.
@@ -259,6 +268,8 @@ func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
 		t.Fatalf("SpawnAtom failed: %v", er)
 	}
 
+	// v3 contract: the rejection arrives as a non-OK status (FailedPrecondition)
+	// whose details restore ErrCodeAtomInstanceMismatch.
 	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId: cluster.sourceProcess.local.GetIDInfo(),
 		To: &IDInfo{
@@ -269,10 +280,12 @@ func TestCosmosRemote_InstanceIDZeroRejected(t *testing.T) {
 		CosmosArgs: nil,
 		Message:    "Greeting",
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
-	}); er != nil {
-		t.Fatalf("Sync transport error: %v", er)
-	} else if rsp == nil || rsp.Error == nil || rsp.Error.Code != ErrCodeAtomInstanceMismatch {
-		t.Fatalf("Expected ErrAtomInstanceMismatch for instance_id=0, got rsp=%v", rsp)
+	}); er == nil {
+		t.Fatalf("Expected a non-OK status for instance_id=0, got rsp=%v", rsp)
+	} else if st, _ := status.FromError(er); st.Code() != codes.FailedPrecondition {
+		t.Fatalf("status code=(%v), want FailedPrecondition", st.Code())
+	} else if restored := grpcErrorToError(er); restored.Code != ErrCodeAtomInstanceMismatch {
+		t.Fatalf("restored code=(%d), want ErrCodeAtomInstanceMismatch", restored.Code)
 	}
 }
 

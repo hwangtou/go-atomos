@@ -19,6 +19,9 @@ var (
 	atomosClientTimeout = 5 * time.Second
 )
 
+// Management-plane RPC: errors stay body-embedded only (no gRPC status
+// mapping); management tooling prefers an always-OK transport. See §8 of
+// docs/DESIGN_V3_API.md.
 func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteTryKillingReq) (*CosmosRemoteTryKillingRsp, error) {
 	defer func() {
 		Recover(a.process.local)
@@ -35,6 +38,7 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 
 // DrainNode handles a remote drain request: enter Draining state, stop
 // accepting new atoms, and exit once existing atoms finish (or deadline hits).
+// Management-plane RPC: body-embedded errors only (see TryKilling).
 func (a *atomosRemoteService) DrainNode(ctx context.Context, req *CosmosRemoteDrainNodeReq) (*CosmosRemoteDrainNodeRsp, error) {
 	defer func() {
 		Recover(a.process.local)
@@ -52,6 +56,11 @@ func (a *atomosRemoteService) DrainNode(ctx context.Context, req *CosmosRemoteDr
 }
 
 func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.getAtomID(ctx, req))
+}
+
+func (a *atomosRemoteService) getAtomID(ctx context.Context, req *CosmosRemoteGetAtomIDReq) (*CosmosRemoteGetAtomIDRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -75,6 +84,11 @@ func (a *atomosRemoteService) GetAtomID(ctx context.Context, req *CosmosRemoteGe
 }
 
 func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteGetIDStateReq) (*CosmosRemoteGetIDStateRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.getIDState(ctx, req))
+}
+
+func (a *atomosRemoteService) getIDState(ctx context.Context, req *CosmosRemoteGetIDStateReq) (*CosmosRemoteGetIDStateRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -101,6 +115,11 @@ func (a *atomosRemoteService) GetIDState(ctx context.Context, req *CosmosRemoteG
 }
 
 func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemoteGetIDIdleTimeReq) (*CosmosRemoteGetIDIdleTimeRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.getIDIdleTime(ctx, req))
+}
+
+func (a *atomosRemoteService) getIDIdleTime(ctx context.Context, req *CosmosRemoteGetIDIdleTimeReq) (*CosmosRemoteGetIDIdleTimeRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -126,6 +145,7 @@ func (a *atomosRemoteService) GetIDIdleTime(ctx context.Context, req *CosmosRemo
 	return rsp, nil
 }
 
+// Management-plane RPC: body-embedded errors only (see TryKilling).
 func (a *atomosRemoteService) GetElementInfo(ctx context.Context, req *CosmosRemoteGetElementInfoReq) (*CosmosRemoteGetElementInfoRsp, error) {
 	defer func() {
 		Recover(a.process.local)
@@ -141,6 +161,11 @@ func (a *atomosRemoteService) GetElementInfo(ctx context.Context, req *CosmosRem
 }
 
 func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.spawnAtom(ctx, req))
+}
+
+func (a *atomosRemoteService) spawnAtom(ctx context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
 	defer func() {
 		Recover(a.process.local)
 	}()
@@ -187,6 +212,11 @@ func (a *atomosRemoteService) SpawnAtom(ctx context.Context, req *CosmosRemoteSp
 // Rsp is the rsp.
 // Error is the error.
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.syncMessagingByName(ctx, req))
+}
+
+func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	defer func() { Recover(a.process.local) }()
 
 	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
@@ -250,6 +280,11 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 }
 
 func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.asyncMessagingByName(ctx, req))
+}
+
+func (a *atomosRemoteService) asyncMessagingByName(ctx context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
 	defer func() { Recover(a.process.local) }()
 
 	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName req=(%v)", req)
@@ -320,6 +355,7 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 // AsyncOnMessageCallback is the callback for async messaging.
 // CallbackId is the callback id, which is local.
 // ToId is the target id, which is remote.
+// Management-plane RPC: body-embedded errors only (see TryKilling).
 func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *CosmosRemoteAsyncOnMessageCallbackReq) (*CosmosRemoteAsyncOnMessageCallbackRsp, error) {
 	defer func() { Recover(a.process.local) }()
 
@@ -382,6 +418,11 @@ func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *C
 }
 
 func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
+	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
+	return callRspWithStatus(a.killAtom(ctx, req))
+}
+
+func (a *atomosRemoteService) killAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteKillAtomRsp{}
 
@@ -413,6 +454,7 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 	return rsp, nil
 }
 
+// Management-plane RPC: body-embedded errors only (see TryKilling).
 func (a *atomosRemoteService) ElementBroadcast(ctx context.Context, req *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
 	defer func() {
 		Recover(a.process.local)

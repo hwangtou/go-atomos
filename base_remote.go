@@ -182,7 +182,10 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 		Args:       arg,
 	})
 	if er != nil {
-		return nil, NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: SyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+		// Prefer the *Error carried in the gRPC status details (it preserves
+		// the remote code and call stacks); fall back to a reverse-mapped
+		// status code for transport-level failures.
+		return nil, grpcErrorToError(er).AddStack(nil)
 	}
 	if rsp.Reply != nil {
 		reply, er = rsp.Reply.UnmarshalNew()
@@ -247,7 +250,7 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		Args:       arg,
 	})
 	if er != nil {
-		return NewErrorf(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName response error. err=(%v)", er).AddStack(nil)
+		return grpcErrorToError(er).AddStack(nil)
 	}
 	if rsp.Error != nil {
 		return rsp.Error.AddStack(nil)
@@ -314,7 +317,7 @@ func (a *BaseRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 		CosmosArgs: helper.getRemoteArg(),
 	})
 	if er != nil {
-		return NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: KillAtom response error.").AddStack(nil)
+		return grpcErrorToError(er).AddStack(nil)
 	}
 
 	if rsp.Error != nil {
