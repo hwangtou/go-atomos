@@ -77,16 +77,6 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
-	// If no TLS, return
-	if serverCertPem == nil || serverKeyPem == nil {
-		return false, nil, nil, nil
-	}
-	// Parse the key pair to create tls config of gRPC server.
-	serverCert, er := tls.X509KeyPair(serverCertPem, serverKeyPem)
-	if er != nil {
-		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
-	}
-
 	// Client-side
 	clientCertPem, _, err := etcdGet(cli, etcdClusterClientCertKey)
 	if err != nil {
@@ -96,6 +86,31 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	if err != nil {
 		return false, nil, nil, err.AddStack(nil)
 	}
+	// No TLS material at all.
+	if serverCertPem == nil && serverKeyPem == nil && clientCertPem == nil && clientKeyPem == nil {
+		return false, nil, nil, nil
+	}
+	// Incomplete TLS material must fail loudly instead of silently degrading:
+	// a half-written server pair (or client material without the server pair)
+	// used to return "no TLS" — a plaintext cluster hiding the operator's
+	// mistake — and a half-written client pair used to produce a mutual-TLS
+	// config whose handshake can never succeed.
+	if serverCertPem == nil || serverKeyPem == nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid,
+			"etcd: incomplete cluster TLS config: the server cert and key must be set together. serverCert=(%v),serverKey=(%v),clientCert=(%v),clientKey=(%v)",
+			serverCertPem != nil, serverKeyPem != nil, clientCertPem != nil, clientKeyPem != nil).AddStack(nil)
+	}
+	if (clientCertPem == nil) != (clientKeyPem == nil) {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid,
+			"etcd: incomplete cluster TLS config: the client cert and key must be set together. clientCert=(%v),clientKey=(%v)",
+			clientCertPem != nil, clientKeyPem != nil).AddStack(nil)
+	}
+	// Parse the key pair to create tls config of gRPC server.
+	serverCert, er := tls.X509KeyPair(serverCertPem, serverKeyPem)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
+	}
+
 	var certPool *x509.CertPool
 	var clientCert tls.Certificate
 	if clientCertPem != nil && clientKeyPem != nil {
@@ -104,7 +119,7 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse client certificate").AddStack(nil)
 		}
 		// Load client's certificate and private key
-		clientCert, er = tls.X509KeyPair(serverCertPem, serverKeyPem)
+		clientCert, er = tls.X509KeyPair(clientCertPem, clientKeyPem)
 		if er != nil {
 			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse key pair. err=(%s)", er).AddStack(nil)
 		}
