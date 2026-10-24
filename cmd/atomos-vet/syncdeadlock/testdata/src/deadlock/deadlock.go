@@ -30,6 +30,7 @@ type FooAtom interface {
 	Atomos
 	Greeting(from ID, in any) (any, error)
 	Ping(from ID, in any) (any, error)
+	Echo(from ID, in any) (any, error)
 }
 
 type BarAtom interface {
@@ -54,9 +55,17 @@ func (c *FooAtomID) Ping(caller SelfID, in any, ext ...ArgsForBaseAtomos) (any, 
 	return nil, nil
 }
 
+func (c *FooAtomID) Echo(caller SelfID, in any, ext ...ArgsForBaseAtomos) (any, error) {
+	return nil, nil
+}
+
 type BarAtomID struct{ id ID }
 
 func (c *BarAtomID) Pong(caller SelfID, in any, ext ...ArgsForBaseAtomos) (any, error) {
+	return nil, nil
+}
+
+func (c *BarAtomID) SyncMessagingByName(caller SelfID, name string, in any, ext ...ArgsForBaseAtomos) (any, error) {
 	return nil, nil
 }
 
@@ -99,6 +108,15 @@ func (a *atomFoo) Ping(from ID, in any) (any, error) {
 	return nil, e
 }
 
+// BAD: SyncMessagingByName with a LITERAL message name — edge
+// (Foo,Echo)→(Bar,Pong); combined with Pong→Echo below this closes
+// Foo.Echo→Bar.Pong→Foo.Echo.
+func (a *atomFoo) Echo(from ID, in any) (any, error) {
+	bar, _ := GetBarAtomID(a.self.Cosmos(), "bar")
+	_, e := bar.SyncMessagingByName(a.self, "Pong", in) // want `potential sync deadlock cycle: handler Bar.Pong`
+	return nil, e
+}
+
 type atomBar struct {
 	self SelfID
 }
@@ -108,6 +126,10 @@ func (a *atomBar) String() string { return "atomBar" }
 func (a *atomBar) Pong(from ID, in any) (any, error) {
 	foo, _ := GetFooAtomID(a.self.Cosmos(), "foo")
 	_, e := foo.Ping(a.self, in)
+	if e != nil {
+		return nil, e
+	}
+	_, e = foo.Echo(a.self, in)
 	return nil, e
 }
 

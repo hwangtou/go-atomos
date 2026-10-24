@@ -183,4 +183,4 @@ capture from the hook or an ops endpoint.
 | Cross-node chain | `atomos.proto` `CosmosArgs.wait_chain`, `base_remote.go`, `atomos_remote_service.go` |
 | Hook + event | `cosmos.go` (`SetDeadlockHook`, `DeadlockEvent`), fire sites in detection/timeout paths |
 | Stack dump | `util_go.go` `DumpStacks` |
-| Tests | `sync_deadlock_test.go`, `sync_deadlock_crossnode_test.go` |
+| Tests | `sync_deadlock_test.go`, `sync_deadlock_crossnode_test.go`, `sync_deadlock_matrix_test.go` (exhaustive scenario matrix: ring shapes local/cross-node, invisible-wait variants, negatives) |

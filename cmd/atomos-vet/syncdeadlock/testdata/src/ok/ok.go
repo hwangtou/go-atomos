@@ -107,6 +107,10 @@ func (a *atomFoo) Ping(from ID, in any) (any, error) {
 	go func() {
 		_, _ = foo.Ping(a.self, in)
 	}()
+	// SyncMessagingByName with a RUNTIME-COMPUTED name: no literal, no edge
+	// (documented limitation — the runtime wait-graph covers it).
+	name := "Gre" + "eting"
+	_, _ = foo.SyncMessagingByName(a.self, name, in)
 	return nil, nil
 }
 

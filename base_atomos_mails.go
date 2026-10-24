@@ -338,7 +338,7 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 			})
 			return nil, err
 		} else {
-			err := NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
+			err := NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.currentHandlingMessage()).AddStack(nil)
 			a.process.onDeadlockEvent(&DeadlockEvent{
 				Kind: DeadlockEventTimeoutHandling, Target: a.id.Info(), Name: m.name, Err: errOrNil(err),
 			})

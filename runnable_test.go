@@ -45,7 +45,18 @@ func newTestCosmosRunnable(id *IDInfo) *CosmosRunnable {
 
 type testRunnableDev struct{}
 
+// testAtomConstructorHook lets a test customize atoms created by
+// testRunnableDev.AtomConstructor — e.g. install a spawnHook on the new
+// instance before its Spawn startup runs (spawn-entanglement tests). The
+// returning function restores the default constructor behavior.
+var testAtomConstructorHook func(name string) *testRunnableAtom
+
 func (d *testRunnableDev) AtomConstructor(name string) Atomos {
+	if testAtomConstructorHook != nil {
+		if a := testAtomConstructorHook(name); a != nil {
+			return a
+		}
+	}
 	return &testRunnableAtom{}
 }
 
@@ -55,6 +66,11 @@ func (d *testRunnableDev) ElementConstructor() Atomos {
 
 type testRunnableElement struct {
 	self ElementSelfID
+
+	// sayHelloHook, when set, is invoked by the element-level SayHello
+	// handler (atom→element ring tests). Returning a non-nil error fails the
+	// element message with that error.
+	sayHelloHook func(from ID) *Error
 }
 
 func (t *testRunnableElement) Spawn(self ElementSelfID, data *ForTestData, _ ...ArgsForBaseAtomos) error {
@@ -71,8 +87,12 @@ func (t *testRunnableElement) Halt(from ID, cancelled []uint64) (save bool, data
 }
 
 func (t *testRunnableElement) SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error) {
-	//TODO implement me
-	panic("implement me")
+	if t.sayHelloHook != nil {
+		if e := t.sayHelloHook(from); e != nil {
+			return nil, e
+		}
+	}
+	return &ForTestHelloO{}, nil
 }
 
 type testRunnableAtom struct {
@@ -85,8 +105,21 @@ type testRunnableAtom struct {
 	cyclePeer string
 
 	// remoteHook is invoked by Greeting mode 5 (cross-node cycle tests): the
-	// closure makes a remote sync call on behalf of the handler.
+	// closure makes an outbound sync call — remote or local — on behalf of
+	// the handler.
 	remoteHook func(self AtomSelfID) *Error
+
+	// greetingGate, when non-nil, blocks Greeting at entry until the channel
+	// is closed/_signaled (simultaneous-call tests need both handlers running
+	// before either calls out).
+	greetingGate chan struct{}
+
+	// wormholeHook is invoked by AcceptWormhole when set; implementing
+	// AcceptWormhole enables wormhole reception for this atom.
+	wormholeHook func(from ID) error
+
+	// spawnHook, when set, runs inside the atom's Spawn startup.
+	spawnHook func(self AtomSelfID) error
 
 	haltNotify chan struct{}
 	haltWait   time.Duration
@@ -94,6 +127,19 @@ type testRunnableAtom struct {
 
 func (t *testRunnableAtom) Spawn(self AtomSelfID, arg *ForTestSpawnArg, data *ForTestData, _ ...ArgsForBaseAtomos) error {
 	t.self = self
+	if t.spawnHook != nil {
+		if e := t.spawnHook(self); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// AcceptWormhole enables wormhole reception for testRunnableAtom.
+func (t *testRunnableAtom) AcceptWormhole(from ID, wormhole BaseAtomosWormhole) error {
+	if t.wormholeHook != nil {
+		return t.wormholeHook(from)
+	}
 	return nil
 }
 
@@ -118,6 +164,9 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 	}
 	if t.greetingWait > 0 {
 		<-time.After(t.greetingWait)
+	}
+	if t.greetingGate != nil {
+		<-t.greetingGate
 	}
 	switch in.Mode {
 	case 1:

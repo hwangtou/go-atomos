@@ -679,6 +679,18 @@ func (a *BaseAtomos) setWaiting(message string) {
 	a.mt.unset(message)
 }
 
+// currentHandlingMessage returns the message this Atomos is currently
+// handling, or "" when idle. The tracker is written by the mailbox goroutine
+// under the mailbox mutex (setBusy/setWaiting); readers such as
+// waitReply's timeout diagnostics must take the same lock — an unsynchronized
+// read races with the mailbox completing a mail exactly when the timeout
+// fires.
+func (a *BaseAtomos) currentHandlingMessage() string {
+	a.mailbox.mutex.Lock()
+	defer a.mailbox.mutex.Unlock()
+	return a.mt.current
+}
+
 func (a *BaseAtomos) setStopping() {
 	a.mailbox.mutex.Lock()
 	defer a.mailbox.mutex.Unlock()
