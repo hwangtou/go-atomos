@@ -10,7 +10,6 @@ package atomos
 // survives all of the above.
 
 import (
-	"strings"
 	"testing"
 	"time"
 )
@@ -80,18 +79,14 @@ func TestElement_SyncPanicReturnsPanicStackAndAtomSurvives(t *testing.T) {
 }
 
 // loggerHasError reports whether the process logging captured an error-log
-// line containing substr.
+// line containing substr. Goes through the logger's locked accessor: the
+// logging mailbox goroutine appends concurrently.
 func loggerHasError(p *CosmosProcess, substr string) bool {
 	l, ok := p.logging.logging.(*reproLogger)
 	if !ok {
 		return false
 	}
-	for _, e := range l.errs {
-		if strings.Contains(e, substr) {
-			return true
-		}
-	}
-	return false
+	return l.hasError(substr)
 }
 
 func TestElement_SyncTimeoutHandling(t *testing.T) {
