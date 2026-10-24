@@ -229,6 +229,8 @@ const (
 - README 重写：quickstart、架构图、测试指南链接。
 - 恢复 examples/（hello_world 基于 v3 API 重写）。
 
+实施状态（v3.0-beta1 已落地）：核心公开符号（ID/SelfID/Element/CosmosNode/CosmosRunnable/WithID/WithRebind/Arg* 系列/错误哨兵）已统一英文优先 godoc，中文保留为翻译注记；根包新增 `example_test.go`（`ExampleCodeOf`、`ExampleArgBaseAtomosAnyValue`、`ExampleWithRebind`，均为不起进程的 testable Example）。README 已重写（quickstart/特性/测试指南/仓库布局），新增 AGENTS.md（构建测试命令、proto 生成禁忌、常见错误模式）。examples/hello_world 已基于 v3 API 重建并留在主 module（`go build ./...` 覆盖），含 proto/gen.sh/实现/进程级测试，二进制实际运行验证通过（spawn→SayHello→SIGINT 优雅退出）。`ExampleRun`/`ExampleElementDeveloper` 因需起进程未做成 Example，由 examples/hello_world 承担此角色。架构图未配（纯文字 README）。
+
 ## 7. 测试工具包 `atomostest`（P1，与接口重构互为依赖）
 
 接口可实现化（§2）落地后，新建 `atomostest` 子包：
@@ -236,6 +238,8 @@ const (
 - `atomostest.Run(t, runnable, opts...)`：测试进程入口（替代 `MainForTest`）。
 - `atomostest.NewFakeID()` / `NewFakeLogging()` / `NewFakeSelfID()`：官方 fake。
 - 内存模拟节点（无 gRPC/etcd/fork）+ 虚拟时钟：作为后续阶段，设计文档另立。
+
+实施状态（v3.0-beta1 已落地）：`Run` 已有；`NewFakeID`/`NewFakeLogging`/`NewFakeSelfID` 已实现并配单测（`atomostest/fake_*.go`、`fakes_test.go`）。FakeID 支持按消息名配置回复（`SetMessageReply`）、动态 handler（`SetSyncHandler`）与调用历史断言（`Calls`/`CallCount`/`ResetCalls`）；FakeSelfID 内嵌 FakeID 并提供 FakeLogging 日志记录、同步执行的 FakeTask、可设置的 CosmosMain/Config/AsyncCallbackPending 与计数式 KillSelf。包 doc 已声明边界：fake 仅用于测试用户业务逻辑，注入框架内核路径会被 `ErrFrameworkInvalidID` 显式拒绝。内存模拟节点与虚拟时钟仍按原计划另立设计。
 
 ## 8. 内部 RPC 协议与错误传输（P2）
 
