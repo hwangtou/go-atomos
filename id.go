@@ -6,46 +6,49 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ID 是对Atomos的标识符，类似指针和句柄的概念。
-// ID, an instance that similar to file descriptor of the Atom.
+// ID is the handle of an Atomos instance — conceptually similar to a file
+// descriptor: it identifies the target of messaging and lifecycle calls.
+// 对Atomos的标识符，类似指针和句柄的概念。
 type ID interface {
-	// GetIDInfo
+	// GetIDInfo returns the structured identity of this ID.
 	// 获取ID信息。
 	GetIDInfo() *IDInfo
-	// String
+	// String returns the string representation of this ID.
 	// 获取ID的字符串表示。
 	String() string
 
-	// Cosmos 所在Cosmos节点的ID。
-	// ID of the Cosmos node where the Cosmos is located.
+	// Cosmos returns the Cosmos node where this ID lives.
+	// 所在Cosmos节点的ID。
 	Cosmos() CosmosNode
 
-	// State 当前运行状态
-	// Current running state
+	// State returns the current running state.
+	// 当前运行状态。
 	State() BaseAtomosState
-	// IdleTime 空闲的时长
-	// Idle time
+	// IdleTime returns how long the actor has been idle.
+	// 空闲的时长。
 	IdleTime() time.Duration
 
-	// SyncMessagingByName 同步调用
-	// Sync call
+	// SyncMessagingByName makes a synchronous message call and blocks until
+	// the reply arrives or the call fails.
+	// 同步调用。
 	SyncMessagingByName(callerID ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (out proto.Message, err error)
 
-	// AsyncMessagingByName 异步调用
-	// Async call
+	// AsyncMessagingByName makes an asynchronous message call; the reply is
+	// delivered to callback. A non-nil return means the call failed before
+	// execution and callback will never be invoked.
+	// 异步调用。
 	AsyncMessagingByName(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error)
 
-	// DecoderByName 获得某个消息的解码器
-	// Get decoder of a message
+	// DecoderByName returns the input/output decoders of a message.
+	// 获得某个消息的解码器。
 	DecoderByName(name string) (in, out MessageDecoder)
 
-	// Kill 从其它Atom或者main发送Kill消息。
-	// Send Kill message from other Atom or main.
+	// Kill asks this actor to stop, sent from another Atom or from main.
+	// 从其它Atom或者main发送Kill消息。
 	Kill(callerID ID, ext ...ArgsForBaseAtomos) error
 
-	// SendWormhole
+	// SendWormhole sends a wormhole message carrying arbitrary typed data.
 	// 发送Wormhole消息。
-	// Send Wormhole message.
 	SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error
 }
 
@@ -75,70 +78,76 @@ func asIDInternal(id ID) (idInternal, *Error) {
 		"ID: implementation %T does not provide the framework-internal ID extension; passing a user-implemented ID to framework kernel paths is a programming error.", id).AddStack(nil)
 }
 
-// ReleasableID 可以释放的ID，每当我们成功获得一个ID之后，都应该defer Release。
-// ReleasableID, an ID that can be released, we should defer Release after we get an ID successfully.
+// ReleasableID is an ID that can be released. Whenever an ID is acquired
+// successfully, Release should be deferred.
+// 可以释放的ID，每当我们成功获得一个ID之后，都应该defer Release。
 type ReleasableID interface {
 	ID
 	Release()
 }
 
-// SelfID 是让Atomos对象内部访问的ID的概念。
+// SelfID is the ID an Atomos instance uses to access itself from the inside.
+// Through SelfID an actor can reach its Cosmos node (CosmosMain), kill itself
+// (KillSelf), and use the Log and Task utilities.
+// 让Atomos对象内部访问的ID的概念。
 // 通过SelfID，Atomos内部可以访问到自己的Cosmos（CosmosProcess）、可以杀掉自己（KillSelf），以及提供Log和Task的相关功能。
-// SelfID is the concept of ID that can be accessed by Atomos object internally.
-// Through SelfID, Atomos can access its Cosmos (CosmosProcess) internally, kill itself (KillSelf), and provide Log and Task related functions.
 type SelfID interface {
 	ID
 	AtomosUtilities
 
-	// CosmosMain 获取Cosmos节点（本地实现以 CosmosNode 接口返回）。
+	// CosmosMain returns the Cosmos node (the local implementation, as a
+	// CosmosNode). Callers needing *CosmosLocal specifically can type-assert.
+	// 获取Cosmos节点（本地实现以 CosmosNode 接口返回）。
 	// 需要 *CosmosLocal 具体类型处自行类型断言。
-	// Get the Cosmos node (the local implementation, returned as CosmosNode).
-	// Callers needing *CosmosLocal specifically can type-assert.
 	CosmosMain() CosmosNode
 
-	// KillSelf Atomos从内部杀死自己。
-	// Atomos kills itself internally.
+	// KillSelf makes the actor kill itself from the inside.
+	// Atomos从内部杀死自己。
 	KillSelf()
 
-	// AsyncCallbackPending 返回在途异步回调数量。
-	// 业务空闲清理可在 KillSelf 前检查:非空时推迟自杀,给在途回复留排空窗口
-	// (atom 停机时框架会把在途回调以 ErrAsyncCallbackCancelledByHalt 终结)。
+	// AsyncCallbackPending returns the number of in-flight async callbacks.
+	// Idle-cleanup logic can check it before KillSelf: when non-zero, defer
+	// the self-kill to leave a drain window for in-flight replies (at atom
+	// halt the framework terminates them with ErrAsyncCallbackCancelledByHalt).
+	// 返回在途异步回调数量。
 	AsyncCallbackPending() int
 
-	// Parallel 提供由recover保护的并发支持。
-	// Provide concurrent support protected by recover.
+	// Parallel provides concurrency protected by recover.
+	// 提供由recover保护的并发支持。
 	Parallel(func())
 
-	// Config 获取自定义的配置
-	// Get customized config
+	// Config returns the customized config.
+	// 获取自定义的配置。
 	Config() map[string][]byte
 }
 
-// AtomSelfID 是Atom的SelfID。
-// AtomSelfID is SelfID of Atom.
+// AtomSelfID is the SelfID of an Atom.
+// Atom的SelfID。
 type AtomSelfID interface {
 	SelfID
 
-	// Persistence 如果有实现AtomAutoData接口，那么可以通过该方法获取AtomAutoData。
-	// If AtomAutoData interface is implemented, AtomAutoData can be obtained through this method.
+	// Persistence returns the AtomAutoData when the ElementDeveloper
+	// implements the AutoData interface, nil otherwise.
+	// 如果有实现AtomAutoData接口，那么可以通过该方法获取AtomAutoData。
 	Persistence() AtomAutoData
 }
 
-// ElementSelfID 是Element的SelfID。
-// ElementSelfID is SelfID of Element.
+// ElementSelfID is the SelfID of an Element.
+// Element的SelfID。
 type ElementSelfID interface {
 	Element
 	SelfID
 
-	// Persistence 如果有实现AutoDataPersistence接口，那么可以通过该方法获取AutoDataPersistence。
-	// If AutoData interface is implemented, AutoData can be obtained through this method.
+	// Persistence returns the AutoData when the ElementDeveloper implements
+	// the AutoData interface, nil otherwise.
+	// 如果有实现AutoData接口，那么可以通过该方法获取AutoData。
 	Persistence() AutoData
 
-	// GetAtoms 获取当前Element中的所有的Atom。
-	// Get all Atoms in current Element.
+	// GetAtoms returns all Atoms of this Element.
+	// 获取当前Element中的所有的Atom。
 	GetAtoms() []*AtomLocal
-	// GetAtomsInPattern 获取当前Element中所有符合pattern的Atom。
-	// Get all Atoms that match pattern in current Element.
+	// GetAtomsInPattern returns all Atoms of this Element matching pattern.
+	// 获取当前Element中所有符合pattern的Atom。
 	GetAtomsInPattern(pattern string) []*AtomLocal
 }
 

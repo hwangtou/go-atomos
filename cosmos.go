@@ -42,15 +42,15 @@ type CosmosNode interface {
 }
 
 // CosmosRunnable is the application builder. Every Atomos process creates one,
-// registers Element implementations and hooks, then passes it to Main() or Start().
+// registers Element implementations and hooks, then passes it to Run (or
+// atomostest.Run in tests).
 //
 // Typical usage:
 //
-//	runnable := &atomos.CosmosRunnable{}
-//	runnable.SetConfig(config).
-//	         SetMainScript(myScript).
-//	         AddElementImplementationWithSpawn(myElementImpl)
-//	atomos.Main(*runnable)
+//	runnable := (&atomos.CosmosRunnable{}).
+//		SetMainScript(myScript).
+//		AddElementImplementationWithSpawn(myElementImpl)
+//	atomos.Run(runnable)
 type CosmosRunnable struct {
 	config       *Config
 	implements   map[string]*ElementImplementation
@@ -79,8 +79,9 @@ type CosmosRunnable struct {
 	idTrackerDebug        *bool
 }
 
-// Check 检查CosmosRunnable是否正确构造。
-// Check if CosmosRunnable is constructed correctly.
+// Check reports whether the CosmosRunnable is correctly constructed: a Config
+// and a MainScript are required.
+// 检查CosmosRunnable是否正确构造。
 func (r *CosmosRunnable) Check() error {
 	// Config
 	if r.config == nil {
@@ -100,16 +101,18 @@ func (r *CosmosRunnable) Check() error {
 	return nil
 }
 
-// AddElementImplementation CosmosRunnable构造器方法，用于添加ElementImplementation（实现）。
-// Construct method of CosmosRunnable, uses to add ElementImplementation.
+// AddElementImplementation registers an ElementImplementation with the
+// runnable. The Element is available but not spawned at process start; use
+// AddElementImplementationWithSpawn or SetElementSpawn for that.
+// CosmosRunnable构造器方法，用于添加ElementImplementation（实现）。
 func (r *CosmosRunnable) AddElementImplementation(i *ElementImplementation) *CosmosRunnable {
 	return r.addElementImplementation(i, false)
 }
 
-// AddElementImplementationWithSpawn 与 AddElementImplementation 相同，并额外将该
-// Element 标记为 spawn 入口（等价于再调用 SetElementSpawn）。
-// AddElementImplementationWithSpawn is AddElementImplementation plus marking the
-// Element as a spawn entry (equivalent to also calling SetElementSpawn).
+// AddElementImplementationWithSpawn is AddElementImplementation plus marking
+// the Element as a spawn entry (equivalent to also calling SetElementSpawn):
+// the Element is spawned automatically at process start.
+// 与 AddElementImplementation 相同，并额外将该 Element 标记为 spawn 入口。
 func (r *CosmosRunnable) AddElementImplementationWithSpawn(i *ElementImplementation) *CosmosRunnable {
 	return r.addElementImplementation(i, true)
 }
@@ -129,6 +132,8 @@ func (r *CosmosRunnable) addElementImplementation(i *ElementImplementation, setS
 	return r
 }
 
+// SetElementSpawn marks a registered Element as a spawn entry: it is spawned
+// automatically at process start, in the order the entries were marked.
 func (r *CosmosRunnable) SetElementSpawn(name string) *CosmosRunnable {
 	if r.spawnElement == nil {
 		r.spawnElement = map[string]bool{}
@@ -144,8 +149,9 @@ func (r *CosmosRunnable) SetElementSpawn(name string) *CosmosRunnable {
 	return r
 }
 
-// SetConfig CosmosRunnable构造器方法，用于设置Config。
-// Construct method of CosmosRunnable, uses to set Config.
+// SetConfig sets the process Config. Run and atomostest.Run may replace it
+// with the config loaded from the config file or app environment.
+// CosmosRunnable构造器方法，用于设置Config。
 func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 	r.config = config
 	return r
@@ -179,48 +185,61 @@ func (r *CosmosRunnable) SetIDTrackerDebug(v bool) *CosmosRunnable {
 	return r
 }
 
-// SetMainScript CosmosRunnable构造器方法，用于设置MainScript。
-// Construct method of CosmosRunnable, uses to set MainScript.
+// SetMainScript sets the process-level lifecycle hooks (CosmosMainScript).
+// Required: Check fails without it.
+// CosmosRunnable构造器方法，用于设置MainScript。
 func (r *CosmosRunnable) SetMainScript(script CosmosMainScript) *CosmosRunnable {
 	r.mainScript = script
 	return r
 }
 
+// SetRouter sets the global router used to pick a node for cluster-wide
+// lookups when more than one node could serve an Element.
 func (r *CosmosRunnable) SetRouter(router CosmosMainGlobalRouter) *CosmosRunnable {
 	r.mainRouter = router
 	return r
 }
 
+// SetSpawningHook registers a hook invoked when an actor starts spawning.
 func (r *CosmosRunnable) SetSpawningHook(hook func(id *IDInfo)) *CosmosRunnable {
 	r.spawningHook = hook
 	return r
 }
 
+// SetSpawnHook registers a hook invoked after an actor has spawned.
 func (r *CosmosRunnable) SetSpawnHook(hook func(id *IDInfo)) *CosmosRunnable {
 	r.spawnHook = hook
 	return r
 }
 
+// SetStoppingHook registers a hook invoked when an actor starts stopping.
 func (r *CosmosRunnable) SetStoppingHook(hook func(id *IDInfo)) *CosmosRunnable {
 	r.stoppingHook = hook
 	return r
 }
 
+// SetHaltedHook registers a hook invoked after an actor has halted.
 func (r *CosmosRunnable) SetHaltedHook(hook func(id *IDInfo, err error, mt *AtomosMessageTrackerExporter)) *CosmosRunnable {
 	r.haltedHook = hook
 	return r
 }
 
+// SetMessageTimeoutHook registers a hook invoked when a message exceeds its
+// timeout.
 func (r *CosmosRunnable) SetMessageTimeoutHook(hook func(id *IDInfo, timeout time.Duration, message string, args proto.Message)) *CosmosRunnable {
 	r.messageTimeoutHook = hook
 	return r
 }
 
+// SetRecoverHook registers a hook invoked when an actor recovers from a
+// panic.
 func (r *CosmosRunnable) SetRecoverHook(hook func(id *IDInfo, err error)) *CosmosRunnable {
 	r.recoverHook = hook
 	return r
 }
 
+// SetNewErrorHook registers a hook invoked whenever the framework constructs
+// an error.
 func (r *CosmosRunnable) SetNewErrorHook(hook func(err error)) *CosmosRunnable {
 	r.newErrorHook = hook
 	return r
