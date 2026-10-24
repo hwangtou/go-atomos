@@ -9,7 +9,9 @@ can stand alone or join an etcd-backed multi-node cluster.
 ## Features
 
 - **Actor runtime** — every actor owns a serial mailbox; sync/async messaging
-  with deadlock detection, timeouts, and panic recovery hooks.
+  with deadlock detection (local wait-graph + cross-node wait chains,
+  `ErrIDFirstSyncCallDeadlock`), timeouts, and panic recovery hooks. See
+  [docs/DEADLOCK.md](docs/DEADLOCK.md).
 - **Code generation** — `protoc-gen-go-atomos` turns a `.proto` service into
   typed element/atom interfaces, ID clients, and message decoders.
 - **Multi-node clusters** — etcd service discovery, cross-node messaging over
@@ -117,7 +119,8 @@ go vet -vettool=$(which atomos-vet) ./...
 ```
 
 - `syncdeadlock` — a sync message handler that sync-calls its own atom (or a
-  call cycle) deadlocks its mailbox; the analyzer flags it.
+  typed handler call cycle) deadlocks its mailbox; the analyzer flags it at
+  compile time using the generated `<Svc>Atom` interfaces and ID clients.
 - `deferrelease` — every `IDTracker` from `CosmosGetAtomID` /
   `CosmosSpawnAtom` must be released via `defer tracker.Release()`,
   `atomos.WithID`, or `atomos.WithRebind`.
@@ -144,5 +147,6 @@ code with `atomos.CodeOf(err)`.
 ## Documentation
 
 - [docs/DESIGN_V3_API.md](docs/DESIGN_V3_API.md) — v3 API design and migration notes.
+- [docs/DEADLOCK.md](docs/DEADLOCK.md) — sync-call deadlock model, three-layer defenses (analyzer, wait-graph, cross-node chains), and runtime handling (`SetDeadlockHook`, `DumpStacks`).
 - [docs/DESIGN_DRAIN_GRADUAL.md](docs/DESIGN_DRAIN_GRADUAL.md) — gradual drain design.
 - [docs/PROTO_GEN_IMPROVEMENTS.md](docs/PROTO_GEN_IMPROVEMENTS.md) — generator improvement backlog.

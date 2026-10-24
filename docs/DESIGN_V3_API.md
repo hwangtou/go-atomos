@@ -276,3 +276,11 @@ const (
    - v2 服务端 → v3 客户端：v2 永不返回非 OK status，v3 客户端走原有 body.Error 路径，逐字节兼容。
    - v3 ↔ v3：details 优先，Code/Message/CallStacks 完整往返（`TestGRPCStatusRoundTrip` + `TestCosmosRemote_InstanceMismatchOnRespawn` 等集成测试覆盖）。
    - 双节点集成：`TestCosmosRemote_*`（双真实 CosmosProcess 进程间 gRPC，无 etcd）全部通过，含 spawn/消息/Kill/instance mismatch/instance_id=0 拒绝/cosmos 层端到端。
+
+### 10.2 `CosmosArgs.wait_chain` 字段追加（跨节点死锁检测，v3 后续演进）
+
+rc1 之后，v3 追加了 `CosmosArgs.wait_chain = 5`（`repeated string`）用于跨节点同步调用环检测（设计细节见 `docs/DEADLOCK.md`）。对 §10.1 结论的影响与兼容性：
+
+1. **append-only 合规**：仅在 `CosmosArgs` 尾部追加字段 5，已有字段 1-4 编号与语义未动；错误码零新增零改动。§10.1 第 2 条（错误码不变）继续成立。
+2. **§10.1 第 1 条按字面失效**：v2 线上无此字段，`atomos.proto` 不再与 `preview/20261023` 逐字节一致——这是有意的协议演进，冻结规则（不重编号、不改用途、尾部追加）仍被遵守。
+3. **跨版本行为**：v2 节点收到携带 `wait_chain` 的请求按 proto3 未知字段跳过，不回传链，跨节点环检测在混部链路上降级为超时兜底；v2 客户端调用 v3 服务端不带该字段，行为不变。全 v3 链路（含本地跳转 A@n1→B@n2→本地C@n2→A@n1）由 `TestDeadlock_CrossNode*` 端到端覆盖，检测错误码复用 84（`ErrIDFirstSyncCallDeadlock`）。
