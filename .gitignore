@@ -13,3 +13,4 @@ protoc-gen-go-atomos/protoc-gen-go-atomos
 /~
 /supervisor/process_playground
 /atomos-vet
+.DS_Store

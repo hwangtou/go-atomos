@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package hello;
+
+option go_package = "github.com/hwangtou/go-atomos/examples/hello_world/api";
+
+import "atomos.proto";
+
+// Regenerate with ./gen.sh (requires protoc, protoc-gen-go and
+// protoc-gen-go-atomos on PATH).
+
+// HelloData is the spawn-time data for the Greeter element and its atoms.
+message HelloData {
+  string greeting = 1;
+}
+
+// HelloSpawnArg is the argument passed when spawning a Greeter atom.
+message HelloSpawnArg {
+  string name = 1;
+}
+
+// HelloRequest is the input of the SayHello atom message.
+message HelloRequest {
+  string name = 1;
+}
+
+// HelloReply is the output of the SayHello atom message.
+message HelloReply {
+  string message = 1;
+}
+
+service Greeter {
+  rpc ElementSpawn (atomos.Nil) returns (HelloData) {
+    option (atomos.atomos_method) = AtomosElementSpawn;
+  }
+  rpc Spawn (HelloSpawnArg) returns (HelloData) {
+    option (atomos.atomos_method) = AtomosAtomSpawn;
+  }
+  rpc SayHello (HelloRequest) returns (HelloReply) {
+    option (atomos.atomos_method) = AtomosAtomMethod;
+  }
+}

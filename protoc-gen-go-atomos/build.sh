@@ -1,10 +1,9 @@
-go build -o protoc-gen-go-atomos/protoc-gen-go-atomos protoc-gen-go-atomos/atomos.go protoc-gen-go-atomos/main.go
-
-GOPATH="/Users/hwangtou/Developer/go"
-
-cp protoc-gen-go-atomos/protoc-gen-go-atomos "$GOPATH"/bin/protoc-gen-go-atomos
+#!/bin/sh
+# Build and install protoc-gen-go-atomos into GOBIN (or GOPATH/bin).
+set -eu
+cd "$(dirname "$0")"
+go install .
 
 ## Test
-#protoc --go_out=. --go-atomos_out=. examples/go_atomos/for_test.proto
-#cp examples/go_atomos/for_test.pb.go .
-#cp examples/go_atomos/for_test_atomos.pb.go .
+#protoc -I. --go_out=. --go_opt=paths=source_relative \
+#  --go-atomos_out=. --go-atomos_opt=paths=source_relative for_test.proto
