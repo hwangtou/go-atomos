@@ -16,6 +16,7 @@ package atomos
 // running without introspection.
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
 	"net"
@@ -52,6 +53,7 @@ func startDebugServer(p *CosmosProcess, addr string) *debugServer {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", ds.handleIndex)
 	mux.HandleFunc("/elements", ds.handleElements)
+	mux.HandleFunc("/schema", ds.handleSchema)
 	mux.HandleFunc("/metrics", ds.handleMetrics)
 	mux.HandleFunc("/healthz", ds.handleHealthz)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -176,6 +178,7 @@ func (ds *debugServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>atomos debug</title></head>
 <body><h1>atomos debug server</h1><ul>
 <li><a href="/elements">/elements</a> — element &amp; atom inventory, wait graph</li>
+<li><a href="/schema">/schema</a> — element message schema (JSON)</li>
 <li><a href="/metrics">/metrics</a> — Prometheus text format</li>
 <li><a href="/healthz">/healthz</a> — liveness</li>
 <li><a href="/debug/pprof/">/debug/pprof/</a> — CPU / heap / goroutine profiles</li>
@@ -263,6 +266,12 @@ func promLabel(s string) string {
 }
 
 func (ds *debugServer) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = w.Write([]byte(ds.metricsText()))
+}
+
+// metricsText renders the full exposition; split from the handler for tests.
+func (ds *debugServer) metricsText() string {
 	elements := ds.collect()
 	p := ds.process
 	id := p.local.GetIDInfo()
@@ -303,6 +312,26 @@ func (ds *debugServer) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	p.syncChainMu.Unlock()
 	metric("atomos_sync_chains", "Mailbox goroutines currently executing a chain-carrying cross-node sync call.", syncChains)
 
+	counts, sum, total, perCall := p.snapshotRPCMetrics()
+	if total > 0 {
+		b.WriteString("# HELP atomos_rpc_latency_seconds Client-observed latency of call-class RPCs.\n# TYPE atomos_rpc_latency_seconds histogram\n")
+		for i, bound := range rpcLatencyBuckets {
+			fmt.Fprintf(&b, "atomos_rpc_latency_seconds_bucket{le=\"%v\"} %d\n", bound, counts[i])
+		}
+		fmt.Fprintf(&b, "atomos_rpc_latency_seconds_bucket{le=\"+Inf\"} %d\n", counts[len(rpcLatencyBuckets)])
+		fmt.Fprintf(&b, "atomos_rpc_latency_seconds_sum %v\natomos_rpc_latency_seconds_count %d\n", sum, total)
+		b.WriteString("# HELP atomos_rpc_calls_total Call-class RPCs by entry point.\n# TYPE atomos_rpc_calls_total counter\n")
+		methods := make([]string, 0, len(perCall))
+		for m := range perCall {
+			methods = append(methods, m)
+		}
+		sort.Strings(methods)
+		for _, m := range methods {
+			fmt.Fprintf(&b, "atomos_rpc_calls_total{method=\"%s\"} %d\n", promLabel(m), perCall[m])
+		}
+	}
+	metric("atomos_remote_connections", "Remote nodes currently tracked by this process.", p.remoteConnectionsCount())
+
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	metric("go_goroutines", "Number of goroutines.", runtime.NumGoroutine())
@@ -310,8 +339,65 @@ func (ds *debugServer) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	metric("go_memstats_sys_bytes", "Bytes obtained from system.", ms.Sys)
 	metric("go_memstats_heap_inuse_bytes", "Heap bytes in use.", ms.HeapInuse)
 
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	_, _ = w.Write([]byte(b.String()))
+	return b.String()
+}
+
+// handleSchema serves the element message schema (Config.Messages) as JSON:
+// for every element, each message name with its in/out proto type URLs.
+// This is the machine-readable face of the framework — the foundation for
+// management CLIs and MCP-style tooling.
+func (ds *debugServer) handleSchema(w http.ResponseWriter, _ *http.Request) {
+	type messageSchema struct {
+		In  string `json:"in"`
+		Out string `json:"out"`
+	}
+	type elementSchema struct {
+		Name     string                   `json:"name"`
+		Version  uint64                   `json:"version"`
+		Atoms    int                      `json:"atoms"`
+		Active   int                      `json:"active"`
+		Messages map[string]messageSchema `json:"messages"`
+	}
+	out := struct {
+		Cosmos   string          `json:"cosmos"`
+		Node     string          `json:"node"`
+		Elements []elementSchema `json:"elements"`
+	}{Cosmos: ds.process.local.GetIDInfo().Cosmos, Node: ds.process.local.GetIDInfo().Node}
+	elems, err := ds.process.local.getLocalAllElements()
+	if err == nil {
+		out.Elements = make([]elementSchema, 0, len(elems))
+		for _, elem := range elems {
+			if elem == nil || elem.elemImpl == nil || elem.elemImpl.Interface == nil {
+				continue
+			}
+			es := elementSchema{
+				Name:     elem.GetIDInfo().Element,
+				Version:  elem.elemImpl.Interface.Config.GetVersion(),
+				Atoms:    elem.GetAtomsNum(),
+				Active:   elem.GetActiveAtomsNum(),
+				Messages: map[string]messageSchema{},
+			}
+			for name, mc := range elem.elemImpl.Interface.Config.Messages {
+				es.Messages[name] = messageSchema{
+					In:  mc.GetIn().GetTypeUrl(),
+					Out: mc.GetOut().GetTypeUrl(),
+				}
+			}
+			out.Elements = append(out.Elements, es)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write([]byte(mustJSON(out)))
+}
+
+// mustJSON marshals v with stable indentation; introspection payloads are
+// plain maps and slices, which MarshalIndent orders deterministically.
+func mustJSON(v any) string {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("{\n  \"error\": %q\n}", err.Error())
+	}
+	return string(data)
 }
 
 // debugServerAddr extracts the configured debug listen address, if any.

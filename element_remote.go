@@ -129,6 +129,9 @@ func (e *ElementRemote) getGoID() uint64 {
 // Implementation of Element
 
 func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+	if e.cosmos != nil && e.cosmos.process != nil {
+		defer e.cosmos.process.observeRPC("ElementGetAtomID", time.Now())
+	}
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -191,6 +194,9 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 }
 
 func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+	if e.cosmos != nil && e.cosmos.process != nil {
+		defer e.cosmos.process.observeRPC("ElementSpawnAtom", time.Now())
+	}
 	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)

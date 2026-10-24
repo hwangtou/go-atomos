@@ -97,6 +97,10 @@ type CosmosProcess struct {
 	// Stop. Nil when not configured. Guarded by mutex.
 	debugServer *debugServer
 
+	// rpcMetrics records client-observed call-class RPC latencies and
+	// per-method counts, exposed through the debug server.
+	rpcMetrics *rpcMetrics
+
 	cluster struct {
 		enable bool
 		// ETCD
@@ -176,6 +180,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncCallDefaultTimeout = 10 * time.Second
 	p.waitGraph = map[uint64]waitEdge{}
 	p.syncChains = map[uint64][]string{}
+	p.rpcMetrics = newRPCMetrics()
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}

@@ -91,13 +91,16 @@ func TestDebugServerEndpoints(t *testing.T) {
 			Cosmos:         "debugCosmos",
 			Node:           "debugNode",
 			LogLevel:       LogLevel_Debug,
-			EnableElements: []string{debugElemName},
+			EnableElements: []string{debugElemName, ForTestAtomosName},
 			Customize: map[string][]byte{
 				configKeyDebugServer: []byte(addr),
 			},
 		}).
 		SetMainScript(&debugMainScript{}).
-		AddElementImplementationWithSpawn(elemImpl)
+		AddElementImplementationWithSpawn(elemImpl).
+		// The ForTest element carries decoders, exercising the schema
+		// metadata surface (Config.Messages) on /schema and /metrics.
+		AddElementImplementationWithSpawn(GetForTestAtomosImplement(&testRunnableDev{}))
 
 	if err := process.Start(runnable); err != nil {
 		for _, e := range logger.errs {
@@ -158,23 +161,49 @@ func TestDebugServerEndpoints(t *testing.T) {
 	})
 
 	t.Run("Metrics", func(t *testing.T) {
+		// Seed one recorded RPC so the histogram block is exercised.
+		process.observeRPC("SyncMessaging", time.Now().Add(-20*time.Millisecond))
 		body, code := httpGet(t, base+"/metrics")
 		if code != http.StatusOK {
 			t.Fatalf("metrics status = %d", code)
 		}
 		for _, want := range []string{
 			`atomos_process_info{cosmos="debugCosmos",node="debugNode"} 1`,
-			"atomos_elements 1",
+			"atomos_elements 2",
 			`atomos_element_atoms{element="` + debugElemName + `"} 1`,
 			`atomos_element_atoms_active{element="` + debugElemName + `"} 1`,
+			`atomos_element_messages{element="` + ForTestAtomosName + `"} 2`,
 			`atomos_atom_mails{element="` + debugElemName + `",atom="` + debugAtomName + `"}`,
 			`atomos_atom_idle_seconds{element="` + debugElemName + `",atom="` + debugAtomName + `"}`,
 			"atomos_sync_wait_edges",
 			"atomos_sync_chains",
+			"atomos_rpc_latency_seconds_bucket{le=\"+Inf\"} 1",
+			"atomos_rpc_latency_seconds_count 1",
+			`atomos_rpc_calls_total{method="SyncMessaging"} 1`,
+			"atomos_remote_connections 0",
 			"go_goroutines",
 		} {
 			if !strings.Contains(body, want) {
 				t.Errorf("metrics missing %q", want)
+			}
+		}
+	})
+
+	t.Run("Schema", func(t *testing.T) {
+		body, code := httpGet(t, base+"/schema")
+		if code != http.StatusOK {
+			t.Fatalf("schema status = %d", code)
+		}
+		for _, want := range []string{
+			`"cosmos": "debugCosmos"`,
+			`"name": "` + debugElemName + `"`,
+			`"Greeting"`,
+			`"in": "type.googleapis.com/atomos.ForTestGreetingI"`,
+			`"out": "type.googleapis.com/atomos.ForTestGreetingO"`,
+			`"SayHello"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("schema missing %q", want)
 			}
 		}
 	})

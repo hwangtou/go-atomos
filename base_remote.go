@@ -154,7 +154,18 @@ func (a *BaseRemote) IdleTime() time.Duration {
 	return time.Duration(rsp.IdleTime)
 }
 
+// rpcProcess returns the owning process for metrics recording, nil-safe.
+func (a *BaseRemote) rpcProcess() *CosmosProcess {
+	if a == nil || a.cosmos == nil {
+		return nil
+	}
+	return a.cosmos.process
+}
+
 func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext ...ArgsForBaseAtomos) (reply proto.Message, err error) {
+	if p := a.rpcProcess(); p != nil {
+		defer p.observeRPC("SyncMessaging", time.Now())
+	}
 	helper := createBaseAtomosHelper(BaseAtomosMailSync, ext)
 	if helper.hasErrors() {
 		return nil, helper.getError()
@@ -228,6 +239,9 @@ func withWaitChain(args *CosmosArgs, chain []string) *CosmosArgs {
 }
 
 func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {
+	if p := a.rpcProcess(); p != nil {
+		defer p.observeRPC("AsyncMessaging", time.Now())
+	}
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
 		if callback != nil {
@@ -328,6 +342,9 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 }
 
 func (a *BaseRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
+	if p := a.rpcProcess(); p != nil {
+		defer p.observeRPC("Kill", time.Now())
+	}
 	helper := createBaseAtomosHelper(BaseAtomosMailKill, ext)
 	if helper.hasErrors() {
 		return helper.getError()
