@@ -220,7 +220,7 @@ const (
 - 修复遗留项：G7（`noExport` 首字母缩写）、G9（Spawn 签名 input/output 角色反直觉，v3 统一为 arg 在 input、data 在 output 并写入文档）、Messenger 泛型精简（O7，如改动可控）。
 - 生成器补 golden-file 测试，纳入 CI；消灭"插件版本与框架 API 脱节"（regen-proto SKILL.md 当前警告）的状态。
 
-实施状态（v3.0-alpha3 部分落地）：错误返回 `error`（alpha2 已完成）与 §4 参数形态适配（变参 ext、生成的 ID 类型显式 `String()` 消歧）已落地；**golden-file 测试已建**（`protoc-gen-go-atomos/golden_test.go` + `testdata/golden/`，in-process protogen 驱动 + protoc descriptor set，覆盖显式 option 与前缀回退共 8 种方法分类，`-update` 刷新），尚未纳入 CI。G7/G9/Messenger 泛型精简未做。
+实施状态（v3.0-alpha3 部分落地）：错误返回 `error`（alpha2 已完成）与 §4 参数形态适配（变参 ext、生成的 ID 类型显式 `String()` 消歧）已落地；**golden-file 测试已建**（`protoc-gen-go-atomos/golden_test.go` + `testdata/golden/`，in-process protogen 驱动 + protoc descriptor set，覆盖显式 option 与前缀回退共 8 种方法分类，`-update` 刷新），尚未纳入 CI。G7/G9/Messenger 泛型精简未做，且已决策冻结至下个大版本窗口（破坏性生成 API 变更会使 rc1 的 §10 兼容验证失效；见 docs/DESIGN_TESTKIT_DST.md 末节）。golden 测试已随 CI（.github/workflows/ci.yml）纳入。
 
 ### 6.2 文档
 

@@ -100,8 +100,21 @@ Cluster RPC & TLS
   leaks), run via `go vet -vettool`.
 - `atomostest` test doubles: `Run` (in-process runtime with `t.Log`
   routing, returning the `*CosmosProcess` and auto-stopping via
-  `t.Cleanup`), `Eventually`, `TakeGoroutines().AssertNoLeak`, `FakeID`,
-  `FakeSelfID`, `FakeLogging`, `FakeTask`.
+  `t.Cleanup`), `RunCluster` (real multi-node cluster: embedded etcd +
+  loopback gRPC, default element-pinning router), `Probe` (five lifecycle
+  hooks recorded and pollable), `Eventually`, `TakeGoroutines().AssertNoLeak`,
+  `FakeID`, `FakeSelfID`, `FakeLogging`, `FakeTask`.
+- Introspection round-out: `atomos_rpc_latency_seconds` histogram +
+  `atomos_rpc_calls_total` + `atomos_remote_connections` metrics, `/schema`
+  JSON endpoint (element message schema), `cmd/atomosctl` management CLI.
+- `protoc-gen-go-atomos` emits a static `ElementConfig.Messages` fill
+  (`atomos.AtomMessageConfigOf`); the framework fills it at runtime from
+  decoders for hand-written implementations.
+- Cluster nodes accept `_cluster_advertise_ip` in Customize (loopback
+  advertisement for containers/single-host deployments);
+  `CosmosRunnable.GetRouter()` read access.
+- Supervisor: first test suite; `CreateFileIfNotExist` no longer overwrites
+  existing configs on re-init.
 - Error-code snapshot test locking all 131 numeric values; generator
   golden-file test (`go test ./protoc-gen-go-atomos/`, `-update` to
   refresh).

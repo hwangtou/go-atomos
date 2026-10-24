@@ -22,7 +22,9 @@ can stand alone or join an etcd-backed multi-node cluster.
   and concurrent queues, all executed on the actor's mailbox goroutine.
 - **Test kit** — `atomostest.Run` boots a real in-process runtime for tests
   (returning the `*CosmosProcess`, auto-stopped via `t.Cleanup`);
-  `Eventually` polls async actor state instead of sleeping;
+  `RunCluster` boots a real multi-node cluster over an embedded etcd and
+  loopback gRPC; `Probe` records actor lifecycle events from the five
+  runnable hooks; `Eventually` polls async actor state instead of sleeping;
   `TakeGoroutines().AssertNoLeak` catches leaked mailbox goroutines;
   `FakeID` / `FakeSelfID` / `FakeLogging` / `FakeTask` cover unit tests
   without a process.
