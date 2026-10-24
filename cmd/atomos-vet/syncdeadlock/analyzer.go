@@ -1,5 +1,6 @@
 // Package syncdeadlock is a go vet analyzer that flags sync handler methods
-// which make a sync call to themselves — a provably always-deadlock pattern.
+// which make a sync call to themselves — a provably always-deadlock pattern —
+// and handler call graphs that form a sync cycle.
 //
 // In go-atomos, each Atom processes one message at a time on its mailbox
 // goroutine. A sync handler that sync-calls its own Atom blocks that goroutine
@@ -8,11 +9,30 @@
 // returns ErrIDFirstSyncCallDeadlock; this analyzer catches the same bug at
 // compile time so it never reaches runtime.
 //
-// Scope: only self-call is detected (the handler resolves an ID to its own atom
-// and sync-calls it). Cross-atom cycles (A→B→A) are out of scope — atom names
-// are runtime values, making static cycle detection unreliable; the runtime
-// wait-graph (cosmos_process.go detectDeadlockAndWait) is the authoritative
-// mechanism for those.
+// Detection is type-based, keyed off the shapes emitted by protoc-gen-go-atomos:
+//
+//   - A handler interface is a named interface ending in "Atom" or "Element"
+//     that embeds an interface named "Atomos" (e.g. GreeterAtom,
+//     GreeterElement). Its explicit methods are the sync handlers.
+//   - A named type in this package implementing such an interface (checked via
+//     go/types Implements) provides those handlers.
+//   - A sync call edge is a method call whose receiver's type is an ID client
+//     type (named type ending in "AtomID"/"ElementID"), or a call to a
+//     generated SpawnXxxAtom package function, or SyncMessagingByName /
+//     CosmosSpawnAtom with a literal message/element name. Async variants
+//     (AsyncXxx methods, callback-taking signatures) are excluded.
+//
+// Cycle nodes are (service, method) pairs, so same-named methods on unrelated
+// services cannot create false edges. Calls lexically inside a `go` statement
+// are ignored: they run on another goroutine and do not block the mailbox.
+//
+// Scope limits: handler bodies in OTHER packages are not analyzed (an edge
+// leaving this package has no returning edges here, so cross-package cycles
+// are one-sided and go unreported); calls with runtime-computed message names
+// are skipped; self-call detection still relies on the documented
+// self.GetIDInfo().Atom resolution pattern. The runtime wait-graph
+// (cosmos_process.go detectDeadlockAndWait) remains the authoritative
+// mechanism for everything static analysis cannot see.
 //
 // Only non-test, non-generated files are checked.
 package syncdeadlock
@@ -20,19 +40,22 @@ package syncdeadlock
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
 
-const doc = `flag sync handlers that sync-call their own atom (always deadlock)
+const doc = `flag sync handlers that sync-call their own atom, or handler call cycles
 
 A go-atomos sync handler runs on the Atom's single mailbox goroutine. If it
 sync-calls its own Atom (resolved via GetXxxAtomID(cosmos, self.GetIDInfo().Atom)
 followed by a sync call on that ID), the mailbox goroutine blocks forever
-waiting for a reply it can never process. This analyzer flags that
-self-call pattern at compile time. Cross-atom cycles (A→B→A) are not detected
-statically; the runtime wait-graph handles those.`
+waiting for a reply it can never process. This analyzer flags that self-call
+pattern, plus cycles in the typed sync-call graph between handlers
+(A.Svc.M → B.Svc.N → A.Svc.M), at compile time. Cross-package cycles are
+one-sided and not reported; the runtime wait-graph handles those.`
 
 var Analyzer = &analysis.Analyzer{
 	Name: "syncdeadlock",
@@ -40,20 +63,84 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
+// serviceMethod identifies one sync handler: the element service it belongs to
+// (the generated interface name minus the Atom/Element suffix) and the method
+// name.
+type serviceMethod struct {
+	service string
+	method  string
+}
+
+func (s serviceMethod) String() string { return s.service + "." + s.method }
+
+// handlerDecl pairs a handler node with its implementing method declaration.
+type handlerDecl struct {
+	node     serviceMethod
+	typeName string
+	fn       *ast.FuncDecl
+}
+
+// handlerIface is a generated handler interface discovered in this package or
+// one of its direct imports.
+type handlerIface struct {
+	service string
+	iface   *types.Interface
+	methods []string // explicit method names
+}
+
 func run(pass *analysis.Pass) (any, error) {
-	// Collect all sync handler methods in this package.
-	var handlers []*ast.FuncDecl
+	// Index method declarations by (receiver base type, method name) so
+	// implementing types can be linked back to AST bodies.
+	methodDecls := map[string]map[string]*ast.FuncDecl{}
 	for _, file := range pass.Files {
 		if isTestFile(pass, file) || isGenerated(file) {
 			continue
 		}
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
+			if !ok || fn.Body == nil || fn.Recv == nil {
 				continue
 			}
-			if isSyncHandler(fn) {
-				handlers = append(handlers, fn)
+			recv := receiverTypeName(fn)
+			if recv == "" {
+				continue
+			}
+			if methodDecls[recv] == nil {
+				methodDecls[recv] = map[string]*ast.FuncDecl{}
+			}
+			methodDecls[recv][fn.Name.Name] = fn
+		}
+	}
+	if len(methodDecls) == 0 {
+		return nil, nil
+	}
+
+	// Discover handler interfaces and the implementing types in this package.
+	handlerIfaces := findHandlerInterfaces(pass)
+	var handlers []handlerDecl
+	if len(handlerIfaces) > 0 {
+		for _, name := range pass.Pkg.Scope().Names() {
+			tn, ok := pass.Pkg.Scope().Lookup(name).(*types.TypeName)
+			if !ok || tn.IsAlias() {
+				continue
+			}
+			named, ok := tn.Type().(*types.Named)
+			if !ok || named.TypeParams() != nil {
+				continue
+			}
+			for _, hi := range handlerIfaces {
+				if !implementsHandler(named, hi.iface) {
+					continue
+				}
+				for _, m := range hi.methods {
+					if fn, ok := methodDecls[name][m]; ok {
+						handlers = append(handlers, handlerDecl{
+							node:     serviceMethod{service: hi.service, method: m},
+							typeName: name,
+							fn:       fn,
+						})
+					}
+				}
 			}
 		}
 	}
@@ -61,79 +148,46 @@ func run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	// Pass 1: self-call detection (precise) + collect cross-handler sync-call
-	// edges for cycle detection (heuristic).
-	// handlerMethodNames is the set of method names that are sync handlers in
-	// this package — used to recognize sync calls that target another handler.
-	handlerMethodNames := map[string]bool{}
-	for _, fn := range handlers {
-		handlerMethodNames[fn.Name.Name] = true
-	}
-
-	// syncCallEdges maps a handler method name → set of handler method names it
-	// sync-calls. E.g. "Greeting" → {"SayHello"} means some Greeting handler
-	// body contains a `.SayHello(callerID, ...)` call.
-	// The value also records a representative call position for reporting.
-	syncCallEdges := map[string]map[string]callEdge{}
-
-	for _, fn := range handlers {
-		// Self-call check (existing logic).
-		analyzeSelfCall(pass, fn)
-
-		// Collect sync calls to other handler-named methods.
-		calls := map[string]callEdge{}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			calleeName := callFuncName(call)
-			if calleeName == "" {
-				return true
-			}
-			// Is this a sync call to a known handler method? It must be a
-			// selector call (id.MethodName) and the method must be a handler.
-			if _, isSel := call.Fun.(*ast.SelectorExpr); !isSel {
-				return true
-			}
-			if handlerMethodNames[calleeName] && calleeName != fn.Name.Name {
-				calls[calleeName] = callEdge{pos: call.Pos()}
-			}
-			return true
-		})
-		if len(calls) > 0 {
-			syncCallEdges[fn.Name.Name] = calls
-		}
+	// Pass 1: self-call detection (precise) + collect typed sync-call edges.
+	// syncCallEdges maps handler → set of handlers it sync-calls, with a
+	// representative call position for reporting.
+	syncCallEdges := map[serviceMethod]map[serviceMethod]callEdge{}
+	for _, h := range handlers {
+		analyzeSelfCall(pass, h)
+		collectSyncCallEdges(pass, h, syncCallEdges)
 	}
 
 	// Pass 2: cycle detection on the handler sync-call graph.
 	// A cycle A→B→A (or A→B→C→A) means the handlers mutually sync-call each
-	// other — a potential deadlock. We report at the edge that closes a cycle.
-	reportedCycles := map[string]bool{}
-	for from := range syncCallEdges {
-		visited := map[string]bool{}
-		detectCycleDFS(pass, from, from, syncCallEdges, visited, reportedCycles, []string{from})
+	// other — a potential deadlock. Cycles are collected first, then reported
+	// deterministically: each unique cycle is rotated so its smallest node is
+	// first and reported at the edge closing that rotation.
+	cycles := map[string][]serviceMethod{}
+	for _, from := range sortedNodes(syncCallEdges) {
+		visited := map[serviceMethod]bool{}
+		collectCycleDFS(from, from, syncCallEdges, visited, cycles, []serviceMethod{from})
+	}
+	for _, key := range sortedCycleKeys(cycles) {
+		cycle := cycles[key]
+		closing := cycle[len(cycle)-2]
+		pass.Reportf(syncCallEdges[closing][cycle[len(cycle)-1]].pos,
+			"potential sync deadlock cycle: handler %s — these handlers mutually sync-call each other (%s); at runtime the wait-graph catches this, but restructure to avoid the cycle",
+			cycle[0], joinNames(cycle, "→"))
 	}
 	return nil, nil
 }
 
-type callEdge struct {
-	pos token.Pos
-}
-
-// detectCycleDFS walks the sync-call graph looking for a path back to `origin`.
-// If found, it reports the cycle (deduped by canonical key).
-func detectCycleDFS(pass *analysis.Pass, origin, current string, edges map[string]map[string]callEdge, visited, reported map[string]bool, path []string) {
-	for to, edge := range edges[current] {
+// collectCycleDFS walks the sync-call graph looking for a path back to
+// `origin`. If found, the cycle is stored (deduped by canonical key, rotated so
+// the smallest node is first and repeated last).
+func collectCycleDFS(origin, current serviceMethod, edges map[serviceMethod]map[serviceMethod]callEdge, visited map[serviceMethod]bool, cycles map[string][]serviceMethod, path []serviceMethod) {
+	for _, to := range sortedNeighbors(edges[current]) {
 		if to == origin {
 			// Cycle found: origin → ... → current → origin.
 			cycle := append(path, to)
 			key := canonicalCycleKey(cycle)
-			if !reported[key] {
-				reported[key] = true
-				pass.Reportf(edge.pos,
-					"potential sync deadlock cycle: handler %s — these handlers mutually sync-call each other (%s); at runtime the wait-graph catches this, but restructure to avoid the cycle",
-					origin, joinNames(cycle, "→"))
+			if _, seen := cycles[key]; !seen {
+				cycles[key] = rotateCycle(cycle)
 			}
 			return
 		}
@@ -141,29 +195,365 @@ func detectCycleDFS(pass *analysis.Pass, origin, current string, edges map[strin
 			continue
 		}
 		visited[to] = true
-		detectCycleDFS(pass, origin, to, edges, visited, reported, append(path, to))
+		collectCycleDFS(origin, to, edges, visited, cycles, append(path, to))
 	}
 }
 
-func canonicalCycleKey(cycle []string) string {
-	// Normalize: rotate so the lexicographically smallest element is first,
-	// then join. This makes A→B→A and B→A→B produce the same key.
+// rotateCycle rotates a cycle (whose last element repeats the first) so the
+// lexicographically smallest node is first — canonical form for dedup and
+// deterministic reporting.
+func rotateCycle(cycle []serviceMethod) []serviceMethod {
 	minIdx := 0
 	for i := 1; i < len(cycle)-1; i++ { // exclude the trailing repeat
-		if cycle[i] < cycle[minIdx] {
+		if cycle[i].String() < cycle[minIdx].String() {
 			minIdx = i
 		}
 	}
 	n := len(cycle) - 1 // number of distinct nodes
-	rotated := make([]string, 0, len(cycle))
+	rotated := make([]serviceMethod, 0, len(cycle))
 	for i := 0; i <= n; i++ {
 		rotated = append(rotated, cycle[(minIdx+i)%n])
 	}
-	return strings.Join(rotated, "→")
+	return rotated
 }
 
-func joinNames(names []string, sep string) string {
-	return strings.Join(names, sep)
+func sortedNodes(edges map[serviceMethod]map[serviceMethod]callEdge) []serviceMethod {
+	out := make([]serviceMethod, 0, len(edges))
+	for from := range edges {
+		out = append(out, from)
+	}
+	sortSlice(out)
+	return out
+}
+
+func sortedNeighbors(edges map[serviceMethod]callEdge) []serviceMethod {
+	out := make([]serviceMethod, 0, len(edges))
+	for to := range edges {
+		out = append(out, to)
+	}
+	sortSlice(out)
+	return out
+}
+
+func sortedCycleKeys(cycles map[string][]serviceMethod) []string {
+	out := make([]string, 0, len(cycles))
+	for key := range cycles {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortSlice(nodes []serviceMethod) {
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].String() < nodes[j].String() })
+}
+
+type callEdge struct {
+	pos token.Pos
+}
+
+// findHandlerInterfaces scans this package and its direct imports for named
+// interfaces shaped like generated handler interfaces: name ends in "Atom" or
+// "Element" (with a non-empty service prefix) and the interface embeds an
+// interface named "Atomos".
+func findHandlerInterfaces(pass *analysis.Pass) []handlerIface {
+	var out []handlerIface
+	scopes := []*types.Scope{pass.Pkg.Scope()}
+	for _, imp := range pass.Pkg.Imports() {
+		scopes = append(scopes, imp.Scope())
+	}
+	for _, scope := range scopes {
+		for _, name := range scope.Names() {
+			tn, ok := scope.Lookup(name).(*types.TypeName)
+			if !ok || tn.IsAlias() {
+				continue
+			}
+			named, ok := tn.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+			iface, ok := named.Underlying().(*types.Interface)
+			if !ok {
+				continue
+			}
+			service, _ := trimHandlerSuffix(name)
+			if service == "" || !embedsAtomos(iface, 0) {
+				continue
+			}
+			hi := handlerIface{service: service, iface: iface.Complete()}
+			hi.methods = explicitMethodNames(hi.iface)
+			if len(hi.methods) > 0 {
+				out = append(out, hi)
+			}
+		}
+	}
+	return out
+}
+
+// explicitMethodNames returns the method names declared directly on the
+// interface (excluding methods promoted from embedded interfaces). Generated
+// handler interfaces only declare their RPC methods explicitly; everything
+// else (GetIDInfo, Cosmos, ...) comes from the embedded Atomos.
+func explicitMethodNames(iface *types.Interface) []string {
+	embedded := map[string]bool{}
+	for i := 0; i < iface.NumEmbeddeds(); i++ {
+		if eiface, ok := iface.EmbeddedType(i).Underlying().(*types.Interface); ok {
+			for j := 0; j < eiface.NumMethods(); j++ {
+				embedded[eiface.Method(j).Name()] = true
+			}
+		}
+	}
+	var out []string
+	for i := 0; i < iface.NumMethods(); i++ {
+		m := iface.Method(i)
+		if m != nil && !embedded[m.Name()] {
+			out = append(out, m.Name())
+		}
+	}
+	return out
+}
+
+// trimHandlerSuffix splits a generated interface name into its service name
+// and suffix. ok=false when the name does not end in Atom/Element or has no
+// service prefix.
+func trimHandlerSuffix(name string) (service string, ok bool) {
+	for _, suffix := range []string{"Atom", "Element"} {
+		if strings.HasSuffix(name, suffix) && len(name) > len(suffix) {
+			return strings.TrimSuffix(name, suffix), true
+		}
+	}
+	return "", false
+}
+
+// embedsAtomos reports whether the interface embeds (transitively) an
+// interface named "Atomos" — the framework base interface every generated
+// handler interface embeds.
+func embedsAtomos(iface *types.Interface, depth int) bool {
+	if depth > 8 {
+		return false
+	}
+	for i := 0; i < iface.NumEmbeddeds(); i++ {
+		emb := iface.EmbeddedType(i)
+		if named, ok := emb.(*types.Named); ok {
+			if named.Obj().Name() == "Atomos" {
+				return true
+			}
+			if sub, ok := named.Underlying().(*types.Interface); ok && embedsAtomos(sub, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// implementsHandler reports whether T or *T implements the handler interface.
+func implementsHandler(t *types.Named, iface *types.Interface) bool {
+	return types.Implements(t, iface) || types.Implements(types.NewPointer(t), iface)
+}
+
+// receiverTypeName extracts the base type name of a method receiver
+// ("atom" for `func (t *atom) M(...)`). Empty for non-identifier receivers.
+func receiverTypeName(fn *ast.FuncDecl) string {
+	if len(fn.Recv.List) == 0 || len(fn.Recv.List[0].Names) == 0 {
+		return ""
+	}
+	// 解包指针/泛型实例化等形式,只取基础标识符。
+	expr := fn.Recv.List[0].Type
+	for {
+		switch e := expr.(type) {
+		case *ast.StarExpr:
+			expr = e.X
+		case *ast.IndexExpr:
+			expr = e.X
+		case *ast.Ident:
+			return e.Name
+		default:
+			return ""
+		}
+	}
+}
+
+// collectSyncCallEdges walks a handler body and records typed sync-call edges
+// into edges. Calls lexically inside a `go` statement are skipped: they run on
+// another goroutine and do not block the mailbox.
+func collectSyncCallEdges(pass *analysis.Pass, h handlerDecl, edges map[serviceMethod]map[serviceMethod]callEdge) {
+	add := func(to serviceMethod, pos token.Pos) {
+		// Same handler on another atom is not a static cycle: atom names are
+		// runtime values, so A.M→B.M only loops if the names chain back at
+		// runtime — the wait-graph's job. Only multi-node handler cycles are
+		// reported here.
+		if to == h.node {
+			return
+		}
+		if edges[h.node] == nil {
+			edges[h.node] = map[serviceMethod]callEdge{}
+		}
+		if _, exists := edges[h.node][to]; !exists {
+			edges[h.node][to] = callEdge{pos: pos}
+		}
+	}
+	ast.Inspect(h.fn.Body, func(n ast.Node) bool {
+		switch n.(type) {
+		case *ast.GoStmt:
+			return false // runs on another goroutine; cannot deadlock this mailbox
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if to, ok := syncCallTarget(pass, call); ok {
+			add(to, call.Pos())
+		}
+		return true
+	})
+}
+
+// syncCallTarget resolves a call expression to the handler it (potentially)
+// invokes synchronously. Recognized shapes:
+//
+//   - method call on an ID client type (named type ending in
+//     "AtomID"/"ElementID"): each method is an edge to (service, method).
+//     SyncMessagingByName uses its literal message-name argument as the method.
+//     Async variants (AsyncXxx names, callback-taking signatures) are excluded.
+//   - package function Spawn<Svc>Atom(...): edge to (Svc, "Spawn").
+//   - CosmosSpawnAtom(caller, elem, name, arg) with a literal elem name:
+//     edge to (elem, "Spawn").
+//
+// Everything else (runtime-computed names, calls on non-client types) yields
+// false.
+func syncCallTarget(pass *analysis.Pass, call *ast.CallExpr) (serviceMethod, bool) {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		// Same-package function call, e.g. SpawnGreeterAtom(...).
+		obj, ok := pass.TypesInfo.Uses[fn].(*types.Func)
+		if !ok {
+			return serviceMethod{}, false
+		}
+		return factoryTarget(obj.Name(), call)
+	case *ast.SelectorExpr:
+		if sel, ok := pass.TypesInfo.Selections[fn]; ok {
+			// Method call on a value: edge only when the receiver type is an
+			// ID client type.
+			recv := derefNamed(sel.Recv())
+			if recv == nil {
+				return serviceMethod{}, false
+			}
+			service, isClient := trimIDClientSuffix(recv.Obj().Name())
+			if !isClient {
+				return serviceMethod{}, false
+			}
+			method := fn.Sel.Name
+			if strings.HasPrefix(method, "Async") || methodTakesCallback(pass, recv, method) {
+				return serviceMethod{}, false
+			}
+			if method == "SyncMessagingByName" {
+				// SyncMessagingByName(caller, name, in, ...): the handler is
+				// the literal name argument.
+				if len(call.Args) < 2 {
+					return serviceMethod{}, false
+				}
+				lit, ok := stringLiteral(call.Args[1])
+				if !ok {
+					return serviceMethod{}, false
+				}
+				method = lit
+			}
+			return serviceMethod{service: service, method: method}, true
+		}
+		// Package-qualified function call, e.g. api.SpawnGreeterAtom(...).
+		if id, ok := fn.X.(*ast.Ident); ok {
+			if _, isPkg := pass.TypesInfo.Uses[id].(*types.PkgName); isPkg {
+				return factoryTarget(fn.Sel.Name, call)
+			}
+		}
+	}
+	return serviceMethod{}, false
+}
+
+// factoryTarget maps a generated factory function name (or framework spawn
+// entry) to the handler it invokes synchronously.
+func factoryTarget(name string, call *ast.CallExpr) (serviceMethod, bool) {
+	if strings.HasPrefix(name, "Spawn") && strings.HasSuffix(name, "Atom") &&
+		len(name) > len("Spawn")+len("Atom") {
+		return serviceMethod{service: strings.TrimSuffix(strings.TrimPrefix(name, "Spawn"), "Atom"), method: "Spawn"}, true
+	}
+	if name == "CosmosSpawnAtom" {
+		// CosmosSpawnAtom(caller, elem, name, arg): elem at index 1.
+		if len(call.Args) >= 2 {
+			if lit, ok := stringLiteral(call.Args[1]); ok {
+				return serviceMethod{service: lit, method: "Spawn"}, true
+			}
+		}
+	}
+	return serviceMethod{}, false
+}
+
+// trimIDClientSuffix splits an ID client type name ("GreeterAtomID") into its
+// service name ("Greeter"). ok=false for other names.
+func trimIDClientSuffix(name string) (service string, ok bool) {
+	for _, suffix := range []string{"AtomID", "ElementID"} {
+		if strings.HasSuffix(name, suffix) && len(name) > len(suffix) {
+			return strings.TrimSuffix(name, suffix), true
+		}
+	}
+	return "", false
+}
+
+// methodTakesCallback reports whether the named method on recv has a
+// function-typed parameter — the signature shape of generated async clients.
+func methodTakesCallback(pass *analysis.Pass, recv *types.Named, method string) bool {
+	obj, _, _ := types.LookupFieldOrMethod(recv, true, pass.Pkg, method)
+	sig, ok := obj.(*types.Func)
+	if !ok {
+		return false
+	}
+	fnSig, ok := sig.Type().(*types.Signature)
+	if !ok {
+		return false
+	}
+	for i := 0; i < fnSig.Params().Len(); i++ {
+		if _, ok := fnSig.Params().At(i).Type().Underlying().(*types.Signature); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// stringLiteral extracts a basic string literal, if expr is one.
+func stringLiteral(expr ast.Expr) (string, bool) {
+	if lit, ok := expr.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		return strings.Trim(lit.Value, "`\""), true
+	}
+	return "", false
+}
+
+func derefNamed(t types.Type) *types.Named {
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+	return named
+}
+
+// canonicalCycleKey produces the dedup key for a cycle: its canonical rotation
+// joined with "→".
+func canonicalCycleKey(cycle []serviceMethod) string {
+	names := make([]string, len(cycle))
+	for i, n := range rotateCycle(cycle) {
+		names[i] = n.String()
+	}
+	return strings.Join(names, "→")
+}
+
+func joinNames(names []serviceMethod, sep string) string {
+	strs := make([]string, len(names))
+	for i, n := range names {
+		strs[i] = n.String()
+	}
+	return strings.Join(strs, sep)
 }
 
 func isGenerated(file *ast.File) bool {
@@ -182,46 +572,18 @@ func isTestFile(pass *analysis.Pass, file *ast.File) bool {
 	return strings.HasSuffix(pos.Filename, "_test.go")
 }
 
-// isSyncHandler reports whether a method has the sync-handler signature shape:
-// a receiver + a `from <Type>` parameter (conventionally `from ID`) + an `in`
-// parameter. The types are checked by name loosely — the key signal is the
-// first param name "from" and a second param. This is a heuristic; the
-// authoritative handler list lives in the generated <Svc>Atom interface, but
-// scanning that from here is fragile. The "from" param name is a strong enough
-// convention across the framework's generated dispatch code.
-func isSyncHandler(fn *ast.FuncDecl) bool {
-	if fn.Recv == nil || len(fn.Type.Params.List) < 2 {
-		return false
-	}
-	// First param (after receiver) should be named "from".
-	params := fn.Type.Params.List
-	if params[0].Names == nil || len(params[0].Names) == 0 {
-		return false
-	}
-	return params[0].Names[0].Name == "from"
-}
-
 // analyzeSelfCall checks a sync handler for the self-call deadlock pattern:
-// the handler resolves an ID to its own atom and sync-calls it.
-func analyzeSelfCall(pass *analysis.Pass, fn *ast.FuncDecl) {
-	if !isSyncHandler(fn) {
-		return
-	}
-
-	// Determine the receiver identifier name (e.g. "t" in func (t *Type) Greeting(...)).
-	// This is used to recognize references to self (t.self, self, etc.).
+// the handler resolves an ID to its own atom and sync-calls it. The
+// self-resolution is recognized by the documented idiom: passing
+// <recv>.GetIDInfo().Atom as the atom-name argument to a generated ID factory
+// (Get<Svc>AtomID / Spawn<Svc>Atom / CosmosGetAtomID / CosmosSpawnAtom).
+func analyzeSelfCall(pass *analysis.Pass, h handlerDecl) {
 	recvName := ""
-	if fn.Recv != nil && len(fn.Recv.List) > 0 && len(fn.Recv.List[0].Names) > 0 {
-		recvName = fn.Recv.List[0].Names[0].Name
+	if h.fn.Recv != nil && len(h.fn.Recv.List) > 0 && len(h.fn.Recv.List[0].Names) > 0 {
+		recvName = h.fn.Recv.List[0].Names[0].Name
 	}
 
-	// Walk the handler body looking for the self-call pattern:
-	//   <id>, _ := Get<Svc>AtomID(<expr>.Cosmos(), <expr>.GetIDInfo().Atom)
-	//   <id>.<Handler>(<expr>, ...)
-	// where <expr> is a reference to the handler's receiver (self/t.self/etc.)
-	// or the handler's first param (from). If the atom-name argument resolves to
-	// self, this is a self-call → always deadlock.
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
+	ast.Inspect(h.fn.Body, func(n ast.Node) bool {
 		stmt, ok := n.(*ast.AssignStmt)
 		if !ok {
 			return true
@@ -231,7 +593,7 @@ func analyzeSelfCall(pass *analysis.Pass, fn *ast.FuncDecl) {
 			if !ok {
 				continue
 			}
-			factoryName := callFuncName(call)
+			factoryName := factoryFuncName(call)
 			if !isAtomIDFactoryName(factoryName) &&
 				factoryName != "CosmosGetAtomID" && factoryName != "CosmosSpawnAtom" {
 				continue
@@ -245,15 +607,27 @@ func analyzeSelfCall(pass *analysis.Pass, fn *ast.FuncDecl) {
 			if nameArgIdx < 0 || nameArgIdx >= len(call.Args) {
 				continue
 			}
-			if !exprReferencesSelf(call.Args[nameArgIdx], recvName, fn) {
+			if !exprReferencesSelf(call.Args[nameArgIdx], recvName) {
 				continue
 			}
 			pass.Reportf(call.Pos(),
 				"sync handler %s resolves an ID to its own atom (%s with self atom name) — this sync call always deadlocks; use async or restructure",
-				fn.Name.Name, factoryName)
+				h.node, factoryName)
 		}
 		return true
 	})
+}
+
+// factoryFuncName returns the called function's name for factory-shape calls
+// (identifier or package-qualified selector).
+func factoryFuncName(call *ast.CallExpr) string {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name
+	case *ast.SelectorExpr:
+		return fn.Sel.Name
+	}
+	return ""
 }
 
 // factoryNameArgIndex returns the index of the atom-name argument in a factory
@@ -279,18 +653,14 @@ func factoryNameArgIndex(factoryName string, call *ast.CallExpr) int {
 }
 
 // exprReferencesSelf reports whether an expression references the handler's
-// self/receiver. It looks for the pattern `<recv>.GetIDInfo().Atom` (the
-// canonical self-atom resolution), or any reference to a name containing the
-// receiver identifier. This is a heuristic with very low false-positive rate:
-// `self.GetIDInfo().Atom` is the documented idiom for resolving one's own atom.
-func exprReferencesSelf(expr ast.Expr, recvName string, fn *ast.FuncDecl) bool {
+// self/receiver via the canonical self-resolution pattern
+// `<recv>.GetIDInfo().Atom`.
+func exprReferencesSelf(expr ast.Expr, recvName string) bool {
 	// Match <X>.GetIDInfo().Atom — the canonical self-resolution pattern.
 	// The AST for `self.GetIDInfo().Atom` is a SelectorExpr:
 	//   Sel=Atom, X=(SelectorExpr Sel=GetIDInfo ... X=<ident or selector>)
 	if sel, ok := expr.(*ast.SelectorExpr); ok {
 		if sel.Sel.Name == "Atom" {
-			// Walk the inner expression to see if the base identifier is the
-			// receiver or a field of the receiver (e.g. self, t.self).
 			found := false
 			ast.Inspect(sel.X, func(n ast.Node) bool {
 				if ident, ok := n.(*ast.Ident); ok {
@@ -307,16 +677,6 @@ func exprReferencesSelf(expr ast.Expr, recvName string, fn *ast.FuncDecl) bool {
 		}
 	}
 	return false
-}
-
-func callFuncName(call *ast.CallExpr) string {
-	switch fn := call.Fun.(type) {
-	case *ast.Ident:
-		return fn.Name
-	case *ast.SelectorExpr:
-		return fn.Sel.Name
-	}
-	return ""
 }
 
 func isAtomIDFactoryName(name string) bool {
