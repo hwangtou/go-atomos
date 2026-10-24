@@ -20,7 +20,10 @@ can stand alone or join an etcd-backed multi-node cluster.
   `WithID` / `WithRebind`, enforced by the bundled `atomos-vet` analyzers.
 - **Task scheduling** — deferred, timed and crontab tasks plus named serial
   and concurrent queues, all executed on the actor's mailbox goroutine.
-- **Test kit** — `atomostest.Run` boots a real in-process runtime for tests;
+- **Test kit** — `atomostest.Run` boots a real in-process runtime for tests
+  (returning the `*CosmosProcess`, auto-stopped via `t.Cleanup`);
+  `Eventually` polls async actor state instead of sleeping;
+  `TakeGoroutines().AssertNoLeak` catches leaked mailbox goroutines;
   `FakeID` / `FakeSelfID` / `FakeLogging` / `FakeTask` cover unit tests
   without a process.
 - **Debug server** — an opt-in HTTP endpoint (`WithDebugServer("127.0.0.1:9099")`

@@ -99,7 +99,9 @@ Cluster RPC & TLS
   (self/cross-handler sync-call cycles) and `deferrelease` (IDTracker
   leaks), run via `go vet -vettool`.
 - `atomostest` test doubles: `Run` (in-process runtime with `t.Log`
-  routing), `FakeID`, `FakeSelfID`, `FakeLogging`, `FakeTask`.
+  routing, returning the `*CosmosProcess` and auto-stopping via
+  `t.Cleanup`), `Eventually`, `TakeGoroutines().AssertNoLeak`, `FakeID`,
+  `FakeSelfID`, `FakeLogging`, `FakeTask`.
 - Error-code snapshot test locking all 131 numeric values; generator
   golden-file test (`go test ./protoc-gen-go-atomos/`, `-update` to
   refresh).

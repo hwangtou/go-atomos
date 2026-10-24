@@ -16,6 +16,11 @@
 //   - FakeLogging implements atomos.Logging by recording entries for
 //     assertion.
 //
+// Polling and leak helpers complement the fakes: actor state changes are
+// asynchronous, so Eventually polls a condition instead of sleeping, and
+// TakeGoroutines().AssertNoLeak checks that mailbox goroutines really left
+// after shutdown.
+//
 // The fakes are stand-ins for testing user code. They are not
 // framework-internal IDs: passing one into a framework kernel path (for
 // example as the callerID of a real actor) fails explicitly with
@@ -33,9 +38,15 @@ import (
 // carry its Config (via SetConfig); logs are routed to t.Log and any startup
 // failure fails the test via t.Fatalf.
 //
+// The process is returned for direct access (Self, Spawn, Stop, debug
+// introspection). It is stopped automatically via t.Cleanup, so mailbox
+// goroutines never leak across tests; tests that stop it themselves first
+// are fine (the cleanup Stop of an already-off process is a no-op error,
+// ignored).
+//
 // opts are accepted for symmetry with atomos.Run and reserved for future
 // test-mode options; they are currently ignored.
-func Run(t *testing.T, runnable *atomos.CosmosRunnable, opts ...atomos.RunOption) {
+func Run(t *testing.T, runnable *atomos.CosmosRunnable, opts ...atomos.RunOption) *atomos.CosmosProcess {
 	t.Helper()
 	t.Logf("Welcome to Atomos! pid=(%d)", os.Getpid())
 
@@ -48,10 +59,14 @@ func Run(t *testing.T, runnable *atomos.CosmosRunnable, opts ...atomos.RunOption
 	if err != nil {
 		t.Fatalf("App: Init cosmos process failed. pid=(%d),err=(%v)", os.Getpid(), err)
 	}
+	t.Cleanup(func() {
+		_ = process.Stop()
+	})
 
 	runnable.SetConfig(app.GetConfig())
 	if err := process.Start(runnable); err != nil {
 		t.Fatalf("App: Runnable starts failed, now exiting. err=(%v)", err)
 	}
 	t.Log("App: Started.")
+	return process
 }
