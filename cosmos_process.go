@@ -92,6 +92,11 @@ type CosmosProcess struct {
 	logging *loggingAtomos
 	local   *CosmosLocal
 
+	// debugServer is the optional introspection HTTP server, started by Start
+	// when Config.Customize carries configKeyDebugServer and stopped first in
+	// Stop. Nil when not configured. Guarded by mutex.
+	debugServer *debugServer
+
 	cluster struct {
 		enable bool
 		// ETCD
@@ -130,6 +135,23 @@ const (
 	CosmosProcessStateShutdown CosmosProcessState = 3
 	CosmosProcessStateOff      CosmosProcessState = 4
 )
+
+// String returns the state name used in logs and the debug server.
+func (s CosmosProcessState) String() string {
+	switch s {
+	case CosmosProcessStatePrepare:
+		return "Prepare"
+	case CosmosProcessStateStartup:
+		return "Startup"
+	case CosmosProcessStateRunning:
+		return "Running"
+	case CosmosProcessStateShutdown:
+		return "Shutdown"
+	case CosmosProcessStateOff:
+		return "Off"
+	}
+	return "Unknown"
+}
 
 // newCosmosProcess 创建进程
 // Callers: App.NewCosmosProcess (production/atomostest) and test fixtures.
@@ -499,6 +521,13 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 
 	p.mutex.Lock()
 	p.state = CosmosProcessStateRunning
+	// Optional introspection server; runs until Stop. A listen failure is
+	// logged inside and leaves the process running without introspection.
+	if p.local.runnable != nil && p.local.runnable.config != nil {
+		if addr := debugServerAddr(p.local.runnable.config.Customize); addr != "" {
+			p.debugServer = startDebugServer(p, addr)
+		}
+	}
 	p.mutex.Unlock()
 
 	return nil
@@ -752,6 +781,18 @@ func (p *CosmosProcess) Stop() error {
 		return err
 	}
 
+	// Stop the debug server first: no new introspection requests once
+	// shutdown begins (and /healthz already reports unhealthy in Shutdown
+	// state).
+	func() {
+		p.mutex.Lock()
+		defer p.mutex.Unlock()
+		if p.debugServer != nil {
+			p.debugServer.stop()
+			p.debugServer = nil
+		}
+	}()
+
 	err := func() (err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -767,7 +808,7 @@ func (p *CosmosProcess) Stop() error {
 		}()
 
 		if err := p.tryUnsettingCurrentAndUpdateNodeInfo(); err != nil {
-			p.local.coreLog().coreFatal("CosmosProcess: Update cluster info failed. err=(%+v)", err)
+			p.local.coreLog().coreFatal("CosmosProcess: Update cluster info failed. err=(%s)", err.Message)
 		}
 
 		if err = p.mainScriptOnShutdownProtect(); err != nil {

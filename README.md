@@ -23,6 +23,10 @@ can stand alone or join an etcd-backed multi-node cluster.
 - **Test kit** — `atomostest.Run` boots a real in-process runtime for tests;
   `FakeID` / `FakeSelfID` / `FakeLogging` / `FakeTask` cover unit tests
   without a process.
+- **Debug server** — an opt-in HTTP endpoint (`WithDebugServer("127.0.0.1:9099")`
+  or the `_debug_server` customize key) serving `/elements` (element & atom
+  inventory, mailbox depths, idle times, sync wait graph), `/metrics`
+  (Prometheus text format), `/healthz`, and `/debug/pprof/*`.
 
 Requires Go 1.24+.
 

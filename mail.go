@@ -183,6 +183,14 @@ func (mb *mailBox) isRunning() bool {
 	return mb.running
 }
 
+// mailNum returns the current number of queued mails. Introspection only
+// (debug server); the value is a point-in-time snapshot.
+func (mb *mailBox) mailNum() uint32 {
+	mb.mutex.Lock()
+	defer mb.mutex.Unlock()
+	return mb.num
+}
+
 // waitExit waits until the mailbox loop goroutine has fully exited.
 // mb.running is cleared BEFORE the loop's deferred final "Mailbox: Stop" log
 // runs, so isRunning()==false alone does not mean the goroutine is gone —

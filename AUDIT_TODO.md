@@ -208,6 +208,14 @@ type ID interface {
 - 暴露的 metrics：active atom count per element、mailbox queue depth、RPC latency histogram、remote connection count
 - 是独立功能模块，不影响现有逻辑，可作为下一个 feature 独立开发
 
+**已实现**（2026-10-24，v3 分支 `debug_server.go`）：opt-in debug server，经 `Config.Customize["_debug_server"]`
+（YAML `customize` 键或 `Run(runnable, atomos.WithDebugServer("127.0.0.1:9099"))`）启用。
+`/elements` 页面（element/atom 清单、mailbox 深度、空闲时间、sync wait graph 与跨节点 wait chain）、
+`/metrics`（Prometheus text 格式，手写 exposition，无 client_golang 依赖：atomos_elements /
+atomos_element_atoms{,_active} / atomos_atom_mails / atomos_atom_idle_seconds / atomos_sync_wait_edges /
+atomos_sync_chains / go_goroutines / go_memstats_*）、`/healthz`（IsHealthy）、`/debug/pprof/*`。
+监听失败仅记错误日志不阻断进程。未做（记录）：RPC latency histogram、remote connection count metrics。
+
 ---
 
 ## 第五批：Review 2026-07-30 新发现（已处理）

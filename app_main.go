@@ -12,9 +12,10 @@ import (
 type RunOption func(*runConfig)
 
 type runConfig struct {
-	configFile    string
-	hasConfigFile bool
-	standalone    bool
+	configFile     string
+	hasConfigFile  bool
+	standalone     bool
+	debugServerAddr string
 
 	useWorkingPath bool
 	workingPath    string
@@ -55,6 +56,16 @@ func WithWorkingPath(path, cosmos, node string, logLevel LogLevel, customize map
 func WithStandalone() RunOption {
 	return func(c *runConfig) {
 		c.standalone = true
+	}
+}
+
+// WithDebugServer enables the introspection HTTP server on addr (e.g.
+// "127.0.0.1:9099" or ":9099"). It serves /elements, /metrics, /healthz and
+// /debug/pprof/* from process start until stop. Equivalent to setting the
+// "_debug_server" key in the config customize map; an explicit option wins.
+func WithDebugServer(addr string) RunOption {
+	return func(c *runConfig) {
+		c.debugServerAddr = addr
 	}
 }
 
@@ -109,6 +120,12 @@ func Run(runnable *CosmosRunnable, opts ...RunOption) {
 	if err != nil {
 		log.Printf("App: Config is invalid. pid=(%d),err=(%v)", os.Getpid(), err)
 		os.Exit(1)
+	}
+	if rc.debugServerAddr != "" {
+		if app.config.Customize == nil {
+			app.config.Customize = map[string][]byte{}
+		}
+		app.config.Customize[configKeyDebugServer] = []byte(rc.debugServerAddr)
 	}
 
 	process, err := app.NewCosmosProcess()
