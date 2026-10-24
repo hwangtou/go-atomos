@@ -4,6 +4,22 @@
 // atomos.MainForTest: logs go to t.Log instead of files, the PID-file check
 // and daemon fork are skipped, and startup failures call t.Fatalf instead of
 // os.Exit (os.Exit in a test binary would abort every other test).
+//
+// The package also provides in-memory fakes for unit-testing business logic
+// without starting a process:
+//
+//   - FakeID implements atomos.ID with configurable per-message replies and
+//     a recorded call history.
+//   - FakeSelfID implements atomos.SelfID (embedding FakeID) with a fake
+//     logger, a synchronously-executing fake task scheduler, and settable
+//     CosmosMain/Config/AsyncCallbackPending.
+//   - FakeLogging implements atomos.Logging by recording entries for
+//     assertion.
+//
+// The fakes are stand-ins for testing user code. They are not
+// framework-internal IDs: passing one into a framework kernel path (for
+// example as the callerID of a real actor) fails explicitly with
+// atomos.ErrFrameworkInvalidID, by design.
 package atomostest
 
 import (
