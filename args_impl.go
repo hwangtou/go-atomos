@@ -15,6 +15,10 @@ const (
 	ArgTypeBaseAtomosWithAny      ArgType = 5
 	ArgTypeBaseAtomosFromLocalOnly  ArgType = 6
 	ArgTypeBaseAtomosFromRemoteOnly ArgType = 7
+	// ArgTypeBaseAtomosWaitChain is internal-only: it carries the cross-node
+	// wait chain from CosmosArgs.wait_chain into a remote-originated sync
+	// mail. Not exposed as a public Arg constructor.
+	ArgTypeBaseAtomosWaitChain ArgType = 8
 
 	// ArgsForTask
 
@@ -111,6 +115,17 @@ func (argBaseAtomosFromRemoteOnly) getArgType() ArgType {
 	return ArgTypeBaseAtomosFromRemoteOnly
 }
 func (argBaseAtomosFromRemoteOnly) argForBaseAtomos() {}
+
+// argBaseAtomosWaitChain carries the cross-node sync-call wait chain into a
+// remote-originated sync mail. Internal only.
+type argBaseAtomosWaitChain struct {
+	chain []string
+}
+
+func (argBaseAtomosWaitChain) getArgType() ArgType {
+	return ArgTypeBaseAtomosWaitChain
+}
+func (argBaseAtomosWaitChain) argForBaseAtomos() {}
 
 // For Task
 

@@ -84,6 +84,10 @@ type testRunnableAtom struct {
 	// cyclePeer is the atom name to call in Greeting modes 3/4 (cycle tests).
 	cyclePeer string
 
+	// remoteHook is invoked by Greeting mode 5 (cross-node cycle tests): the
+	// closure makes a remote sync call on behalf of the handler.
+	remoteHook func(self AtomSelfID) *Error
+
 	haltNotify chan struct{}
 	haltWait   time.Duration
 }
@@ -164,6 +168,16 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 		_, e = peerID.Greeting(t.self, &ForTestGreetingI{Mode: 1})
 		if e != nil {
 			return nil, asError(e).AddStack(t.self)
+		}
+		out = &ForTestGreetingO{}
+	case 5:
+		// Remote hook (cross-node tests): call out through the configured
+		// closure and propagate its error.
+		if t.remoteHook == nil {
+			return nil, NewErrorf(ErrCodeFrameworkInternalError, "remote hook not set").AddStack(t.self)
+		}
+		if e := t.remoteHook(t.self); e != nil {
+			return nil, e
 		}
 		out = &ForTestGreetingO{}
 	default:

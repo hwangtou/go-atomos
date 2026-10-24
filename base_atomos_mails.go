@@ -92,6 +92,12 @@ type baseAtomosMail struct {
 	startupID uint64
 	asyncID   uint64
 
+	// waitChain is the cross-node wait chain active for this sync mail (nil
+	// for locally-originated calls with no ambient chain). While the mailbox
+	// executes this mail, the chain becomes the process's ambient chain so a
+	// remote call made from the handler extends it.
+	waitChain []string
+
 	// 用于发邮件时阻塞调用go程，以及返回结果用的channel。
 	// A channel used to block messaging goroutine, and return the result.
 	mailReply mailReply
@@ -303,7 +309,15 @@ func (m *baseAtomosMail) sendReplyID(id ID, err *Error) {
 
 // TODO: Think about waitReply() is still waiting when cosmos runnable is exiting.
 func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (resp proto.Message, err *Error) {
+	// The configurable process default bounds user sync calls only;
+	// framework control mails (kill/wormhole) keep the 10s floor so a short
+	// default cannot break process Stop.
 	timeout := helper.timeout
+	if m.mailType == BaseAtomosMailSync {
+		timeout = a.process.syncCallTimeout(timeout)
+	} else if timeout == 0 {
+		timeout = 10 * time.Second
+	}
 
 	m.mutex.Lock()
 	waitCh := m.waitCh
@@ -313,17 +327,22 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
 	}
 	var reply *mailReply
-	if timeout == 0 {
-		timeout = 10 * time.Second
-	}
 	select {
 	case reply = <-waitCh:
 	case <-time.After(timeout):
 		if a.mailbox.removeMail(m.mail) {
 			releaseMail(m.mail)
-			return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+			err := NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
+			a.process.onDeadlockEvent(&DeadlockEvent{
+				Kind: DeadlockEventTimeoutReject, Target: a.id.Info(), Name: m.name, Err: errOrNil(err),
+			})
+			return nil, err
 		} else {
-			return nil, NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
+			err := NewErrorf(ErrCodeAtomosPushTimeoutHandling, "Atomos: Message is handling timeout. id=(%s),name=(%s),timeout=(%v),current=(%s)", a.id.Info(), m.name, timeout, a.mt.current).AddStack(nil)
+			a.process.onDeadlockEvent(&DeadlockEvent{
+				Kind: DeadlockEventTimeoutHandling, Target: a.id.Info(), Name: m.name, Err: errOrNil(err),
+			})
+			return nil, err
 		}
 	}
 	// Wait channel must be empty before delete a mail.
@@ -345,11 +364,12 @@ func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id I
 		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos: Message wait invalid.").AddStack(nil)
 	}
 
-	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
-	var reply *mailReply
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
+
+	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
+	var reply *mailReply
 	select {
 	case reply = <-waitCh:
 	case <-time.After(timeout):

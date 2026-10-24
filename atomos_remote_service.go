@@ -3,6 +3,7 @@ package atomos
 import (
 	"context"
 	"reflect"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -221,6 +222,29 @@ func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *Cosm
 
 	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
+
+	// Cross-node cycle check: if the propagated wait chain already contains
+	// the target, dispatching this call would close a sync cycle across
+	// nodes and every mailbox on it would block forever. Reject immediately
+	// with the same error the local wait-graph uses, so the error travels
+	// back and unblocks the whole chain. Requests from older nodes carry no
+	// chain and skip this check (timeout remains the backstop there).
+	if req.To != nil && len(req.CosmosArgs.GetWaitChain()) > 0 {
+		to := req.To.Info()
+		for _, link := range req.CosmosArgs.GetWaitChain() {
+			if link == to {
+				chainStr := strings.Join(req.CosmosArgs.GetWaitChain(), "→") + "→" + to + " (cycle)"
+				rsp.Error = NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
+					"CosmosRemote: Sync call deadlock (cross-node cycle). target=(%s) name=(%s) chain=%s",
+					to, req.Message, chainStr).AddStack(a.process.local)
+				a.process.onDeadlockEvent(&DeadlockEvent{
+					Kind: DeadlockEventCycle, Caller: req.CallerId.Info(), Target: to,
+					Name: req.Message, Chain: chainStr, Err: errOrNil(rsp.Error),
+				})
+				return rsp, nil
+			}
+		}
+	}
 
 	switch req.To.Type {
 	case IDType_Atom, IDType_Element:

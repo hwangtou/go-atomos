@@ -399,4 +399,9 @@ message CosmosArgs {
   int64 base_atomos_timeout_in_nano = 2;
   bool base_atomos_append_to_head = 3;
   bool base_atomos_wait_killed = 4;
+  // Cross-node sync-call wait chain (added for cross-node deadlock
+  // detection): the IDs of atoms already blocking this call, outermost
+  // first. Entries use IDInfo.Info() format. Older nodes ignore it and
+  // degrade to timeout-based protection.
+  repeated string wait_chain = 5;
 }

@@ -160,7 +160,9 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 		return nil, helper.getError()
 	}
 
-	client, ctx, cancel, cerr := a.getCli(helper.timeout)
+	// A remote sync call without an explicit timeout is bounded by the same
+	// process-wide default as local sync calls (plus the client margin).
+	client, ctx, cancel, cerr := a.getCli(a.cosmos.process.syncCallTimeout(helper.timeout))
 	if cerr != nil {
 		return nil, cerr.AddStack(nil)
 	}
@@ -174,10 +176,26 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 			return nil, NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: SyncMessagingByName arg error. err=(%v)", er).AddStack(nil)
 		}
 	}
+	// Cross-node wait chain: the ambient chain of the executing goroutine
+	// (set while a chain-carrying sync mail runs on it) plus this caller's
+	// identity. The receiving node rejects the call immediately if the chain
+	// already contains the target — a cross-node sync cycle. Purely local
+	// cycles are caught by the process wait-graph and never reach here.
+	chain := a.cosmos.process.currentSyncChain(getGoID())
+	who := ""
+	if from != nil {
+		who = from.GetIDInfo().Info()
+	} else {
+		who = a.info.Info()
+	}
+	outChain := make([]string, 0, len(chain)+1)
+	outChain = append(outChain, chain...)
+	outChain = append(outChain, who)
+
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:   from.GetIDInfo(),
 		To:         a.info,
-		CosmosArgs: helper.getRemoteArg(),
+		CosmosArgs: withWaitChain(helper.getRemoteArg(), outChain),
 		Message:    name,
 		Args:       arg,
 	})
@@ -197,6 +215,16 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 		return reply, rsp.Error.AddStack(nil)
 	}
 	return reply, nil
+}
+
+// withWaitChain attaches a cross-node wait chain to CosmosArgs, allocating the
+// args only when needed (local calls construct CosmosArgs without a chain).
+func withWaitChain(args *CosmosArgs, chain []string) *CosmosArgs {
+	if args == nil {
+		args = &CosmosArgs{}
+	}
+	args.WaitChain = chain
+	return args
 }
 
 func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message, callback func(out proto.Message, err error), ext ...ArgsForBaseAtomos) (errBeforeExec error) {

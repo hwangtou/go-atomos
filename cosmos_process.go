@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -41,14 +42,33 @@ type CosmosProcess struct {
 	instanceSeq atomic.Uint64
 
 	// waitMu guards waitGraph, the sync-call wait-graph used for deadlock
-	// detection. Each entry (executingGoID → targetMailboxGoID) records that a
+	// detection. Each edge (executingGoID → waitEdge) records that a
 	// goroutine is blocked in PushSyncMessage.waitReply waiting for a target
 	// Atom's mailbox goroutine to process a sync mail. A cycle in this graph
 	// (e.g. A's mailbox blocked on B while B's mailbox is blocked on A) is a
 	// deadlock; PushSyncMessage checks this before enqueue and returns
-	// ErrIDFirstSyncCallDeadlock immediately instead of waiting 10s for timeout.
+	// ErrIDFirstSyncCallDeadlock immediately instead of waiting out the
+	// timeout. Edges carry the target's ID for readable chain diagnostics and,
+	// when syncDeadlockDebug is on, the caller's stack at push time.
 	waitMu    sync.Mutex
-	waitGraph map[uint64]uint64
+	waitGraph map[uint64]waitEdge
+
+	// syncChainMu guards syncChains, the ambient cross-node wait chain per
+	// mailbox goroutine. While a chain-carrying sync mail executes on a
+	// mailbox goroutine, syncChains[goID] holds the chain carried by that
+	// mail; a remote sync call made from inside the handler extends it (see
+	// BaseRemote.PushSyncMessage). Local wait-graph cycles are covered by
+	// waitGraph; this map extends detection across nodes.
+	syncChainMu sync.Mutex
+	syncChains  map[uint64][]string
+
+	// syncDeadlockDebug enables per-edge stack capture for waitGraph (off by
+	// default; costs one runtime.Callers per registered edge when on).
+	syncDeadlockDebug bool
+	// syncCallDefaultTimeout bounds sync calls that do not pass an explicit
+	// ArgBaseAtomosTimeout: it is the local waitReply fallback and the remote
+	// client-side deadline base. Default 10s.
+	syncCallDefaultTimeout time.Duration
 
 	// Per-process mutable settings (formerly package-level vars).
 	messageTimeoutTracer  bool
@@ -130,7 +150,10 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.messageTimeoutDefault = 2 * time.Second
 	p.muteKeepaliveLog = true
 	p.idTrackerDebug = false
-	p.waitGraph = map[uint64]uint64{}
+	p.syncDeadlockDebug = false
+	p.syncCallDefaultTimeout = 10 * time.Second
+	p.waitGraph = map[uint64]waitEdge{}
+	p.syncChains = map[uint64][]string{}
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}
@@ -174,6 +197,16 @@ func (p *CosmosProcess) allocInstanceID() uint64 {
 	return p.instanceSeq.Add(1)
 }
 
+// waitEdge records one blocked sync call in the wait-graph: the target
+// Atom's mailbox goroutine, the target's ID (for readable chain diagnostics),
+// and — when syncDeadlockDebug is enabled — the caller's stack captured at
+// push time.
+type waitEdge struct {
+	targetGoID uint64
+	targetID   *IDInfo
+	frames     []uintptr
+}
+
 // detectDeadlockAndWait checks whether adding a wait edge callerGoID →
 // targetGoID would close a cycle in the sync-call wait-graph. If it would, it
 // returns true (deadlock) and does NOT register the edge. If it would not, it
@@ -182,8 +215,9 @@ func (p *CosmosProcess) allocInstanceID() uint64 {
 // cycle cannot both pass the check (the second sees the first's edge).
 //
 // callerGoID is the goroutine currently executing PushSyncMessage (about to
-// block in waitReply); targetGoID is the target Atom's mailbox goroutine.
-func (p *CosmosProcess) detectDeadlockAndWait(callerGoID, targetGoID uint64) (deadlock bool) {
+// block in waitReply); targetGoID is the target Atom's mailbox goroutine;
+// targetID identifies the target Atom for readable diagnostics.
+func (p *CosmosProcess) detectDeadlockAndWait(callerGoID, targetGoID uint64, targetID *IDInfo) (deadlock bool) {
 	if p == nil {
 		return false
 	}
@@ -196,20 +230,27 @@ func (p *CosmosProcess) detectDeadlockAndWait(callerGoID, targetGoID uint64) (de
 		if cur == callerGoID {
 			return true // cycle: target reaches caller
 		}
-		next, ok := p.waitGraph[cur]
+		edge, ok := p.waitGraph[cur]
 		if !ok {
 			break // chain ended, no cycle
 		}
-		cur = next
+		cur = edge.targetGoID
 	}
 	// No cycle: register the edge. Each goroutine has at most one outstanding
 	// wait edge at a time (it blocks synchronously), so a plain assignment is
 	// correct. Lazy-init the map for CosmosProcess instances constructed
 	// outside init() (e.g. bare test fixtures).
 	if p.waitGraph == nil {
-		p.waitGraph = map[uint64]uint64{}
+		p.waitGraph = map[uint64]waitEdge{}
 	}
-	p.waitGraph[callerGoID] = targetGoID
+	var frames []uintptr
+	if p.syncDeadlockDebug {
+		pcs := make([]uintptr, 32)
+		if n := runtime.Callers(3, pcs); n > 0 {
+			frames = pcs[:n]
+		}
+	}
+	p.waitGraph[callerGoID] = waitEdge{targetGoID: targetGoID, targetID: targetID, frames: frames}
 	return false
 }
 
@@ -226,8 +267,9 @@ func (p *CosmosProcess) removeWaitEdge(executingGoID uint64) {
 }
 
 // waitChain returns a human-readable description of the wait chain from `from`
-// to `to` (inclusive), for deadlock diagnostics. Caller must hold no lock; this
-// acquires waitMu briefly. Only meaningful once a cycle is already confirmed.
+// to `to` (inclusive), e.g. "g42→Atom(node::Elem::a)[g7]→Atom(node::Elem::b)[g42 (cycle)]".
+// Caller must hold no lock; this acquires waitMu briefly. Only meaningful once
+// a cycle is already confirmed.
 func (p *CosmosProcess) waitChain(from, to uint64) string {
 	if p == nil {
 		return ""
@@ -235,20 +277,113 @@ func (p *CosmosProcess) waitChain(from, to uint64) string {
 	p.waitMu.Lock()
 	defer p.waitMu.Unlock()
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d", from)
+	fmt.Fprintf(&b, "g%d", from)
 	cur := from
-	for cur != 0 && cur != to {
-		next, ok := p.waitGraph[cur]
+	for cur != 0 {
+		edge, ok := p.waitGraph[cur]
 		if !ok {
 			break
 		}
-		fmt.Fprintf(&b, "→%d", next)
-		cur = next
-	}
-	if cur == to {
-		fmt.Fprintf(&b, "→%d(cycle)", to)
+		fmt.Fprintf(&b, "→%s[g%d]", edge.targetID.Info(), edge.targetGoID)
+		cur = edge.targetGoID
+		if cur == to {
+			b.WriteString(" (cycle)")
+			break
+		}
 	}
 	return b.String()
+}
+
+// waitChainStacks renders the captured caller stacks along the wait chain from
+// `from` toward `to`, one block per edge that has frames. Returns "" when
+// syncDeadlockDebug is off (no frames captured).
+func (p *CosmosProcess) waitChainStacks(from, to uint64) string {
+	if p == nil {
+		return ""
+	}
+	p.waitMu.Lock()
+	defer p.waitMu.Unlock()
+	var b strings.Builder
+	cur := from
+	for cur != 0 {
+		edge, ok := p.waitGraph[cur]
+		if !ok {
+			break
+		}
+		if len(edge.frames) > 0 {
+			fmt.Fprintf(&b, "\n  goroutine %d waiting for %s[g%d] at:", cur, edge.targetID.Info(), edge.targetGoID)
+			renderFrames(&b, edge.frames)
+		}
+		if edge.targetGoID == to {
+			break
+		}
+		cur = edge.targetGoID
+	}
+	return b.String()
+}
+
+// renderFrames appends a "function\n    file:line" block per frame.
+func renderFrames(b *strings.Builder, frames []uintptr) {
+	iter := runtime.CallersFrames(frames)
+	for {
+		f, more := iter.Next()
+		if f.Function != "" {
+			fmt.Fprintf(b, "\n    %s\n        %s:%d", f.Function, f.File, f.Line)
+		}
+		if !more {
+			return
+		}
+	}
+}
+
+// setSyncChain records `chain` as the ambient cross-node wait chain for the
+// goroutine executing a chain-carrying sync mail. Called by the mailbox before
+// dispatching the mail; paired with clearSyncChain.
+func (p *CosmosProcess) setSyncChain(goID uint64, chain []string) {
+	if p == nil || goID == 0 || len(chain) == 0 {
+		return
+	}
+	p.syncChainMu.Lock()
+	if p.syncChains == nil {
+		p.syncChains = map[uint64][]string{}
+	}
+	p.syncChains[goID] = chain
+	p.syncChainMu.Unlock()
+}
+
+// clearSyncChain removes the ambient chain for a goroutine after its mail
+// finished executing.
+func (p *CosmosProcess) clearSyncChain(goID uint64) {
+	if p == nil || goID == 0 {
+		return
+	}
+	p.syncChainMu.Lock()
+	delete(p.syncChains, goID)
+	p.syncChainMu.Unlock()
+}
+
+// currentSyncChain returns the ambient cross-node wait chain for the goroutine
+// executing a chain-carrying sync mail, or nil. The returned slice is shared
+// (treat as read-only).
+func (p *CosmosProcess) currentSyncChain(goID uint64) []string {
+	if p == nil || goID == 0 {
+		return nil
+	}
+	p.syncChainMu.Lock()
+	defer p.syncChainMu.Unlock()
+	return p.syncChains[goID]
+}
+
+// syncCallTimeout returns the effective timeout for a sync call: an explicit
+// positive timeout wins; otherwise the process-wide default (10s when unset).
+func (p *CosmosProcess) syncCallTimeout(d time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	if p == nil || p.syncCallDefaultTimeout <= 0 {
+		return 10 * time.Second
+	}
+	return p.syncCallDefaultTimeout
 }
 
 // Start 启动进程
@@ -300,6 +435,12 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		}
 		if runnable.idTrackerDebug != nil {
 			p.idTrackerDebug = *runnable.idTrackerDebug
+		}
+		if runnable.syncDeadlockDebug != nil {
+			p.syncDeadlockDebug = *runnable.syncDeadlockDebug
+		}
+		if runnable.syncCallDefaultTimeout > 0 {
+			p.syncCallDefaultTimeout = runnable.syncCallDefaultTimeout
 		}
 
 		// 启动时初始化脚本。
@@ -644,6 +785,12 @@ func (p *CosmosProcess) Stop() error {
 	p.state = CosmosProcessStateOff
 	p.mutex.Unlock()
 	p.local.coreLog().coreInfo("CosmosProcess: Stopping app is off.")
+
+	// 退出卫生:清空等待图残留边。被阻塞的等待方会经由 kill/stop 回复或超时
+	// 唤醒,removeWaitEdge 对缺失键是安全的。
+	p.waitMu.Lock()
+	p.waitGraph = map[uint64]waitEdge{}
+	p.waitMu.Unlock()
 
 	<-time.After(100 * time.Millisecond)
 	p.logging.stop()
@@ -1083,4 +1230,28 @@ func (p *CosmosProcess) onNewError(err *Error) {
 		return
 	}
 	newErrorHook(errOrNil(err))
+}
+
+// onDeadlockEvent delivers a sync-call deadlock detection or timeout event to
+// the hook registered via CosmosRunnable.SetDeadlockHook. Panics in the hook
+// are contained: the hook is an observer and must never take down the
+// reporting goroutine (which is often a mailbox).
+func (p *CosmosProcess) onDeadlockEvent(e *DeadlockEvent) {
+	if p == nil || e == nil {
+		return
+	}
+	runnable := p.local.runnable
+	if runnable == nil {
+		return
+	}
+	hook := runnable.deadlockHook
+	if hook == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			p.local.coreLog().coreError("CosmosProcess: Deadlock hook panicked. err=(%v)", r)
+		}
+	}()
+	hook(e)
 }

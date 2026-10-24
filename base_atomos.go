@@ -224,15 +224,26 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 	hasWaitEdge := false
 	if callerGoID != 0 && targetGoID != 0 {
 		if callerGoID == targetGoID {
-			return nil, NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
+			err := NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
 				"Atomos: Sync call deadlock (self). caller=(%s) target=(%s) name=(%s)",
 				from.GetIDInfo().Info(), a.id.Info(), name).AddStack(nil)
+			a.process.onDeadlockEvent(&DeadlockEvent{
+				Kind: DeadlockEventCycle, Caller: from.GetIDInfo().Info(), Target: a.id.Info(),
+				Name: name, Err: errOrNil(err),
+			})
+			return nil, err
 		}
-		if a.process.detectDeadlockAndWait(callerGoID, targetGoID) {
-			return nil, NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
-				"Atomos: Sync call deadlock (cycle). caller=(%s) target=(%s) name=(%s) chain=%s",
+		if a.process.detectDeadlockAndWait(callerGoID, targetGoID, a.id) {
+			err := NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
+				"Atomos: Sync call deadlock (cycle). caller=(%s) target=(%s) name=(%s) chain=%s%s",
 				from.GetIDInfo().Info(), a.id.Info(), name,
-				a.process.waitChain(targetGoID, callerGoID)).AddStack(nil)
+				a.process.waitChain(targetGoID, callerGoID),
+				a.process.waitChainStacks(targetGoID, callerGoID)).AddStack(nil)
+			a.process.onDeadlockEvent(&DeadlockEvent{
+				Kind: DeadlockEventCycle, Caller: from.GetIDInfo().Info(), Target: a.id.Info(),
+				Name: name, Chain: a.process.waitChain(targetGoID, callerGoID), Err: errOrNil(err),
+			})
+			return nil, err
 		}
 		hasWaitEdge = true
 	}
@@ -246,6 +257,12 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 
 	am := allocBaseAtomosMail()
 	initBaseAtomosMailSync(am, from, name, in)
+	// Cross-node chain propagation: a remote-originated call carries its chain
+	// via the internal arg; a nested local call inherits the ambient chain of
+	// the executing goroutine so the chain survives local hops too.
+	if am.waitChain = helper.waitChain; am.waitChain == nil {
+		am.waitChain = a.process.currentSyncChain(callerGoID)
+	}
 
 	var ok bool
 	if helper.appendToHead {
@@ -721,6 +738,13 @@ func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 		{
 			a.setBusy(am.name, am.arg)
 			defer a.setWaiting(am.name)
+			if am.waitChain != nil {
+				// While this (remote-originated or chain-carrying) sync mail
+				// executes, expose its chain as the mailbox goroutine's
+				// ambient chain: remote calls from the handler extend it.
+				a.process.setSyncChain(a.mailbox.goID, am.waitChain)
+				defer a.process.clearSyncChain(a.mailbox.goID)
+			}
 
 			resp, err := a.holder.onSyncMessaging(am.from, am.name, am.arg)
 			if resp != nil {
@@ -948,6 +972,10 @@ type baseAtomosHelper struct {
 	timeout      time.Duration
 	appendToHead bool
 	waitKilled   bool
+	// waitChain is the cross-node wait chain carried by a remote-originated
+	// sync call (internal arg; not recorded in fields — it is runtime
+	// metadata, not a user argument).
+	waitChain []string
 }
 
 type baseAtomosExtInvalidArg struct {
@@ -1007,6 +1035,24 @@ func createBaseAtomosHelper(mailType BaseAtomosMailType, ext []ArgsForBaseAtomos
 				helper.fields = append(helper.fields, int32(ArgTypeBaseAtomosWaitKilled))
 				helper.waitKilled = true
 			}
+		case ArgTypeBaseAtomosWaitChain:
+			if !helper.checkMailTypeIn(mailType, []BaseAtomosMailType{BaseAtomosMailSync}) {
+				helper.addInvalidArg(i, v, "WaitChain argument is only valid for Sync mails")
+				continue
+			}
+			if helper.waitChain != nil {
+				helper.addConflictArg(i, v, "WaitChain argument conflict")
+			} else {
+				switch arg := v.(type) {
+				case argBaseAtomosWaitChain:
+					helper.waitChain = arg.chain
+				case *argBaseAtomosWaitChain:
+					helper.waitChain = arg.chain
+				default:
+					helper.addInvalidArg(i, v, "WaitChain argument type is invalid")
+					continue
+				}
+			}
 		default:
 			helper.addInvalidArg(i, v, "Argument type is invalid")
 		}
@@ -1027,6 +1073,9 @@ func createExtForCosmosArgs(arg *CosmosArgs) []ArgsForBaseAtomos {
 	}
 	if arg.BaseAtomosWaitKilled {
 		ext = append(ext, ArgBaseAtomosWaitKilled())
+	}
+	if len(arg.WaitChain) > 0 {
+		ext = append(ext, argBaseAtomosWaitChain{chain: arg.WaitChain})
 	}
 	return ext
 }

@@ -37,6 +37,22 @@ func Recover(id SelfID) {
 	}
 }
 
+// DumpStacks captures and returns the stacks of all goroutines of this
+// process. It is the diagnostics outlet to call from a DeadlockEvent hook, an
+// ops endpoint, or a watchdog when a process is suspected wedged; the returned
+// text is exactly what `runtime.Stack(buf, true)` produces (the same format as
+// a panic dump).
+func DumpStacks() string {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return string(buf[:n])
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
 func dumpAllGoID() map[uint64]bool {
 	m := map[uint64]bool{}
 	buf := make([]byte, 1<<20)

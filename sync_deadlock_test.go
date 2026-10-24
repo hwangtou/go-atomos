@@ -1,6 +1,7 @@
 package atomos
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -153,9 +154,219 @@ func TestDeadlock_TimeoutStillWorks(t *testing.T) {
 		}
 		// A slow handler that is actively processing (mail popped) yields
 		// ErrAtomosPushTimeoutHandling; one still queued yields Reject. Either
-		// is acceptable — the point is it is NOT ErrIDFirstSyncCallDeadlock.
+		// is acceptable — the point is it NOT ErrIDFirstSyncCallDeadlock.
 		if CodeOf(err) == ErrCodeIDFirstSyncCallDeadlock {
 			t.Fatalf("expected timeout (Reject or Handling), got deadlock false positive: %v", err)
+		}
+	})
+}
+
+// TestDeadlock_CycleReadableChain verifies the deadlock error carries a
+// readable wait chain (atom identities, not bare goroutine numbers).
+func TestDeadlock_CycleReadableChain(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		elem, gerr := p.local.getLocalElement(ForTestAtomosName)
+		if gerr != nil {
+			t.Fatalf("getLocalElement: %v", gerr)
+		}
+		const atomA = "chain_a"
+		const atomB = "chain_b"
+		implA := spawnTestAtom(t, elem, atomA)
+		implB := spawnTestAtom(t, elem, atomB)
+		implA.cyclePeer = atomB
+		implB.cyclePeer = atomA
+
+		atomAID, _, err := elem.GetAtomID(atomA, NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
+		if err != nil {
+			t.Fatalf("GetAtomID(A): %v", err)
+		}
+		_, err = atomAID.SyncMessagingByName(p.local, "Greeting",
+			&ForTestGreetingI{Mode: 3},
+			ArgBaseAtomosTimeout(2 * time.Second))
+		if CodeOf(err) != ErrCodeIDFirstSyncCallDeadlock {
+			t.Fatalf("expected ErrIDFirstSyncCallDeadlock, got: %v", err)
+		}
+		msg := err.Error()
+		// The chain must name the atoms on the cycle, not just goroutine ids.
+		if !strings.Contains(msg, "::"+atomB+"[") || !strings.Contains(msg, "(cycle)") {
+			t.Fatalf("deadlock error lacks readable chain: %v", msg)
+		}
+	})
+}
+
+// TestDeadlock_DebugStacks verifies that with syncDeadlockDebug enabled the
+// deadlock error carries the caller stacks captured along the wait chain.
+func TestDeadlock_DebugStacks(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		p.syncDeadlockDebug = true
+
+		elem, gerr := p.local.getLocalElement(ForTestAtomosName)
+		if gerr != nil {
+			t.Fatalf("getLocalElement: %v", gerr)
+		}
+		const atomA = "stacks_a"
+		const atomB = "stacks_b"
+		implA := spawnTestAtom(t, elem, atomA)
+		implB := spawnTestAtom(t, elem, atomB)
+		implA.cyclePeer = atomB
+		implB.cyclePeer = atomA
+
+		atomAID, _, err := elem.GetAtomID(atomA, NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
+		if err != nil {
+			t.Fatalf("GetAtomID(A): %v", err)
+		}
+		_, err = atomAID.SyncMessagingByName(p.local, "Greeting",
+			&ForTestGreetingI{Mode: 3},
+			ArgBaseAtomosTimeout(2 * time.Second))
+		if CodeOf(err) != ErrCodeIDFirstSyncCallDeadlock {
+			t.Fatalf("expected ErrIDFirstSyncCallDeadlock, got: %v", err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "waiting for") || !strings.Contains(msg, "Greeting") {
+			t.Fatalf("deadlock error lacks captured stacks: %v", msg)
+		}
+	})
+}
+
+// TestDeadlock_HookFiresOnCycle verifies SetDeadlockHook receives a
+// DeadlockEventCycle (with the readable chain) when the wait-graph rejects a
+// local cycle.
+func TestDeadlock_HookFiresOnCycle(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		events := make(chan *DeadlockEvent, 4)
+		p.local.runnable.deadlockHook = func(e *DeadlockEvent) { events <- e }
+
+		elem, gerr := p.local.getLocalElement(ForTestAtomosName)
+		if gerr != nil {
+			t.Fatalf("getLocalElement: %v", gerr)
+		}
+		const atomA = "hook_a"
+		const atomB = "hook_b"
+		implA := spawnTestAtom(t, elem, atomA)
+		implB := spawnTestAtom(t, elem, atomB)
+		implA.cyclePeer = atomB
+		implB.cyclePeer = atomA
+
+		atomAID, _, err := elem.GetAtomID(atomA, NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
+		if err != nil {
+			t.Fatalf("GetAtomID(A): %v", err)
+		}
+		_, err = atomAID.SyncMessagingByName(p.local, "Greeting",
+			&ForTestGreetingI{Mode: 3},
+			ArgBaseAtomosTimeout(2 * time.Second))
+		if CodeOf(err) != ErrCodeIDFirstSyncCallDeadlock {
+			t.Fatalf("expected ErrIDFirstSyncCallDeadlock, got: %v", err)
+		}
+		select {
+		case e := <-events:
+			if e.Kind != DeadlockEventCycle {
+				t.Fatalf("expected DeadlockEventCycle, got kind=%d", e.Kind)
+			}
+			if !strings.Contains(e.Chain, atomB) || e.Err == nil {
+				t.Fatalf("unexpected event: %+v", e)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("deadlock hook did not fire")
+		}
+	})
+}
+
+// TestDeadlock_HookFiresOnTimeout verifies the hook receives a timeout event
+// (Reject or Handling) when a sync call times out.
+func TestDeadlock_HookFiresOnTimeout(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		events := make(chan *DeadlockEvent, 4)
+		p.local.runnable.deadlockHook = func(e *DeadlockEvent) { events <- e }
+
+		elem, gerr := p.local.getLocalElement(ForTestAtomosName)
+		if gerr != nil {
+			t.Fatalf("getLocalElement: %v", gerr)
+		}
+		impl := spawnTestAtom(t, elem, "hook_timeout_atom")
+		impl.greetingWait = 200 * time.Millisecond
+
+		atomID, _, err := elem.GetAtomID("hook_timeout_atom", NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
+		if err != nil {
+			t.Fatalf("GetAtomID: %v", err)
+		}
+		_, err = atomID.SyncMessagingByName(p.local, "Greeting",
+			&ForTestGreetingI{Mode: 1},
+			ArgBaseAtomosTimeout(50 * time.Millisecond))
+		if err == nil {
+			t.Fatal("expected timeout error, got nil")
+		}
+		select {
+		case e := <-events:
+			if e.Kind != DeadlockEventTimeoutReject && e.Kind != DeadlockEventTimeoutHandling {
+				t.Fatalf("expected timeout event, got kind=%d", e.Kind)
+			}
+			if e.Name != "Greeting" || e.Err == nil {
+				t.Fatalf("unexpected event: %+v", e)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("deadlock hook did not fire on timeout")
+		}
+	})
+}
+
+// TestDeadlock_DumpStacks verifies the exported stack-dump helper returns
+// goroutine stacks including this goroutine.
+func TestDeadlock_DumpStacks(t *testing.T) {
+	out := DumpStacks()
+	if !strings.Contains(out, "goroutine ") || !strings.Contains(out, "TestDeadlock_DumpStacks") {
+		t.Fatalf("DumpStacks output missing goroutine stacks:\n%s", out)
+	}
+}
+
+// TestDeadlock_DefaultTimeoutConfigurable verifies syncCallDefaultTimeout
+// bounds sync calls that pass no explicit timeout.
+func TestDeadlock_DefaultTimeoutConfigurable(t *testing.T) {
+	savedDebug := allocMailDebug.Load()
+	allocMailDebug.Store(false)
+	defer func() { allocMailDebug.Store(savedDebug) }()
+
+	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {
+		p.syncCallDefaultTimeout = 100 * time.Millisecond
+
+		elem, gerr := p.local.getLocalElement(ForTestAtomosName)
+		if gerr != nil {
+			t.Fatalf("getLocalElement: %v", gerr)
+		}
+		impl := spawnTestAtom(t, elem, "default_timeout_atom")
+		impl.greetingWait = 300 * time.Millisecond // handler outlives the default timeout
+
+		atomID, _, err := elem.GetAtomID("default_timeout_atom", NewIDTrackerInfoFromLocalGoroutine(3), ArgBaseAtomosFromLocalOnly())
+		if err != nil {
+			t.Fatalf("GetAtomID: %v", err)
+		}
+		start := time.Now()
+		// No ArgBaseAtomosTimeout: the process default must apply.
+		_, err = atomID.SyncMessagingByName(p.local, "Greeting", &ForTestGreetingI{Mode: 1})
+		elapsed := time.Since(start)
+		if err == nil {
+			t.Fatal("expected timeout error, got nil")
+		}
+		if CodeOf(err) == ErrCodeIDFirstSyncCallDeadlock {
+			t.Fatalf("expected timeout, got deadlock false positive: %v", err)
+		}
+		if elapsed > 5*time.Second {
+			t.Fatalf("default timeout not applied, call took %v: %v", elapsed, err)
 		}
 	})
 }

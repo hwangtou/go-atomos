@@ -71,12 +71,18 @@ type CosmosRunnable struct {
 	recoverHook        func(id *IDInfo, err error)
 	newErrorHook       func(err error)
 
+	// deadlockHook is invoked on every runtime sync-call deadlock detection
+	// and sync-call timeout. See SetDeadlockHook.
+	deadlockHook func(e *DeadlockEvent)
+
 	// Per-process settings applied to the CosmosProcess at Start. Nil fields
 	// keep the CosmosProcess defaults.
 	messageTimeoutTracer  *bool
 	messageTimeoutDefault time.Duration
 	muteKeepaliveLog      *bool
 	idTrackerDebug        *bool
+	syncDeadlockDebug     *bool
+	syncCallDefaultTimeout time.Duration
 }
 
 // Check reports whether the CosmosRunnable is correctly constructed: a Config
@@ -182,6 +188,76 @@ func (r *CosmosRunnable) SetMuteKeepaliveLog(b bool) *CosmosRunnable {
 // started with this runnable. See CosmosProcess.idTrackerDebug.
 func (r *CosmosRunnable) SetIDTrackerDebug(v bool) *CosmosRunnable {
 	r.idTrackerDebug = &v
+	return r
+}
+
+// SetSyncDeadlockDebug enables per-edge stack capture for the sync-call
+// wait-graph on the CosmosProcess started with this runnable. When enabled,
+// every registered wait edge captures the caller's stack; deadlock errors
+// (and the deadlock hook) then carry those stacks. Off by default — the hot
+// path pays zero extra cost.
+func (r *CosmosRunnable) SetSyncDeadlockDebug(v bool) *CosmosRunnable {
+	r.syncDeadlockDebug = &v
+	return r
+}
+
+// DeadlockEventKind classifies runtime sync-call failure events reported
+// through the deadlock hook.
+type DeadlockEventKind int
+
+const (
+	// DeadlockEventCycle: the sync-call wait-graph detected a cycle (local or
+	// cross-node) and rejected the call with ErrIDFirstSyncCallDeadlock.
+	DeadlockEventCycle DeadlockEventKind = iota
+	// DeadlockEventTimeoutReject: a sync mail timed out while still queued.
+	DeadlockEventTimeoutReject
+	// DeadlockEventTimeoutHandling: a sync mail timed out while its handler
+	// was executing (slow or wedged handler, or an undetectable wait cycle
+	// such as one through user locks).
+	DeadlockEventTimeoutHandling
+)
+
+// DeadlockEvent describes one runtime sync-call deadlock detection or
+// timeout. Delivered via the hook set by CosmosRunnable.SetDeadlockHook.
+type DeadlockEvent struct {
+	// Kind classifies the event.
+	Kind DeadlockEventKind
+	// Caller is the IDInfo.Info() string of the sync caller, or "" if unknown.
+	Caller string
+	// Target is the IDInfo.Info() string of the target atom.
+	Target string
+	// Name is the sync message name.
+	Name string
+	// Chain is the readable wait chain for cycle events (e.g.
+	// "g42→node::Elem::a[g7] (cycle)"); empty for timeout events.
+	Chain string
+	// Err is the error returned to the sync caller.
+	Err error
+}
+
+// SetDeadlockHook registers a callback invoked on every runtime sync-call
+// deadlock detection (DeadlockEventCycle) and sync-call timeout
+// (DeadlockEventTimeoutReject / DeadlockEventTimeoutHandling).
+//
+// The hook is a diagnostics/ops outlet: count, alert, or dump stacks
+// (atomos.DumpStacks). It cannot unblock a detected cycle — Go cannot preempt
+// the blocked goroutines; the framework already unblocked the caller by
+// returning ErrIDFirstSyncCallDeadlock, and the remaining ring members wake as
+// the error propagates back or their timeouts expire. The hook runs
+// synchronously on the reporting goroutine; it must be fast, must not panic,
+// and must not make sync calls into the framework.
+func (r *CosmosRunnable) SetDeadlockHook(fn func(e *DeadlockEvent)) *CosmosRunnable {
+	r.deadlockHook = fn
+	return r
+}
+
+// SetSyncCallDefaultTimeout sets the timeout applied to user sync calls that
+// do not pass an explicit ArgBaseAtomosTimeout: it is the local waitReply
+// fallback for sync mails and the base of the remote client-side gRPC
+// deadline. Framework control mails (kill/wormhole) always keep a 10s floor.
+// The default is 10s; non-positive values are ignored.
+func (r *CosmosRunnable) SetSyncCallDefaultTimeout(d time.Duration) *CosmosRunnable {
+	r.syncCallDefaultTimeout = d
 	return r
 }
 
