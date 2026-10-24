@@ -156,6 +156,8 @@ code with `atomos.CodeOf(err)`.
 ## Documentation
 
 - [docs/DESIGN_V3_API.md](docs/DESIGN_V3_API.md) — v3 API design and migration notes.
+- [docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md](docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md) — **read before rolling v3 nodes into a v2 fleet**: the double-write masks precise remote error codes from v2 callers; this is the audit guide.
 - [docs/DEADLOCK.md](docs/DEADLOCK.md) — sync-call deadlock model, three-layer defenses (analyzer, wait-graph, cross-node chains), and runtime handling (`SetDeadlockHook`, `DumpStacks`).
 - [docs/DESIGN_DRAIN_GRADUAL.md](docs/DESIGN_DRAIN_GRADUAL.md) — gradual drain design.
 - [docs/PROTO_GEN_IMPROVEMENTS.md](docs/PROTO_GEN_IMPROVEMENTS.md) — generator improvement backlog.
+- [docs/DESIGN_TESTKIT_DST.md](docs/DESIGN_TESTKIT_DST.md) — deterministic simulation testing design (clock / etcd / transport seams).
