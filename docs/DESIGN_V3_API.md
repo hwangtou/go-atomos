@@ -247,6 +247,8 @@ const (
 - `DrainNode` 等管理面 RPC 保留内嵌错误（管理面工具链友好优先）。
 - 协议加 `version` 握手字段的取舍：v3 暂缓，记录在案。
 
+实施状态（v3.0-rc1 已落地前两项，握手字段维持暂缓）：映射表与互转在 `atomos_grpc_status.go`——`grpcCodeOfErrCode`（正向归类：不存在类→NotFound，状态拒绝类→FailedPrecondition，参数类→InvalidArgument，超时类→DeadlineExceeded，panic/内部类→Internal，其余→Unknown）、`grpcStatusFromError`（服务端双写：`*Error` proto 进 status details，响应体 Error 字段照填）、`grpcErrorToError`（客户端读侧：details 优先还原含 CallStacks 的完整 `*Error`，缺失时按 status code 反映射为代表性错误码，如 Unavailable→ErrCodeCosmosRemoteConnectFailed）。服务端接入点为 7 个调用类 RPC 的 wrapper（`callRspWithStatus`）；客户端接入点为 `BaseRemote.PushSyncMessage/PushAsyncMessage/Kill` 与 `ElementRemote.GetAtomID/SpawnAtom`。管理面 RPC（TryKilling/DrainNode/GetElementInfo/ElementBroadcast/AsyncOnMessageCallback）保持仅内嵌，代码注释已写明取舍。单测 `atomos_grpc_status_test.go` 覆盖映射表、status 往返（Code/CallStacks 不丢失）与反映射回退；`cosmos_remote_test.go` 的 raw-stub 集成测试已改为新契约（非 OK status + details 还原），兼作双写端到端覆盖。
+
 ## 9. 实施顺序
 
 | 阶段 | 内容 | 验证 |
@@ -255,10 +257,22 @@ const (
 | v3.0-alpha2 | §3 错误语义（`error` 返回值 + `errors.Is` + 错误码冻结） | 全量测试适配；错误码 CI 检查脚本 |
 | v3.0-alpha3 | §4 参数统一 + §6.1 生成器 v3 + golden 测试 | for_test.proto 重新生成并编译运行（golden 测试已建，CI 接入待做） |
 | v3.0-beta1 | §6.2 文档与 examples、§7 atomostest 基础 | hello_world 示例跑通 |
-| v3.0-rc1 | §8 协议改进（如纳入）、兼容性冒烟（v2/v3 节点共存灰度验证） | 双节点集成测试 |
+| v3.0-rc1 | §8 协议改进（如纳入）、兼容性冒烟（v2/v3 节点共存灰度验证） | 双节点集成测试（TestCosmosRemote_* 双进程 gRPC 套件全绿；v2/v3 兼容证据见 §10） |
 
 ## 10. 兼容承诺
 
 - v3 不保证源码兼容；提供本节各项迁移说明，并在 CHANGELOG 逐条列出。
 - **线协议兼容**：`atomos.proto` 字段编号冻结策略不变；v3 节点与 v2 节点跨版本调用的兼容矩阵在 rc 阶段验证（IDInfo/Error/args 的 wire 格式未变，预期互通，startup_id/instance_id 语义不变）。
 - 生成代码：用户需用 v3 版 protoc-gen-go-atomos 重新生成业务代码。
+
+### 10.1 rc1 验证结果
+
+对照基线分支 `preview/20261023`（即 v2 线）：
+
+1. **wire 格式不变**：`git diff preview/20261023..v3 -- atomos.proto atomos.pb.go atomos_grpc.pb.go` 为空，三个文件逐字节一致。另用当前工具链（protoc 35.1 + protoc-gen-go v1.36.10）重新生成 `atomos.pb.go` 与仓库提交版本 `diff` 为空，descriptor 字节级一致。IDInfo/Error/args 的 wire 格式与 startup_id/instance_id 语义不变成立。
+2. **错误码不变**：alpha2 把 iota 改为显式数值后，`error_code_snapshot_test.go` 锁定全部 131 个码。rc1 做了一次性交叉校验：将 `preview/20261023:error_code.go` 的 iota 常量编译打印（130 个值，OK+129 个错误码），与 v3 快照逐一比对——**全部一致，无一偏移**；v3 唯一新增为尾部追加的 `ErrCodeFrameworkInvalidID=130`（符合 append-only 规则）。
+3. **双写/读取策略的跨版本行为**：
+   - v3 服务端 → v2 客户端：调用类 RPC 业务失败时 v2 客户端收到非 OK gRPC status。v2 的 `base_remote.go`/`element_remote.go` 调用点在 `er != nil` 分支直接返回包装后的 `ErrCosmosRemoteResponseInvalid`，**不触碰 nil 响应体、无 panic**，调用失败可按原有逻辑重试。注意双写下 body.Error 非空与非 OK status 同生同灭，因此 v2 侧读 body.Error 精确业务码的路径被完全遮蔽（ErrAtomNotExists 等远程错误在 v2 侧一律变为 ErrCosmosRemoteResponseInvalid）——这是 §8 双写策略的已知取舍，灰度时需排查 v2 依赖远程调用精确错误码做分支逻辑的调用点。
+   - v2 服务端 → v3 客户端：v2 永不返回非 OK status，v3 客户端走原有 body.Error 路径，逐字节兼容。
+   - v3 ↔ v3：details 优先，Code/Message/CallStacks 完整往返（`TestGRPCStatusRoundTrip` + `TestCosmosRemote_InstanceMismatchOnRespawn` 等集成测试覆盖）。
+   - 双节点集成：`TestCosmosRemote_*`（双真实 CosmosProcess 进程间 gRPC，无 etcd）全部通过，含 spawn/消息/Kill/instance mismatch/instance_id=0 拒绝/cosmos 层端到端。
