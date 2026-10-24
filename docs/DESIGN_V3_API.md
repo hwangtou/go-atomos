@@ -310,7 +310,7 @@ const (
 1. **wire 格式不变**：`git diff preview/20261023..v3 -- atomos.proto atomos.pb.go atomos_grpc.pb.go` 为空，三个文件逐字节一致。另用当前工具链（protoc 35.1 + protoc-gen-go v1.36.10）重新生成 `atomos.pb.go` 与仓库提交版本 `diff` 为空，descriptor 字节级一致。IDInfo/Error/args 的 wire 格式与 startup_id/instance_id 语义不变成立。
 2. **错误码不变**：alpha2 把 iota 改为显式数值后，`error_code_snapshot_test.go` 锁定全部 131 个码。rc1 做了一次性交叉校验：将 `preview/20261023:error_code.go` 的 iota 常量编译打印（130 个值，OK+129 个错误码），与 v3 快照逐一比对——**全部一致，无一偏移**；v3 唯一新增为尾部追加的 `ErrCodeFrameworkInvalidID=130`（符合 append-only 规则）。
 3. **双写/读取策略的跨版本行为**：
-   - v3 服务端 → v2 客户端：调用类 RPC 业务失败时 v2 客户端收到非 OK gRPC status。v2 的 `base_remote.go`/`element_remote.go` 调用点在 `er != nil` 分支直接返回包装后的 `ErrCosmosRemoteResponseInvalid`，**不触碰 nil 响应体、无 panic**，调用失败可按原有逻辑重试。注意双写下 body.Error 非空与非 OK status 同生同灭，因此 v2 侧读 body.Error 精确业务码的路径被完全遮蔽（ErrAtomNotExists 等远程错误在 v2 侧一律变为 ErrCosmosRemoteResponseInvalid）——这是 §8 双写策略的已知取舍，灰度时需排查 v2 依赖远程调用精确错误码做分支逻辑的调用点。
+   - v3 服务端 → v2 客户端：调用类 RPC 业务失败时 v2 客户端收到非 OK gRPC status。v2 的 `base_remote.go`/`element_remote.go` 调用点在 `er != nil` 分支直接返回包装后的 `ErrCosmosRemoteResponseInvalid`，**不触碰 nil 响应体、无 panic**，调用失败可按原有逻辑重试。注意双写下 body.Error 非空与非 OK status 同生同灭，因此 v2 侧读 body.Error 精确业务码的路径被完全遮蔽（ErrAtomNotExists 等远程错误在 v2 侧一律变为 ErrCosmosRemoteResponseInvalid）——这是 §8 双写策略的已知取舍，灰度时需排查 v2 依赖远程调用精确错误码做分支逻辑的调用点。**排查操作手册：`docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md`**（扫描 grep 模式、三类分级处理、清单模板），混部项目灰度前必读。
    - v2 服务端 → v3 客户端：v2 永不返回非 OK status，v3 客户端走原有 body.Error 路径，逐字节兼容。
    - v3 ↔ v3：details 优先，Code/Message/CallStacks 完整往返（`TestGRPCStatusRoundTrip` + `TestCosmosRemote_InstanceMismatchOnRespawn` 等集成测试覆盖）。
    - 双节点集成：`TestCosmosRemote_*`（双真实 CosmosProcess 进程间 gRPC，无 etcd）全部通过，含 spawn/消息/Kill/instance mismatch/instance_id=0 拒绝/cosmos 层端到端。

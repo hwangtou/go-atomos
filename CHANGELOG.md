@@ -142,7 +142,9 @@ Cluster RPC & TLS
 - **Mixed clusters**: v2→v3 calls are byte-compatible; v3→v2 call failures
   surface to v2 clients as `ErrCosmosRemoteResponseInvalid` (precise remote
   codes are masked by the status double-write — a known, documented
-  trade-off). Full matrix in `docs/DESIGN_V3_API.md` §10.
+  trade-off; the step-by-step audit guide for projects rolling v3 into a
+  v2 fleet lives in `docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md`). Full
+  matrix in `docs/DESIGN_V3_API.md` §10.
 - **Generated code**: business code must be regenerated with the v3
   `protoc-gen-go-atomos`; v2-generated code will not compile against v3.
 
