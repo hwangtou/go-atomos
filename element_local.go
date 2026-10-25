@@ -223,6 +223,10 @@ func (e *ElementLocal) asyncSet(callback func(out proto.Message, err error)) (st
 	return e.atomos.asyncSet(callback)
 }
 
+func (e *ElementLocal) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return e.atomos.asyncPop(asyncID)
+}
+
 // Implementation of ElementSelfID
 
 func (e *ElementLocal) Persistence() AutoData {

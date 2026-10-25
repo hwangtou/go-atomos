@@ -221,6 +221,8 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 	// Remote targets (goID==0) cannot form local cycles and are skipped.
 	callerGoID := getGoID()
 	targetGoID := a.GetGoID()
+	waitKey := a.process.beginSyncWait(from.GetIDInfo())
+	defer a.process.endSyncWait(waitKey)
 	hasWaitEdge := false
 	if callerGoID != 0 && targetGoID != 0 {
 		if callerGoID == targetGoID {
@@ -257,11 +259,14 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 
 	am := allocBaseAtomosMail()
 	initBaseAtomosMailSync(am, from, name, in)
-	// Cross-node chain propagation: a remote-originated call carries its chain
-	// via the internal arg; a nested local call inherits the ambient chain of
-	// the executing goroutine so the chain survives local hops too.
-	if am.waitChain = helper.waitChain; am.waitChain == nil {
-		am.waitChain = a.process.currentSyncChain(callerGoID)
+	// A remote-originated call already includes its caller. A nested local hop
+	// inherits the ambient chain and adds the local caller before the next hop.
+	if helper.waitChain != nil {
+		am.waitChain = helper.waitChain
+	} else if chain := a.process.currentSyncChain(callerGoID); len(chain) > 0 {
+		am.waitChain = make([]string, 0, len(chain)+1)
+		am.waitChain = append(am.waitChain, chain...)
+		am.waitChain = append(am.waitChain, syncChainLink(from.GetIDInfo()))
 	}
 
 	var ok bool
@@ -299,8 +304,10 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 	}
 
 	var startupID, asyncID uint64
+	var fromInternal idInternal
 	if callback != nil {
-		fromInternal, intErr := asIDInternal(from)
+		var intErr *Error
+		fromInternal, intErr = asIDInternal(from)
 		if intErr != nil {
 			return intErr.AddStack(nil)
 		}
@@ -329,6 +336,10 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 		ok = a.mailbox.pushTail(am.mail)
 	}
 	if !ok {
+		if asyncID != 0 {
+			fromInternal.asyncPop(asyncID)
+		}
+		releaseMail(am.mail)
 		return NewErrorf(ErrCodeAtomosIsNotRunning,
 			"Atomos is not running. from=(%s),name=(%s),in=(%v)", from, name, in).AddStack(nil)
 	}
@@ -651,17 +662,17 @@ func (a *BaseAtomos) IsInState(states ...BaseAtomosState) bool {
 
 func (a *BaseAtomos) setSpawning() {
 	a.mailbox.mutex.Lock()
-	defer a.mailbox.mutex.Unlock()
 	a.state = BaseAtomosSpawning
 	a.mt.spawning()
+	a.mailbox.mutex.Unlock()
 	a.process.onIDSpawning(a.id)
 }
 
 func (a *BaseAtomos) setSpawn() {
 	a.mailbox.mutex.Lock()
-	defer a.mailbox.mutex.Unlock()
 	a.state = BaseAtomosWaiting
 	a.mt.spawn()
+	a.mailbox.mutex.Unlock()
 	a.process.onIDSpawn(a.id)
 }
 
@@ -693,9 +704,9 @@ func (a *BaseAtomos) currentHandlingMessage() string {
 
 func (a *BaseAtomos) setStopping() {
 	a.mailbox.mutex.Lock()
-	defer a.mailbox.mutex.Unlock()
 	a.state = BaseAtomosStopping
 	a.mt.stopping()
+	a.mailbox.mutex.Unlock()
 	a.process.onIDStopping(a.id)
 }
 

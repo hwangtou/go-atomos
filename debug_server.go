@@ -3,7 +3,9 @@ package atomos
 // Debug server: an opt-in HTTP introspection endpoint for a running Cosmos
 // process. Enabled by setting Config.Customize[configKeyDebugServer] to a TCP
 // listen address (YAML `customize: {_debug_server: "127.0.0.1:9099"}` or the
-// WithDebugServer Run option). It serves until CosmosProcess.Stop.
+// WithDebugServer Run option). It serves until CosmosProcess.Stop. Non-loopback
+// listeners also require Config.Customize[configKeyDebugServerToken]. Whenever
+// a token is configured, every endpoint requires Bearer authentication.
 //
 // Endpoints:
 //   - /elements      human-readable inventory: elements, live atoms, mailbox
@@ -12,11 +14,14 @@ package atomos
 //   - /healthz       liveness mirroring CosmosProcess.IsHealthy
 //   - /debug/pprof/* stock net/http/pprof handlers
 //
-// The server is auxiliary: a listen failure is logged and the process keeps
-// running without introspection.
+// The server is auxiliary: an unsafe configuration or listen failure is logged
+// and the process keeps running without introspection.
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net"
@@ -29,26 +34,51 @@ import (
 	"time"
 )
 
+const (
+	debugReadHeaderTimeout = 2 * time.Second
+	debugIdleTimeout       = 2 * time.Minute
+)
+
 type debugServer struct {
-	process  *CosmosProcess
-	listener net.Listener
-	server   *http.Server
-	started  time.Time
+	process      *CosmosProcess
+	listener     net.Listener
+	server       *http.Server
+	started      time.Time
+	tokenHash    [sha256.Size]byte
+	authRequired bool
 }
 
 // startDebugServer starts the introspection HTTP server on addr. It returns
-// nil (after logging) if the address cannot be listened on — observability
-// must not take the process down.
+// nil (after logging) if the configuration is unsafe or the address cannot be
+// listened on — observability must not take the process down.
 func startDebugServer(p *CosmosProcess, addr string) *debugServer {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		p.local.coreLog().coreError("DebugServer: Invalid listen address, debug server disabled. addr=(%s),err=(%v)", addr, err)
+		return nil
+	}
+	token := debugServerToken(p.local.runnable.config.Customize)
+	if !tcpAddr.IP.IsLoopback() && token == "" {
+		p.local.coreLog().coreError("DebugServer: Non-loopback listen requires a Bearer token, debug server disabled. addr=(%s)", addr)
+		return nil
+	}
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		p.local.coreLog().coreError("DebugServer: Listen failed, debug server disabled. addr=(%s),err=(%v)", addr, err)
 		return nil
 	}
+	if token == "" && !listenerIsLoopback(ln) {
+		_ = ln.Close()
+		p.local.coreLog().coreError("DebugServer: Non-loopback listener without a token, debug server disabled. addr=(%s)", ln.Addr())
+		return nil
+	}
 	ds := &debugServer{
-		process:  p,
-		listener: ln,
-		started:  time.Now(),
+		process:      p,
+		listener:     ln,
+		started:      time.Now(),
+		tokenHash:    sha256.Sum256([]byte(token)),
+		authRequired: token != "",
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", ds.handleIndex)
@@ -61,12 +91,41 @@ func startDebugServer(p *CosmosProcess, addr string) *debugServer {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	ds.server = &http.Server{Handler: mux}
+	ds.server = &http.Server{
+		Handler:           ds.authenticate(mux),
+		ReadHeaderTimeout: debugReadHeaderTimeout,
+		IdleTimeout:       debugIdleTimeout,
+	}
 	go func() {
-		_ = ds.server.Serve(ln)
+		if err := ds.server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			p.local.coreLog().coreError("DebugServer: Serve failed, debug server disabled. addr=(%s),err=(%v)", ds.addr(), err)
+		}
 	}()
 	p.local.coreLog().coreInfo("DebugServer: Serving. addr=(%s)", ds.addr())
 	return ds
+}
+
+func listenerIsLoopback(ln net.Listener) bool {
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	return ok && addr.IP.IsLoopback()
+}
+
+func (ds *debugServer) authenticate(next http.Handler) http.Handler {
+	if !ds.authRequired {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization := r.Header.Values("Authorization")
+		if len(authorization) == 1 && strings.HasPrefix(authorization[0], "Bearer ") {
+			providedHash := sha256.Sum256([]byte(strings.TrimPrefix(authorization[0], "Bearer ")))
+			if subtle.ConstantTimeCompare(providedHash[:], ds.tokenHash[:]) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		w.Header().Set("WWW-Authenticate", `Bearer realm="atomos-debug"`)
+		http.Error(w, "unauthorized\n", http.StatusUnauthorized)
+	})
 }
 
 // stop closes the listener and any in-flight request connections.
@@ -194,10 +253,17 @@ func (ds *debugServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "unhealthy\n", http.StatusServiceUnavailable)
 }
 
+func (ds *debugServer) processStateSnapshot() CosmosProcessState {
+	ds.process.mutex.RLock()
+	defer ds.process.mutex.RUnlock()
+	return ds.process.state
+}
+
 func (ds *debugServer) handleElements(w http.ResponseWriter, _ *http.Request) {
 	elements := ds.collect()
 	p := ds.process
 	id := p.local.GetIDInfo()
+	processState := ds.processStateSnapshot()
 
 	var b strings.Builder
 	b.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>atomos elements</title>
@@ -205,7 +271,7 @@ func (ds *debugServer) handleElements(w http.ResponseWriter, _ *http.Request) {
 th,td{border:1px solid #999;padding:2px 8px;text-align:left}th{background:#eee}</style></head><body>`)
 	fmt.Fprintf(&b, "<h1>atomos %s / node %s</h1>", html.EscapeString(id.Cosmos), html.EscapeString(id.Node))
 	fmt.Fprintf(&b, "<p>pid=%d state=%s uptime=%s <a href=\"/metrics\">metrics</a> <a href=\"/debug/pprof/\">pprof</a></p>",
-		os.Getpid(), html.EscapeString(p.state.String()), time.Since(ds.started).Round(time.Second))
+		os.Getpid(), html.EscapeString(processState.String()), time.Since(ds.started).Round(time.Second))
 
 	b.WriteString("<table><tr><th>element</th><th>state</th><th>atoms</th><th>active</th><th>messages</th></tr>")
 	for _, e := range elements {
@@ -412,6 +478,10 @@ func debugServerAddr(customize map[string][]byte) string {
 		return ":" + addr
 	}
 	return addr
+}
+
+func debugServerToken(customize map[string][]byte) string {
+	return strings.TrimSpace(string(customize[configKeyDebugServerToken]))
 }
 
 func isAllDigits(s string) bool {

@@ -144,6 +144,10 @@ func (c *CosmosLocal) asyncSet(callback func(out proto.Message, err error)) (sta
 	return c.atomos.asyncSet(callback)
 }
 
+func (c *CosmosLocal) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return c.atomos.asyncPop(asyncID)
+}
+
 // Implementation of CosmosNode
 
 func (c *CosmosLocal) GetNodeName() string {
@@ -167,7 +171,10 @@ func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBase
 	if ierr != nil {
 		return nil, nil, ierr.AddStack(c)
 	}
-	id, tracker, gerr := e.GetAtomID(name, c.newLocalIDTrackerInfo(), ArgBaseAtomosFromLocalOnly())
+	localArgs := make([]ArgsForBaseAtomos, 0, len(args)+1)
+	localArgs = append(localArgs, args...)
+	localArgs = append(localArgs, ArgBaseAtomosFromLocalOnly())
+	id, tracker, gerr := e.GetAtomID(name, c.newLocalIDTrackerInfo(), localArgs...)
 	if gerr != nil {
 		return nil, nil, asError(gerr).AddStack(c)
 	}
@@ -179,7 +186,10 @@ func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, ar
 	if err != nil {
 		return nil, nil, err.AddStack(c)
 	}
-	return e.SpawnAtom(callerID, name, arg, c.newLocalIDTrackerInfo(), ArgBaseAtomosFromLocalOnly())
+	localArgs := make([]ArgsForBaseAtomos, 0, len(args)+1)
+	localArgs = append(localArgs, args...)
+	localArgs = append(localArgs, ArgBaseAtomosFromLocalOnly())
+	return e.SpawnAtom(callerID, name, arg, c.newLocalIDTrackerInfo(), localArgs...)
 }
 
 // newLocalIDTrackerInfo returns a non-nil IDTrackerInfo for a local spawn/get,

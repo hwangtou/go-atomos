@@ -141,3 +141,28 @@ func Test_etcdHelpers_HungEndpointReturnCodedErrors(t *testing.T) {
 		t.Errorf("etcdDelete: expected ErrCodeCosmosEtcdDeleteFailed, got (%v)", err)
 	}
 }
+
+func Test_etcdVersionLock_HungEndpointHasBoundedRPCs(t *testing.T) {
+	oldTimeout, oldAttempts, oldBackoff := etcdOpTimeout, etcdVersionLockAttempts, etcdVersionLockBackoff
+	etcdOpTimeout, etcdVersionLockAttempts, etcdVersionLockBackoff = 100*time.Millisecond, 2, time.Millisecond
+	t.Cleanup(func() {
+		etcdOpTimeout, etcdVersionLockAttempts, etcdVersionLockBackoff = oldTimeout, oldAttempts, oldBackoff
+	})
+	p, err := newCosmosProcess("timeout_cosmos", "timeout_node", &reproLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runnable := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: "timeout_cosmos", Node: "timeout_node"})
+	if err := p.Start(runnable); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Stop() })
+	p.cluster.etcdClient = newTarpitClient(t)
+	start := time.Now()
+	if err := p.etcdStartUpTryLockingVersionNodeLock(p.cluster.etcdClient, "timeout_node", 1); err == nil {
+		t.Fatal("lock against a hung endpoint unexpectedly succeeded")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("version-lock RPCs were not bounded: %v", elapsed)
+	}
+}

@@ -31,7 +31,11 @@ can stand alone or join an etcd-backed multi-node cluster.
 - **Debug server** — an opt-in HTTP endpoint (`WithDebugServer("127.0.0.1:9099")`
   or the `_debug_server` customize key) serving `/elements` (element & atom
   inventory, mailbox depths, idle times, sync wait graph), `/metrics`
-  (Prometheus text format), `/healthz`, and `/debug/pprof/*`.
+  (Prometheus text format), `/healthz`, and `/debug/pprof/*`. Listeners default
+  to loopback-only operation; a non-loopback address requires a non-empty
+  `_debug_server_token` customize value or the server is logged and disabled.
+  Whenever that token is set, every endpoint (including `/healthz`) requires
+  `Authorization: Bearer <token>`. Set `ATOMOS_DEBUG_TOKEN` for `atomosctl`.
 
 Requires Go 1.24+.
 

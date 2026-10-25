@@ -1,6 +1,6 @@
 GOPATH ?= $(shell go env GOPATH)
 
-.PHONY: vet build-vet test test-root test-race test-integration bench cover cross-build
+.PHONY: vet build-vet test test-root test-race test-integration test-integration-race bench cover cross-build
 
 # build-vet builds the combined go-atomos vet analyzer (multichecker: defer-release + sync-deadlock).
 build-vet:
@@ -16,11 +16,12 @@ test:
 	go test ./...
 	cd supervisor && go test ./...
 
-# test-race runs the root package under the race detector, twice: the second
-# run catches state leaked across tests that only manifests on reuse
+# test-race runs every package in both modules under the race detector, twice:
+# the second run catches state leaked across tests that only manifests on reuse
 # (mailbox goroutines, package-level vars).
 test-race:
-	go test . -race -count=2 -timeout 900s
+	go test ./... -race -count=2 -timeout 900s
+	cd supervisor && go test ./... -race -count=2 -timeout 900s
 
 # test-integration runs the tests behind the "integration" build tag, against
 # an embedded etcd (real lease/watch/txn semantics): version lock lifecycle
@@ -31,6 +32,9 @@ test-race:
 test-integration:
 	go test . -tags integration -count=1 -timeout 900s
 
+test-integration-race:
+	go test . -tags integration -race -count=1 -timeout 900s
+
 # bench runs the root package benchmarks.
 bench:
 	go test . -run '^$$' -bench . -benchtime 1s
@@ -40,6 +44,7 @@ cover:
 	go test . -count=1 -timeout 300s -coverprofile=cover.out
 	go tool cover -func=cover.out | tail -1
 
-# cross-build gate for Windows support.
+# cross-build gates Windows support for the root module. Supervisor is Unix-only.
 cross-build:
 	GOOS=windows go build ./...
+	@echo "Skipping supervisor Windows build: supervisor is Unix-only"

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -91,4 +92,53 @@ func TestCLIEndpoints(t *testing.T) {
 			t.Fatalf("no args: code=%d err=%q", code, errOut)
 		}
 	})
+}
+
+func TestCLIBearerToken(t *testing.T) {
+	const token = "atomosctl-test-token"
+	t.Setenv("ATOMOS_DEBUG_TOKEN", token)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte("atomos_elements 1\n"))
+	}))
+	defer ts.Close()
+
+	out, errOut, code := runCLI(t, "metrics", ts.URL)
+	if code != 0 || !strings.Contains(out, "atomos_elements 1") {
+		t.Fatalf("authenticated metrics: code=%d out=%q err=%q", code, out, errOut)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("injected write failure")
+}
+
+func TestCLIOutputWriteError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("atomos_elements 1\n"))
+	})
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	for _, command := range []string{"metrics", "health"} {
+		t.Run(command, func(t *testing.T) {
+			var stderr strings.Builder
+			code := run([]string{command, ts.URL}, failingWriter{}, &stderr)
+			if code == 0 {
+				t.Fatalf("write failure returned success")
+			}
+			if !strings.Contains(stderr.String(), "write output failed: injected write failure") {
+				t.Fatalf("write failure stderr = %q", stderr.String())
+			}
+		})
+	}
 }

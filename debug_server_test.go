@@ -200,7 +200,7 @@ func TestDebugServerEndpoints(t *testing.T) {
 			`"Greeting"`,
 			`"in": "type.googleapis.com/atomos.ForTestGreetingI"`,
 			`"out": "type.googleapis.com/atomos.ForTestGreetingO"`,
-			`"SayHello"`,
+			`"ElementSayHello"`,
 		} {
 			if !strings.Contains(body, want) {
 				t.Errorf("schema missing %q", want)
@@ -303,5 +303,131 @@ func TestDebugServerDisabledByDefault(t *testing.T) {
 	}
 	if addr := debugServerAddr(runnable.config.Customize); addr != "" {
 		t.Fatalf("unexpected addr %q", addr)
+	}
+}
+
+func startDebugServerTestProcess(t *testing.T, addr, token string) (*CosmosProcess, *reproLogger) {
+	t.Helper()
+	logger := &reproLogger{}
+	process, cerr := newCosmosProcess("debugSecurityCosmos", "debugSecurityNode", logger)
+	if cerr != nil {
+		t.Fatalf("newCosmosProcess failed: %v", cerr.Message)
+	}
+	runnable := newTestCosmosRunnable(&IDInfo{
+		Type:   IDType_Cosmos,
+		Cosmos: "debugSecurityCosmos",
+		Node:   "debugSecurityNode",
+	})
+	runnable.config.Customize = map[string][]byte{configKeyDebugServer: []byte(addr)}
+	if token != "" {
+		runnable.config.Customize[configKeyDebugServerToken] = []byte(token)
+	}
+	if err := process.Start(runnable); err != nil {
+		t.Fatalf("process start failed: %v", err)
+	}
+	t.Cleanup(func() { _ = process.Stop() })
+	return process, logger
+}
+
+func httpGetWithAuthorization(t *testing.T, url, authorization string) (string, int) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new request for %s failed: %v", url, err)
+	}
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s failed: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s body failed: %v", url, err)
+	}
+	return string(body), resp.StatusCode
+}
+
+func TestDebugServerNonLoopbackRequiresToken(t *testing.T) {
+	process, logger := startDebugServerTestProcess(t, "0.0.0.0:0", "")
+	if process.debugServer != nil {
+		t.Fatalf("non-loopback debug server started without a token")
+	}
+	for deadline := time.Now().Add(2 * time.Second); !logger.hasError("Non-loopback listen requires a Bearer token"); {
+		if time.Now().After(deadline) {
+			t.Fatalf("missing unsafe-listener error log")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestDebugServerBearerAuthentication(t *testing.T) {
+	const token = "debug-test-token"
+	process, _ := startDebugServerTestProcess(t, "0.0.0.0:0", token)
+	ds := process.debugServer
+	if ds == nil {
+		t.Fatalf("non-loopback debug server with token did not start")
+	}
+	if listenerIsLoopback(ds.listener) {
+		t.Fatalf("test listener %s is unexpectedly loopback", ds.addr())
+	}
+	_, port, err := net.SplitHostPort(ds.addr())
+	if err != nil {
+		t.Fatalf("split debug address failed: %v", err)
+	}
+	base := "http://127.0.0.1:" + port
+	paths := []string{"/", "/elements", "/schema", "/metrics", "/healthz", "/debug/pprof/"}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			for _, authorization := range []string{"", "Bearer wrong-token", "Basic " + token} {
+				if _, code := httpGetWithAuthorization(t, base+path, authorization); code != http.StatusUnauthorized {
+					t.Errorf("GET %s with Authorization %q: status = %d, want 401", path, authorization, code)
+				}
+			}
+			if _, code := httpGetWithAuthorization(t, base+path, "Bearer "+token); code != http.StatusOK {
+				t.Errorf("GET %s with valid Bearer token: status = %d, want 200", path, code)
+			}
+		})
+	}
+}
+
+func TestDebugServerSlowHeaders(t *testing.T) {
+	process, _ := startDebugServerTestProcess(t, "127.0.0.1:0", "")
+	ds := process.debugServer
+	if ds == nil {
+		t.Fatalf("debug server not started")
+	}
+	if ds.server.ReadHeaderTimeout != debugReadHeaderTimeout || ds.server.IdleTimeout != debugIdleTimeout {
+		t.Fatalf("server timeouts = (%v, %v), want (%v, %v)",
+			ds.server.ReadHeaderTimeout, ds.server.IdleTimeout, debugReadHeaderTimeout, debugIdleTimeout)
+	}
+	if ds.server.WriteTimeout != 0 {
+		t.Fatalf("WriteTimeout = %v; long-running pprof requests must not be cut off", ds.server.WriteTimeout)
+	}
+
+	conn, err := net.Dial("tcp", ds.addr())
+	if err != nil {
+		t.Fatalf("dial debug server failed: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write([]byte("GET /healthz HTTP/1.1\r\nHost: localhost\r\n")); err != nil {
+		t.Fatalf("write partial request failed: %v", err)
+	}
+	started := time.Now()
+	if err := conn.SetReadDeadline(started.Add(debugReadHeaderTimeout + time.Second)); err != nil {
+		t.Fatalf("set read deadline failed: %v", err)
+	}
+	if _, err := io.ReadAll(conn); err != nil {
+		t.Fatalf("slow request was not closed cleanly: %v", err)
+	}
+	elapsed := time.Since(started)
+	if elapsed < debugReadHeaderTimeout-250*time.Millisecond {
+		t.Fatalf("slow request closed too early after %v", elapsed)
+	}
+	if _, code := httpGet(t, "http://"+ds.addr()+"/healthz"); code != http.StatusOK {
+		t.Fatalf("server unhealthy after slow request: status = %d", code)
 	}
 }

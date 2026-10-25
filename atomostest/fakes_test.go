@@ -89,6 +89,22 @@ func TestFakeIDSyncHandler(t *testing.T) {
 	}
 }
 
+func TestFakeIDSyncHandlerCanReenterFakeID(t *testing.T) {
+	id := NewFakeID()
+	id.SetSyncHandler(func(name string, in proto.Message) (proto.Message, error) {
+		if got := id.CallCount("SyncMessagingByName") + id.CallCount("AsyncMessagingByName"); got == 0 {
+			t.Error("handler did not observe its recorded call")
+		}
+		return wrapperspb.String("ok"), nil
+	})
+	if _, err := id.SyncMessagingByName(nil, "Sync", nil); err != nil {
+		t.Fatalf("SyncMessagingByName err=(%v)", err)
+	}
+	if err := id.AsyncMessagingByName(nil, "Async", nil, nil); err != nil {
+		t.Fatalf("AsyncMessagingByName err=(%v)", err)
+	}
+}
+
 func TestFakeIDAsyncReply(t *testing.T) {
 	id := NewFakeID()
 	replyErr := errors.New("boom")

@@ -20,8 +20,11 @@ type TestReporter interface {
 }
 
 // Eventually polls condition until it returns true, failing t when timeout
-// elapses first. interval <= 0 falls back to 10ms. Actor state transitions
-// happen on mailbox goroutines; prefer this over time.Sleep in tests.
+// elapses first. interval <= 0 falls back to 10ms. Sleeps are capped at the
+// remaining timeout. A condition call is synchronous and cannot be interrupted,
+// so a slow or blocked condition may extend Eventually beyond the timeout.
+// Actor state transitions happen on mailbox goroutines; prefer this over
+// time.Sleep in tests.
 func Eventually(t TestReporter, timeout, interval time.Duration, condition func() bool, msgAndArgs ...any) {
 	t.Helper()
 	if interval <= 0 {
@@ -29,7 +32,8 @@ func Eventually(t TestReporter, timeout, interval time.Duration, condition func(
 	}
 	deadline := time.Now().Add(timeout)
 	for !condition() {
-		if time.Now().After(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			if len(msgAndArgs) > 0 {
 				if format, ok := msgAndArgs[0].(string); ok {
 					t.Fatalf("atomostest: condition not met within %v: %s", timeout, fmt.Sprintf(format, msgAndArgs[1:]...))
@@ -41,7 +45,10 @@ func Eventually(t TestReporter, timeout, interval time.Duration, condition func(
 			t.Fatalf("atomostest: condition not met within %v", timeout)
 			return
 		}
-		time.Sleep(interval)
+		if interval < remaining {
+			remaining = interval
+		}
+		time.Sleep(remaining)
 	}
 }
 

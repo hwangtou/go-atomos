@@ -85,13 +85,16 @@ hop on the chain. Off by default (zero hot-path cost).
 ### Cross-node wait chain (`CosmosArgs.wait_chain`)
 
 Remote sync calls propagate their wait chain in the request. On the sending
-side the chain is `ambient chain of the executing mailbox + this caller's ID`;
-on the receiving node the service entry checks whether the chain already
-contains the target ID — if so, the call is rejected immediately with the
-same `ErrIDFirstSyncCallDeadlock`, and the error travels back along the RPC
-path, unblocking every member of the ring. The chain survives local hops: a
-chain-carrying sync mail exposes its chain as the mailbox's ambient chain
-while executing, so `A@n1 → B@n2 → (local) C@n2 → A@n1` is caught too.
+side the chain is `ambient chain of the executing mailbox + this caller's ID
+and instance`; every local hop appends its caller too. On the receiving node
+the service rejects a matching target only while that exact instance is still
+blocked in an outgoing sync call. The closing call returns
+`ErrIDFirstSyncCallDeadlock` immediately and the error travels back along the
+RPC path, unblocking every member of the ring. The active-wait check prevents
+a stale chain from an upstream timeout (or a respawned atom) from rejecting a
+fresh, non-cyclic call. Thus `A@n1 → B@n2 → (local) C@n2 → A@n1` and rings
+returning to the intermediate B are both caught without treating historical
+chain membership alone as a deadlock.
 
 Mixed-version clusters: nodes running older binaries ignore the new
 `wait_chain` field (proto3 unknown-field skipping), so the chain breaks at

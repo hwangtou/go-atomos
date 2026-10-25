@@ -90,8 +90,8 @@ type atomFoo struct {
 func (a *atomFoo) String() string { return "atomFoo" }
 
 func (a *atomFoo) Greeting(from ID, in any) (any, error) {
-	id, _ := GetFooAtomID(a.self.Cosmos(), a.self.GetIDInfo().Atom) // want `sync handler Foo.Greeting resolves an ID to its own atom`
-	_, e := id.Greeting(a.self, in)
+	id, _ := GetFooAtomID(a.self.Cosmos(), a.self.GetIDInfo().Atom)
+	_, e := id.Greeting(a.self, in) // want `sync handler Foo.Atom.Greeting sync-calls its own atom`
 	return nil, e
 }
 
@@ -101,7 +101,7 @@ func (a *atomFoo) Greeting(from ID, in any) (any, error) {
 //	Foo.Ping → Greeter.Spawn → Foo.Ping   (generated Spawn factory cycle)
 func (a *atomFoo) Ping(from ID, in any) (any, error) {
 	bar, _ := GetBarAtomID(a.self.Cosmos(), "bar")
-	if _, e := bar.Pong(a.self, in); e != nil { // want `potential sync deadlock cycle: handler Bar.Pong`
+	if _, e := bar.Pong(a.self, in); e != nil { // want `potential sync deadlock cycle: handler Bar.Atom.Pong`
 		return nil, e
 	}
 	_, e := SpawnGreeterAtom(a.self, a.self.Cosmos(), "g", nil)
@@ -113,7 +113,7 @@ func (a *atomFoo) Ping(from ID, in any) (any, error) {
 // Foo.Echo→Bar.Pong→Foo.Echo.
 func (a *atomFoo) Echo(from ID, in any) (any, error) {
 	bar, _ := GetBarAtomID(a.self.Cosmos(), "bar")
-	_, e := bar.SyncMessagingByName(a.self, "Pong", in) // want `potential sync deadlock cycle: handler Bar.Pong`
+	_, e := bar.SyncMessagingByName(a.self, "Pong", in) // want `potential sync deadlock cycle: handler Bar.Atom.Pong`
 	return nil, e
 }
 
@@ -141,6 +141,6 @@ func (a *atomGreeter) String() string { return "atomGreeter" }
 
 func (a *atomGreeter) Spawn(self SelfID, arg any) error {
 	foo, _ := GetFooAtomID(a.self.Cosmos(), "foo")
-	_, e := foo.Ping(a.self, nil) // want `potential sync deadlock cycle: handler Foo.Ping`
+	_, e := foo.Ping(a.self, nil) // want `potential sync deadlock cycle: handler Foo.Atom.Ping`
 	return e
 }

@@ -535,17 +535,20 @@ func (p *Path) confirmOwnerAndMode(group *user.Group, perm os.FileMode) error {
 }
 
 func (p *Path) CreateFileIfNotExist(buf []byte, perm os.FileMode) error {
-	// Refresh our own stat: callers typically created the parent directory
-	// moments ago, and a stale FileInfo made a second init run overwrite
-	// existing (possibly operator-edited) config files.
-	if er := p.Refresh(); er != nil {
-		return er
-	}
-	if p.exist() {
+	file, er := os.OpenFile(p.path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if errors.Is(er, os.ErrExist) {
 		return nil
 	}
-	er := ioutil.WriteFile(p.path, buf, perm)
 	if er != nil {
+		return er
+	}
+	if _, er = file.Write(buf); er != nil {
+		_ = file.Close()
+		_ = os.Remove(p.path)
+		return er
+	}
+	if er = file.Close(); er != nil {
+		_ = os.Remove(p.path)
 		return er
 	}
 	return nil

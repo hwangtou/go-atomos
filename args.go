@@ -30,10 +30,12 @@ func ArgBaseAtomosWaitKilled() ArgsForBaseAtomos {
 	return argBaseAtomosWaitKilled{}
 }
 
-// ArgBaseAtomosAny creates an argument that holds any arbitrary data to be passed along with the BaseAtomos operation.
-// 创建一个参数，包含任何任意数据，以便与BaseAtomos操作一起传递。
+// ArgBaseAtomosAny attaches arbitrary data to spawn/load operations. The
+// receiving ElementLoader or spawner can recover it with ArgBaseAtomosAnyValue.
+// It is not a sync/async message argument.
+// 创建用于 Spawn/Load 上下文的任意数据参数，不用于普通 sync/async 消息。
 // Example usage:
-// toID.SyncMessagingByName(callerID, "message_name", inMessage, atomos.ArgBaseAtomosAny(myData))
+// cosmos.CosmosSpawnAtom(callerID, "Element", "atom", spawnArg, atomos.ArgBaseAtomosAny(myData))
 func ArgBaseAtomosAny(v any) ArgsForBaseAtomos {
 	return argBaseAtomosWithAny{Any: v}
 }

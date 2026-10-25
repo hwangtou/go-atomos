@@ -51,9 +51,9 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 	if strings.ToLower(y.LogSTD) == "true" {
 		conf.Customize[configKeyLogStdout] = []byte("1")
 	}
-	if cluster := y.EnableCluster; cluster != nil {
+	if cluster := y.EnableCluster; cluster != nil && cluster.Enable {
 		conf.EnableCluster = &CosmosClusterConfig{
-			Enable:        cluster.Enable,
+			Enable:        true,
 			EtcdEndpoints: cluster.EtcdEndpoints,
 			OptionalPorts: cluster.OptionalPorts,
 			EnableCert:    nil,
@@ -160,16 +160,16 @@ type NodeYAMLConfig struct {
 }
 
 type ClusterYAMLConfig struct {
-	Enable        bool        `yaml:"enable"`
-	EtcdEndpoints []string    `yaml:"etcd-endpoints"`
-	OptionalPorts []int32     `yaml:"optional-ports"`
-	EnableCert    *CertConfig `yaml:"enable-cert"`
+	Enable        bool            `yaml:"enable"`
+	EtcdEndpoints []string        `yaml:"etcd-endpoints"`
+	OptionalPorts []int32         `yaml:"optional-ports"`
+	EnableCert    *CertYAMLConfig `yaml:"enable-cert"`
 }
 
 type CertYAMLConfig struct {
-	CertPath string `yaml:"cert-path"`
-	KeyPath  string `yaml:"key-path"`
-	Insecure bool   `yaml:"insecure"`
+	CertPath           string `yaml:"cert-path"`
+	KeyPath            string `yaml:"key-path"`
+	InsecureSkipVerify bool   `yaml:"insecure-skip-verify"`
 }
 
 // applyEnvOverrides overlays environment variables onto the Config struct.

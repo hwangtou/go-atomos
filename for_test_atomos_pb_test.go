@@ -19,7 +19,7 @@ type ForTestAtomosElement interface {
 	// Element-level (using explicit option)
 	Spawn(self ElementSelfID, data *ForTestData, args ...ArgsForBaseAtomos) error
 
-	SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error)
+	ElementSayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error)
 }
 
 // ForTestAtomosAtom is the atomos implements of ForTestAtomos atom.
@@ -56,13 +56,13 @@ func GetForTestAtomosElementID(c CosmosNode) (*ForTestAtomosElementID, error) {
 }
 
 // Sync
-func (c *ForTestAtomosElementID) SayHello(callerID SelfID, in *ForTestHelloI, ext ...ArgsForBaseAtomos) (out *ForTestHelloO, err error) {
-	return forTestAtomosElementMessengerValue.SayHello().SyncElement(c, callerID, in, ext...)
+func (c *ForTestAtomosElementID) ElementSayHello(callerID SelfID, in *ForTestHelloI, ext ...ArgsForBaseAtomos) (out *ForTestHelloO, err error) {
+	return forTestAtomosElementMessengerValue.ElementSayHello().SyncElement(c, callerID, in, ext...)
 }
 
 // Async
-func (c *ForTestAtomosElementID) AsyncSayHello(callerID SelfID, in *ForTestHelloI, callback func(out *ForTestHelloO, err error), ext ...ArgsForBaseAtomos) {
-	forTestAtomosElementMessengerValue.SayHello().AsyncElement(c, callerID, in, callback, ext...)
+func (c *ForTestAtomosElementID) AsyncElementSayHello(callerID SelfID, in *ForTestHelloI, callback func(out *ForTestHelloO, err error), ext ...ArgsForBaseAtomos) error {
+	return forTestAtomosElementMessengerValue.ElementSayHello().AsyncElement(c, callerID, in, callback, ext...)
 }
 
 // Atom: ForTestAtomos
@@ -98,8 +98,8 @@ func (c *ForTestAtomosAtomID) Greeting(callerID SelfID, in *ForTestGreetingI, ex
 }
 
 // Async
-func (c *ForTestAtomosAtomID) AsyncGreeting(callerID SelfID, in *ForTestGreetingI, callback func(out *ForTestGreetingO, err error), ext ...ArgsForBaseAtomos) {
-	forTestAtomosAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
+func (c *ForTestAtomosAtomID) AsyncGreeting(callerID SelfID, in *ForTestGreetingI, callback func(out *ForTestGreetingO, err error), ext ...ArgsForBaseAtomos) error {
+	return forTestAtomosAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
 // Atomos Interface
@@ -108,12 +108,12 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 	elem := NewImplementationFromDeveloper(dev)
 	elem.Interface = GetForTestAtomosInterface(dev)
 	elem.ElementHandlers = map[string]MessageHandler{
-		"SayHello": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
-			a, i, err := forTestAtomosElementMessengerValue.SayHello().ExecuteAtom(to, in)
+		"ElementSayHello": func(from ID, to Atomos, in proto.Message) (proto.Message, error) {
+			a, i, err := forTestAtomosElementMessengerValue.ElementSayHello().ExecuteAtom(to, in)
 			if err != nil {
 				return nil, err.AddStack(nil)
 			}
-			return a.SayHello(from, i)
+			return a.ElementSayHello(from, i)
 		},
 	}
 	elem.AtomHandlers = map[string]MessageHandler{
@@ -130,8 +130,8 @@ func GetForTestAtomosImplement(dev ElementDeveloper) *ElementImplementation {
 func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 	elem := NewInterfaceFromDeveloper(ForTestAtomosName, dev)
 	elem.Config.Messages = map[string]*AtomMessageConfig{
-		"SayHello": AtomMessageConfigOf(&ForTestHelloI{}, &ForTestHelloO{}),
-		"Greeting": AtomMessageConfigOf(&ForTestGreetingI{}, &ForTestGreetingO{}),
+		"ElementSayHello": AtomMessageConfigOf(&ForTestHelloI{}, &ForTestHelloO{}),
+		"Greeting":        AtomMessageConfigOf(&ForTestGreetingI{}, &ForTestGreetingO{}),
 	}
 	elem.ElementSpawner = func(s ElementSelfID, a Atomos, data proto.Message, args ...ArgsForBaseAtomos) error {
 		dataT, _ := data.(*ForTestData)
@@ -151,7 +151,7 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 		return atom.Spawn(s, argT, dataT)
 	}
 	elem.ElementDecoders = map[string]*IOMessageDecoder{
-		"SayHello": forTestAtomosElementMessengerValue.SayHello().Decoder(&ForTestHelloI{}, &ForTestHelloO{}),
+		"ElementSayHello": forTestAtomosElementMessengerValue.ElementSayHello().Decoder(&ForTestHelloI{}, &ForTestHelloO{}),
 	}
 	elem.AtomDecoders = map[string]*IOMessageDecoder{
 		"Greeting": forTestAtomosAtomMessengerValue.Greeting().Decoder(&ForTestGreetingI{}, &ForTestGreetingO{}),
@@ -163,8 +163,8 @@ func GetForTestAtomosInterface(dev ElementDeveloper) *ElementInterface {
 
 type forTestAtomosElementMessenger struct{}
 
-func (m forTestAtomosElementMessenger) SayHello() Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO] {
-	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{Name: "SayHello"}
+func (m forTestAtomosElementMessenger) ElementSayHello() Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO] {
+	return Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{Name: "ElementSayHello"}
 }
 
 var forTestAtomosElementMessengerValue forTestAtomosElementMessenger

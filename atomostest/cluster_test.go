@@ -116,6 +116,37 @@ func TestRunCluster_CrossNodeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAwaitAtomOnNode_ReleasesTrackers(t *testing.T) {
+	runnable := clusterRunnable("solo").SetConfig(&atomos.Config{
+		Cosmos:   "awaitTrackerCosmos",
+		Node:     "solo",
+		LogLevel: atomos.LogLevel_Debug,
+	})
+	process := Run(t, runnable)
+	atomID, tracker, err := process.Self().CosmosSpawnAtom(process.Self(), clusterElem, "awaited", nil)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	tracker.Release()
+
+	r := &recordingReporter{}
+	AwaitAtomOnNode(r, process, clusterElem, "awaited", "other", 120*time.Millisecond)
+	if r.fatal == "" {
+		t.Fatal("expected AwaitAtomOnNode to time out on the wrong node")
+	}
+	if err := atomID.Kill(process.Self(), atomos.ArgBaseAtomosWaitKilled()); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+	elementID, err := process.Self().CosmosGetElementID(clusterElem)
+	if err != nil {
+		t.Fatalf("get element: %v", err)
+	}
+	element := elementID.(atomos.Element)
+	Eventually(t, 5*time.Second, 20*time.Millisecond, func() bool {
+		return len(element.GetAllInactiveAtomsIDTrackerInfo()) == 0
+	}, "AwaitAtomOnNode leaked an IDTracker")
+}
+
 func TestProbe_LifecycleEvents(t *testing.T) {
 	runnable := clusterRunnable("solo").SetConfig(&atomos.Config{
 		Cosmos:   "probeCosmos",

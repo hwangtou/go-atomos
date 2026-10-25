@@ -166,6 +166,10 @@ func (t *testBaseAtomos) asyncSet(callback func(out proto.Message, err error)) (
 	return t.atomos.asyncSet(callback)
 }
 
+func (t *testBaseAtomos) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return t.atomos.asyncPop(asyncID)
+}
+
 func (t *testBaseAtomos) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	t.t.Log("asyncCallback called:", callerID, name, asyncID, reply, err)
 	t.atomos.PushAsyncMessageCallback(callerID, name, startupID, asyncID, reply, err)

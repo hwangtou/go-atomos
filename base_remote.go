@@ -107,21 +107,24 @@ func (a *BaseRemote) getPinnedConn() *grpc.ClientConn {
 }
 
 func (a *BaseRemote) getCli(timeout time.Duration) (AtomosRemoteServiceClient, context.Context, context.CancelFunc, *Error) {
-	// Prefer the pinned connection (captured at ID creation) so that a current
-	// switch does not reroute existing calls to the wrong version. If the pin
-	// is dead (node restarted), fall back to the current client so the call can
-	// reach the new version.
+	client, _, ctx, cancel, err := a.getCliWithConn(timeout)
+	return client, ctx, cancel, err
+}
+
+func (a *BaseRemote) getCliWithConn(timeout time.Duration) (AtomosRemoteServiceClient, *grpc.ClientConn, context.Context, context.CancelFunc, *Error) {
+	// Return the exact selected connection so a newly resolved ID can be pinned
+	// to the same version that served its resolution RPC.
 	conn := a.validPinnedConn()
 	if conn == nil {
 		conn = a.cosmos.getCurrentClient()
 	}
 	if conn == nil {
-		return nil, nil, nil, NewError(ErrCodeCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
+		return nil, nil, nil, nil, NewError(ErrCodeCosmosRemoteConnectFailed, "AtomRemote: SyncMessagingByName client error.").AddStack(nil)
 	}
 
 	client := NewAtomosRemoteServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+atomosClientTimeout)
-	return client, ctx, cancel, nil
+	return client, conn, ctx, cancel, nil
 }
 
 func (a *BaseRemote) State() BaseAtomosState {
@@ -193,16 +196,13 @@ func (a *BaseRemote) PushSyncMessage(from ID, name string, in proto.Message, ext
 	// already contains the target — a cross-node sync cycle. Purely local
 	// cycles are caught by the process wait-graph and never reach here.
 	chain := a.cosmos.process.currentSyncChain(getGoID())
-	who := ""
-	if from != nil {
-		who = from.GetIDInfo().Info()
-	} else {
-		who = a.info.Info()
-	}
+	who := from.GetIDInfo()
 	outChain := make([]string, 0, len(chain)+1)
 	outChain = append(outChain, chain...)
-	outChain = append(outChain, who)
+	outChain = append(outChain, syncChainLink(who))
 
+	waitKey := a.cosmos.process.beginSyncWait(who)
+	defer a.cosmos.process.endSyncWait(waitKey)
 	rsp, er := client.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId:   from.GetIDInfo(),
 		To:         a.info,
@@ -269,12 +269,17 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 	defer cancel()
 
 	var startupID, asyncID uint64
+	var callerInternal idInternal
 	if callback != nil {
-		callerInternal, intErr := asIDInternal(callerID)
+		var intErr *Error
+		callerInternal, intErr = asIDInternal(callerID)
 		if intErr != nil {
 			return intErr.AddStack(nil)
 		}
 		startupID, asyncID = callerInternal.asyncSet(callback)
+		if asyncID == 0 {
+			return nil
+		}
 		if startupID != a.cosmos.process.startupID {
 			// This should never happen, just in case.
 			a.cosmos.process.logging.pushFrameworkFatalLog("BaseRemote: AsyncMessagingByName asyncSet returned unexpected startupID. expected=(%d) actual=(%d)", a.cosmos.process.startupID, startupID)
@@ -292,9 +297,15 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		Args:       arg,
 	})
 	if er != nil {
+		if asyncID != 0 {
+			callerInternal.asyncPop(asyncID)
+		}
 		return grpcErrorToError(er).AddStack(nil)
 	}
 	if rsp.Error != nil {
+		if asyncID != 0 {
+			callerInternal.asyncPop(asyncID)
+		}
 		return rsp.Error.AddStack(nil)
 	}
 	return nil

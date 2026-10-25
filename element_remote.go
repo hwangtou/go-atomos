@@ -29,10 +29,11 @@ func newElementRemoteFromSource(c *CosmosRemote, info *IDInfo, i *ElementInterfa
 }
 
 func (e *elementRemoteFromSource) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
-	// BUG: asyncSet should never be called on a source-process remote ID.
-	// It exists only to satisfy the ID interface. Returning zeros so callers
-	// get a safe no-op rather than a process crash.
 	return 0, 0
+}
+
+func (e *elementRemoteFromSource) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return nil
 }
 
 func (e *elementRemoteFromSource) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
@@ -56,6 +57,10 @@ func newElementRemoteInTargetProcess(elem *ElementRemote, startupID, asyncID uin
 
 func (e *elementRemoteInTargetProcess) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
 	return e.startupID, e.asyncID
+}
+
+func (e *elementRemoteInTargetProcess) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return nil
 }
 
 func (e *elementRemoteInTargetProcess) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
@@ -132,7 +137,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 	if e.cosmos != nil && e.cosmos.process != nil {
 		defer e.cosmos.process.observeRPC("ElementGetAtomID", time.Now())
 	}
-	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
+	cli, conn, ctx, cancel, err := e.remote.getCliWithConn(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
@@ -151,7 +156,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 
 	// Pin the connection used for this call so the returned atom ID keeps
 	// targeting this version even after current switches (drain/hot-upgrade).
-	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, e.remote.getCliConn()), nil, nil
+	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, conn), nil, nil
 }
 
 func (e *ElementRemote) GetAtomsNum() int {
@@ -197,7 +202,7 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 	if e.cosmos != nil && e.cosmos.process != nil {
 		defer e.cosmos.process.observeRPC("ElementSpawnAtom", time.Now())
 	}
-	cli, ctx, cancel, err := e.remote.getCli(atomosClientTimeout)
+	cli, conn, ctx, cancel, err := e.remote.getCliWithConn(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
 	}
@@ -220,12 +225,12 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 	if er != nil {
 		return nil, nil, grpcErrorToError(er).AddStack(nil)
 	}
-	if rsp.Error != nil && rsp.Id == nil {
+	if rsp.Error != nil {
 		return nil, nil, rsp.Error.AddStack(nil)
 	}
 
 	// Pin the connection used for this call (see GetAtomID for rationale).
-	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, e.remote.getCliConn()), nil, nil
+	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Id, conn), nil, nil
 }
 
 // 内部实现

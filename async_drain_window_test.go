@@ -62,7 +62,7 @@ func TestAsyncDrainWindow(t *testing.T) {
 	// 推迟窗口内回复到达 → 回调被正常消费(生产:结算回复赶在排空窗口内回来)
 	callbackID := svc.getLocalIDFromIDInfo(&IDInfo{
 		Type: IDType_Atom, Cosmos: "clearCosmos", Node: "clearNode",
-		Element: "ClearElem", Atom: "drain1",
+		Element: "ClearElem", Atom: "drain1", InstanceId: atom.GetIDInfo().InstanceId,
 	})
 	if callbackID == nil {
 		t.Fatalf("按名字解析 callbackID 失败")

@@ -24,11 +24,15 @@ go build ./...
 go vet ./...
 go test . -count=1 -timeout 600s          # root package suite (~20s)
 go test ./atomostest/ ./cmd/atomos-vet/... ./protoc-gen-go-atomos/ ./examples/...
+make test-race                           # all packages in both modules, twice
+make test-integration                    # embedded etcd integration suite
+make test-integration-race               # integration suite with race detector
 GOOS=windows go build ./...               # cross-compile gate
 ```
 
-The `supervisor/` directory is a separate module; build/test it from its own
-directory.
+The `supervisor/` directory is a separate Unix-only module; build/test it from
+its own directory. The Windows cross-compile gate covers the root module only
+and intentionally excludes supervisor.
 
 ## Proto regeneration
 

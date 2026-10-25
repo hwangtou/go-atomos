@@ -85,8 +85,8 @@ func (c *GreeterAtomID) SayHello(callerID go_atomos.SelfID, in *HelloRequest, ex
 }
 
 // Async
-func (c *GreeterAtomID) AsyncSayHello(callerID go_atomos.SelfID, in *HelloRequest, callback func(out *HelloReply, err error), ext ...go_atomos.ArgsForBaseAtomos) {
-	greeterAtomMessengerValue.SayHello().AsyncAtom(c, callerID, in, callback, ext...)
+func (c *GreeterAtomID) AsyncSayHello(callerID go_atomos.SelfID, in *HelloRequest, callback func(out *HelloReply, err error), ext ...go_atomos.ArgsForBaseAtomos) error {
+	return greeterAtomMessengerValue.SayHello().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
 // Atomos Interface
@@ -108,6 +108,9 @@ func GetGreeterImplement(dev go_atomos.ElementDeveloper) *go_atomos.ElementImple
 }
 func GetGreeterInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(GreeterName, dev)
+	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
+		"SayHello": go_atomos.AtomMessageConfigOf(&HelloRequest{}, &HelloReply{}),
+	}
 	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...go_atomos.ArgsForBaseAtomos) error {
 		dataT, _ := data.(*HelloData)
 		e, ok := a.(GreeterElement)

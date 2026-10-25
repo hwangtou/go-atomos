@@ -34,7 +34,7 @@ service GoldenOption {
   rpc ElementSpawn (atomos.Nil) returns (GoldenData) {
     option (atomos.atomos_method) = AtomosElementSpawn;
   }
-  rpc SayHello (GoldenHelloI) returns (GoldenHelloO) {
+  rpc ElementSayHello (GoldenHelloI) returns (GoldenHelloO) {
     option (atomos.atomos_method) = AtomosElementMethod;
   }
   rpc Spawn (GoldenSpawnArg) returns (GoldenData) {

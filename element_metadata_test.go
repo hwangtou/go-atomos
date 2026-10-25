@@ -23,7 +23,7 @@ func TestElementConfigMessages_FilledFromDecoders(t *testing.T) {
 			t.Fatalf("Config.Messages not filled, len=%d", len(msgs))
 		}
 		cases := []struct{ name, inType, outType string }{
-			{"SayHello", "atomos.ForTestHelloI", "atomos.ForTestHelloO"},
+			{"ElementSayHello", "atomos.ForTestHelloI", "atomos.ForTestHelloO"},
 			{"Greeting", "atomos.ForTestGreetingI", "atomos.ForTestGreetingO"},
 		}
 		for _, c := range cases {
@@ -46,7 +46,7 @@ func TestElementConfigMessages_ManualFillPreserved(t *testing.T) {
 	kept := &AtomMessageConfig{}
 	iface.Config.Messages["custom"] = kept
 	iface.ElementDecoders = map[string]*IOMessageDecoder{
-		"SayHello": forTestSayHelloDecoder(),
+		"ElementSayHello": forTestElementSayHelloDecoder(),
 	}
 	fillElementMessages(iface)
 	if len(iface.Config.Messages) != 1 || iface.Config.Messages["custom"] != kept {
@@ -64,7 +64,7 @@ func TestElementConfigMessages_EmptyInterfaceSafe(t *testing.T) {
 // produce instances of the OUT message type, not the IN type (the fill and
 // any user-side decode path depends on it).
 func TestIOMessageDecoder_OutDecClonesOutPrototype(t *testing.T) {
-	dec := forTestSayHelloDecoder()
+	dec := forTestElementSayHelloDecoder()
 	in, err := dec.InDec(nil, true)
 	if err != nil {
 		t.Fatalf("InDec: %v", err)
@@ -97,9 +97,9 @@ func mapKeys(m map[string]*AtomMessageConfig) []string {
 	return keys
 }
 
-// forTestSayHelloDecoder builds the SayHello decoder the way generated code
+// forTestElementSayHelloDecoder builds the ElementSayHello decoder the way generated code
 // does, without depending on the generated fixture's unexported messenger.
-func forTestSayHelloDecoder() *IOMessageDecoder {
-	m := Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{nil, nil, "SayHello"}
+func forTestElementSayHelloDecoder() *IOMessageDecoder {
+	m := Messenger[*ForTestAtomosElementID, *ForTestAtomosAtomID, ForTestAtomosElement, *ForTestHelloI, *ForTestHelloO]{nil, nil, "ElementSayHello"}
 	return m.Decoder(&ForTestHelloI{}, &ForTestHelloO{})
 }

@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,13 +26,18 @@ commands:
   health   <addr>   liveness probe; exit code 0 = healthy
 
 <addr> is the debug server listen address, e.g. http://127.0.0.1:9099
-(enable with atomos.WithDebugServer or the _debug_server customize key)`
+(enable with atomos.WithDebugServer or the _debug_server customize key).
+Set ATOMOS_DEBUG_TOKEN when the server requires Bearer authentication.`
 
 func main() {
-	if len(os.Args) != 3 {
-		failUsage("expected exactly two arguments")
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 2 {
+		return failUsage(stderr, "expected exactly two arguments")
 	}
-	command, addr := os.Args[1], os.Args[2]
+	command, addr := args[0], args[1]
 	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
 		addr = "http://" + addr
 	}
@@ -46,41 +52,56 @@ func main() {
 	case "health":
 		path = "/healthz"
 	default:
-		failUsage(fmt.Sprintf("unknown command %q", command))
+		return failUsage(stderr, fmt.Sprintf("unknown command %q", command))
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(addr + path)
+	req, err := http.NewRequest(http.MethodGet, addr+path, nil)
 	if err != nil {
-		fatal(fmt.Sprintf("request failed: %v", err))
+		return fatal(stderr, fmt.Sprintf("create request failed: %v", err))
+	}
+	if token := strings.TrimSpace(os.Getenv("ATOMOS_DEBUG_TOKEN")); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fatal(stderr, fmt.Sprintf("request failed: %v", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fatal(fmt.Sprintf("read body failed: %v", err))
+		return fatal(stderr, fmt.Sprintf("read body failed: %v", err))
 	}
 	if command == "health" {
-		if resp.StatusCode == http.StatusOK {
-			fmt.Print("healthy\n")
-			return
+		if resp.StatusCode != http.StatusOK {
+			return fatal(stderr, fmt.Sprintf("unhealthy: status %d, body %s", resp.StatusCode, strings.TrimSpace(string(body))))
 		}
-		fatal(fmt.Sprintf("unhealthy: status %d, body %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		body = []byte("healthy\n")
+	} else if resp.StatusCode != http.StatusOK {
+		return fatal(stderr, fmt.Sprintf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
 	}
-	if resp.StatusCode != http.StatusOK {
-		fatal(fmt.Sprintf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+	if err := writeOutput(stdout, body); err != nil {
+		return fatal(stderr, fmt.Sprintf("write output failed: %v", err))
 	}
-	os.Stdout.Write(body)
+	return 0
+}
+
+func writeOutput(w io.Writer, body []byte) error {
 	if len(body) > 0 && body[len(body)-1] != '\n' {
-		fmt.Println()
+		body = append(body, '\n')
 	}
+	_, err := io.Copy(w, bytes.NewReader(body))
+	return err
 }
 
-func failUsage(msg string) {
-	fmt.Fprintf(os.Stderr, "atomosctl: %s\n\n%s\n", msg, usage)
-	os.Exit(2)
+func failUsage(w io.Writer, msg string) int {
+	if _, err := fmt.Fprintf(w, "atomosctl: %s\n\n%s\n", msg, usage); err != nil {
+		return 1
+	}
+	return 2
 }
 
-func fatal(msg string) {
-	fmt.Fprintf(os.Stderr, "atomosctl: %s\n", msg)
-	os.Exit(1)
+func fatal(w io.Writer, msg string) int {
+	_, _ = fmt.Fprintf(w, "atomosctl: %s\n", msg)
+	return 1
 }

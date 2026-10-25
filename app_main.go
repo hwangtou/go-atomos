@@ -12,9 +12,9 @@ import (
 type RunOption func(*runConfig)
 
 type runConfig struct {
-	configFile     string
-	hasConfigFile  bool
-	standalone     bool
+	configFile      string
+	hasConfigFile   bool
+	standalone      bool
 	debugServerAddr string
 
 	useWorkingPath bool
@@ -31,6 +31,7 @@ func WithConfigFile(path string) RunOption {
 	return func(c *runConfig) {
 		c.configFile = path
 		c.hasConfigFile = true
+		c.useWorkingPath = false
 	}
 }
 
@@ -41,6 +42,7 @@ func WithConfigFile(path string) RunOption {
 func WithWorkingPath(path, cosmos, node string, logLevel LogLevel, customize map[string][]byte) RunOption {
 	return func(c *runConfig) {
 		c.useWorkingPath = true
+		c.hasConfigFile = false
 		c.workingPath = path
 		c.cosmos = cosmos
 		c.node = node
@@ -59,10 +61,12 @@ func WithStandalone() RunOption {
 	}
 }
 
-// WithDebugServer enables the introspection HTTP server on addr (e.g.
-// "127.0.0.1:9099" or ":9099"). It serves /elements, /metrics, /healthz and
-// /debug/pprof/* from process start until stop. Equivalent to setting the
-// "_debug_server" key in the config customize map; an explicit option wins.
+// WithDebugServer enables the introspection HTTP server on addr (for example,
+// "127.0.0.1:9099"). It serves /elements, /metrics, /healthz and
+// /debug/pprof/* from process start until stop. Non-loopback listeners also
+// require a "_debug_server_token" customize value, used as a Bearer token on
+// every endpoint. Equivalent to the "_debug_server" customize key; an explicit
+// option wins.
 func WithDebugServer(addr string) RunOption {
 	return func(c *runConfig) {
 		c.debugServerAddr = addr

@@ -156,10 +156,11 @@ func AwaitElementOnNode(t TestReporter, p *atomos.CosmosProcess, elem, node stri
 func AwaitAtomOnNode(t TestReporter, p *atomos.CosmosProcess, elem, atomName, node string, timeout time.Duration) {
 	t.Helper()
 	Eventually(t, timeout, 50*time.Millisecond, func() bool {
-		id, _, err := p.Self().CosmosGetAtomID(elem, atomName, atomos.ArgBaseAtomosFromLocalOnly())
+		id, tracker, err := p.Self().CosmosGetAtomID(elem, atomName, atomos.ArgBaseAtomosFromLocalOnly())
 		if err != nil {
 			return false
 		}
+		defer tracker.Release()
 		return id.GetIDInfo().Node == node
 	}, "atom %q/%q did not resolve to node %q within %v", elem, atomName, node, timeout)
 }

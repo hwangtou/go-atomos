@@ -39,6 +39,13 @@ func TestErrorIsNilSafety(t *testing.T) {
 	if got := CodeOf(err); got != ErrCodeUnknown {
 		t.Errorf("CodeOf(typed-nil) = %d, want %d (ErrCodeUnknown)", got, ErrCodeUnknown)
 	}
+	var nilTarget *Error
+	if NewError(ErrCodeAtomNotExists, "x").Is(nilTarget) {
+		t.Error("non-nil *Error matched a typed-nil target")
+	}
+	if errors.Is(NewError(ErrCodeAtomNotExists, "x"), nilTarget) {
+		t.Error("errors.Is matched a typed-nil target")
+	}
 }
 
 func TestCodeOf(t *testing.T) {

@@ -118,8 +118,8 @@ func TestDeadlockMatrix_SimultaneousMutualLocal(t *testing.T) {
 		defer genB.Release()
 
 		start := time.Now()
-		genA.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { doneA <- err })
-		genB.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { doneB <- err })
+		_ = genA.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { doneA <- err })
+		_ = genB.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { doneB <- err })
 
 		// Both handlers are now inside Greeting, blocked on their gates.
 		<-implA.greetingNotify
@@ -237,7 +237,7 @@ func TestDeadlockMatrix_AtomElementAtomRing(t *testing.T) {
 		}
 		// A calls the element.
 		implA.remoteHook = func(self AtomSelfID) *Error {
-			_, e := elemID.SyncMessagingByName(self, "SayHello", &ForTestHelloI{}, ArgBaseAtomosTimeout(3*time.Second))
+			_, e := elemID.SyncMessagingByName(self, "ElementSayHello", &ForTestHelloI{}, ArgBaseAtomosTimeout(3*time.Second))
 			if e != nil {
 				return asError(e).AddStack(self)
 			}
@@ -385,34 +385,34 @@ func TestDeadlockMatrix_CrossNodeSimultaneous(t *testing.T) {
 	gateA, gateB := make(chan struct{}), make(chan struct{})
 	errA, errB := make(chan error, 1), make(chan error, 1)
 	implA.greetingGate = gateA
-		implB.greetingGate = gateB
-		implA.greetingNotify = make(chan struct{}, 1)
-		implB.greetingNotify = make(chan struct{}, 1)
-		implA.remoteHook = func(self AtomSelfID) *Error {
-			e := remoteCall(srcToTarget, atomB, self)
-			errA <- errOrNil(e)
-			return e
-		}
-		implB.remoteHook = func(self AtomSelfID) *Error {
-			e := remoteCall(tgtToSource, atomA, self)
-			errB <- errOrNil(e)
-			return e
-		}
+	implB.greetingGate = gateB
+	implA.greetingNotify = make(chan struct{}, 1)
+	implB.greetingNotify = make(chan struct{}, 1)
+	implA.remoteHook = func(self AtomSelfID) *Error {
+		e := remoteCall(srcToTarget, atomB, self)
+		errA <- errOrNil(e)
+		return e
+	}
+	implB.remoteHook = func(self AtomSelfID) *Error {
+		e := remoteCall(tgtToSource, atomA, self)
+		errB <- errOrNil(e)
+		return e
+	}
 
-		genA, err := GetForTestAtomosAtomID(cluster.sourceProcess.local, atomA)
-		if err != nil {
-			t.Fatalf("GetForTestAtomosAtomID(A): %v", err)
-		}
-		defer genA.Release()
-		genB, err := GetForTestAtomosAtomID(cluster.targetProcess.local, atomB)
-		if err != nil {
-			t.Fatalf("GetForTestAtomosAtomID(B): %v", err)
-		}
-		defer genB.Release()
+	genA, err := GetForTestAtomosAtomID(cluster.sourceProcess.local, atomA)
+	if err != nil {
+		t.Fatalf("GetForTestAtomosAtomID(A): %v", err)
+	}
+	defer genA.Release()
+	genB, err := GetForTestAtomosAtomID(cluster.targetProcess.local, atomB)
+	if err != nil {
+		t.Fatalf("GetForTestAtomosAtomID(B): %v", err)
+	}
+	defer genB.Release()
 
-		start := time.Now()
-		genA.AsyncGreeting(cluster.sourceProcess.local, &ForTestGreetingI{Mode: 5}, func(*ForTestGreetingO, error) {})
-		genB.AsyncGreeting(cluster.targetProcess.local, &ForTestGreetingI{Mode: 5}, func(*ForTestGreetingO, error) {})
+	start := time.Now()
+	_ = genA.AsyncGreeting(cluster.sourceProcess.local, &ForTestGreetingI{Mode: 5}, func(*ForTestGreetingO, error) {})
+	_ = genB.AsyncGreeting(cluster.targetProcess.local, &ForTestGreetingI{Mode: 5}, func(*ForTestGreetingO, error) {})
 	<-implA.greetingNotify
 	<-implB.greetingNotify
 	close(gateA)
@@ -664,7 +664,7 @@ func TestDeadlockMatrix_AsyncBreaksCycle(t *testing.T) {
 			t.Fatalf("GetForTestAtomosAtomID(B): %v", err)
 		}
 		defer genB.Release()
-		genB.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { done <- err })
+		_ = genB.AsyncGreeting(p.local, &ForTestGreetingI{Mode: 5}, func(out *ForTestGreetingO, err error) { done <- err })
 		select {
 		case err := <-done:
 			if err != nil {

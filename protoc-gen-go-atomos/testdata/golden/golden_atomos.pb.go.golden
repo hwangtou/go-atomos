@@ -23,7 +23,7 @@ type GoldenOptionElement interface {
 	go_atomos.Atomos
 	Spawn(self go_atomos.ElementSelfID, data *GoldenData, args ...go_atomos.ArgsForBaseAtomos) error
 
-	SayHello(from go_atomos.ID, in *GoldenHelloI) (out *GoldenHelloO, err error)
+	ElementSayHello(from go_atomos.ID, in *GoldenHelloI) (out *GoldenHelloO, err error)
 }
 
 // GoldenOptionAtom is the atomos implements of GoldenOption atom.
@@ -59,13 +59,13 @@ func GetGoldenOptionElementID(c go_atomos.CosmosNode) (*GoldenOptionElementID, e
 }
 
 // Sync
-func (c *GoldenOptionElementID) SayHello(callerID go_atomos.SelfID, in *GoldenHelloI, ext ...go_atomos.ArgsForBaseAtomos) (out *GoldenHelloO, err error) {
-	return goldenOptionElementMessengerValue.SayHello().SyncElement(c, callerID, in, ext...)
+func (c *GoldenOptionElementID) ElementSayHello(callerID go_atomos.SelfID, in *GoldenHelloI, ext ...go_atomos.ArgsForBaseAtomos) (out *GoldenHelloO, err error) {
+	return goldenOptionElementMessengerValue.ElementSayHello().SyncElement(c, callerID, in, ext...)
 }
 
 // Async
-func (c *GoldenOptionElementID) AsyncSayHello(callerID go_atomos.SelfID, in *GoldenHelloI, callback func(out *GoldenHelloO, err error), ext ...go_atomos.ArgsForBaseAtomos) {
-	goldenOptionElementMessengerValue.SayHello().AsyncElement(c, callerID, in, callback, ext...)
+func (c *GoldenOptionElementID) AsyncElementSayHello(callerID go_atomos.SelfID, in *GoldenHelloI, callback func(out *GoldenHelloO, err error), ext ...go_atomos.ArgsForBaseAtomos) error {
+	return goldenOptionElementMessengerValue.ElementSayHello().AsyncElement(c, callerID, in, callback, ext...)
 }
 
 // Atom: GoldenOption
@@ -101,8 +101,8 @@ func (c *GoldenOptionAtomID) Greeting(callerID go_atomos.SelfID, in *GoldenGreet
 }
 
 // Async
-func (c *GoldenOptionAtomID) AsyncGreeting(callerID go_atomos.SelfID, in *GoldenGreetingI, callback func(out *GoldenGreetingO, err error), ext ...go_atomos.ArgsForBaseAtomos) {
-	goldenOptionAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
+func (c *GoldenOptionAtomID) AsyncGreeting(callerID go_atomos.SelfID, in *GoldenGreetingI, callback func(out *GoldenGreetingO, err error), ext ...go_atomos.ArgsForBaseAtomos) error {
+	return goldenOptionAtomMessengerValue.Greeting().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
 // Atomos Interface
@@ -111,12 +111,12 @@ func GetGoldenOptionImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 	elem := go_atomos.NewImplementationFromDeveloper(dev)
 	elem.Interface = GetGoldenOptionInterface(dev)
 	elem.ElementHandlers = map[string]go_atomos.MessageHandler{
-		"SayHello": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, error) {
-			a, i, err := goldenOptionElementMessengerValue.SayHello().ExecuteAtom(to, in)
+		"ElementSayHello": func(from go_atomos.ID, to go_atomos.Atomos, in proto.Message) (proto.Message, error) {
+			a, i, err := goldenOptionElementMessengerValue.ElementSayHello().ExecuteAtom(to, in)
 			if err != nil {
 				return nil, err.AddStack(nil)
 			}
-			return a.SayHello(from, i)
+			return a.ElementSayHello(from, i)
 		},
 	}
 	elem.AtomHandlers = map[string]go_atomos.MessageHandler{
@@ -133,8 +133,8 @@ func GetGoldenOptionImplement(dev go_atomos.ElementDeveloper) *go_atomos.Element
 func GetGoldenOptionInterface(dev go_atomos.ElementDeveloper) *go_atomos.ElementInterface {
 	elem := go_atomos.NewInterfaceFromDeveloper(GoldenOptionName, dev)
 	elem.Config.Messages = map[string]*go_atomos.AtomMessageConfig{
-		"SayHello": go_atomos.AtomMessageConfigOf(&GoldenHelloI{}, &GoldenHelloO{}),
-		"Greeting": go_atomos.AtomMessageConfigOf(&GoldenGreetingI{}, &GoldenGreetingO{}),
+		"ElementSayHello": go_atomos.AtomMessageConfigOf(&GoldenHelloI{}, &GoldenHelloO{}),
+		"Greeting":        go_atomos.AtomMessageConfigOf(&GoldenGreetingI{}, &GoldenGreetingO{}),
 	}
 	elem.ElementSpawner = func(s go_atomos.ElementSelfID, a go_atomos.Atomos, data proto.Message, args ...go_atomos.ArgsForBaseAtomos) error {
 		dataT, _ := data.(*GoldenData)
@@ -154,7 +154,7 @@ func GetGoldenOptionInterface(dev go_atomos.ElementDeveloper) *go_atomos.Element
 		return atom.Spawn(s, argT, dataT)
 	}
 	elem.ElementDecoders = map[string]*go_atomos.IOMessageDecoder{
-		"SayHello": goldenOptionElementMessengerValue.SayHello().Decoder(&GoldenHelloI{}, &GoldenHelloO{}),
+		"ElementSayHello": goldenOptionElementMessengerValue.ElementSayHello().Decoder(&GoldenHelloI{}, &GoldenHelloO{}),
 	}
 	elem.AtomDecoders = map[string]*go_atomos.IOMessageDecoder{
 		"Greeting": goldenOptionAtomMessengerValue.Greeting().Decoder(&GoldenGreetingI{}, &GoldenGreetingO{}),
@@ -166,8 +166,8 @@ func GetGoldenOptionInterface(dev go_atomos.ElementDeveloper) *go_atomos.Element
 
 type goldenOptionElementMessenger struct{}
 
-func (m goldenOptionElementMessenger) SayHello() go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO] {
-	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO]{Name: "SayHello"}
+func (m goldenOptionElementMessenger) ElementSayHello() go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO] {
+	return go_atomos.Messenger[*GoldenOptionElementID, *GoldenOptionAtomID, GoldenOptionElement, *GoldenHelloI, *GoldenHelloO]{Name: "ElementSayHello"}
 }
 
 var goldenOptionElementMessengerValue goldenOptionElementMessenger
@@ -241,8 +241,8 @@ func (c *GoldenPrefixElementID) Echo(callerID go_atomos.SelfID, in *GoldenHelloI
 }
 
 // Async
-func (c *GoldenPrefixElementID) AsyncEcho(callerID go_atomos.SelfID, in *GoldenHelloI, callback func(out *GoldenHelloO, err error), ext ...go_atomos.ArgsForBaseAtomos) {
-	goldenPrefixElementMessengerValue.Echo().AsyncElement(c, callerID, in, callback, ext...)
+func (c *GoldenPrefixElementID) AsyncEcho(callerID go_atomos.SelfID, in *GoldenHelloI, callback func(out *GoldenHelloO, err error), ext ...go_atomos.ArgsForBaseAtomos) error {
+	return goldenPrefixElementMessengerValue.Echo().AsyncElement(c, callerID, in, callback, ext...)
 }
 
 // Atom: GoldenPrefix
@@ -278,8 +278,8 @@ func (c *GoldenPrefixAtomID) Ping(callerID go_atomos.SelfID, in *GoldenGreetingI
 }
 
 // Async
-func (c *GoldenPrefixAtomID) AsyncPing(callerID go_atomos.SelfID, in *GoldenGreetingI, callback func(out *GoldenGreetingO, err error), ext ...go_atomos.ArgsForBaseAtomos) {
-	goldenPrefixAtomMessengerValue.Ping().AsyncAtom(c, callerID, in, callback, ext...)
+func (c *GoldenPrefixAtomID) AsyncPing(callerID go_atomos.SelfID, in *GoldenGreetingI, callback func(out *GoldenGreetingO, err error), ext ...go_atomos.ArgsForBaseAtomos) error {
+	return goldenPrefixAtomMessengerValue.Ping().AsyncAtom(c, callerID, in, callback, ext...)
 }
 
 // Atomos Interface

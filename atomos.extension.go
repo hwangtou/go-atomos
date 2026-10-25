@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func (x *Config) Check() error {
@@ -86,16 +88,32 @@ func errOrNil(err *Error) error {
 }
 
 // asError converts an error-typed value back to *Error for framework-internal
-// handling (stacks, code inspection). A non-*Error value — one constructed
-// outside the framework — is wrapped with the reserved ErrCodeUnknown code.
+// handling (stacks, code inspection). The result is always fresh, so AddStack
+// cannot mutate a shared sentinel or another owner's error. A wrapped *Error
+// supplies the code while the complete original error remains the unwrap cause
+// (see error_cause.go), preserving errors.Is/As and joined error chains.
 func asError(err error) *Error {
 	if err == nil {
 		return nil
 	}
 	if e, ok := err.(*Error); ok {
-		return e
+		return cloneError(e)
 	}
-	return NewError(ErrCodeUnknown, err.Error())
+	e := NewError(ErrCodeUnknown, err.Error())
+	var frameworkErr *Error
+	if errors.As(err, &frameworkErr) && frameworkErr != nil {
+		e.Code = frameworkErr.Code
+		e.CallStacks = append([]*ErrorCallerInfo(nil), frameworkErr.CallStacks...)
+	}
+	return setCause(e, err)
+}
+
+func cloneError(err *Error) *Error {
+	if err == nil {
+		return nil
+	}
+	clone := proto.Clone(err).(*Error)
+	return setCause(clone, causeOf(err))
 }
 
 func (x *Error) AddPanicStack(id SelfID, skip int, reason any, args ...any) *Error {
@@ -106,21 +124,13 @@ func (x *Error) AddPanicStack(id SelfID, skip int, reason any, args ...any) *Err
 	if !ok {
 		file, line = "???", 0
 	}
-	// Argument
-	var argsBuf []string
-	for _, arg := range args {
-		if arg != nil && reflect.TypeOf(arg).Kind() == reflect.Pointer && !reflect.ValueOf(arg).IsNil() {
-			buf, _ := json.Marshal(arg)
-			argsBuf = append(argsBuf, string(buf))
-		}
-	}
 	x.CallStacks = append(x.CallStacks, &ErrorCallerInfo{
 		Id:          SelfID2IDInfo(id),
 		PanicStack:  string(debug.Stack()),
 		PanicReason: fmt.Sprintf("%v", reason),
 		File:        file,
 		Line:        uint32(line),
-		Args:        argsBuf,
+		Args:        marshalCallArgs(args),
 	})
 	return x
 }
@@ -133,21 +143,13 @@ func (x *Error) AddStack(id SelfID, args ...any) *Error {
 	if !ok {
 		file, line = "???", 0
 	}
-	// Argument
-	var argsBuf []string
-	for _, arg := range args {
-		if arg != nil && reflect.TypeOf(arg).Kind() == reflect.Pointer && !reflect.ValueOf(arg).IsNil() {
-			buf, _ := json.Marshal(arg)
-			argsBuf = append(argsBuf, string(buf))
-		}
-	}
 	x.CallStacks = append(x.CallStacks, &ErrorCallerInfo{
 		Id:          SelfID2IDInfo(id),
 		PanicStack:  "",
 		PanicReason: "",
 		File:        file,
 		Line:        uint32(line),
-		Args:        argsBuf,
+		Args:        marshalCallArgs(args),
 	})
 	return x
 }
@@ -167,8 +169,12 @@ func (x *Error) Error() string {
 					builder.WriteString(fmt.Sprintf("\t\t%s\n", arg))
 				}
 			}
-			if stack.PanicReason != "" || stack.PanicStack != "" {
+			if stack.PanicReason != "" {
 				builder.WriteString(fmt.Sprintf("\tRecover: %s\n%s\n", stack.PanicReason, stack.PanicStack))
+			} else if stack.PanicStack != "" {
+				// PanicStack doubles as the creation-site Go stack for
+				// WithStack-captured errors (see error_cause.go).
+				builder.WriteString(fmt.Sprintf("\tGoStack:\n%s\n", stack.PanicStack))
 			}
 		}
 		return fmt.Sprintf("[%v] %s\n%s", x.Code, x.Message, builder.String())

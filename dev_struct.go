@@ -59,8 +59,9 @@ func fillElementMessages(iface *ElementInterface) {
 	if iface == nil || iface.Config == nil || len(iface.Config.Messages) > 0 {
 		return
 	}
+	conflicts := map[string]struct{}{}
 	put := func(name string, dec *IOMessageDecoder) {
-		if dec == nil || dec.InDec == nil || dec.OutDec == nil {
+		if _, conflict := conflicts[name]; conflict || dec == nil || dec.InDec == nil || dec.OutDec == nil {
 			return
 		}
 		in, errIn := dec.InDec(nil, true)
@@ -71,6 +72,13 @@ func fillElementMessages(iface *ElementInterface) {
 		inAny, errInAny := anypb.New(in)
 		outAny, errOutAny := anypb.New(out)
 		if errInAny != nil || errOutAny != nil {
+			return
+		}
+		if existing := iface.Config.Messages[name]; existing != nil {
+			if existing.In.GetTypeUrl() != inAny.TypeUrl || existing.Out.GetTypeUrl() != outAny.TypeUrl {
+				delete(iface.Config.Messages, name)
+				conflicts[name] = struct{}{}
+			}
 			return
 		}
 		iface.Config.Messages[name] = &AtomMessageConfig{In: inAny, Out: outAny}

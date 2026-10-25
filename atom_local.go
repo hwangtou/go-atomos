@@ -222,6 +222,10 @@ func (a *AtomLocal) asyncSet(callback func(out proto.Message, err error)) (start
 	return a.atomos.asyncSet(callback)
 }
 
+func (a *AtomLocal) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return a.atomos.asyncPop(asyncID)
+}
+
 // Implementation of AtomSelfID
 
 func (a *AtomLocal) Persistence() AtomAutoData {
@@ -382,20 +386,20 @@ func (a *AtomLocal) elementAtomSpawn(current *ElementImplementation, persistence
 	// 尝试进行自动数据持久化逻辑，如果支持的话，就会被执行。
 	// 会从对象中GetAtomData，如果返回错误，证明服务不可用，那将会拒绝Atom的Spawn。
 	// 如果GetAtomData拿不出数据，且Spawn没有传入参数，则认为是没有对第一次Spawn的Atom传入参数，属于错误。
-		if persistence != nil {
-			atomPersistence := persistence.AtomAutoData()
-			if atomPersistence != nil {
-				name := a.atomos.id.Atom
-				var derr error
-				data, derr = atomPersistence.GetAtomData(name)
-				if err = asError(derr); err != nil {
-					return err.AddStack(a)
-				}
-				if data == nil && arg == nil {
-					return NewErrorf(ErrCodeAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
-				}
+	if persistence != nil {
+		atomPersistence := persistence.AtomAutoData()
+		if atomPersistence != nil {
+			name := a.atomos.id.Atom
+			var derr error
+			data, derr = atomPersistence.GetAtomData(name)
+			if err = asError(derr); err != nil {
+				return err.AddStack(a)
+			}
+			if data == nil && arg == nil {
+				return NewErrorf(ErrCodeAtomDataNotFound, "Atom data not found. name=(%s)", name).AddStack(a)
 			}
 		}
+	}
 	if err = asError(current.Interface.AtomSpawner(a, a.atomos.instance, arg, data, args...)); err != nil {
 		return err.AddStack(a)
 	}

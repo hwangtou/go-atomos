@@ -273,24 +273,18 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	svc := &atomosRemoteService{process: process}
 	callbackIDInfo := &IDInfo{
 		Type: IDType_Atom, Cosmos: "reproCosmos", Node: "reproNode",
-		Element: reproElemName, Atom: reproAtomName,
+		Element: reproElemName, Atom: reproAtomName, InstanceId: atomIDA.GetIDInfo().InstanceId,
 	}
-	callbackID := svc.getLocalIDFromIDInfo(callbackIDInfo)
-	if callbackID == nil {
-		t.Fatalf("按名字解析 callbackID 失败")
+	if callbackID := svc.getLocalIDFromIDInfo(callbackIDInfo); callbackID != nil {
+		t.Fatalf("旧实例的迟到回复不得解析到换代后的实例: %v", callbackID)
 	}
-	if callbackID == atomIDA {
-		t.Fatalf("解析到旧实例 A,预期换代后的 B")
-	}
-	t.Logf("回复按名字解析到实例 B=%p (A=%p)", callbackID, atomIDA)
-	callbackID.(idInternal).asyncCallback(callbackID, "ReproAsync", startupID, asyncID, nil, nil)
 	time.Sleep(200 * time.Millisecond)
 
-	// T6 断言: 报出 handler not found(带 instance 便于与注册实例比对),且回调未被消费
-	if !logger.hasError("handler not found") || !logger.hasError("instance=") {
-		t.Errorf("未复现: 期望出现带 instance= 的 'handler not found' 错误日志")
+	// T6 断言: 旧实例回复在严格实例校验处被拒绝,不会投递到新实例。
+	if logger.hasError("handler not found") {
+		t.Errorf("旧实例回复不应进入新实例的 callback handler")
 	} else {
-		t.Log("✅ 复现成功: 新实例收到过期回复并报 handler not found (含 instance,可与注册日志比对实例)")
+		t.Log("✅ 旧实例回复在解析阶段被拒绝,未污染新实例")
 	}
 	if got := callbackConsumed.get(); got != 0 {
 		t.Errorf("回调不应被成功消费,实际消费 %d 次(仅允许清账终结)", got)
@@ -308,6 +302,10 @@ func TestReproStaleAsyncReplyAfterAtomRecycled(t *testing.T) {
 	_, asyncID2 := atomIDB.(*AtomLocal).atomos.asyncSet(func(out proto.Message, err error) {
 		callbackInvoked2.add()
 	})
+	callbackID := svc.getLocalIDFromIDInfo(atomIDB.GetIDInfo())
+	if callbackID == nil {
+		t.Fatal("当前实例回调解析失败")
+	}
 	callbackID.(idInternal).asyncCallback(callbackID, "ReproAsync", startupID, asyncID2, nil, nil)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && callbackInvoked2.get() == 0 {

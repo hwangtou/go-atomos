@@ -24,12 +24,13 @@ func (m *taskMailbox) mailboxOnStartUp(_ func() *Error) *Error {
 }
 
 func (m *taskMailbox) mailboxOnReceive(mail *mail) {
-	m.handleAtomosMail(mail)
 	am := mail.data.(*baseAtomosMail)
+	helper := am.atomosTask.helper
+	m.handleAtomosMail(mail)
 	if m.serial {
-		am.atomosTask.helper.manager.checkCloseTaskSerialMailbox(am.atomosTask.helper, m)
+		helper.manager.checkCloseTaskSerialMailbox(helper, m)
 	} else {
-		am.atomosTask.helper.manager.checkCloseTaskMailbox(m)
+		helper.manager.checkCloseTaskMailbox(helper, m)
 	}
 }
 

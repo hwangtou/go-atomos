@@ -104,6 +104,10 @@ func (c *cosmosRemoteInTargetProcess) asyncSet(callback func(out proto.Message, 
 	return c.startupID, c.asyncID
 }
 
+func (c *cosmosRemoteInTargetProcess) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return nil
+}
+
 func newCosmosRemoteInTargetProcess(cosmos *CosmosRemote, startupID, asyncID uint64) *cosmosRemoteInTargetProcess {
 	return &cosmosRemoteInTargetProcess{
 		CosmosRemote: cosmos,
@@ -388,10 +392,11 @@ func (c *CosmosRemote) AsyncMessagingByName(callerID ID, name string, in proto.M
 }
 
 func (c *CosmosRemote) asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64) {
-	// BUG: asyncSet should never be called on a CosmosRemote.
-	// It exists only to satisfy the ID interface. Returning zeros so callers
-	// get a safe no-op rather than a process crash.
 	return 0, 0
+}
+
+func (c *CosmosRemote) asyncPop(asyncID uint64) func(out proto.Message, err error) {
+	return nil
 }
 
 func (c *CosmosRemote) asyncCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
@@ -488,14 +493,12 @@ type cosmosRemoteVersion struct {
 	avail   bool
 	client  *grpc.ClientConn
 	version string
-	// dialMu + dialed guard the lazy dial so check() runs at most once per
-	// "dial cycle". Unlike sync.Once, this can be reset by setDisable() to
-	// allow redial after a connection is closed. The dial itself happens
-	// *outside* the CosmosRemote mutex (which can be held by getCurrentClient
-	// callers), preventing a slow (~1s) connect from blocking all
-	// cross-node calls.
-	dialMu  sync.Mutex
-	dialed  bool
+	// dialMu + dialed guard the lazy dial. Unlike sync.Once, failures and
+	// setDisable reset the guard so a later call can retry. The dial itself
+	// happens outside the CosmosRemote mutex, preventing a slow connect from
+	// blocking all cross-node calls.
+	dialMu sync.Mutex
+	dialed bool
 }
 
 func newCosmosRemoteVersion(process *CosmosProcess, info *CosmosNodeVersionInfo, version string) *cosmosRemoteVersion {
@@ -541,7 +544,7 @@ func (c *cosmosRemoteVersion) setInfo(info *CosmosNodeVersionInfo) {
 func (c *cosmosRemoteVersion) check() bool {
 	c.dialMu.Lock()
 	if c.dialed {
-		// Already dialed in this cycle (success or failure); return current state.
+		// A successful dial, or one still in flight, owns the current cycle.
 		avail := c.avail
 		c.dialMu.Unlock()
 		return avail
@@ -562,6 +565,9 @@ func (c *cosmosRemoteVersion) check() bool {
 	}
 	if er != nil {
 		c.process.local.coreLog().coreFatal("CosmosRemote: NewClient failed. addr=(%s),err=(%v)", info.Address, er)
+		c.dialMu.Lock()
+		c.dialed = false
+		c.dialMu.Unlock()
 		return false
 	}
 	// grpc.NewClient connects lazily and ignores grpc.WithBlock. Preserve the
@@ -584,6 +590,9 @@ func (c *cosmosRemoteVersion) check() bool {
 				conn.Close()
 			}
 			c.process.local.coreLog().coreFatal("CosmosRemote: Connect failed. addr=(%s),state=(%v),conn=(%v),connEr=(%v)", info.Address, st, conn, connEr)
+			c.dialMu.Lock()
+			c.dialed = false
+			c.dialMu.Unlock()
 			return false
 		}
 	}

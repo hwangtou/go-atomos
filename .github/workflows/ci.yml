@@ -3,9 +3,9 @@
 # Mirrors the gates documented in AGENTS.md and the Makefile targets:
 # build + vet (stdlib and atomos-vet analyzers) + full test suite
 # (including the generator golden-file test), race detector (-count=2),
-# integration tests against an embedded etcd, and the Windows
-# cross-compile gate. protoc is not required: the golden test drives
-# protogen in-process against checked-in descriptor sets.
+# integration tests against an embedded etcd, and the Windows root-module
+# cross-compile gate. The check job installs protoc and runs the generator
+# golden test explicitly so a missing compiler cannot silently skip it.
 
 name: CI
 
@@ -37,6 +37,15 @@ jobs:
           cache-dependency-path: |
             go.sum
             supervisor/go.sum
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes protobuf-compiler
+      - name: Generator golden test (must not skip)
+        run: |
+          set -o pipefail
+          go test -v ./protoc-gen-go-atomos/ -run '^TestGolden$' -count=1 | tee /tmp/go-atomos-golden.log
+          ! grep -q -- '--- SKIP: TestGolden' /tmp/go-atomos-golden.log
       - name: Build
         run: go build ./...
       - name: Vet (stdlib + atomos-vet)
@@ -49,7 +58,7 @@ jobs:
           go test ./... -count=1 -timeout 600s
 
   race:
-    name: Race detector (-count=2)
+    name: Race detector (all modules, -count=2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -75,6 +84,8 @@ jobs:
             supervisor/go.sum
       - name: Integration tests
         run: make test-integration
+      - name: Integration tests with race detector
+        run: make test-integration-race
 
   cross-build:
     name: Cross-compile (windows)
@@ -87,5 +98,5 @@ jobs:
           cache-dependency-path: |
             go.sum
             supervisor/go.sum
-      - name: Windows build gate
+      - name: Windows root-module build gate (supervisor is Unix-only)
         run: make cross-build

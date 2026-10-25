@@ -64,7 +64,12 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncElement(e E, callerID SelfID, in IN, 
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		err := NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
+		if callback == nil {
+			return err
+		}
+		callback(nilID, err)
+		return nil
 	}
 	m.ElementID = e
 
@@ -95,7 +100,12 @@ func (m Messenger[E, A, AT, IN, OUT]) AsyncAtom(a A, callerID SelfID, in IN, cal
 	// Check arguments.
 	if callerID == nil {
 		var nilID OUT
-		callback(nilID, NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil))
+		err := NewErrorf(ErrCodeAtomFromIDInvalid, "Messenger: callerID is nil").AddStack(nil)
+		if callback == nil {
+			return err
+		}
+		callback(nilID, err)
+		return nil
 	}
 	m.AtomID = a
 

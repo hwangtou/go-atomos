@@ -157,6 +157,48 @@ customize:
 	}
 }
 
+func Test_NewCosmosNodeConfigFromYamlPath_DisabledClusterIsStandalone(t *testing.T) {
+	clearAtomosEnv(t)
+	path := writeConfig(t, `
+cosmos: c
+node: n
+enable-cluster:
+  enable: false
+  etcd-endpoints: [localhost:2379]
+  optional-ports: [50051]
+`)
+	conf, err := NewCosmosNodeConfigFromYamlPath(path, &CosmosRunnable{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conf.EnableCluster != nil {
+		t.Fatalf("disabled cluster must remain standalone, got %+v", conf.EnableCluster)
+	}
+}
+
+func Test_NewCosmosNodeConfigFromYamlPath_TLS(t *testing.T) {
+	clearAtomosEnv(t)
+	path := writeConfig(t, `
+cosmos: c
+node: n
+enable-cluster:
+  enable: true
+  etcd-endpoints: [localhost:2379]
+  enable-cert:
+    cert-path: /tmp/cluster.crt
+    key-path: /tmp/cluster.key
+    insecure-skip-verify: true
+`)
+	conf, err := NewCosmosNodeConfigFromYamlPath(path, &CosmosRunnable{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := conf.EnableCluster.EnableCert
+	if cert == nil || cert.CertPath != "/tmp/cluster.crt" || cert.KeyPath != "/tmp/cluster.key" || !cert.InsecureSkipVerify {
+		t.Fatalf("TLS config was not preserved: %+v", cert)
+	}
+}
+
 func Test_NewCosmosNodeConfigFromYamlPath_LogLevelAliases(t *testing.T) {
 	clearAtomosEnv(t)
 	cases := map[string]LogLevel{

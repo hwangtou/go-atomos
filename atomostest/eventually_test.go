@@ -41,6 +41,19 @@ func TestEventually_Timeout(t *testing.T) {
 	}
 }
 
+func TestEventually_SleepDoesNotExceedDeadline(t *testing.T) {
+	r := &recordingReporter{}
+	start := time.Now()
+	Eventually(r, 50*time.Millisecond, 2*time.Second, func() bool { return false })
+	elapsed := time.Since(start)
+	if r.fatal == "" {
+		t.Fatal("expected Fatalf on timeout")
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("Eventually slept past its deadline: elapsed=%v", elapsed)
+	}
+}
+
 func TestEventually_DefaultInterval(t *testing.T) {
 	var n atomic.Int32
 	go func() {

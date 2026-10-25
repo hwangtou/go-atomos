@@ -52,6 +52,7 @@ type CosmosProcess struct {
 	// when syncDeadlockDebug is on, the caller's stack at push time.
 	waitMu    sync.Mutex
 	waitGraph map[uint64]waitEdge
+	syncWaits map[string]int
 
 	// syncChainMu guards syncChains, the ambient cross-node wait chain per
 	// mailbox goroutine. While a chain-carrying sync mail executes on a
@@ -179,6 +180,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncDeadlockDebug = false
 	p.syncCallDefaultTimeout = 10 * time.Second
 	p.waitGraph = map[uint64]waitEdge{}
+	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
 	p.rpcMetrics = newRPCMetrics()
 
@@ -291,6 +293,50 @@ func (p *CosmosProcess) removeWaitEdge(executingGoID uint64) {
 	p.waitMu.Lock()
 	delete(p.waitGraph, executingGoID)
 	p.waitMu.Unlock()
+}
+
+func syncChainLink(id *IDInfo) string {
+	if id == nil {
+		return "NilID"
+	}
+	return fmt.Sprintf("%s#%d", id.Info(), id.InstanceId)
+}
+
+func (p *CosmosProcess) beginSyncWait(id *IDInfo) string {
+	if p == nil || id == nil {
+		return ""
+	}
+	key := syncChainLink(id)
+	p.waitMu.Lock()
+	if p.syncWaits == nil {
+		p.syncWaits = map[string]int{}
+	}
+	p.syncWaits[key]++
+	p.waitMu.Unlock()
+	return key
+}
+
+func (p *CosmosProcess) endSyncWait(key string) {
+	if p == nil || key == "" {
+		return
+	}
+	p.waitMu.Lock()
+	if p.syncWaits[key] <= 1 {
+		delete(p.syncWaits, key)
+	} else {
+		p.syncWaits[key]--
+	}
+	p.waitMu.Unlock()
+}
+
+func (p *CosmosProcess) isSyncWaiting(id *IDInfo) bool {
+	if p == nil || id == nil {
+		return false
+	}
+	p.waitMu.Lock()
+	waiting := p.syncWaits[syncChainLink(id)] > 0
+	p.waitMu.Unlock()
+	return waiting
 }
 
 // waitChain returns a human-readable description of the wait chain from `from`
@@ -480,7 +526,6 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		// If it is a cluster process, try to load networking configuration via etcd, then try to listen.
 		if err = p.prepareCluster(runnable); err != nil {
 			p.local.coreLog().coreFatal("CosmosProcess: Prepare cluster failed. err=(%s)", err.Message)
-			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
 		p.local.coreLog().coreInfo("CosmosProcess: Checkpoint - prepareCluster")
@@ -489,7 +534,6 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		// The local node environment of the cluster is ready, try to start the elements.
 		if err = p.local.trySpawningElements(); err != nil {
 			p.local.coreLog().coreFatal("CosmosProcess: Spawn elements failed. err=(%s)", err.Message)
-			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
 		p.local.coreLog().coreInfo("CosmosProcess: Checkpoint - trySpawningElements.")
@@ -499,8 +543,6 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		// Then set the current process information to etcd and keepalive.
 		if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
 			p.local.coreLog().coreFatal("CosmosProcess: Set cluster to current and keepalive failed. err=(%s)", err.Message)
-			p.handleStartUpFailedLocalCleanUp()
-			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
 		p.local.coreLog().coreInfo("CosmosProcess: Checkpoint - trySettingClusterToCurrentAndKeepalive")
@@ -509,18 +551,19 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		// Start the main script.
 		if err = p.mainScriptOnStartUpProtect(); err != nil {
 			p.local.coreLog().coreFatal("CosmosProcess: Main script startup failed. err=(%s)", err.Message)
-			p.handleStartUpFailedLocalCleanUp()
-			p.handleStartUpFailedClusterCleanUp()
 			return err.AddStack(p.local)
 		}
 		p.local.coreLog().coreInfo("CosmosProcess: Checkpoint - mainScriptOnStartUpProtect")
 
 		return nil
 	}(); err != nil {
+		p.local.coreLog().coreError("CosmosProcess: Start failed. err=(%v)", err)
+		p.handleStartUpFailedLocalCleanUp()
+		p.handleStartUpFailedClusterCleanUp()
 		p.mutex.Lock()
 		p.state = CosmosProcessStateOff
 		p.mutex.Unlock()
-		p.local.coreLog().coreError("CosmosProcess: Start failed. err=(%v)", err)
+		p.logging.stop()
 		return err.AddStack(p.local)
 	}
 
@@ -601,6 +644,10 @@ func (p *CosmosProcess) stopFromOtherNodeAfterResponse() {
 
 	p.mutex.Lock()
 	p.state = CosmosProcessStateOff
+	if p.debugServer != nil {
+		p.debugServer.stop()
+		p.debugServer = nil
+	}
 	p.mutex.Unlock()
 	p.local.coreLog().coreInfo("CosmosProcess: stopFromOtherNodeAfterResponse.")
 
@@ -729,9 +776,6 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 	if !p.cluster.enable {
 		return nil
 	}
-	if p.cluster.etcdInfoCh == nil {
-		return nil
-	}
 	_, infoBuf, err := p.etcdNodeVersion(p.local.runnable.config.Node, p.cluster.etcdVersion, &CosmosNodeVersionInfo{
 		Node:      p.local.runnable.config.Node,
 		Address:   p.cluster.grpcAddress,
@@ -743,12 +787,34 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 	if err != nil {
 		return err.AddStack(nil)
 	}
-	select {
-	case p.cluster.etcdInfoCh <- infoBuf:
-	default:
-		// Channel full; the keepalive goroutine will pick up the next update.
-	}
+	p.queueEtcdInfo(infoBuf)
 	return nil
+}
+
+func (p *CosmosProcess) queueEtcdInfo(info string) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	if p.cluster.etcdInfoCh != nil {
+		select {
+		case p.cluster.etcdInfoCh <- info:
+		default:
+		}
+	}
+}
+
+func (p *CosmosProcess) closeEtcdInfoChannel() <-chan struct{} {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.cluster.etcdCancelWatch != nil {
+		p.cluster.etcdCancelWatch()
+		p.cluster.etcdCancelWatch = nil
+	}
+	if p.cluster.etcdInfoCh == nil {
+		return nil
+	}
+	close(p.cluster.etcdInfoCh)
+	p.cluster.etcdInfoCh = nil
+	return p.cluster.etcdExitCh
 }
 
 // Stop 停止进程
@@ -836,6 +902,7 @@ func (p *CosmosProcess) Stop() error {
 	// 唤醒,removeWaitEdge 对缺失键是安全的。
 	p.waitMu.Lock()
 	p.waitGraph = map[uint64]waitEdge{}
+	p.syncWaits = map[string]int{}
 	p.waitMu.Unlock()
 
 	<-time.After(100 * time.Millisecond)
@@ -908,11 +975,10 @@ func (p *CosmosProcess) IsRunning() bool {
 	return p.state == CosmosProcessStateRunning
 }
 
-// IsHealthy returns true if the process is in the Running state. This is
-// suitable for Docker HEALTHCHECK and Kubernetes liveness probes.
-// Future versions may add element-level health checks.
+// IsHealthy reports whether the process is running and its cluster registration
+// and watch are healthy. Standalone processes have no etcd health dependency.
 func (p *CosmosProcess) IsHealthy() bool {
-	return p.IsRunning()
+	return p.IsRunning() && p.EtcdClusterHealthy()
 }
 
 // recoveryMiddleware returns a gRPC unary interceptor that recovers panics in
@@ -940,12 +1006,12 @@ func (p *CosmosProcess) recoveryMiddleware() grpc.UnaryServerInterceptor {
 func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 	// Check if it is a cluster process.
 	cluster := runnable.config.EnableCluster
-	if cluster == nil {
+	if cluster == nil || !cluster.Enable {
 		return nil
 	}
 
 	// Prepare cluster local.
-	err := p.prepareClusterLocalNode(cluster.EtcdEndpoints, runnable.config.Node, cluster.OptionalPorts)
+	err := p.prepareClusterLocalNode(cluster.EtcdEndpoints, runnable.config.Node, cluster.OptionalPorts, cluster.EnableCert)
 	if err != nil {
 		return err.AddStack(p.local)
 	}
@@ -957,8 +1023,8 @@ func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 // prepareClusterLocalNode 准备集群本地节点
 // 注意顺序，先建立etcd链接，再创建gRPC监听，以避免etcd不认可当前节点的情况，也占用了gRPC资源。
 // Notice the order, first establish the etcd link, then create the gRPC listener, to avoid the situation that etcd does not recognize the current node, and also occupy the gRPC resources.
-func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName string, ports []int32) *Error {
-	p.cluster.etcdVersion = time.Now().Unix()
+func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName string, ports []int32, cert *CertConfig) *Error {
+	p.cluster.etcdVersion = time.Now().UnixNano()
 
 	// 获取本地IP地址，用于接受集群中其他节点的连接。
 	// An explicit _cluster_advertise_ip override wins (containers, loopback
@@ -1013,10 +1079,15 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		return err.AddStack(p.local)
 	}
 
-	// 从etcd获取gRPC TLS配置（如果有）。
-	// Get gRPC TLS config from etcd, if any.
-	// TODO: Test TLS and non TLS.
-	isTLS, serverOption, dialOption, err := p.getClusterTLSConfig(cli)
+	var isTLS bool
+	var serverOption *grpc.ServerOption
+	var dialOption *grpc.DialOption
+	var err *Error
+	if cert != nil {
+		isTLS, serverOption, dialOption, err = getClusterTLSConfigFromFiles(cert)
+	} else {
+		isTLS, serverOption, dialOption, err = p.getClusterTLSConfig(cli)
+	}
 	if err != nil {
 		return err.AddStack(p.local)
 	}
@@ -1099,13 +1170,9 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 // When preparing the cluster locally fails, do the cleanup work of etcd and gRPC.
 func (p *CosmosProcess) handleStartUpFailedClusterCleanUp() {
 	// 删除etcd中的watcher。
-	if p.cluster.etcdInfoCh != nil {
-		close(p.cluster.etcdInfoCh)
-		if p.cluster.etcdExitCh != nil {
-			<-p.cluster.etcdExitCh
-			p.cluster.etcdExitCh = nil
-		}
-		p.cluster.etcdInfoCh = nil
+	if exitCh := p.closeEtcdInfoChannel(); exitCh != nil {
+		<-exitCh
+		p.cluster.etcdExitCh = nil
 	}
 
 	// 删除etcd中的key，刪除version锁和node信息。
@@ -1155,13 +1222,9 @@ func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
 // Unload cluster local node.
 func (p *CosmosProcess) unloadClusterLocalNode() {
 	// 删除etcd中的watcher。
-	if p.cluster.etcdInfoCh != nil {
-		close(p.cluster.etcdInfoCh)
-		if p.cluster.etcdExitCh != nil {
-			<-p.cluster.etcdExitCh
-			p.cluster.etcdExitCh = nil
-		}
-		p.cluster.etcdInfoCh = nil
+	if exitCh := p.closeEtcdInfoChannel(); exitCh != nil {
+		<-exitCh
+		p.cluster.etcdExitCh = nil
 	}
 
 	// 删除etcd中的key，刪除version锁和node信息。

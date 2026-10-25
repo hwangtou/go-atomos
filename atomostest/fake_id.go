@@ -226,12 +226,14 @@ func (f *FakeID) SendWormhole(callerID atomos.ID, wormhole atomos.BaseAtomosWorm
 // configured, in which case err explains the miss.
 func (f *FakeID) resolve(name string, in proto.Message) (out proto.Message, err error, ok bool) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.syncHandler != nil {
-		out, err = f.syncHandler(name, in)
+	handler := f.syncHandler
+	r, has := f.replies[name]
+	f.mu.Unlock()
+	if handler != nil {
+		out, err = handler(name, in)
 		return out, err, true
 	}
-	if r, has := f.replies[name]; has {
+	if has {
 		return r.out, r.err, true
 	}
 	return nil, fmt.Errorf("FakeID: no reply configured for message %q", name), false

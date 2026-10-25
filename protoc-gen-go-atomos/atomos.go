@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	atomos "github.com/hwangtou/go-atomos"
@@ -25,29 +26,38 @@ const (
 	catAtomSpawn     methodCategory = 4
 )
 
+func explicitMethodCategory(method *protogen.Method) (methodCategory, bool) {
+	opts := method.Desc.Options().(*descriptorpb.MethodOptions)
+	if opts == nil {
+		return 0, false
+	}
+	val := proto.GetExtension(opts, atomos.E_AtomosMethod)
+	v, ok := val.(atomos.AtomosMethodType)
+	if !ok {
+		return 0, false
+	}
+	switch v {
+	case atomos.AtomosMethodType_AtomosElementMethod:
+		return catElementMethod, true
+	case atomos.AtomosMethodType_AtomosAtomMethod:
+		return catAtomMethod, true
+	case atomos.AtomosMethodType_AtomosElementSpawn:
+		return catElementSpawn, true
+	case atomos.AtomosMethodType_AtomosAtomSpawn:
+		return catAtomSpawn, true
+	default:
+		return 0, false
+	}
+}
+
 // categorizeMethod reads the atomos_method custom option first; if absent
 // (AtomosMethodAuto = 0), falls back to the name-prefix convention for
 // backward compatibility.
 func categorizeMethod(method *protogen.Method) methodCategory {
-	opts := method.Desc.Options().(*descriptorpb.MethodOptions)
-	if opts != nil {
-		// Read the extension using the generated E_AtomosMethod descriptor.
-		val := proto.GetExtension(opts, atomos.E_AtomosMethod)
-		if v, ok := val.(atomos.AtomosMethodType); ok && v != atomos.AtomosMethodType_AtomosMethodAuto {
-			switch v {
-			case atomos.AtomosMethodType_AtomosElementMethod:
-				return catElementMethod
-			case atomos.AtomosMethodType_AtomosAtomMethod:
-				return catAtomMethod
-			case atomos.AtomosMethodType_AtomosElementSpawn:
-				return catElementSpawn
-			case atomos.AtomosMethodType_AtomosAtomSpawn:
-				return catAtomSpawn
-			}
-		}
+	if category, ok := explicitMethodCategory(method); ok {
+		return category
 	}
 
-	// Fallback: name-prefix convention (backward compatible).
 	name := method.GoName
 	if name == "ElementSpawn" {
 		return catElementSpawn
@@ -61,7 +71,7 @@ func categorizeMethod(method *protogen.Method) methodCategory {
 	return catAtomMethod
 }
 
-// generateFile generates a _grpc.pb.go file containing gRPC service definitions.
+// generateFile generates an _atomos.pb.go file containing actor service definitions.
 func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
 	if len(file.Services) == 0 {
 		return nil
@@ -86,6 +96,10 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 		elementName := service.GoName
 		if elementName == "Main" {
 			gen.Error(errors.New("cannot use element name \"Main\""))
+			continue
+		}
+		if err := validateSchemaMethodNames(service); err != nil {
+			gen.Error(err)
 			continue
 		}
 
@@ -121,6 +135,35 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 		genImplement(file, g, service)
 	}
 	g.P()
+}
+
+func validateSchemaMethodNames(service *protogen.Service) error {
+	type schemaMethod struct {
+		method   *protogen.Method
+		category methodCategory
+	}
+	seen := map[string]schemaMethod{}
+	for _, method := range service.Methods {
+		category := categorizeMethod(method)
+		var name, kind string
+		switch category {
+		case catElementMethod:
+			name, kind = elementMethodName(method), "Element"
+		case catAtomMethod:
+			name, kind = method.GoName, "Atom"
+		default:
+			continue
+		}
+		if previous, ok := seen[name]; ok {
+			previousKind := "Atom"
+			if previous.category == catElementMethod {
+				previousKind = "Element"
+			}
+			return fmt.Errorf("service %s: %s method %s and %s method %s both normalize to schema name %q", service.GoName, previousKind, previous.method.GoName, kind, method.GoName, name)
+		}
+		seen[name] = schemaMethod{method: method, category: category}
+	}
+	return nil
 }
 
 func genElementInterface(g *protogen.GeneratedFile, service *protogen.Service) {
@@ -254,8 +297,8 @@ func genElementIDInternal(g *protogen.GeneratedFile, service *protogen.Service) 
 		g.P("func (c *", idName, ") Async", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", callback func(out *", g.QualifiedGoIdent(method.Output.GoIdent), ", err error)",
-			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") {")
-		g.P(elementMessengerValueName, ".", methodName, "().AsyncElement(c, callerID, in, callback, ext...)")
+			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") error {")
+		g.P("return ", elementMessengerValueName, ".", methodName, "().AsyncElement(c, callerID, in, callback, ext...)")
 		g.P("}")
 		g.P()
 	}
@@ -306,7 +349,7 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 
 	// Client method implementations.
 	for _, method := range atomMethods(service) {
-		methodName := method.GoName // G2 fix: no TrimPrefix("Element") — atom methods are already filtered
+		methodName := method.GoName
 
 		g.P()
 		writeMethodComment(g, method)
@@ -325,8 +368,8 @@ func genAtomIDInternal(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("func (c *", atomName, ") Async", methodName, "(callerID ", atomosPackage.Ident("SelfID"),
 			", in *", g.QualifiedGoIdent(method.Input.GoIdent),
 			", callback func(out *", g.QualifiedGoIdent(method.Output.GoIdent), ", err error)",
-			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") {")
-		g.P(atomMessengerValueName, ".", methodName, "().AsyncAtom(c, callerID, in, callback, ext...)")
+			", ext ...", atomosPackage.Ident("ArgsForBaseAtomos"), ") error {")
+		g.P("return ", atomMessengerValueName, ".", methodName, "().AsyncAtom(c, callerID, in, callback, ext...)")
 		g.P("}")
 		g.P()
 	}
@@ -511,13 +554,11 @@ func atomSpawnMethod(service *protogen.Service) *protogen.Method {
 // When using the name-prefix convention (ElementSayHello), the "Element" prefix
 // is stripped. When using explicit option, the method name is used as-is.
 func elementMethodName(m *protogen.Method) string {
-	cat := categorizeMethod(m)
-	if cat == catElementMethod {
-		// Check if the method uses the prefix convention (Auto fallback with
-		// "Element" prefix) vs explicit option.
-		if strings.HasPrefix(m.GoName, "Element") && m.GoName != "Element" {
-			return strings.TrimPrefix(m.GoName, "Element")
-		}
+	if _, explicit := explicitMethodCategory(m); explicit {
+		return m.GoName
+	}
+	if strings.HasPrefix(m.GoName, "Element") && m.GoName != "Element" {
+		return strings.TrimPrefix(m.GoName, "Element")
 	}
 	return m.GoName
 }

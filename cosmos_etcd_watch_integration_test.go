@@ -156,11 +156,11 @@ func Test_etcdWatch_NodeDeathByLeaseExpiryRemovesRemoteVersion(t *testing.T) {
 	// (etcdKeepalive, as used by trySettingClusterToCurrentAndKeepalive) plus
 	// a lock key marking itself current.
 	info := &CosmosNodeVersionInfo{
-		Node:    node,
-		Address: "1.1.1.1:1234",
-		Id:      &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: node},
-		State:   ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		Node:      node,
+		Address:   "1.1.1.1:1234",
+		Id:        &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: node},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 111,
 	}
 	buf, er := json.Marshal(info)
@@ -199,11 +199,11 @@ func Test_etcdWatch_NodeDeathByLeaseExpiryRemovesRemoteVersion(t *testing.T) {
 	// registration is still discovered.
 	const survivor, survivorVersion = "survivorNode", int64(2000)
 	writeNodeInfo(t, ee.client, etcdCosmosNodeVersionURI(cosmos, survivor, survivorVersion), &CosmosNodeVersionInfo{
-		Node:    survivor,
-		Address: "1.1.1.1:1235",
-		Id:      &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: survivor},
-		State:   ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		Node:      survivor,
+		Address:   "1.1.1.1:1235",
+		Id:        &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: survivor},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 222,
 	})
 	waitForRemote(t, p, survivor, 3*time.Second, func(r *CosmosRemote) bool {
@@ -255,11 +255,11 @@ func Test_etcdWatch_DirtyKeysAndValuesAreLoggedAndSurvived(t *testing.T) {
 	// arrives after all the garbage is discovered normally.
 	const survivor, survivorVersion = "survivorNode", int64(3000)
 	writeNodeInfo(t, ee.client, etcdCosmosNodeVersionURI(cosmos, survivor, survivorVersion), &CosmosNodeVersionInfo{
-		Node:    survivor,
-		Address: "2.2.2.2:1234",
-		Id:      &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: survivor},
-		State:   ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		Node:      survivor,
+		Address:   "2.2.2.2:1234",
+		Id:        &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: survivor},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 333,
 	})
 	waitForRemote(t, p, survivor, 3*time.Second, func(r *CosmosRemote) bool {
@@ -284,11 +284,11 @@ func Test_etcdWatch_ServerRestartReconnectsAndResumes(t *testing.T) {
 	const versionA = int64(1000)
 	versionKeyA := etcdCosmosNodeVersionURI(cosmos, nodeA, versionA)
 	writeNodeInfo(t, cli, versionKeyA, &CosmosNodeVersionInfo{
-		Node:    nodeA,
-		Address: "3.3.3.3:1234",
-		Id:      &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: nodeA},
-		State:   ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		Node:      nodeA,
+		Address:   "3.3.3.3:1234",
+		Id:        &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: nodeA},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 444,
 	})
 
@@ -332,11 +332,11 @@ func Test_etcdWatch_ServerRestartReconnectsAndResumes(t *testing.T) {
 	// Reconnect backoff makes this take a few seconds, so the budget is loose.
 	const nodeB, versionB = "nodeB", int64(2000)
 	writeNodeInfo(t, cli, etcdCosmosNodeVersionURI(cosmos, nodeB, versionB), &CosmosNodeVersionInfo{
-		Node:    nodeB,
-		Address: "3.3.3.3:1235",
-		Id:      &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: nodeB},
-		State:   ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		Node:      nodeB,
+		Address:   "3.3.3.3:1235",
+		Id:        &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: nodeB},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 555,
 	})
 	waitForRemote(t, p, nodeB, 30*time.Second, func(r *CosmosRemote) bool {
@@ -348,4 +348,41 @@ func Test_etcdWatch_ServerRestartReconnectsAndResumes(t *testing.T) {
 	if r := getRemote(p, nodeA); r == nil || remoteVersionCount(r) != 1 {
 		t.Fatalf("node A remote lost across restart: %+v", r)
 	}
+}
+
+func Test_etcdWatch_RebuildReconcilesMissedDeleteAndCancelExits(t *testing.T) {
+	ee := newEmbeddedEtcd(t)
+	const cosmos, node = "reconcileCosmos", "departedNode"
+	const version int64 = 1000
+	p, _ := newWatchProcess(t, cosmos, "watcherNode")
+	startWatch(t, p, ee.client)
+	writeNodeInfo(t, ee.client, etcdCosmosNodeVersionURI(cosmos, node, version), &CosmosNodeVersionInfo{
+		Node: node, Address: "127.0.0.1:1", StartupId: 1,
+		Id:    &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: node},
+		State: ClusterNodeState_Started, Elements: map[string]*IDInfo{},
+	})
+	waitForRemote(t, p, node, 3*time.Second, func(remote *CosmosRemote) bool {
+		return remoteVersionCount(remote) == 1
+	}, "initial discovery")
+
+	p.cluster.etcdCancelWatch()
+	deadline := time.Now().Add(3 * time.Second)
+	for p.etcdRuntime().watchHealthy.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("watch cancellation did not stop the watch loop")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := etcdDelete(ee.client, etcdCosmosNodeVersionURI(cosmos, node, version)); err != nil {
+		t.Fatal(err)
+	}
+
+	// The DELETE happened while no watch existed. The next snapshot must remove
+	// the stale cache entry and subscribe after that snapshot's revision.
+	if err := p.watchCluster(ee.client); err != nil {
+		t.Fatal(err)
+	}
+	waitForRemote(t, p, node, 3*time.Second, func(remote *CosmosRemote) bool {
+		return remoteVersionCount(remote) == 0
+	}, "snapshot reconciliation of missed delete")
 }

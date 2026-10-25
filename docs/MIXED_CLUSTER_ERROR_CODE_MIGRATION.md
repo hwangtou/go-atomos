@@ -13,7 +13,9 @@ status details 里）。
 
 gRPC 库在非 OK status 时**丢弃响应体**，于是 v2 客户端（只读响应体）在
 `er != nil` 分支拿不到任何精确错误码，统一得到包装后的
-`ErrCosmosRemoteResponseInvalid`。
+`ErrCosmosRemoteResponseInvalid`。唯一例外是 Sync handler 同时返回非空
+reply 和 error：为保留 `(partial reply, error)` 公共契约，该响应只走 OK
+status + body error，不执行 status 双写；原始 stub 调用方需兼容这一例外。
 
 一句话：**v2 调用方 → v3 服务端的远程业务失败，错误码从“精确”退化为
 “一律连接类失败”。本地调用与 v3→v3 调用不受影响。**

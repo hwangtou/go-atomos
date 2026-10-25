@@ -22,9 +22,10 @@
 //     CosmosSpawnAtom with a literal message/element name. Async variants
 //     (AsyncXxx methods, callback-taking signatures) are excluded.
 //
-// Cycle nodes are (service, method) pairs, so same-named methods on unrelated
-// services cannot create false edges. Calls lexically inside a `go` statement
-// are ignored: they run on another goroutine and do not block the mailbox.
+// Cycle nodes are (service, Element/Atom kind, method) triples, so same-named
+// methods on unrelated services or on an Element versus an Atom cannot create
+// false edges. Calls lexically inside a `go` statement are ignored: they run on
+// another goroutine and do not block the mailbox.
 //
 // Scope limits: handler bodies in OTHER packages are not analyzed (an edge
 // leaving this package has no returning edges here, so cross-package cycles
@@ -63,15 +64,15 @@ var Analyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
-// serviceMethod identifies one sync handler: the element service it belongs to
-// (the generated interface name minus the Atom/Element suffix) and the method
-// name.
+// serviceMethod identifies one sync handler. Element and Atom handlers remain
+// distinct even when their service and method names are identical.
 type serviceMethod struct {
 	service string
+	kind    string
 	method  string
 }
 
-func (s serviceMethod) String() string { return s.service + "." + s.method }
+func (s serviceMethod) String() string { return s.service + "." + s.kind + "." + s.method }
 
 // handlerDecl pairs a handler node with its implementing method declaration.
 type handlerDecl struct {
@@ -84,6 +85,7 @@ type handlerDecl struct {
 // one of its direct imports.
 type handlerIface struct {
 	service string
+	kind    string
 	iface   *types.Interface
 	methods []string // explicit method names
 }
@@ -135,7 +137,7 @@ func run(pass *analysis.Pass) (any, error) {
 				for _, m := range hi.methods {
 					if fn, ok := methodDecls[name][m]; ok {
 						handlers = append(handlers, handlerDecl{
-							node:     serviceMethod{service: hi.service, method: m},
+							node:     serviceMethod{service: hi.service, kind: hi.kind, method: m},
 							typeName: name,
 							fn:       fn,
 						})
@@ -152,8 +154,12 @@ func run(pass *analysis.Pass) (any, error) {
 	// syncCallEdges maps handler → set of handlers it sync-calls, with a
 	// representative call position for reporting.
 	syncCallEdges := map[serviceMethod]map[serviceMethod]callEdge{}
+	knownHandlers := map[serviceMethod]bool{}
 	for _, h := range handlers {
-		analyzeSelfCall(pass, h)
+		knownHandlers[h.node] = true
+	}
+	for _, h := range handlers {
+		analyzeSelfCall(pass, h, knownHandlers)
 		collectSyncCallEdges(pass, h, syncCallEdges)
 	}
 
@@ -276,11 +282,11 @@ func findHandlerInterfaces(pass *analysis.Pass) []handlerIface {
 			if !ok {
 				continue
 			}
-			service, _ := trimHandlerSuffix(name)
-			if service == "" || !embedsAtomos(iface, 0) {
+			service, kind, ok := trimHandlerSuffix(name)
+			if !ok || !embedsAtomos(iface, 0) {
 				continue
 			}
-			hi := handlerIface{service: service, iface: iface.Complete()}
+			hi := handlerIface{service: service, kind: kind, iface: iface.Complete()}
 			hi.methods = explicitMethodNames(hi.iface)
 			if len(hi.methods) > 0 {
 				out = append(out, hi)
@@ -314,15 +320,15 @@ func explicitMethodNames(iface *types.Interface) []string {
 }
 
 // trimHandlerSuffix splits a generated interface name into its service name
-// and suffix. ok=false when the name does not end in Atom/Element or has no
+// and kind. ok=false when the name does not end in Atom/Element or has no
 // service prefix.
-func trimHandlerSuffix(name string) (service string, ok bool) {
+func trimHandlerSuffix(name string) (service, kind string, ok bool) {
 	for _, suffix := range []string{"Atom", "Element"} {
 		if strings.HasSuffix(name, suffix) && len(name) > len(suffix) {
-			return strings.TrimSuffix(name, suffix), true
+			return strings.TrimSuffix(name, suffix), suffix, true
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
 // embedsAtomos reports whether the interface embeds (transitively) an
@@ -438,7 +444,7 @@ func syncCallTarget(pass *analysis.Pass, call *ast.CallExpr) (serviceMethod, boo
 			if recv == nil {
 				return serviceMethod{}, false
 			}
-			service, isClient := trimIDClientSuffix(recv.Obj().Name())
+			service, kind, isClient := trimIDClientSuffix(recv.Obj().Name())
 			if !isClient {
 				return serviceMethod{}, false
 			}
@@ -458,7 +464,7 @@ func syncCallTarget(pass *analysis.Pass, call *ast.CallExpr) (serviceMethod, boo
 				}
 				method = lit
 			}
-			return serviceMethod{service: service, method: method}, true
+			return serviceMethod{service: service, kind: kind, method: method}, true
 		}
 		// Package-qualified function call, e.g. api.SpawnGreeterAtom(...).
 		if id, ok := fn.X.(*ast.Ident); ok {
@@ -475,13 +481,13 @@ func syncCallTarget(pass *analysis.Pass, call *ast.CallExpr) (serviceMethod, boo
 func factoryTarget(name string, call *ast.CallExpr) (serviceMethod, bool) {
 	if strings.HasPrefix(name, "Spawn") && strings.HasSuffix(name, "Atom") &&
 		len(name) > len("Spawn")+len("Atom") {
-		return serviceMethod{service: strings.TrimSuffix(strings.TrimPrefix(name, "Spawn"), "Atom"), method: "Spawn"}, true
+		return serviceMethod{service: strings.TrimSuffix(strings.TrimPrefix(name, "Spawn"), "Atom"), kind: "Atom", method: "Spawn"}, true
 	}
 	if name == "CosmosSpawnAtom" {
 		// CosmosSpawnAtom(caller, elem, name, arg): elem at index 1.
 		if len(call.Args) >= 2 {
 			if lit, ok := stringLiteral(call.Args[1]); ok {
-				return serviceMethod{service: lit, method: "Spawn"}, true
+				return serviceMethod{service: lit, kind: "Atom", method: "Spawn"}, true
 			}
 		}
 	}
@@ -489,14 +495,14 @@ func factoryTarget(name string, call *ast.CallExpr) (serviceMethod, bool) {
 }
 
 // trimIDClientSuffix splits an ID client type name ("GreeterAtomID") into its
-// service name ("Greeter"). ok=false for other names.
-func trimIDClientSuffix(name string) (service string, ok bool) {
+// service name ("Greeter") and kind. ok=false for other names.
+func trimIDClientSuffix(name string) (service, kind string, ok bool) {
 	for _, suffix := range []string{"AtomID", "ElementID"} {
 		if strings.HasSuffix(name, suffix) && len(name) > len(suffix) {
-			return strings.TrimSuffix(name, suffix), true
+			return strings.TrimSuffix(name, suffix), strings.TrimSuffix(suffix, "ID"), true
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
 // methodTakesCallback reports whether the named method on recv has a
@@ -572,50 +578,74 @@ func isTestFile(pass *analysis.Pass, file *ast.File) bool {
 	return strings.HasSuffix(pos.Filename, "_test.go")
 }
 
-// analyzeSelfCall checks a sync handler for the self-call deadlock pattern:
-// the handler resolves an ID to its own atom and sync-calls it. The
-// self-resolution is recognized by the documented idiom: passing
-// <recv>.GetIDInfo().Atom as the atom-name argument to a generated ID factory
-// (Get<Svc>AtomID / Spawn<Svc>Atom / CosmosGetAtomID / CosmosSpawnAtom).
-func analyzeSelfCall(pass *analysis.Pass, h handlerDecl) {
+// analyzeSelfCall tracks IDs resolved with <recv>.GetIDInfo().Atom and reports
+// only when one of those IDs is used for an actual synchronous handler call.
+// Merely obtaining the ID, async calls, and calls inside go statements are safe.
+func analyzeSelfCall(pass *analysis.Pass, h handlerDecl, knownHandlers map[serviceMethod]bool) {
 	recvName := ""
 	if h.fn.Recv != nil && len(h.fn.Recv.List) > 0 && len(h.fn.Recv.List[0].Names) > 0 {
 		recvName = h.fn.Recv.List[0].Names[0].Name
 	}
+	selfIDs := map[*types.Var]string{}
 
 	ast.Inspect(h.fn.Body, func(n ast.Node) bool {
-		stmt, ok := n.(*ast.AssignStmt)
+		if _, ok := n.(*ast.GoStmt); ok {
+			return false
+		}
+		if stmt, ok := n.(*ast.AssignStmt); ok && len(stmt.Rhs) == 1 && len(stmt.Lhs) > 0 {
+			if call, ok := stmt.Rhs[0].(*ast.CallExpr); ok {
+				factoryName := factoryFuncName(call)
+				nameArgIdx := factoryNameArgIndex(factoryName, call)
+				if nameArgIdx >= 0 && nameArgIdx < len(call.Args) && exprReferencesSelf(call.Args[nameArgIdx], recvName) {
+					if v := assignedVar(pass, stmt.Lhs[0]); v != nil {
+						selfIDs[v] = factoryName
+					}
+				}
+			}
+			return true
+		}
+
+		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		for _, rhs := range stmt.Rhs {
-			call, ok := rhs.(*ast.CallExpr)
-			if !ok {
-				continue
-			}
-			factoryName := factoryFuncName(call)
-			if !isAtomIDFactoryName(factoryName) &&
-				factoryName != "CosmosGetAtomID" && factoryName != "CosmosSpawnAtom" {
-				continue
-			}
-			// Check whether the factory's atom-name argument references self.
-			// For Get<Svc>AtomID(cosmos, name): name is arg[1].
-			// For CosmosGetAtomID(elem, name): name is arg[1].
-			// For Spawn<Svc>Atom(caller, cosmos, name, arg): name is arg[2].
-			// For CosmosSpawnAtom(caller, elem, name, arg): name is arg[2].
-			nameArgIdx := factoryNameArgIndex(factoryName, call)
-			if nameArgIdx < 0 || nameArgIdx >= len(call.Args) {
-				continue
-			}
-			if !exprReferencesSelf(call.Args[nameArgIdx], recvName) {
-				continue
-			}
-			pass.Reportf(call.Pos(),
-				"sync handler %s resolves an ID to its own atom (%s with self atom name) — this sync call always deadlocks; use async or restructure",
-				h.node, factoryName)
+		fn, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
 		}
+		id, ok := fn.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		v, ok := pass.TypesInfo.Uses[id].(*types.Var)
+		if !ok {
+			return true
+		}
+		factoryName, selfID := selfIDs[v]
+		if !selfID {
+			return true
+		}
+		target, ok := syncCallTarget(pass, call)
+		if !ok || !knownHandlers[target] || target.service != h.node.service || target.kind != h.node.kind {
+			return true
+		}
+		pass.Reportf(call.Pos(),
+			"sync handler %s sync-calls its own atom (%s from %s with self atom name) — this sync call always deadlocks; use async or restructure",
+			h.node, target, factoryName)
 		return true
 	})
+}
+
+func assignedVar(pass *analysis.Pass, expr ast.Expr) *types.Var {
+	id, ok := expr.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	if v, ok := pass.TypesInfo.Defs[id].(*types.Var); ok {
+		return v
+	}
+	v, _ := pass.TypesInfo.Uses[id].(*types.Var)
+	return v
 }
 
 // factoryFuncName returns the called function's name for factory-shape calls

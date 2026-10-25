@@ -1,261 +1,179 @@
 package atomos
 
 import (
-	"context"
 	"encoding/json"
+	"time"
+
 	etcdClient "go.etcd.io/etcd/client/v3"
 )
 
-// 启动时，检查etcd中同一个cosmos的node有多少个version。因为version是用于热更的设计，而不是为了支持多个版本，所以集群同时只应该有不超过两个version。
-// 当检查到当前cosmos的node已经有两个version，且两个version都不是自己时，应该主动退出。
-// Check how many versions of the node of the same cosmos are in etcd. Because the version is designed for hot updates, not to support multiple versions, there should be no more than two versions in the cluster at the same time.
-// When it is found that the current cosmos node already has two versions, and neither of the two versions is itself, it should actively exit.
-// Key and prefix to be used in conditions
-func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Client, nodeName string, version int64) *Error {
-	maxNodes := 2
-	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, nodeName)
+const etcdMaxNodeVersions = 2
 
-	buf, etcdVer, err := etcdGet(cli, lockURI)
-	if err != nil {
-		return err.AddStack(nil)
-	}
+var (
+	etcdVersionLockAttempts = 8
+	etcdVersionLockBackoff  = 20 * time.Millisecond
+)
 
-	lockInfo := &CosmosNodeVersionLock{}
-	// Transaction
-	txn := cli.Txn(context.Background())
-	if buf == nil {
-		lockInfo.Versions = append(lockInfo.Versions, version)
-		buf, er := json.Marshal(lockInfo)
+// etcdUpdateVersionLock performs an optimistic, bounded read/CAS loop. Etcd's
+// ModRevision changes on every write; key Version does not and therefore cannot
+// detect all competing updates.
+func etcdUpdateVersionLock(cli *etcdClient.Client, lockURI string, update func(*CosmosNodeVersionLock) (bool, *Error)) *Error {
+	var lastErr *Error
+	for attempt := 0; attempt < etcdVersionLockAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(etcdVersionLockBackoff)
+		}
+		buf, _, modRevision, err := etcdGetMeta(cli, lockURI)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		lockInfo := &CosmosNodeVersionLock{}
+		exists := buf != nil
+		if exists {
+			if er := json.Unmarshal(buf, lockInfo); er != nil {
+				return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
+			}
+		}
+		changed, err := update(lockInfo)
+		if err != nil {
+			return err.AddStack(nil)
+		}
+		if !changed {
+			return nil
+		}
+		newBuf, er := json.Marshal(lockInfo)
 		if er != nil {
 			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
 		}
-		// Try to insert the key only if it does not exist
-		resp, er := txn.If(
-			// Condition - key does not exist
-			etcdClient.Compare(etcdClient.Version(lockURI), "=", 0),
-		).Then(
-			// Then - put the key with the value
-			etcdClient.OpPut(lockURI, string(buf)),
-		).Commit()
 
+		ctx, cancel := etcdContext()
+		txn := cli.Txn(ctx)
+		if exists {
+			txn = txn.If(etcdClient.Compare(etcdClient.ModRevision(lockURI), "=", modRevision))
+		} else {
+			txn = txn.If(etcdClient.Compare(etcdClient.Version(lockURI), "=", 0))
+		}
+		resp, er := txn.Then(etcdClient.OpPut(lockURI, string(newBuf))).Commit()
+		cancel()
 		if er != nil {
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			lastErr = NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
+			continue
 		}
-		if !resp.Succeeded {
-			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+		if resp.Succeeded {
+			return nil
 		}
-		return nil
-	} else {
-		// Unmarshal the lock info
-		er := json.Unmarshal(buf, lockInfo)
-		if er != nil {
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
-		}
-		// Check if the number of keys is equal or more than the maximum allowed
-		if len(lockInfo.Versions) >= maxNodes {
-			// Reject rather than silently clearing the version history. Clearing
-			// would let an arbitrary number of concurrent versions of the same
-			// node run at once, defeating the purpose of the version lock (which
-			// serializes hot upgrades to at most maxNodes coexisting versions).
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. versions=(%v),maxNodes=(%d)", lockInfo.Versions, maxNodes).AddStack(nil)
-		}
-		lockInfo.Versions = append(lockInfo.Versions, version)
-
-		// Marshal the lock info
-		buf, er := json.Marshal(lockInfo)
-		if er != nil {
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
-		}
-		// Try to update the key only if the version is the same
-		resp, er := txn.If(
-			// Condition - key exists
-			etcdClient.Compare(etcdClient.Version(lockURI), ">", 0),
-			// Condition - version is the same
-			etcdClient.Compare(etcdClient.Version(lockURI), "=", etcdVer),
-		).Then(
-			// Then - put the key with the value
-			etcdClient.OpPut(lockURI, string(buf)),
-		).Commit()
-
-		if er != nil {
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
-		}
-		if !resp.Succeeded {
-			buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-			return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
-		}
-		return nil
+		lastErr = NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: lock changed during transaction. uri=(%s)", lockURI).AddStack(nil)
 	}
+	if lastErr == nil {
+		lastErr = NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: lock transaction retry exhausted. uri=(%s)", lockURI).AddStack(nil)
+	}
+	return lastErr
 }
 
-// 启动失败时，解锁etcd中同一个cosmos的node的version。
-// Unlock the version of the node of the same cosmos in etcd when startup fails.
-func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
-	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node)
-	buf, etcdVer, err := etcdGet(p.cluster.etcdClient, lockURI)
-	if err != nil {
-		return err.AddStack(nil)
-	}
-
-	lockInfo := &CosmosNodeVersionLock{}
-	// Transaction
-	txn := p.cluster.etcdClient.Txn(context.Background())
-	if buf == nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
-	}
-	// Unmarshal the lock info
-	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
-	}
-	// Remove the version from the lock info
-	for i, v := range lockInfo.Versions {
-		if v == p.cluster.etcdVersion {
-			lockInfo.Versions = append(lockInfo.Versions[:i], lockInfo.Versions[i+1:]...)
-			break
+func hasVersion(lockInfo *CosmosNodeVersionLock, version int64) bool {
+	for _, v := range lockInfo.Versions {
+		if v == version {
+			return true
 		}
 	}
-	if lockInfo.Current == p.cluster.etcdVersion {
+	return false
+}
+
+func removeVersion(lockInfo *CosmosNodeVersionLock, version int64) bool {
+	versions := lockInfo.Versions[:0]
+	removed := false
+	for _, v := range lockInfo.Versions {
+		if v == version {
+			removed = true
+			continue
+		}
+		versions = append(versions, v)
+	}
+	lockInfo.Versions = versions
+	if lockInfo.Current == version {
 		lockInfo.Current = 0
 	}
+	return removed
+}
 
-	// Marshal the lock info
-	buf, er := json.Marshal(lockInfo)
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
+// reclaimCrashedVersions removes versions whose leased registration key has
+// disappeared. It is only needed when the lock is full, avoiding interference
+// with the usual startup window of a second version.
+func (p *CosmosProcess) reclaimCrashedVersions(cli *etcdClient.Client, nodeName string, lockInfo *CosmosNodeVersionLock) *Error {
+	versions := append([]int64(nil), lockInfo.Versions...)
+	for _, version := range versions {
+		key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, nodeName, version)
+		buf, _, err := etcdGet(cli, key)
+		if err != nil {
+			return err.AddStack(nil)
+		}
+		if buf == nil {
+			removeVersion(lockInfo, version)
+		}
 	}
-	// Try to update the key only if the version is the same
-	resp, er := txn.If(
-		// Condition - key exists
-		etcdClient.Compare(etcdClient.Version(lockURI), ">", 0),
-		// Condition - version is the same
-		etcdClient.Compare(etcdClient.Version(lockURI), "=", etcdVer),
-	).Then(
-		// Then - put the key with the value
-		etcdClient.OpPut(lockURI, string(buf)),
-	).Commit()
-
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
-	}
-	if !resp.Succeeded {
-		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
+	if lockInfo.Current == 0 && len(lockInfo.Versions) == 1 {
+		lockInfo.Current = lockInfo.Versions[0]
 	}
 	return nil
 }
 
-// 启动成功时，更新etcd中同一个cosmos的node的version。
-// Update the version of the node of the same cosmos in etcd when startup succeeds.
+// 启动时，检查并锁定版本。重复锁定同一版本是幂等操作。
+func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Client, nodeName string, version int64) *Error {
+	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, nodeName)
+	return etcdUpdateVersionLock(cli, lockURI, func(lockInfo *CosmosNodeVersionLock) (bool, *Error) {
+		if hasVersion(lockInfo, version) {
+			return false, nil
+		}
+		if len(lockInfo.Versions) >= etcdMaxNodeVersions {
+			if err := p.reclaimCrashedVersions(cli, nodeName, lockInfo); err != nil {
+				return false, err
+			}
+		}
+		if len(lockInfo.Versions) >= etcdMaxNodeVersions {
+			return false, NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: the number of versions is equal or more than the maximum allowed. versions=(%v),maxNodes=(%d)", lockInfo.Versions, etcdMaxNodeVersions).AddStack(nil)
+		}
+		lockInfo.Versions = append(lockInfo.Versions, version)
+		return true, nil
+	})
+}
+
+// 启动失败时，解锁当前进程的版本。
+func (p *CosmosProcess) etcdStartUpFailedNodeVersionUnlock() *Error {
+	return p.etcdUnlockVersion()
+}
+
+// 启动成功时，将当前进程版本标记为 current。
 func (p *CosmosProcess) etcdStartedVersionNodeLock() *Error {
 	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node)
-	buf, etcdVer, err := etcdGet(p.cluster.etcdClient, lockURI)
-	if err != nil {
-		return err.AddStack(nil)
-	}
-
-	lockInfo := &CosmosNodeVersionLock{}
-	// Transaction
-	txn := p.cluster.etcdClient.Txn(context.Background())
-	if buf == nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
-	}
-	// Unmarshal the lock info
-	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
-	}
-	// Check version is in the lock info
-	found := false
-	for _, v := range lockInfo.Versions {
-		if v == p.cluster.etcdVersion {
-			found = true
-			break
+	version := p.cluster.etcdVersion
+	return etcdUpdateVersionLock(p.cluster.etcdClient, lockURI, func(lockInfo *CosmosNodeVersionLock) (bool, *Error) {
+		if !hasVersion(lockInfo, version) {
+			return false, NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: version is not in the lock info. version=(%d),versions=(%v)", version, lockInfo.Versions).AddStack(nil)
 		}
-	}
-	if !found {
-		p.local.coreLog().coreError("etcd: version is not in the lock info.")
-		return nil
-	}
-	lockInfo.Current = p.cluster.etcdVersion
-
-	// Marshal the lock info
-	buf, er := json.Marshal(lockInfo)
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
-	}
-	// Try to update the key only if the version is the same
-	resp, er := txn.If(
-		// Condition - key exists
-		etcdClient.Compare(etcdClient.Version(lockURI), ">", 0),
-		// Condition - version is the same
-		etcdClient.Compare(etcdClient.Version(lockURI), "=", etcdVer),
-	).Then(
-		// Then - put the key with the value
-		etcdClient.OpPut(lockURI, string(buf)),
-	).Commit()
-
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
-	}
-	if !resp.Succeeded {
-		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
-	}
-	return nil
+		if lockInfo.Current == version {
+			return false, nil
+		}
+		lockInfo.Current = version
+		return true, nil
+	})
 }
 
-// 停止时，解锁etcd中同一个cosmos的node的version。
-// Unlock the version of the node of the same cosmos in etcd when stopping.
+// 停止时，解锁当前进程的版本。
 func (p *CosmosProcess) etcdStoppingNodeVersionUnlock() *Error {
+	return p.etcdUnlockVersion()
+}
+
+func (p *CosmosProcess) etcdUnlockVersion() *Error {
 	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, p.local.runnable.config.Node)
-	buf, etcdVer, err := etcdGet(p.cluster.etcdClient, lockURI)
-	if err != nil {
-		return err.AddStack(nil)
-	}
-
-	lockInfo := &CosmosNodeVersionLock{}
-	// Transaction
-	txn := p.cluster.etcdClient.Txn(context.Background())
-	if buf == nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
-	}
-	// Unmarshal the lock info
-	if er := json.Unmarshal(buf, lockInfo); er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to unmarshal lock info. err=(%s)", er).AddStack(nil)
-	}
-	// Remove the version from the lock info
-	for i, v := range lockInfo.Versions {
-		if v == p.cluster.etcdVersion {
-			lockInfo.Versions = append(lockInfo.Versions[:i], lockInfo.Versions[i+1:]...)
-			break
+	version := p.cluster.etcdVersion
+	return etcdUpdateVersionLock(p.cluster.etcdClient, lockURI, func(lockInfo *CosmosNodeVersionLock) (bool, *Error) {
+		if len(lockInfo.Versions) == 0 && lockInfo.Current != version {
+			return false, NewError(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to get lock info.").AddStack(nil)
 		}
-	}
-	if lockInfo.Current == p.cluster.etcdVersion {
-		lockInfo.Current = 0
-	}
-
-	// Marshal the lock info
-	buf, er := json.Marshal(lockInfo)
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to marshal lock info. err=(%s)", er).AddStack(nil)
-	}
-	// Try to update the key only if the version is the same
-	resp, er := txn.If(
-		// Condition - key exists
-		etcdClient.Compare(etcdClient.Version(lockURI), ">", 0),
-		// Condition - version is the same
-		etcdClient.Compare(etcdClient.Version(lockURI), "=", etcdVer),
-	).Then(
-		// Then - put the key with the value
-		etcdClient.OpPut(lockURI, string(buf)),
-	).Commit()
-
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
-	}
-	if !resp.Succeeded {
-		buf, _, _ := etcdGet(p.cluster.etcdClient, lockURI)
-		return NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. uri=(%s),info=(%s)", lockURI, string(buf)).AddStack(nil)
-	}
-	return nil
+		wasCurrent := lockInfo.Current == version
+		changed := removeVersion(lockInfo, version)
+		return changed || wasCurrent, nil
+	})
 }

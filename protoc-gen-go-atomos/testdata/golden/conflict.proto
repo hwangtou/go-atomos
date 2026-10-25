@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package golden;
+option go_package = "github.com/hwangtou/go-atomos/protoc-gen-go-atomos/testdata/golden;golden";
+
+import "atomos.proto";
+import "golden.proto";
+
+service GoldenConflict {
+  rpc ElementPing (GoldenGreetingI) returns (GoldenGreetingO);
+  rpc Ping (GoldenGreetingI) returns (GoldenGreetingO) {
+    option (atomos.atomos_method) = AtomosAtomMethod;
+  }
+}

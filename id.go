@@ -61,6 +61,8 @@ type idInternal interface {
 
 	// asyncSet registers an async reply callback on the caller side.
 	asyncSet(callback func(out proto.Message, err error)) (startupID, callbackID uint64)
+	// asyncPop removes a pending callback when delivery is no longer possible.
+	asyncPop(asyncID uint64) func(out proto.Message, err error)
 	// asyncCallback delivers an async reply to the caller's registered callback.
 	asyncCallback(callbackID ID, name string, startupID, asyncID uint64, reply proto.Message, err error)
 	// getGoID returns the GoID of the mailbox goroutine of this ID.

@@ -67,7 +67,7 @@ func (d *testRunnableDev) ElementConstructor() Atomos {
 type testRunnableElement struct {
 	self ElementSelfID
 
-	// sayHelloHook, when set, is invoked by the element-level SayHello
+	// sayHelloHook, when set, is invoked by the element-level ElementSayHello
 	// handler (atom→element ring tests). Returning a non-nil error fails the
 	// element message with that error.
 	sayHelloHook func(from ID) *Error
@@ -86,7 +86,7 @@ func (t *testRunnableElement) Halt(from ID, cancelled []uint64) (save bool, data
 	return false, nil
 }
 
-func (t *testRunnableElement) SayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error) {
+func (t *testRunnableElement) ElementSayHello(from ID, in *ForTestHelloI) (out *ForTestHelloO, err error) {
 	if t.sayHelloHook != nil {
 		if e := t.sayHelloHook(from); e != nil {
 			return nil, e
@@ -113,6 +113,11 @@ type testRunnableAtom struct {
 	// is closed/_signaled (simultaneous-call tests need both handlers running
 	// before either calls out).
 	greetingGate chan struct{}
+
+	// greetingPlainErr, when set, is returned by Greeting mode 6 as a plain
+	// (non-*Error) error, exercising cause preservation at the kernel
+	// boundary (see error_cause.go).
+	greetingPlainErr error
 
 	// wormholeHook is invoked by AcceptWormhole when set; implementing
 	// AcceptWormhole enables wormhole reception for this atom.
@@ -229,6 +234,13 @@ func (t *testRunnableAtom) Greeting(from ID, in *ForTestGreetingI) (out *ForTest
 			return nil, e
 		}
 		out = &ForTestGreetingO{}
+	case 6:
+		// Plain user error (not *Error): the kernel boundary must preserve it
+		// as the unwrap cause of the *Error the caller receives.
+		if t.greetingPlainErr == nil {
+			panic("mode 6: greetingPlainErr not set")
+		}
+		return nil, t.greetingPlainErr
 	default:
 		panic("unknown mode")
 	}

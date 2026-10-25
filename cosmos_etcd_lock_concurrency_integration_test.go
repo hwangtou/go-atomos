@@ -9,15 +9,10 @@ import (
 )
 
 // Concurrent version-lock tests against a real etcd. The lock is an optimistic
-// transaction (read state, then CAS on the etcd key version), so correctness
-// under concurrency is exactly what the serialized lifecycle test in
-// cosmos_etcd_version_lock_integration_test.go cannot prove:
-//
-//   - concurrent TryLock: the create-race (read "absent", lose the create),
-//     the append-race (two writers CAS on the same key version), and the
-//     capacity cap must never let a third version slip in or corrupt the list
-//   - concurrent unlock: the loser of the CAS race must fail loudly, never
-//     silently drop the other writer's update (lost update)
+// ModRevision CAS with bounded retries, so correctness under concurrency is
+// exactly what the serialized lifecycle test cannot prove: the create/append
+// races preserve the capacity cap, and conflicting unlocks retry rather than
+// silently dropping either writer's update.
 
 func Test_etcdVersionLock_ConcurrentTryLock(t *testing.T) {
 	ee := newEmbeddedEtcd(t)
@@ -32,6 +27,11 @@ func Test_etcdVersionLock_ConcurrentTryLock(t *testing.T) {
 	versions := make([]int64, racers)
 	for i := range versions {
 		versions[i] = int64(100 * (i + 1))
+		// Every contender is live; otherwise full-lock crash reclamation would
+		// deliberately remove its registration-free version.
+		if err := etcdPut(ee.client, etcdCosmosNodeVersionURI(cosmos, node, versions[i]), []byte("registered")); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	results := make([]*Error, racers)
@@ -98,10 +98,8 @@ func Test_etcdVersionLock_ConcurrentUnlockCASConflict(t *testing.T) {
 		t.Fatalf("lock v200: %v", err.Message)
 	}
 
-	// Both stop concurrently. Each unlock reads the lock, removes its own
-	// version, and CAS-commits; when they read the same key version, the
-	// etcd transaction serializes them and the loser's stale write must be
-	// REJECTED — the failure mode being pinned is the silent lost update.
+	// A ModRevision conflict retries from a fresh snapshot, so both removals
+	// eventually commit without either writer losing the other's update.
 	errs := make([]*Error, 2)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -115,41 +113,13 @@ func Test_etcdVersionLock_ConcurrentUnlockCASConflict(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
-
-	// Either the calls serialize cleanly (both succeed) or the CAS conflict
-	// rejects one — but at least the first commit always succeeds.
-	succeeded := 0
-	var remaining []int64
 	for i, err := range errs {
-		version := int64(100 * (i + 1))
-		if err == nil {
-			succeeded++
-		} else {
-			remaining = append(remaining, version)
-			if code := CodeOf(err); code != ErrCodeCosmosEtcdClusterVersionLockFailed {
-				t.Errorf("unlock v%d: expected ErrCodeCosmosEtcdClusterVersionLockFailed, got code=(%d), err=(%v)", version, code, err)
-			}
+		if err != nil {
+			t.Fatalf("concurrent unlock %d failed after bounded retry: %v", i, err)
 		}
 	}
-	if succeeded < 1 || succeeded > 2 {
-		t.Fatalf("expected 1-2 successful unlocks, got %d: %v", succeeded, errs)
-	}
-
-	// The lock must end up holding exactly the versions whose unlock did NOT
-	// succeed — one commit lost is a bug, both versions surviving a double
-	// unlock is a bug.
 	lock := readLock(t, ee, cosmos, node)
-	if lock == nil {
-		t.Fatal("lock key missing after unlock race")
-	}
-	got := append([]int64(nil), lock.Versions...)
-	sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
-	if len(got) != len(remaining) {
-		t.Fatalf("lock=(%v), want exactly the not-unlocked versions=(%v)", got, remaining)
-	}
-	for i := range got {
-		if got[i] != remaining[i] {
-			t.Fatalf("lock=(%v), want exactly the not-unlocked versions=(%v)", got, remaining)
-		}
+	if lock == nil || len(lock.Versions) != 0 || lock.Current != 0 {
+		t.Fatalf("concurrent unlocks did not remove both versions: %+v", lock)
 	}
 }

@@ -46,7 +46,7 @@ func (x *Error) Is(target error) bool {
 	if !ok {
 		return false
 	}
-	return x != nil && x.Code == t.Code
+	return x != nil && t != nil && x.Code == t.Code
 }
 
 // CodeOf extracts the error code from err. It returns OK for nil, the code

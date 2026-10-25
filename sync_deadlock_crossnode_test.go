@@ -54,16 +54,31 @@ func TestDeadlock_CrossNodeServiceCheck(t *testing.T) {
 		t.Fatalf("SyncMessagingByName with unrelated chain should succeed, got rsp.Error: %v", rsp.Error)
 	}
 
-	// Deadlock: the chain contains the target → immediate rejection.
-	// v3 contract (§8 double-write): business failure arrives as a non-OK
-	// gRPC status carrying the *Error in its details.
+	// A historical chain entry is not enough: after the upstream wait ended,
+	// the same target must accept a fresh non-cyclic call.
+	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId: cluster.sourceProcess.local.GetIDInfo(),
+		To:       target,
+		CosmosArgs: &CosmosArgs{
+			WaitChain: []string{syncChainLink(target)},
+		},
+		Message: "Greeting",
+		Args:    toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	}); er != nil || rsp.Error != nil {
+		t.Fatalf("inactive target with a stale chain entry must succeed: rsp=%v err=%v", rsp, er)
+	}
+
+	// Deadlock: the exact target instance is still actively waiting and the
+	// chain returns to it → immediate rejection.
+	waitKey := cluster.targetProcess.beginSyncWait(target)
+	defer cluster.targetProcess.endSyncWait(waitKey)
 	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
 		CallerId: cluster.sourceProcess.local.GetIDInfo(),
 		To:       target,
 		CosmosArgs: &CosmosArgs{
 			WaitChain: []string{
 				"cross_node_source::ForTestAtomos::origin",
-				target.Info(),
+				syncChainLink(target),
 			},
 		},
 		Message: "Greeting",

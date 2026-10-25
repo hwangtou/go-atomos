@@ -25,6 +25,11 @@ const (
 	// customize map or the WithDebugServer Run option.
 	configKeyDebugServer = "_debug_server"
 
+	// configKeyDebugServerToken is a key in Config.Customize whose value is the
+	// Bearer token required by every debug server endpoint. It is mandatory when
+	// configKeyDebugServer specifies a non-loopback listen address.
+	configKeyDebugServerToken = "_debug_server_token"
+
 	// configKeyClusterAdvertiseIP overrides the IP a cluster node advertises
 	// to peers via etcd. By default the first non-loopback IPv4 interface
 	// address is used; containers and test fixtures that communicate over

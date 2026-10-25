@@ -3,6 +3,7 @@
 package atomos
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -158,4 +159,82 @@ func Test_etcdKeepaliveRetry_OutageThenRecover(t *testing.T) {
 	if p.cluster.etcdClient != nil || p.cluster.etcdInfoCh != nil {
 		t.Fatalf("Stop left cluster state dirty: etcdClient=(%v), etcdInfoCh=(%v)", p.cluster.etcdClient, p.cluster.etcdInfoCh)
 	}
+}
+
+func Test_etcdKeepaliveLost_ReregistersAndRestoresHealthAndWatch(t *testing.T) {
+	clientPort := reserveLocalPort(t)
+	dir := t.TempDir()
+	e1 := startEmbeddedEtcdAt(t, dir, clientPort)
+	endpoint := fmt.Sprintf("127.0.0.1:%d", clientPort)
+	cli, er := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
+	if er != nil {
+		e1.Close()
+		t.Fatal(er)
+	}
+	t.Cleanup(func() { _ = cli.Close() })
+
+	oldTimeout, oldBackoff, oldAttempts := etcdOpTimeout, etcdRegistrationBackoff, etcdRegistrationAttempts
+	etcdOpTimeout, etcdRegistrationBackoff, etcdRegistrationAttempts = 300*time.Millisecond, 200*time.Millisecond, 100
+	t.Cleanup(func() {
+		etcdOpTimeout, etcdRegistrationBackoff, etcdRegistrationAttempts = oldTimeout, oldBackoff, oldAttempts
+	})
+
+	const cosmos, node = "recoveryCosmos", "recoveryNode"
+	const version int64 = 1000
+	p, _ := newKeepaliveClusterProcess(t, cli, cosmos, node, version)
+	startWatch(t, p, cli)
+	if err := p.etcdStartUpTryLockingVersionNodeLock(cli, node, version); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.trySettingClusterToCurrentAndKeepalive(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor := func(timeout time.Duration, condition func() bool, what string) {
+		t.Helper()
+		deadline := time.Now().Add(timeout)
+		for !condition() {
+			if time.Now().After(deadline) {
+				t.Fatalf("timeout waiting for %s", what)
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+	waitFor(5*time.Second, p.EtcdClusterHealthy, "initial cluster health")
+
+	leaseID := func() clientv3.LeaseID {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		resp, err := cli.Get(ctx, etcdCosmosNodeVersionURI(cosmos, node, version))
+		if err != nil || len(resp.Kvs) == 0 {
+			return 0
+		}
+		return clientv3.LeaseID(resp.Kvs[0].Lease)
+	}
+	before := leaseID()
+	if before == 0 {
+		t.Fatal("initial registration has no lease")
+	}
+
+	e1.Close()
+	waitFor(20*time.Second, func() bool {
+		runtime, ok := etcdRuntimeStates.Load(p)
+		return ok && !runtime.(*etcdRuntimeState).registrationHealthy.Load() && !p.EtcdClusterHealthy()
+	}, "lost registration to become unhealthy")
+
+	e2 := startEmbeddedEtcdAt(t, dir, clientPort)
+	t.Cleanup(e2.Close)
+	waitFor(20*time.Second, p.EtcdClusterHealthy, "registration and watch recovery")
+	waitFor(5*time.Second, func() bool {
+		after := leaseID()
+		return after != 0 && after != before
+	}, "a replacement lease")
+
+	writeNodeInfo(t, cli, etcdCosmosNodeVersionURI(cosmos, "recoveredPeer", 2000), &CosmosNodeVersionInfo{
+		Node: "recoveredPeer", Address: "127.0.0.1:1", StartupId: 99,
+		Id:    &IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: "recoveredPeer"},
+		State: ClusterNodeState_Started, Elements: map[string]*IDInfo{},
+	})
+	waitForRemote(t, p, "recoveredPeer", 5*time.Second, func(remote *CosmosRemote) bool {
+		return remoteVersionCount(remote) == 1
+	}, "watch event after registration recovery")
 }

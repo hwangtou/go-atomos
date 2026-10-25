@@ -3,9 +3,11 @@ package atomos
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -90,8 +92,8 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 
 	// Sync Messaging test (use the resolved IDInfo so it carries instance_id)
 	if rsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
-		CallerId: cluster.sourceProcess.local.GetIDInfo(),
-		To:       atomIDInfo,
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		To:         atomIDInfo,
 		CosmosArgs: nil,
 		Message:    "Greeting",
 		Args:       toAnyPb(t, &ForTestGreetingI{Mode: 1}),
@@ -117,8 +119,8 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 		t.Fatalf("CosmosRemote: AsyncMessagingByName asyncSet failed.")
 	}
 	if rsp, er := cli.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
-		CallerId: cluster.sourceProcess.local.GetIDInfo(),
-		ToId:     atomIDInfo,
+		CallerId:   cluster.sourceProcess.local.GetIDInfo(),
+		ToId:       atomIDInfo,
 		CosmosArgs: nil,
 		StartupId:  startupID,
 		AsyncId:    asyncID,
@@ -383,11 +385,11 @@ func TestWithRebind_ResolveErrorNoCall(t *testing.T) {
 // releaseID is a no-op on it — matching the remote-ID behavior.
 type stubID struct{}
 
-func (stubID) GetIDInfo() *IDInfo       { return nil }
-func (stubID) String() string           { return "stub" }
-func (stubID) Cosmos() CosmosNode       { return nil }
-func (stubID) State() BaseAtomosState   { return 0 }
-func (stubID) IdleTime() time.Duration  { return 0 }
+func (stubID) GetIDInfo() *IDInfo      { return nil }
+func (stubID) String() string          { return "stub" }
+func (stubID) Cosmos() CosmosNode      { return nil }
+func (stubID) State() BaseAtomosState  { return 0 }
+func (stubID) IdleTime() time.Duration { return 0 }
 func (stubID) SyncMessagingByName(ID, string, proto.Message, ...ArgsForBaseAtomos) (proto.Message, error) {
 	return nil, nil
 }
@@ -395,15 +397,53 @@ func (stubID) AsyncMessagingByName(ID, string, proto.Message, func(proto.Message
 	return nil
 }
 func (stubID) asyncSet(func(proto.Message, error)) (uint64, uint64) { return 0, 0 }
+func (stubID) asyncPop(uint64) func(proto.Message, error)           { return nil }
 func (stubID) asyncCallback(ID, string, uint64, uint64, proto.Message, error) {
 }
 func (stubID) DecoderByName(string) (MessageDecoder, MessageDecoder) { return nil, nil }
-func (stubID) Kill(ID, ...ArgsForBaseAtomos) error                    { return nil }
+func (stubID) Kill(ID, ...ArgsForBaseAtomos) error                   { return nil }
 func (stubID) SendWormhole(ID, BaseAtomosWormhole, ...ArgsForBaseAtomos) error {
 	return nil
 }
 func (stubID) getGoID() uint64 { return 0 }
 
+func TestCosmosRemote_FirstDialFailureCanRetry(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	p, processErr := newCosmosProcess("retry_cosmos", "retry_node", &reproLogger{})
+	if processErr != nil {
+		t.Fatal(processErr)
+	}
+	runnable := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: "retry_cosmos", Node: "retry_node"})
+	if err := p.Start(runnable); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Stop() })
+	version := newCosmosRemoteVersion(p, &CosmosNodeVersionInfo{Address: address}, "1")
+	if version.check() {
+		t.Fatal("dial to a stopped listener unexpectedly succeeded")
+	}
+
+	listener, err = net.Listen("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := grpc.NewServer()
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	if !version.check() {
+		t.Fatal("second dial did not retry after the first failure")
+	}
+	if version.getClient() == nil {
+		t.Fatal("successful retry did not publish a client")
+	}
+}
 
 // TestCosmosRemote_AddressReuseDetectsNewGeneration covers the address-reuse
 // scenario: a node restarts and re-registers the SAME address. The startup_id
@@ -662,4 +702,3 @@ func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
 		t.Fatalf("remote Greeting RPC via re-resolved ID failed: %v", e)
 	}
 }
-

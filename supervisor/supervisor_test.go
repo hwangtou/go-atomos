@@ -90,14 +90,20 @@ func TestPathCheckDirectoryOwnerAndMode(t *testing.T) {
 	if err := p.Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	if err := p.CheckDirectoryOwnerAndMode(u, 0700); err == nil {
-		t.Fatal("expected mode mismatch error for 0700 on a 0755 tempdir")
+	if err := p.CheckDirectoryOwnerAndMode(u, p.Mode().Perm()); err != nil {
+		t.Fatalf("check actual TempDir mode %o: %v", p.Mode().Perm(), err)
+	}
+	if err := p.CheckDirectoryOwnerAndMode(u, p.Mode().Perm()^0001); err == nil {
+		t.Fatal("expected mode mismatch error")
 	}
 
 	// A directory we create with the exact mode must pass.
 	sub := NewPath(dir + "/checked")
 	if err := os.Mkdir(sub.path, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(sub.path, 0755); err != nil {
+		t.Fatalf("chmod: %v", err)
 	}
 	if err := sub.Refresh(); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -135,6 +141,32 @@ func TestPathCreateFileIfNotExist(t *testing.T) {
 	}
 	if string(buf) != "cosmos-name: c\n" {
 		t.Fatalf("content overwritten: %q", buf)
+	}
+}
+
+func TestPathCreateFileIfNotExistConcurrent(t *testing.T) {
+	p := NewPath(t.TempDir() + "/supervisor.conf")
+	const writers = 16
+	start := make(chan struct{})
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			<-start
+			errs <- p.CreateFileIfNotExist([]byte("cosmos-name: c\n"), 0644)
+		}()
+	}
+	close(start)
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent create: %v", err)
+		}
+	}
+	buf, err := os.ReadFile(p.path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(buf) != "cosmos-name: c\n" {
+		t.Fatalf("content = %q", buf)
 	}
 }
 

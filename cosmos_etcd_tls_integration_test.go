@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -38,12 +39,13 @@ type testCert struct {
 	key             *ecdsa.PrivateKey
 }
 
-// newTestCert creates a key pair and a certificate for it. With parent == nil
-// the certificate is self-signed (and may act as its own CA); otherwise it is
-// signed by parent. All certificates carry both ServerAuth and ClientAuth
-// EKUs plus a 127.0.0.1 IP SAN, because gRPC verifies the server certificate
-// against the dial target and the tests dial 127.0.0.1.
+// newTestCert creates a key pair and certificate with loopback SANs.
 func newTestCert(t *testing.T, cn string, isCA bool, parent *testCert) *testCert {
+	t.Helper()
+	return newTestCertWithSAN(t, cn, isCA, parent, true)
+}
+
+func newTestCertWithSAN(t *testing.T, cn string, isCA bool, parent *testCert, withSAN bool) *testCert {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -62,8 +64,10 @@ func newTestCert(t *testing.T, cn string, isCA bool, parent *testCert) *testCert
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  isCA,
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
-		DNSNames:              []string{"localhost"},
+	}
+	if withSAN {
+		tmpl.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+		tmpl.DNSNames = []string{"localhost"}
 	}
 	issuer, issuerKey := tmpl, key
 	if parent != nil {
@@ -235,8 +239,7 @@ func Test_getClusterTLSConfig_ServerOnlyTLSHandshake(t *testing.T) {
 		t.Fatalf("server-only TLS: isTLS=(%v), err=(%v)", isTLS, err)
 	}
 
-	// A server started with the server option and a client dialed with the
-	// dial option (InsecureSkipVerify in this mode) must complete a call.
+	// Server-only TLS still authenticates the CA and checks the loopback SAN.
 	_, call := startPeerCNServer(t, serverOption)
 	cn, cerr := call(dialOption)
 	if cerr != nil {
@@ -245,6 +248,55 @@ func Test_getClusterTLSConfig_ServerOnlyTLSHandshake(t *testing.T) {
 	// No client cert is configured in this mode: the server must see none.
 	if cn != "<no-cert>" {
 		t.Fatalf("server-only TLS: server saw client CN=(%q), want no client cert", cn)
+	}
+
+	other := newTestCert(t, "atomos-untrusted-root", true, nil)
+	clearTLSCfg(t, ee.client)
+	putTLSKey(t, ee.client, etcdClusterServerCertKey, other.certPEM)
+	putTLSKey(t, ee.client, etcdClusterServerKeyKey, other.keyPEM)
+	_, _, untrustedDial, err := p.getClusterTLSConfig(ee.client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := call(untrustedDial); err == nil {
+		t.Fatal("server-only TLS trusted an unrelated CA")
+	}
+}
+
+func Test_getClusterTLSConfig_ServerOnlyRejectsMissingSAN(t *testing.T) {
+	ee := newEmbeddedEtcd(t)
+	p := newTLSProcess(t)
+	server := newTestCertWithSAN(t, "atomos-test-server", true, nil, false)
+	clearTLSCfg(t, ee.client)
+	putTLSKey(t, ee.client, etcdClusterServerCertKey, server.certPEM)
+	putTLSKey(t, ee.client, etcdClusterServerKeyKey, server.keyPEM)
+	_, serverOption, dialOption, err := p.getClusterTLSConfig(ee.client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, call := startPeerCNServer(t, serverOption)
+	if _, err := call(dialOption); err == nil {
+		t.Fatal("server-only TLS accepted a certificate without a matching SAN")
+	}
+}
+
+func Test_getClusterTLSConfigFromFiles_Handshake(t *testing.T) {
+	server := newTestCert(t, "atomos-yaml-server", true, nil)
+	dir := t.TempDir()
+	certPath, keyPath := dir+"/cluster.crt", dir+"/cluster.key"
+	if err := os.WriteFile(certPath, server.certPEM, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, server.keyPEM, 0600); err != nil {
+		t.Fatal(err)
+	}
+	isTLS, serverOption, dialOption, err := getClusterTLSConfigFromFiles(&CertConfig{CertPath: certPath, KeyPath: keyPath})
+	if err != nil || !isTLS {
+		t.Fatalf("file TLS config: isTLS=(%v), err=(%v)", isTLS, err)
+	}
+	_, call := startPeerCNServer(t, serverOption)
+	if _, err := call(dialOption); err != nil {
+		t.Fatalf("file TLS handshake failed: %v", err)
 	}
 }
 

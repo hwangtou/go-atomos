@@ -39,7 +39,9 @@ Error semantics
   CosmosNode, Element, spawners, handlers, scripts, task/messenger APIs).
   Success paths return a genuine untyped nil.
 - `protoc-gen-go-atomos` generates `error`-returning interfaces; business
-  code must be regenerated with the v3 plugin.
+  code must be regenerated with the v3 plugin. Generated `Async*` methods also
+  return the pre-execution `error`, so callers no longer depend solely on a
+  callback that may never be registered.
 
 Call signatures
 
@@ -75,7 +77,9 @@ Cluster RPC & TLS
   double-write failures as non-OK gRPC status (code mapped from the
   framework error; full `*Error` proto in status details; body unchanged
   for v2 readers). **Migration**: raw gRPC stub callers must recover errors
-  from status details instead of reading the body of a failed call.
+  from status details instead of reading the body of a failed call. A Sync
+  response carrying both a partial reply and an error remains OK-status with a
+  body error, because non-OK gRPC responses cannot deliver that reply.
   Mixed-cluster behavior is documented in `docs/DESIGN_V3_API.md` §10.1.
 - Mutual-TLS client certificates now load the **client** pair (previously
   every node presented the server certificate, making client auth
@@ -84,6 +88,8 @@ Cluster RPC & TLS
   plaintext. **Migration**: write TLS keys in complete pairs
   (`cluster_server_cert`+`cluster_server_key`, and for mutual TLS
   `cluster_client_cert`+`cluster_client_key`) or remove them entirely.
+  Server-only TLS verifies CA/SAN by default; YAML certificate paths now feed
+  the actual cluster listener/dialer, and `enable:false` stays standalone.
 
 ### Added
 
@@ -91,6 +97,9 @@ Cluster RPC & TLS
   the `_debug_server` customize key serves `/elements` (element & atom
   inventory, mailbox depths, idle times, sync wait graph), `/metrics`
   (Prometheus text format, no client library), `/healthz`, `/debug/pprof/*`.
+  Non-loopback listeners require `_debug_server_token`; whenever configured,
+  that Bearer token is required on every endpoint. `atomosctl` reads
+  `ATOMOS_DEBUG_TOKEN`.
 - Runtime sync-deadlock detection: local wait-graph cycle detection returns
   `ErrIDFirstSyncCallDeadlock` before the timeout, plus cross-node wait
   chains (`CosmosArgs.wait_chain`, appended field 5) with
@@ -119,15 +128,17 @@ Cluster RPC & TLS
   golden-file test (`go test ./protoc-gen-go-atomos/`, `-update` to
   refresh).
 - `ArgBaseAtomosAnyValue` reader; generated Messenger fields are keyed.
-- Makefile gates: `test-race` (-count=2), `test-integration` (embedded
-  etcd), `bench`, `cover`, `cross-build`, `vet` (atomos-vet wired in);
-  GitHub Actions CI running all of them.
+- Makefile gates: `test-race` (-count=2), `test-integration` and
+  `test-integration-race` (embedded etcd), `bench`, `cover`, `cross-build`,
+  `vet` (atomos-vet wired in); GitHub Actions CI running all of them.
 
 ### Fixed
 
-- etcd keepalive/registration RPCs are bounded by deadlines; an unreachable
-  etcd fails fast instead of hanging node registration forever.
-- One-shot etcd registration RPCs carry a deadline (previously unbounded).
+- Every one-shot etcd RPC is deadline-bounded. Lost keepalive streams trigger
+  bounded re-registration and watch reconciliation; watch rebuilds resume from
+  an authoritative snapshot revision and cancellation exits cleanly.
+- Version locks use ModRevision CAS with bounded retries, stale-version
+  reclamation and safe concurrent unlock; first-dial failures can be retried.
 - DeathWatch-related test clusters leaked mailbox/logging goroutines that
   intermittently tripped the race detector; the shared cluster fixture now
   registers cleanup.

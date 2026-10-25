@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -21,57 +22,7 @@ var update = flag.Bool("update", false, "update golden files")
 // It requires protoc on PATH; no plugin binary or go toolchain subprocess is
 // needed.
 func TestGolden(t *testing.T) {
-	protoc, err := exec.LookPath("protoc")
-	if err != nil {
-		t.Skip("protoc not found on PATH")
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	repoRoot := filepath.Dir(wd)
-	protoDir := filepath.Join(wd, "testdata", "golden")
-
-	tmp := t.TempDir()
-	descOut := filepath.Join(tmp, "golden.protoset")
-	cmd := exec.Command(protoc,
-		"-I", protoDir,
-		"-I", repoRoot, // for the atomos.proto import
-		"--include_imports",
-		"--include_source_info",
-		"--descriptor_set_out="+descOut,
-		"golden.proto",
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("protoc descriptor set: %v\n%s", err, out)
-	}
-
-	raw, err := os.ReadFile(descOut)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fds descriptorpb.FileDescriptorSet
-	if err := proto.Unmarshal(raw, &fds); err != nil {
-		t.Fatalf("unmarshal descriptor set: %v", err)
-	}
-
-	req := &pluginpb.CodeGeneratorRequest{
-		FileToGenerate: []string{"golden.proto"},
-		ProtoFile:      fds.File,
-		Parameter:      proto.String("paths=source_relative"),
-	}
-	gen, err := protogen.Options{}.New(req)
-	if err != nil {
-		t.Fatalf("protogen.New: %v", err)
-	}
-	for _, f := range gen.Files {
-		if !f.Generate {
-			continue
-		}
-		generateFile(gen, f)
-	}
-	resp := gen.Response()
+	resp, protoDir := generateResponse(t, "golden.proto")
 	if resp.Error != nil {
 		t.Fatalf("generation error: %s", resp.GetError())
 	}
@@ -100,4 +51,67 @@ func TestGolden(t *testing.T) {
 	if got != string(want) {
 		t.Errorf("generated output does not match golden file %s (run with -update to refresh)", goldenPath)
 	}
+}
+
+func TestSchemaMethodConflict(t *testing.T) {
+	resp, _ := generateResponse(t, "conflict.proto")
+	if resp.Error == nil {
+		t.Fatal("generation succeeded, want normalized schema-name conflict")
+	}
+	for _, want := range []string{"GoldenConflict", "Element method ElementPing", "Atom method Ping", `schema name "Ping"`} {
+		if !strings.Contains(resp.GetError(), want) {
+			t.Errorf("generation error %q does not contain %q", resp.GetError(), want)
+		}
+	}
+}
+
+func generateResponse(t *testing.T, protoName string) (*pluginpb.CodeGeneratorResponse, string) {
+	t.Helper()
+	protoc, err := exec.LookPath("protoc")
+	if err != nil {
+		t.Skip("protoc not found on PATH")
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repoRoot := filepath.Dir(wd)
+	protoDir := filepath.Join(wd, "testdata", "golden")
+	descOut := filepath.Join(t.TempDir(), protoName+".protoset")
+	cmd := exec.Command(protoc,
+		"-I", protoDir,
+		"-I", repoRoot,
+		"--include_imports",
+		"--include_source_info",
+		"--descriptor_set_out="+descOut,
+		protoName,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("protoc descriptor set: %v\n%s", err, out)
+	}
+
+	raw, err := os.ReadFile(descOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fds descriptorpb.FileDescriptorSet
+	if err := proto.Unmarshal(raw, &fds); err != nil {
+		t.Fatalf("unmarshal descriptor set: %v", err)
+	}
+	req := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{protoName},
+		ProtoFile:      fds.File,
+		Parameter:      proto.String("paths=source_relative"),
+	}
+	gen, err := protogen.Options{}.New(req)
+	if err != nil {
+		t.Fatalf("protogen.New: %v", err)
+	}
+	for _, f := range gen.Files {
+		if f.Generate {
+			generateFile(gen, f)
+		}
+	}
+	return gen.Response(), protoDir
 }

@@ -11,8 +11,11 @@ import (
 	"go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"os"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -136,10 +139,16 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 			ClientAuth:   tls.NoClientCert,
 		}))
 
-		// For client-side
-		// Create TLS config for gRPC client
+		// A server-only configuration still verifies the server certificate and
+		// its SAN. The certificate PEM may contain a self-signed certificate or a
+		// chain ending in the cluster CA.
+		serverPool := x509.NewCertPool()
+		if ok := serverPool.AppendCertsFromPEM(serverCertPem); !ok {
+			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse server certificate").AddStack(nil)
+		}
 		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true, // only for testing purposes, don't use in production
+			RootCAs:    serverPool,
+			MinVersion: tls.VersionTLS12,
 		}))
 
 		return true, &serverOption, &dialOption, nil
@@ -163,26 +172,119 @@ func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.S
 	}
 }
 
-// trySettingClusterToCurrentAndKeepalive
-// 尝试设置当前节点为活跃， 并保持当前节点的活跃。如果节点挂了，etcd会在失效后删除节点；如果节点正常退出，会在退出前删除节点。
-// Try to set the current node to active and keep the current node active. If the node hangs, etcd will delete the node after it fails;
-// if the node exits normally, it will delete the node before exiting.
+// getClusterTLSConfigFromFiles builds the server-only TLS options configured by
+// YAML. Verification (including SAN) is enabled unless explicitly overridden.
+func getClusterTLSConfigFromFiles(config *CertConfig) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
+	if config == nil {
+		return false, nil, nil, nil
+	}
+	certPEM, er := os.ReadFile(config.CertPath)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to read certificate. err=(%v)", er).AddStack(nil)
+	}
+	keyPEM, er := os.ReadFile(config.KeyPath)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to read private key. err=(%v)", er).AddStack(nil)
+	}
+	certificate, er := tls.X509KeyPair(certPEM, keyPEM)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to parse key pair. err=(%v)", er).AddStack(nil)
+	}
+	roots := x509.NewCertPool()
+	if ok := roots.AppendCertsFromPEM(certPEM); !ok {
+		return false, nil, nil, NewError(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to parse certificate").AddStack(nil)
+	}
+	serverOption := grpc.Creds(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		ClientAuth:   tls.NoClientCert,
+		MinVersion:   tls.VersionTLS12,
+	}))
+	dialOption := grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+		RootCAs:            roots,
+		InsecureSkipVerify: config.InsecureSkipVerify,
+		MinVersion:         tls.VersionTLS12,
+	}))
+	return true, &serverOption, &dialOption, nil
+}
+
+var (
+	etcdRegistrationAttempts = 10
+	etcdRegistrationBackoff  = 3 * time.Second
+	etcdWatchBackoff         = 200 * time.Millisecond
+)
+
+// Process-scoped etcd health is safe for concurrent readers and is removed on
+// an orderly registration shutdown.
+type etcdRuntimeState struct {
+	registrationHealthy atomic.Bool
+	watchHealthy        atomic.Bool
+	resyncWatch         chan struct{}
+}
+
+var etcdRuntimeStates sync.Map
+
+func (p *CosmosProcess) etcdRuntime() *etcdRuntimeState {
+	runtime, _ := etcdRuntimeStates.LoadOrStore(p, &etcdRuntimeState{resyncWatch: make(chan struct{}, 1)})
+	return runtime.(*etcdRuntimeState)
+}
+
+// EtcdClusterHealthy reports whether registration and cluster watching are both
+// live. A standalone process has no etcd dependency and is therefore healthy.
+func (p *CosmosProcess) EtcdClusterHealthy() bool {
+	if p == nil {
+		return false
+	}
+	if !p.cluster.enable {
+		return true
+	}
+	runtime, ok := etcdRuntimeStates.Load(p)
+	if !ok {
+		return false
+	}
+	state := runtime.(*etcdRuntimeState)
+	return state.registrationHealthy.Load() && state.watchHealthy.Load()
+}
+
+func (p *CosmosProcess) etcdRegisterWithRetry(key string, info *string, infoCh <-chan string) (*clientv3.LeaseGrantResponse, <-chan *clientv3.LeaseKeepAliveResponse, *Error) {
+	var lastErr *Error
+	for attempt := 0; attempt < etcdRegistrationAttempts; attempt++ {
+		if attempt > 0 {
+			timer := time.NewTimer(etcdRegistrationBackoff)
+			select {
+			case <-timer.C:
+			case updated, more := <-infoCh:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				if !more {
+					return nil, nil, NewError(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: registration stopped.").AddStack(nil)
+				}
+				*info = updated
+			}
+		}
+		lease, keepAliveCh, err := etcdKeepalive(p.cluster.etcdClient, key, *info, etcdKeepaliveTime)
+		if err == nil {
+			return lease, keepAliveCh, nil
+		}
+		lastErr = err
+	}
+	return nil, nil, lastErr.AddStack(nil)
+}
+
+// trySettingClusterToCurrentAndKeepalive registers the node and maintains its
+// lease. A closed keepalive stream starts a bounded re-registration cycle.
 func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	if !p.cluster.enable {
 		return nil
 	}
 
-	// If there is, notify the remote node to exit.
-	// 如果有，通知远程节点退出。
 	p.cluster.remoteMutex.Lock()
 	cosmosRemote, has := p.cluster.remoteCosmos[p.local.runnable.config.Node]
 	p.cluster.remoteMutex.Unlock()
 	if has {
-		//// 如果节点已经是活跃的，直接退出并等待响应。
-		//// If the node is already active, exit directly and wait response.
-		//if err := cosmosRemote.tryKillingRemote(); err != nil {
-		//	return err.AddStack(nil)
-		//}
 		p.local.coreLog().coreInfo("CosmosProcess: trySettingClusterToCurrentAndKeepalive has existed.")
 		_ = cosmosRemote
 	}
@@ -199,145 +301,222 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 		return err.AddStack(nil)
 	}
 
-	// Keep the cosmos remote alive.
-	lease, keepAliveCh, err := etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
+	infoCh := p.cluster.etcdInfoCh
+	lease, keepAliveCh, err := p.etcdRegisterWithRetry(key, &infoBuf, infoCh)
 	if err != nil {
-		for i := 0; i < 10; i++ {
-			// Back off before each retry; the previous attempt failed.
-			<-time.After(3 * time.Second)
-			lease, keepAliveCh, err = etcdKeepalive(p.cluster.etcdClient, key, infoBuf, etcdKeepaliveTime)
-			if err == nil {
-				break
-			}
-		}
-		if err != nil {
-			return err.AddStack(nil)
-		}
+		return err.AddStack(nil)
 	}
+	runtime := p.etcdRuntime()
+	exitCh := make(chan struct{})
+	p.cluster.etcdExitCh = exitCh
 
-	// start a separate goroutine to keep the service registration alive, and to handle the case where the service is not able to renew the lease
-	go func(firstLease *clientv3.LeaseGrantResponse) {
+	go func(lease *clientv3.LeaseGrantResponse, keepAliveCh <-chan *clientv3.LeaseKeepAliveResponse) {
+		orderly := false
 		defer func() {
 			if r := recover(); r != nil {
-				p.etcdErrorHandler(NewErrorf(ErrCodeFrameworkInternalError, "etcd: Watcher keepalive stopped.").AddStack(nil))
+				p.etcdErrorHandler(NewErrorf(ErrCodeFrameworkInternalError, "etcd: keepalive stopped after panic. reason=(%v)", r).AddStack(nil))
 			}
-		}()
-
-		//var err *Error
-		var lease = firstLease
-
-		defer func() {
-			p.local.coreLog().coreInfo("etcd: Watcher will stop.")
-			_, er := p.cluster.etcdClient.Delete(context.Background(), key)
-			if er != nil {
-				p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to delete cluster version info. err=(%s)", er).AddStack(nil))
+			runtime.registrationHealthy.Store(false)
+			p.local.coreLog().coreInfo("etcd: registration loop will stop.")
+			if err := etcdDelete(p.cluster.etcdClient, key); err != nil {
+				p.etcdErrorHandler(err)
 			}
 			if cancel := p.cluster.etcdCancelWatch; cancel != nil {
 				cancel()
 			}
-			if p.cluster.etcdExitCh != nil {
-				p.cluster.etcdExitCh <- struct{}{}
+			if orderly {
+				etcdRuntimeStates.Delete(p)
 			}
+			close(exitCh)
 		}()
 
-		p.cluster.etcdExitCh = make(chan struct{})
 		for {
 			select {
-			// 保持活跃
-			// Keepalive
-			//case <-time.After(etcdKeepaliveTime * time.Second * 2 / 3):
-			case keepAlive := <-keepAliveCh:
+			case keepAlive, more := <-keepAliveCh:
+				if !more || keepAlive == nil {
+					runtime.registrationHealthy.Store(false)
+					p.local.coreLog().coreError("etcd: keepalive stream closed; re-registering.")
+					lease, keepAliveCh, err = p.etcdRegisterWithRetry(key, &infoBuf, infoCh)
+					if err != nil {
+						p.local.coreLog().coreError("etcd: bounded re-registration failed. err=(%v)", err)
+						return
+					}
+					runtime.registrationHealthy.Store(true)
+					select {
+					case runtime.resyncWatch <- struct{}{}:
+					default:
+					}
+					continue
+				}
+				runtime.registrationHealthy.Store(true)
 				if !p.muteKeepaliveLog {
 					p.local.coreLog().coreInfo("etcd: Watcher keepalive.")
 				}
-				p.mutex.Lock()
+				p.mutex.RLock()
 				state := p.state
-				p.mutex.Unlock()
+				p.mutex.RUnlock()
 				if state >= CosmosProcessStateShutdown {
-					p.local.coreLog().coreInfo("etcd: Watcher keepalive stopped. state=(%v)", state)
+					orderly = true
 					return
 				}
-				if keepAlive == nil {
-					p.local.coreLog().coreInfo("etcd: Watcher keepalive stopped, lease is not renewed.")
-					return
-				}
-			// 更新节点信息
-			// Update node information
-			case infoBuf, more := <-p.cluster.etcdInfoCh:
-				p.local.coreLog().coreInfo("etcd: Watcher updates process info. info=(%s),more=(%v)", infoBuf, more)
+			case updated, more := <-infoCh:
 				if !more {
+					orderly = true
 					return
 				}
-				_, er := p.cluster.etcdClient.Put(context.Background(), key, infoBuf, clientv3.WithLease(lease.ID))
-				if er != nil {
-					p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Watcher, failed to update cluster version info. err=(%s)", er).AddStack(nil))
+				infoBuf = updated
+				p.local.coreLog().coreInfo("etcd: Watcher updates process info. info=(%s)", infoBuf)
+				if err := etcdPutLease(p.cluster.etcdClient, key, infoBuf, lease.ID); err != nil {
+					runtime.registrationHealthy.Store(false)
+					p.etcdErrorHandler(err)
 				}
 			}
 		}
-	}(lease)
+	}(lease, keepAliveCh)
 
-	// 设置当前节点为活跃
-	// Set the current node to active
 	if err := p.etcdStartedVersionNodeLock(); err != nil {
+		runtime.registrationHealthy.Store(false)
 		return err.AddStack(p.local)
 	}
-
+	runtime.registrationHealthy.Store(true)
 	return nil
 }
 
-// watchCluster
-// 保持当前节点的活跃
-func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
-	keyPrefix := etcdCosmosNodeWatchAllURI(p.local.runnable.config.Cosmos)
+func (p *CosmosProcess) applyClusterSnapshot(kvs []*mvccpb.KeyValue, keyPrefix string) {
 	keyPrefixBytes := []byte(keyPrefix)
-
-	// 会先把当前的节点信息全部获取一次先。
-	// First, get all the node information.
-	getResp, er := cli.Get(context.Background(), keyPrefix, clientv3.WithPrefix())
-	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdGetFailed, "etcd: Failed to fetch cluster info. err=(%s)", er).AddStack(nil)
-	}
-	for _, ev := range getResp.Kvs {
-		if !bytes.HasPrefix(ev.Key, keyPrefixBytes) {
-			p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(ev.Key)).AddStack(nil))
+	present := make(map[string]bool, len(kvs))
+	for _, kv := range kvs {
+		if !bytes.HasPrefix(kv.Key, keyPrefixBytes) {
+			p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Invalid key. key=(%s)", string(kv.Key)).AddStack(nil))
 			continue
 		}
-		key := strings.TrimPrefix(string(ev.Key), keyPrefix)
-		p.handleKey(key, ev.Value, true)
+		key := strings.TrimPrefix(string(kv.Key), keyPrefix)
+		present[key] = true
+		p.handleKey(key, kv.Value, true)
 	}
+
+	// Applying additions alone leaves phantom nodes after a disconnected watch.
+	// Remove every cached lock/version absent from the authoritative snapshot.
+	p.cluster.remoteMutex.Lock()
+	defer p.cluster.remoteMutex.Unlock()
+	for nodeName, remote := range p.cluster.remoteCosmos {
+		remote.mutex.RLock()
+		hasLock := remote.lock != nil
+		versions := make([]string, 0, len(remote.version))
+		for version := range remote.version {
+			versions = append(versions, version)
+		}
+		remote.mutex.RUnlock()
+		if hasLock && !present[nodeName+etcdVerName+"/"] {
+			remote.etcdDeleteLock()
+		}
+		for _, version := range versions {
+			if !present[nodeName+etcdVerName+"/"+version] {
+				remote.etcdDeleteVersion(version)
+			}
+		}
+	}
+}
+
+func (p *CosmosProcess) handleWatchEvent(event *clientv3.Event, keyPrefix string) {
+	p.local.coreLog().coreInfo("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value))
+	if !bytes.HasPrefix(event.Kv.Key, []byte(keyPrefix)) {
+		p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+		return
+	}
+	key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
+	switch event.Type {
+	case mvccpb.PUT:
+		p.handleKey(key, event.Kv.Value, true)
+	case mvccpb.DELETE:
+		p.handleKey(key, event.Kv.Value, false)
+	}
+}
+
+// watchCluster loads an authoritative snapshot, then watches from its revision
+// plus one. Any terminated/canceled stream causes a fresh snapshot and revision
+// reconciliation, with cancellation-aware backoff between attempts.
+func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
+	keyPrefix := etcdCosmosNodeWatchAllURI(p.local.runnable.config.Cosmos)
+	getResp, err := etcdGetPrefix(cli, keyPrefix)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	p.applyClusterSnapshot(getResp.Kvs, keyPrefix)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cluster.etcdCancelWatch = cancel
-	// Watch for changes
+	runtime := p.etcdRuntime()
+	runtime.watchHealthy.Store(true)
 	go func() {
 		defer func() {
+			runtime.watchHealthy.Store(false)
 			if r := recover(); r != nil {
-				p.local.coreLog().coreError("etcd: Watcher recovered from panic. reason=(%v),stack=(%s)",
-					r, string(debug.Stack()))
+				p.local.coreLog().coreError("etcd: Watcher recovered from panic. reason=(%v),stack=(%s)", r, string(debug.Stack()))
 			}
+			p.local.coreLog().coreInfo("etcd: Watcher stopped.")
 		}()
-		p.local.coreLog().coreInfo("etcd: Watcher stopped.")
+
+		backoff := etcdWatchBackoff
+		revision := getResp.Header.Revision
 		for {
-			watchCh := cli.Watch(ctx, keyPrefix, clientv3.WithPrefix())
-			for watchResp := range watchCh {
-				for _, event := range watchResp.Events {
-					p.local.coreLog().coreInfo("etcd: Watch event. type=(%s),key=(%s),value=(%s)", event.Type, string(event.Kv.Key), string(event.Kv.Value))
-					if !bytes.HasPrefix(event.Kv.Key, keyPrefixBytes) {
-						p.etcdErrorHandler(NewErrorf(ErrCodeCosmosEtcdInvalidKey, "etcd: Watcher handle key, got invalid key. key=(%s)", string(event.Kv.Key)).AddStack(nil))
+			watchCtx, watchCancel := context.WithCancel(ctx)
+			watchCh := cli.Watch(watchCtx, keyPrefix, clientv3.WithPrefix(), clientv3.WithRev(revision+1))
+			rebuild := false
+			for !rebuild {
+				select {
+				case <-ctx.Done():
+					watchCancel()
+					return
+				case <-runtime.resyncWatch:
+					rebuild = true
+				case watchResp, more := <-watchCh:
+					if !more || watchResp.Canceled || watchResp.Err() != nil {
+						if more && watchResp.Err() != nil && ctx.Err() == nil {
+							p.local.coreLog().coreError("etcd: watch terminated; rebuilding from a snapshot. err=(%v)", watchResp.Err())
+						}
+						rebuild = true
 						continue
 					}
-					key := strings.TrimPrefix(string(event.Kv.Key), keyPrefix)
-					switch event.Type {
-					case mvccpb.PUT:
-						p.handleKey(key, event.Kv.Value, true)
-					case mvccpb.DELETE:
-						p.handleKey(key, event.Kv.Value, false)
+					for _, event := range watchResp.Events {
+						p.handleWatchEvent(event, keyPrefix)
 					}
+					backoff = etcdWatchBackoff
 				}
+			}
+			watchCancel()
+			runtime.watchHealthy.Store(false)
+
+			for {
+				timer := time.NewTimer(backoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				snapshot, err := etcdGetPrefix(cli, keyPrefix)
+				if err != nil {
+					p.local.coreLog().coreError("etcd: snapshot rebuild failed. err=(%v)", err)
+					if backoff < 5*time.Second {
+						backoff *= 2
+						if backoff > 5*time.Second {
+							backoff = 5 * time.Second
+						}
+					}
+					continue
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				p.applyClusterSnapshot(snapshot.Kvs, keyPrefix)
+				revision = snapshot.Header.Revision
+				runtime.watchHealthy.Store(true)
+				backoff = etcdWatchBackoff
+				break
 			}
 		}
 	}()
-
 	return nil
 }
 
@@ -366,10 +545,7 @@ func (p *CosmosProcess) tryUnsettingCurrentAndUpdateNodeInfo() *Error {
 	if err != nil {
 		return err.AddStack(nil)
 	}
-	select {
-	case p.cluster.etcdInfoCh <- infoBuf:
-	default:
-	}
+	p.queueEtcdInfo(infoBuf)
 	return nil
 }
 

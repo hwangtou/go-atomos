@@ -30,8 +30,10 @@ func (a *atomosRemoteService) TryKilling(ctx context.Context, req *CosmosRemoteT
 	rsp := &CosmosRemoteTryKillingRsp{}
 	if err := a.process.stopFromOtherNode(); err != nil {
 		rsp.Error = err.AddStack(a.process.local)
+		return rsp, nil
 	}
 	go func() {
+		<-ctx.Done()
 		a.process.stopFromOtherNodeAfterResponse()
 	}()
 	return rsp, nil
@@ -94,6 +96,10 @@ func (a *atomosRemoteService) getIDState(ctx context.Context, req *CosmosRemoteG
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteGetIDStateRsp{}
+	if req == nil || req.Id == nil {
+		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDState missing ID").AddStack(nil)
+		return rsp, nil
+	}
 	elem, err := a.process.local.getLocalElement(req.Id.Element)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
@@ -125,6 +131,10 @@ func (a *atomosRemoteService) getIDIdleTime(ctx context.Context, req *CosmosRemo
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteGetIDIdleTimeRsp{}
+	if req == nil || req.Id == nil {
+		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: GetIDIdleTime missing ID").AddStack(nil)
+		return rsp, nil
+	}
 	elem, err := a.process.local.getLocalElement(req.Id.Element)
 	if err != nil {
 		rsp.Error = err.AddStack(a.process.local)
@@ -213,8 +223,13 @@ func (a *atomosRemoteService) spawnAtom(ctx context.Context, req *CosmosRemoteSp
 // Rsp is the rsp.
 // Error is the error.
 func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
-	// Call-class RPC: double-write the error (see atomos_grpc_status.go).
-	return callRspWithStatus(a.syncMessagingByName(ctx, req))
+	rsp, err := a.syncMessagingByName(ctx, req)
+	// gRPC discards response messages on non-OK status. Preserve the public
+	// (partial reply, error) contract through the body for this exceptional case.
+	if rsp != nil && rsp.Reply != nil && rsp.Error != nil {
+		return rsp, nil
+	}
+	return callRspWithStatus(rsp, err)
 }
 
 func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
@@ -222,17 +237,19 @@ func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *Cosm
 
 	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
+	if req == nil || req.To == nil {
+		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName missing target ID").AddStack(nil)
+		return rsp, nil
+	}
 
-	// Cross-node cycle check: if the propagated wait chain already contains
-	// the target, dispatching this call would close a sync cycle across
-	// nodes and every mailbox on it would block forever. Reject immediately
-	// with the same error the local wait-graph uses, so the error travels
-	// back and unblocks the whole chain. Requests from older nodes carry no
-	// chain and skip this check (timeout remains the backstop there).
-	if req.To != nil && len(req.CosmosArgs.GetWaitChain()) > 0 {
+	// A chain entry closes a cycle only while that target is still blocked in
+	// an outgoing sync call. Entries left by a timed-out upstream are stale and
+	// must not reject a fresh callback.
+	if len(req.CosmosArgs.GetWaitChain()) > 0 {
 		to := req.To.Info()
+		targetLink := syncChainLink(req.To)
 		for _, link := range req.CosmosArgs.GetWaitChain() {
-			if link == to {
+			if link == targetLink && a.process.isSyncWaiting(req.To) {
 				chainStr := strings.Join(req.CosmosArgs.GetWaitChain(), "→") + "→" + to + " (cycle)"
 				rsp.Error = NewErrorf(ErrCodeIDFirstSyncCallDeadlock,
 					"CosmosRemote: Sync call deadlock (cross-node cycle). target=(%s) name=(%s) chain=%s",
@@ -313,6 +330,10 @@ func (a *atomosRemoteService) asyncMessagingByName(ctx context.Context, req *Cos
 
 	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName req=(%v)", req)
 	rsp := &CosmosRemoteAsyncMessagingByNameRsp{}
+	if req == nil || req.ToId == nil {
+		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName missing target ID").AddStack(nil)
+		return rsp, nil
+	}
 
 	switch req.ToId.Type {
 	case IDType_Atom, IDType_Element:
@@ -449,6 +470,10 @@ func (a *atomosRemoteService) KillAtom(ctx context.Context, req *CosmosRemoteKil
 func (a *atomosRemoteService) killAtom(ctx context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteKillAtomRsp{}
+	if req == nil || req.Id == nil {
+		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: KillAtom missing atom ID").AddStack(nil)
+		return rsp, nil
+	}
 
 	// Get element.
 	elem, err := a.process.local.getLocalElement(req.Id.Element)
@@ -465,10 +490,11 @@ func (a *atomosRemoteService) killAtom(ctx context.Context, req *CosmosRemoteKil
 
 	cosmosArgs := createExtForCosmosArgs(req.CosmosArgs)
 
-	// Get atom.
-	atom, _, gerr := elem.GetAtomID(req.Id.Atom, nil)
+	// Resolve only the exact live instance held by the remote caller. Never
+	// auto-respawn or kill a replacement with the same atom name.
+	atom, gerr := elem.getAtomFromRemote(req.Id.Atom, req.Id.InstanceId)
 	if gerr != nil {
-		rsp.Error = asError(gerr).AddStack(a.process.local)
+		rsp.Error = gerr.AddStack(a.process.local)
 		return rsp, nil
 	}
 	// Kill atom.
@@ -530,7 +556,7 @@ func (a *atomosRemoteService) getRemoteInTargetProcessIDFromIDInfo(idInfo *IDInf
 }
 
 func (a *atomosRemoteService) getLocalIDFromIDInfo(idInfo *IDInfo) ID {
-	if idInfo.Node != a.process.local.GetIDInfo().Node {
+	if idInfo == nil || idInfo.Node != a.process.local.GetIDInfo().Node {
 		return nil
 	}
 	if idInfo.Type == IDType_Cosmos {
@@ -550,7 +576,10 @@ func (a *atomosRemoteService) getLocalIDFromIDInfo(idInfo *IDInfo) ID {
 	if idInfo.Type != IDType_Atom {
 		return nil
 	}
-	atom, _, _ := elem.GetAtomID(idInfo.Atom, nil)
+	atom, err := elem.getAtomFromRemote(idInfo.Atom, idInfo.InstanceId)
+	if err != nil {
+		return nil
+	}
 	return atom
 }
 
