@@ -241,31 +241,41 @@ func (e *ElementLocal) GetAtoms() []*AtomLocal {
 	e.lock.RLock()
 	atoms := make([]*AtomLocal, 0, len(e.atoms))
 	for _, atomLocal := range e.atoms {
-		if atomLocal.atomos.IsInState(BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy) {
-			atoms = append(atoms, atomLocal)
-		}
+		atoms = append(atoms, atomLocal)
 	}
 	e.lock.RUnlock()
-	return atoms
+
+	active := atoms[:0]
+	for _, atomLocal := range atoms {
+		if atomLocal.atomos.IsInState(BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy) {
+			active = append(active, atomLocal)
+		}
+	}
+	return active
 }
 
 func (e *ElementLocal) GetAtomsInPattern(pattern string) []*AtomLocal {
+	type entry struct {
+		name string
+		atom *AtomLocal
+	}
 	e.lock.RLock()
-	atoms := make([]*AtomLocal, 0, len(e.atoms))
+	entries := make([]entry, 0, len(e.atoms))
 	for name, atomLocal := range e.atoms {
-		matched, err := regexp.MatchString(pattern, name)
-		if err != nil {
-			continue
-		}
-		if !matched {
-			continue
-		}
-
-		if atomLocal.atomos.IsInState(BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy) {
-			atoms = append(atoms, atomLocal)
-		}
+		entries = append(entries, entry{name: name, atom: atomLocal})
 	}
 	e.lock.RUnlock()
+
+	atoms := make([]*AtomLocal, 0, len(entries))
+	for _, ent := range entries {
+		matched, err := regexp.MatchString(pattern, ent.name)
+		if err != nil || !matched {
+			continue
+		}
+		if ent.atom.atomos.IsInState(BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy) {
+			atoms = append(atoms, ent.atom)
+		}
+	}
 	return atoms
 }
 
@@ -303,32 +313,39 @@ func (e *ElementLocal) GetAtomsNum() int {
 }
 
 func (e *ElementLocal) GetActiveAtomsNum() int {
-	num := 0
 	e.lock.RLock()
+	atoms := make([]*AtomLocal, 0, len(e.atoms))
 	for _, atomLocal := range e.atoms {
+		atoms = append(atoms, atomLocal)
+	}
+	e.lock.RUnlock()
+
+	num := 0
+	for _, atomLocal := range atoms {
 		if atomLocal.atomos.IsInState(BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy) {
 			num += 1
 		}
 	}
-	e.lock.RUnlock()
 	return num
 }
 
 func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
-	e.lock.RLock()
-	info := make(map[string]string, len(e.atoms))
 	type entry struct {
 		atom *AtomLocal
 		st   *atomRefState
 	}
+	e.lock.RLock()
 	entries := make([]entry, 0, len(e.atoms))
 	for _, atomLocal := range e.atoms {
-		if atomLocal.atomos.IsInState(BaseAtomosHalt) {
-			entries = append(entries, entry{atomLocal, e.refStates[atomLocal.GetIDInfo().Atom]})
-		}
+		entries = append(entries, entry{atomLocal, e.refStates[atomLocal.GetIDInfo().Atom]})
 	}
 	e.lock.RUnlock()
+
+	info := make(map[string]string, len(entries))
 	for _, ent := range entries {
+		if !ent.atom.atomos.IsInState(BaseAtomosHalt) {
+			continue
+		}
 		// A halted atom with a live refState means it still has outstanding
 		// IDTracker references; dump them. If no refState exists, there are
 		// no outstanding references.
@@ -723,35 +740,42 @@ func (e *ElementLocal) refStateFor(name string) *atomRefState {
 // eligible for collection; otherwise this is a no-op (a live instance simply
 // has no outstanding references right now).
 func (e *ElementLocal) onInstanceRefsDrained(st *atomRefState, instID uint64) {
-	e.lock.Lock()
+	e.lock.RLock()
 	atom, has := e.atoms[st.name]
-	// Only collect if the live entry under this name IS this instance. If a
-	// respawn already replaced it, the old instance is unreachable here and
-	// will simply be GC'd by the runtime once no pointers remain.
-	if has && atom.atomos.instanceID == instID && atom.atomos.isNotHalt() {
-		// Still live and current — nothing to collect.
-		e.lock.Unlock()
-		return
+	e.lock.RUnlock()
+	if has {
+		if atom.atomos.instanceID != instID || atom.atomos.isNotHalt() {
+			return
+		}
 	}
-	if has && atom.atomos.instanceID == instID && atom.atomos.isNotHalt() == false {
-		// Halted and current under this name: remove from the map.
-		delete(e.atoms, st.name)
+
+	if e.removeAtomIfCurrent(st.name, instID) && atom.atomos.mailbox.isRunning() {
+		e.cosmosLocal.process.logging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", st.name)
+	}
+}
+
+// removeAtomIfCurrent removes a container entry only if it still belongs to
+// instID. The name list node is shared across respawns, so stale cleanup must
+// leave both that node and any refState used by the replacement untouched.
+func (e *ElementLocal) removeAtomIfCurrent(name string, instID uint64) bool {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	atom, has := e.atoms[name]
+	if has {
+		if atom == nil || atom.atomos.instanceID != instID {
+			return false
+		}
+		delete(e.atoms, name)
 		if atom.nameElement != nil {
 			e.names.Remove(atom.nameElement)
 			atom.nameElement = nil
 		}
 	}
-	// Retire the refState if no live atom and no outstanding refs remain.
-	if st.isEmpty() {
-		if cur, stillHas := e.atoms[st.name]; !stillHas || cur == nil {
-			delete(e.refStates, st.name)
-		}
+	if st := e.refStates[name]; st != nil && st.isEmpty() {
+		delete(e.refStates, name)
 	}
-	e.lock.Unlock()
-
-	if has && atom.atomos.instanceID == instID && atom.atomos.mailbox.isRunning() {
-		e.cosmosLocal.process.logging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", st.name)
-	}
+	return has
 }
 
 func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
@@ -772,26 +796,7 @@ func (e *ElementLocal) elementAtomRelease(atom *AtomLocal) {
 		return
 	}
 
-	e.lock.Lock()
-	current, has := e.atoms[name]
-	// Only delete if the live entry is still THIS instance (not a respawn).
-	if !has || current.atomos.instanceID != instID {
-		e.lock.Unlock()
-		return
-	}
-	delete(e.atoms, name)
-	if atom.nameElement != nil {
-		e.names.Remove(atom.nameElement)
-		atom.nameElement = nil
-	}
-	// Retire the refState if it has no outstanding refs.
-	if st != nil && st.isEmpty() {
-		delete(e.refStates, name)
-	}
-	e.lock.Unlock()
-
-	// assert
-	if atom.atomos.mailbox.isRunning() {
+	if e.removeAtomIfCurrent(name, instID) && atom.atomos.mailbox.isRunning() {
 		e.cosmosLocal.process.logging.pushFrameworkErrorLog("Atom: Try releasing a mailbox which is still running. name=(%s)", name)
 	}
 }
@@ -809,22 +814,7 @@ func (e *ElementLocal) elementAtomStopping(atom *AtomLocal) {
 		return
 	}
 
-	e.lock.Lock()
-	// Only remove if the live entry is still THIS instance (not a respawn).
-	if current, has := e.atoms[name]; has && current.atomos.instanceID == instID {
-		delete(e.atoms, name)
-	}
-	if atom.nameElement != nil {
-		e.names.Remove(atom.nameElement)
-		atom.nameElement = nil
-	}
-	if st != nil && st.isEmpty() {
-		delete(e.refStates, name)
-	}
-	e.lock.Unlock()
-
-	// assert
-	if atom.atomos.mailbox.isRunning() {
+	if e.removeAtomIfCurrent(name, instID) && atom.atomos.mailbox.isRunning() {
 		e.cosmosLocal.process.logging.pushFrameworkErrorLog("Atom: Try stopping a mailbox which is still running. name=(%s)", name)
 	}
 }
