@@ -863,7 +863,17 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	}
 
 	a.setStopping()
-	defer a.setHalted(err)
+
+	killMails := make([]*baseAtomosMail, 0, 1)
+	defer func() {
+		for _, killMail := range killMails {
+			killMail.sendReply(nil, cloneError(err))
+			releaseBaseAtomosMail(killMail)
+		}
+	}()
+	defer func() {
+		a.setHalted(err)
+	}()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -901,10 +911,8 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 					remainAtomMail := unwrapBaseAtomosFromKillMail(value)
 					switch remainAtomMail.mailType {
 					case BaseAtomosMailKill:
-						remainAtomMail.sendReply(nil, err)
-						// TODO ? Mail dealloc in AtomCore.pushKillMail.
+						killMails = append(killMails, remainAtomMail)
 					}
-					releaseBaseAtomosMail(remainAtomMail)
 				}
 			case *baseAtomosMail:
 				{
@@ -916,8 +924,7 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 					//defer deallocAtomosMail(remainAtomMail)
 					switch remainAtomMail.mailType {
 					case BaseAtomosMailKill:
-						remainAtomMail.sendReply(nil, err)
-						// TODO ? Mail dealloc in AtomCore.pushKillMail.
+						killMails = append(killMails, remainAtomMail)
 					case BaseAtomosMailSync:
 						remainAtomMail.sendReply(nil, err)
 						// TODO ? Mail dealloc in AtomCore.pushMessageMail.
@@ -950,7 +957,9 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 						a.log.coreFatal("Atomos: Stopping unknown message type. type=%v,mail=%+v",
 							remainAtomMail.mailType, remainAtomMail)
 					}
-					releaseBaseAtomosMail(remainAtomMail)
+					if remainAtomMail.mailType != BaseAtomosMailKill {
+						releaseBaseAtomosMail(remainAtomMail)
+					}
 				}
 			default:
 				{
@@ -971,13 +980,11 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 		a.log.Fatal("Atomos: onStop received invalid kill mail baseAtomosMail type, data=(%v),mail=(%v)", em.data, killMail)
 		return
 	}
+	killMails = append(killMails, am)
 	err = a.holder.onStopping(am.from, cancels)
 	if err != nil {
 		err = err.AddStack(nil)
 	}
-	am.sendReply(nil, err)
-
-	releaseBaseAtomosMail(am)
 
 	return err
 }

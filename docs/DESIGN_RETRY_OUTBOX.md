@@ -4,6 +4,7 @@
 > 日期:2026-10-24
 > 关联文件:`base_remote.go` / `atomos_remote_service.go` / `element_local.go` / `base_atomos.go` / `cosmos_etcd.go` / `mail.go` / `atomos.proto`
 > 关联文档:`DESIGN_V3_API.md` §8(协议演进)、`DESIGN_DRAIN_GRADUAL.md`(逻辑寻址,见开放问题)、`DEADLOCK.md`
+> 生命周期与恢复总约束:[`DESIGN_DISTRIBUTED_LIFECYCLE.md`](DESIGN_DISTRIBUTED_LIFECYCLE.md)。传输超时首先是结果未知；通用重发必须以业务幂等或 operation/message 去重为前提，Kill 等控制操作不能直接套用普通异步消息重试。
 
 ---
 
@@ -32,7 +33,7 @@
 | 3 | 回复投给重启后的旧发送进程,被 `startupID` 世代检查拒绝 | `atomos_remote_service.go` `AsyncOnMessageCallback` | 属永久失败,立即终结,不重试 |
 | 4 | 节点经 etcd lease 注册,续约/重注册自愈 | `cosmos_etcd.go` keepalive/watch | "目标节点暂时不在路由表"是可重试错误,节点回来自愈 |
 | 5 | 回调是发送方内存闭包(`asyncCallbackMap`),不可序列化 | `base_atomos.go` `asyncSet` | 回复方向做不到 durable(见 §三) |
-| 6 | IDInfo 自带 boot epoch,proto 注释明确处理"重启后地址复用" | `atomos.proto` ID 字段 | 重放不会投错进程,WAL 存 IDInfo 即可 |
+| 6 | 节点注册信息带 `startup_id`,但 Atom `IDInfo` 只有进程内 `instance_id`,目标 RPC 也未校验目标进程代际 | `atomos.proto` / `base_remote.go` | WAL 只存现有 IDInfo 不能保证重放不投错重启后的进程;需先补目标 startup/incarnation/fence |
 | 7 | 发送超时(DeadlineExceeded)时邮件可能已投成功,只是回复丢了 | gRPC 语义 | at-least-once ⇒ **handler 幂等是使用契约**;wire 预留全局 message_id(尾部追加,冻结规则允许) |
 | 8 | **现存缺陷**:`BaseRemote.PushAsyncMessage` gRPC 失败时,已注册的回调不终结不撤销,悬挂到停机清账才释放 | `base_remote.go` `PushAsyncMessage`(`asyncSet` 之后 `er != nil` 直接 return) | Phase 0 必修;重试器的"永久失败路径"复用同一动作 |
 | 9 | outbox 若写 etcd,每封邮件一次 Raft 共识 | etcd 定位:集群元数据 | WAL 落本地盘;整机盘损不在承诺范围(那是副本/外部 MQ 的话题) |
@@ -47,15 +48,16 @@
 
 一句话:**durable 请求 + best-effort 回复 + 消费端幂等**。这是 Erlang/OTP 同款取舍。若业务要求完整 MQ 语义,正确演进是给 outbox 加"转投外部 MQ"的桥,而非把框架长成 MQ。
 
-## 四、错误三分类(重试器核心决策表)
+## 四、错误分类(重试器核心决策表)
 
 | 类别 | 典型错误 | 动作 |
 |---|---|---|
-| 可重试 | gRPC Unavailable、目标节点不在路由表(lease 过期) | 退避重投,**同一目标串行保序** |
-| 可重试但要 rebind | `ErrCodeAtomInstanceMismatch`(atom 被别处重新 spawn,世代前移) | 重新解析 ID 拿新世代 → 重投;rebind 也失败计入耗尽 |
+| 确定未执行,可重试 | 首次发送前已发现无连接、服务端明确拒绝且保证无副作用 | 退避重投,**同一目标串行保序** |
+| 结果未知 | 请求可能已发出后的 gRPC Unavailable、DeadlineExceeded、响应丢失 | 普通异步消息只能按 at-least-once 使用同一 message_id 重投并要求业务幂等;Spawn/Kill 先按 operation 查询,不得直接 rebind 重发 |
+| 可重试但要 rebind | `ErrCodeAtomInstanceMismatch`(atom 被别处重新 spawn,世代前移) | 仅用于允许迁移到新 incarnation 的消息;重新解析 ID 拿新世代 → 重投,控制操作不得作用于替代实例 |
 | 永久失败 | startupID 不匹配、消息名不存在、参数 unmarshal 失败、重试耗尽 | 立即以错误终结回调 + 写死信日志;atom 死了没人重建属于此类——框架不替业务决定重建有状态 actor |
 
-分类函数落在 `atomos_grpc_status.go` 旁边(复用 `grpcErrorToError` 的反映射),作为独立纯函数输出三值,Phase 0 抽出。
+分类函数落在 `atomos_grpc_status.go` 旁边(复用 `grpcErrorToError` 的反映射),作为独立纯函数输出分类结果,Phase 0 抽出。没有服务端明确未执行证明时,传输错误一律先按结果未知处理。
 
 ## 五、分阶段实施
 

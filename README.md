@@ -163,6 +163,7 @@ code with `atomos.CodeOf(err)`.
 - [docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md](docs/MIXED_CLUSTER_ERROR_CODE_MIGRATION.md) — **read before rolling v3 nodes into a v2 fleet**: the double-write masks precise remote error codes from v2 callers; this is the audit guide.
 - [docs/DEADLOCK.md](docs/DEADLOCK.md) — sync-call deadlock model, three-layer defenses (analyzer, wait-graph, cross-node chains), and runtime handling (`SetDeadlockHook`, `DumpStacks`).
 - [docs/DESIGN_BLOCKING_MITIGATION.md](docs/DESIGN_BLOCKING_MITIGATION.md) — planned follow-ups beyond the deadlock defenses: mailbox-depth/handler-duration metrics (B1), handler watchdog with atom rebuild (B2), hot-atom routing pools (B3).
+- [docs/DESIGN_DISTRIBUTED_LIFECYCLE.md](docs/DESIGN_DISTRIBUTED_LIFECYCLE.md) — distributed lifecycle audit, ownership/fencing model, Spawn/Halt recovery protocol, and staged optimization plan.
 - [docs/DESIGN_DRAIN_GRADUAL.md](docs/DESIGN_DRAIN_GRADUAL.md) — gradual drain design.
 - [docs/PROTO_GEN_IMPROVEMENTS.md](docs/PROTO_GEN_IMPROVEMENTS.md) — generator improvement backlog.
 - [docs/DESIGN_TESTKIT_DST.md](docs/DESIGN_TESTKIT_DST.md) — deterministic simulation testing design (clock / etcd / transport seams).

@@ -604,7 +604,7 @@ func (e *ElementLocal) elementAtomSpawnMeetsExistAtom(name string, oldAtom *Atom
 		// TODO 如果邮箱里面有kill mail，那就说明这个Atom正在被停止，这时候应该当成Stopping来处理。但一定要确保kill mail不会被删除。
 		return e.elementAtomSpawnInternalFoundRunning(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
 	case BaseAtomosStopping:
-		return e.elementAtomSpawnInternalFoundStopping(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
+		return e.elementAtomSpawnInternalFoundStopping(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, atomSpawnStoppingTimeout)
 	case BaseAtomosHalt:
 		return e.elementAtomSpawnNewAtom(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
 	default:
@@ -629,17 +629,21 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock
 	}
 }
 
-func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (toReturn *AtomLocal, idTracker *IDTracker, err *Error) {
+const atomSpawnStoppingTimeout = 10 * time.Second
+
+func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, timeout time.Duration, args ...ArgsForBaseAtomos) (toReturn *AtomLocal, idTracker *IDTracker, err *Error) {
 	if oldLock != nil {
 		oldLock.Unlock()
 	}
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-oldAtom.atomos.stoppingChan:
-		// 思考：如果spawn不是under locking保护的话，这里就有可能出现竞争条件，导致没得到到stoppingChan的通知就继续往下走了，还是有可能会spawn两次。但如果是under locking保护的话，就不会有这个问题了。
 		e.Log().Info("Element: AtomSpawn meets an atom in stopping state, but it stopped successfully. name=(%s)", name)
-	case <-time.After(time.Second * 10):
-		e.Log().Warn("Element: AtomSpawn meets an atom in stopping state, and it seems that the atom is stuck in stopping. name=(%s)", name)
+	case <-timer.C:
+		e.Log().Warn("Element: AtomSpawn cannot replace an atom that is still stopping. name=(%s)", name)
+		return nil, nil, NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
 	}
 	return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
 }

@@ -46,7 +46,7 @@ func (s *kwMainScript) OnShutdown() error                    { return nil }
 // Kill 唤醒在途 sync waiter。
 // victim 的 block handler 占住 mailbox;随后到达的 noop 排队。此时 Kill(AppendToHead+
 // WaitKilled)排在 noop 之前。放行 block 后:执行中的 sync 正常返回;kill 触发停机,
-// 排队中的 noop waiter 应以 ErrAtomosIsStopping 被唤醒,而非永久挂起;WaitKilled 及时返回。
+// 排队中的 noop waiter 应以 ErrAtomosIsStopping 被唤醒,而非永久挂起;WaitKilled 在完整 Halt 后返回。
 func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 	allocMailUsingPool.Store(false)
 	allocMailDebug.Store(true)
@@ -179,7 +179,7 @@ func TestDeadlock_KillWakesQueuedSyncWaiter(t *testing.T) {
 		t.Fatal("Queued noop sync waiter was not woken by kill (deadlock)")
 	}
 
-	// WaitKilled 及时返回。
+	// WaitKilled 在完整 Halt 后返回。
 	select {
 	case err := <-killResult:
 		if err != nil {

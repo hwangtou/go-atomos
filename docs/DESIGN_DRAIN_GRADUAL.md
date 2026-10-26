@@ -3,6 +3,7 @@
 > 状态：设计草案（基于业界调研 + 现状代码分析）
 > 日期：2026-07-30
 > 关联文件：`cosmos_etcd.go` / `cosmos_remote.go` / `base_remote.go` / `atom_remote.go` / `element_remote.go` / `cosmos_local.go` / `cosmos_process.go` / `atomos.proto`
+> 后续所有权、生命周期和 Drain 准入统一改造见 [`DESIGN_DISTRIBUTED_LIFECYCLE.md`](DESIGN_DISTRIBUTED_LIFECYCLE.md)。
 
 ---
 
