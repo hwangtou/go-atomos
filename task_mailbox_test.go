@@ -323,6 +323,7 @@ type testTaskMailboxBaseAtomos struct {
 	atomos *BaseAtomos
 
 	expectedCallback uint64
+	stopHook         func(from ID, cancelled []uint64) *Error
 
 	// mapsMu guards the three tracking maps below: they are written from the
 	// serial task mailbox goroutine (executed), the atomos mailbox goroutine
@@ -451,6 +452,9 @@ func (tba *testTaskMailboxBaseAtomos) onWormhole(from ID, wormhole BaseAtomosWor
 
 func (tba *testTaskMailboxBaseAtomos) onStopping(from ID, cancelled []uint64) *Error {
 	tba.t.Logf("onStopping: from=(%v),cancelled=(%v)", from, cancelled)
+	if tba.stopHook != nil {
+		return tba.stopHook(from, cancelled)
+	}
 	return nil
 }
 

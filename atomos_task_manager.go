@@ -103,7 +103,8 @@ const defaultTasksSize = 10
 type atomosTask struct {
 	// 该Atomos的任务唯一id。
 	// Unique id of this atomos.
-	id uint64
+	id      uint64
+	manager *atomosTaskManager
 
 	// 发去Atomos邮箱的Atomos邮件。
 	// Atomos mail that send to Atomos mailbox.
@@ -156,9 +157,12 @@ type atomosTaskManager struct {
 	// (Is anyone able to use all the number of the unsigned int64?)
 	curID uint64
 
-	// 任务容器，目前仅定时任务使用。
-	// Tasks holder, only timer task will use.
+	// 任务容器，记录排程、排队和执行中的任务。
+	// Tasks holder for scheduling, queued and executing tasks.
 	tasks map[uint64]*atomosTask
+
+	// stopping 拒绝新任务，并由 mutex 保护。
+	stopping bool
 
 	cron *cron.Cron
 
@@ -174,6 +178,7 @@ func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAt
 	at.log = log
 	at.atomos = a
 	at.curID = 0
+	at.stopping = false
 	at.tasks = make(map[uint64]*atomosTask, defaultTasksSize)
 	at.queueMap = make(map[string]*taskMailbox)
 }
@@ -181,15 +186,10 @@ func initAtomosTasksManager(log *loggingAtomos, at *atomosTaskManager, a *BaseAt
 func releaseAtomosTasksManager(at *atomosTaskManager) {
 }
 
-// 在Atomos开始退出的时候上锁，以避免新的任务请求。
-// Lock at Atomos is going to stop, to prevent new incoming tasks.
-func (at *atomosTaskManager) stopLock() {
+// beginStopping 关闭新任务准入，不在整个停机流程中持有 mutex。
+func (at *atomosTaskManager) beginStopping() {
 	at.mutex.Lock()
-}
-
-// 在Atomos退出执行完毕时解锁。
-// Unlock after Atomos has already stopped.
-func (at *atomosTaskManager) stopUnlock() {
+	at.stopping = true
 	at.mutex.Unlock()
 }
 
@@ -204,25 +204,26 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err error) 
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	// If BaseAtomos is nil, Atomos has been stopped, add failed.
-	if at.atomos == nil {
+	if at.stopping || at.atomos == nil {
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
 
-	// ID increment.
 	at.curID += 1
-
-	// Load the Atomos mail.
+	curID := at.curID
 	am := allocBaseAtomosMail()
-	initTaskClosureMail(am, at.closureInfo(0), at.curID, taskClosure)
+	initTaskClosureMail(am, at.closureInfo(0), curID, taskClosure)
+	t := &atomosTask{id: curID, manager: at, atomosMail: am, timerState: TaskMailing}
+	am.atomosTask = t
+	at.tasks[curID] = t
 
-	// Append to the tail of Atomos mailbox immediately.
 	if ok := at.atomos.mailbox.pushTail(am.mail); !ok {
+		delete(at.tasks, curID)
+		releaseMail(am.mail)
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
-	return at.curID, nil
+	return curID, nil
 }
 
 // AddAfter
@@ -235,87 +236,43 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
-
-	// If BaseAtomos is nil, Atomos has been stopped, add failed.
-	if at.atomos == nil {
+	if at.stopping || at.atomos == nil {
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
 
-	// Increment
 	at.curID += 1
 	curID := at.curID
-
-	// Load the Atomos mail.
 	am := allocBaseAtomosMail()
-	initTaskClosureMail(am, at.closureInfo(0), at.curID, taskClosure)
-
-	// But not append to the mailbox, now is to create a timer task.
-	t := &atomosTask{}
+	initTaskClosureMail(am, at.closureInfo(0), curID, taskClosure)
+	t := &atomosTask{id: curID, manager: at, atomosMail: am, timerState: TaskScheduling}
+	am.atomosTask = t
 	at.tasks[curID] = t
-	t.id = curID
-	t.atomosMail = am
-	// Set the task to state TaskScheduling, and try to add mail to mailbox after duration.
-	t.timerState = TaskScheduling
 	t.timer = time.AfterFunc(after, func() {
 		at.mutex.Lock()
-		defer at.mutex.Unlock()
 		it, has := at.tasks[t.id]
-		if !has {
-			// 当且仅当发生在边缘的情况，任务计时器还未成功被取消，但任务已经被移出容器的情况。
-			// It should only happen at the edge of the timer has been triggered,
-			// but the TimerTask has been cancelled.
+		if at.stopping || !has || it != t || it.timerState != TaskScheduling {
+			at.mutex.Unlock()
 			return
 		}
-		switch it.timerState {
-		// 任务已被取消。
-		// 正常来说这段代码不会触发到，除非框架逻辑有问题。
-		// Task has been cancelled.
-		// This switch-case is unreachable unless framework has a bug.
-		case TaskCancelled:
-			if ta, has := at.tasks[it.id]; has {
-				delete(at.tasks, it.id)
-				//deallocAtomosMail(ta.baseAtomosMail)
-				_ = ta
-				// FRAMEWORK LEVEL ERROR
-				// Because it should not happen, once a TimerTask has been cancelled,
-				// it will be removed, thread-safely, immediately.
-				at.log.pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer cancel")
-			}
-			return
-
-		// 任务正在排程。
-		// 这段代码符合正常功能的期待。
-		// Task is scheduling.
-		// This code is expected.
-		case TaskScheduling:
+		if ok := at.atomos.mailbox.pushHead(am.mail); ok {
 			it.timerState = TaskMailing
-			delete(at.tasks, it.id)
-			if ok := at.atomos.mailbox.pushHead(am.mail); !ok {
-				at.atomos.log.Fatal("AtomosTask: AddAfter, atomos is not running")
-			}
-
-		// FRAMEWORK LEVEL ERROR
-		// Because it should not happen, once a TimerTask has been executed,
-		// it will be removed, thread-safely, immediately.
-		default:
-			at.log.pushFrameworkErrorLog("AtomosTask: AddAfter, FRAMEWORK ERROR, timer executing")
+			at.mutex.Unlock()
+			return
 		}
+		// 邮箱已拒绝邮件，保留排程状态，由停机清理统一记录并释放。
+		at.mutex.Unlock()
 	})
 	return curID, nil
 }
 
 func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err error) {
-	c := func() *cron.Cron {
-		at.mutex.Lock()
-		defer at.mutex.Unlock()
-		if at.cron == nil {
-			at.cron = cron.New()
-			at.cron.Start()
-		}
-		return at.cron
-	}()
-
+	at.mutex.Lock()
+	defer at.mutex.Unlock()
+	if at.stopping || at.atomos == nil {
+		return 0, NewErrorf(ErrCodeAtomosIsNotRunning, "AtomosTask: Atomos is not running. Add crontab failed.").AddStack(nil)
+	}
+	c := at.getCronLocked()
 	eid, er := c.AddFunc(spec, func() {
 		if _, er := at.Add(taskClosure); er != nil {
 			// TODO
@@ -331,9 +288,6 @@ func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryI
 // 取消任务。
 // Cancel task.
 func (at *atomosTaskManager) Cancel(id uint64) error {
-	at.mutex.Lock()
-	defer at.mutex.Unlock()
-
 	err := at.cancelTask(id, false, nil)
 	if err != nil {
 		return err.AddStack(nil)
@@ -352,99 +306,138 @@ func (at *atomosTaskManager) CancelCrontab(entryID uint64) (err error) {
 	return nil
 }
 
-// 用于退出Atomos时的清理。
-// For cleaning an stopping atomos.
+// 用于退出Atomos时的清理。主邮箱的剩余邮件由 mailboxOnStop 逐个取消。
 func (at *atomosTaskManager) cancelAllSchedulingTasks() []uint64 {
-	// 外部已经锁过一次，这里不需要再锁。
-	if at.cron != nil {
-		at.cron.Stop()
-		at.cron = nil
+	at.mutex.Lock()
+	c := at.cron
+	at.cron = nil
+	ids := make([]uint64, 0, len(at.tasks))
+	for id := range at.tasks {
+		ids = append(ids, id)
 	}
-	cancels := make([]uint64, len(at.tasks))
-	for id, t := range at.tasks {
-		if err := at.cancelTask(id, true, t); err == nil {
+	at.mutex.Unlock()
+	if c != nil {
+		c.Stop()
+	}
+
+	cancels := make([]uint64, 0, len(ids))
+	for _, id := range ids {
+		at.mutex.Lock()
+		t := at.tasks[id]
+		skip := t != nil && t.timerState == TaskMailing &&
+			(t.helper == nil || t.helper.mailbox == at.atomos.mailbox)
+		at.mutex.Unlock()
+		if skip {
+			continue
+		}
+		if err := at.cancelTask(id, false, nil); err == nil {
 			cancels = append(cancels, id)
 		}
 	}
 	return cancels
 }
 
-// 用于取消指定任务。
-// 仅供Cancel和cancelAllSchedulingTasks这两个线程安全的函数调用。
-// 删除两种任务：
-// 1、 删除添加到Atomos mailbox的atomosTask。
-// 2、 删除还在容器的atomosTask，并删除定时器。
-//
-// Use to cancel a task.
-// Only for Cancel and cancelAllSchedulingTasks method, they are thread-safe.
-// Delete two kinds of tasks:
-// 1. delete append atomosTask
-// 2. delete timer atomosTask
+// cancelTask 的 mailboxExit=true 形式供已持有 mutex 的内部调用方使用。
 func (at *atomosTaskManager) cancelTask(id uint64, mailboxExit bool, t *atomosTask) (err *Error) {
-	if t == nil {
-		ta := at.tasks[id]
-		t = ta
+	queueTask := false
+	if !mailboxExit {
+		at.mutex.Lock()
+		if current := at.tasks[id]; current != nil {
+			t = current
+		}
+		queueTask = t != nil && t.helper != nil
+		at.mutex.Unlock()
+	} else {
+		if t == nil {
+			t = at.tasks[id]
+		}
+		queueTask = t != nil && t.helper != nil
 	}
-	if t != nil && t.helper != nil {
+	if queueTask {
 		return at.cancelTaskQueue(t, mailboxExit, "Cancel due to exit")
 	}
-	// If it has a timer, it's a timer task.
-	if t != nil && t.timer != nil {
-		switch t.timerState {
-		// 任务已被取消。
-		// 正常来说这段代码不会触发到，除非框架逻辑有问题。
-		// Task has been cancelled.
-		// This switch-case is unreachable unless framework has bug.
-		case TaskCancelled:
-			delete(at.tasks, id)
-			//deallocAtomosMail(t.baseAtomosMail)
-			// FRAMEWORK LEVEL ERROR
-			// Because it shouldn't happen, we won't find Canceled timer.
-			err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "AtomosTask: Delete a not exists task timer. task=(%+v)", t).AddStack(nil)
-			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
-			return err
 
-		// 排程的任务准备执行。
-		// 这段代码符合正常功能的期待。
-		// Scheduled task is going to execute.
-		// This code is expected.
-		case TaskScheduling:
-			ok := t.timer.Stop()
-			t.timerState = TaskCancelled
-			delete(at.tasks, id)
-			//deallocAtomosMail(t.baseAtomosMail)
-			if !ok {
-				// Might only happen on the edge of scheduled time has reached,
-				// the period between time.AfterFunc has executed the function,
-				// and the function still have acquired the mutex.
-				at.atomos.log.Info("AtomosTask: Atomos has halted")
-			}
-			return nil
-
-		// 定时任务已经在Atomos mailbox中。
-		// Timer task is already in Atomos mailbox.
-		case TaskMailing:
-			m := at.atomos.mailbox.popByID(id)
-			if m == nil {
-				err = NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
-				return err
-			}
-			releaseMail(m)
-			return nil
-		default:
-			// FRAMEWORK LEVEL ERROR
-			err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "AtomosTask: Unknown timer state, task=(%+v)", t).AddStack(nil)
-			at.log.pushFrameworkErrorLog("AtomosTask: CancelTask, FRAMEWORK ERROR. err=(%v)", err)
-			return err
+	if !mailboxExit {
+		at.mutex.Lock()
+		defer at.mutex.Unlock()
+		if current := at.tasks[id]; current != t {
+			t = current
 		}
 	}
-	m := at.atomos.mailbox.popByID(id)
-	if m == nil {
-		err = NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Delete a not exists task timer, task=(%+v)", t).AddStack(nil)
-		return err
+	if t == nil {
+		return NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Task does not exist. id=(%d)", id).AddStack(nil)
 	}
-	releaseMail(m)
-	return nil
+
+	switch t.timerState {
+	case TaskScheduling:
+		if t.timer != nil {
+			t.timer.Stop()
+		}
+		t.timerState = TaskCancelled
+		delete(at.tasks, id)
+		if t.atomosMail != nil {
+			releaseMail(t.atomosMail.mail)
+			t.atomosMail = nil
+		}
+		return nil
+	case TaskMailing:
+		m := at.atomos.mailbox.popByID(id)
+		if m != nil {
+			releaseMail(m)
+		}
+		t.timerState = TaskCancelled
+		delete(at.tasks, id)
+		t.atomosMail = nil
+		return nil
+	case TaskExecuting:
+		return NewErrorf(ErrCodeAtomosTaskCannotCancelRunningTask, "AtomosTask: Cannot cancel a running task. id=(%d)", id).AddStack(nil)
+	case TaskDone:
+		return NewErrorf(ErrCodeAtomosTaskCannotCancelDoneTask, "AtomosTask: Cannot cancel a done task. id=(%d)", id).AddStack(nil)
+	case TaskCancelled:
+		return NewErrorf(ErrCodeAtomosTaskCannotCancelCancelledTask, "AtomosTask: Task already cancelled. id=(%d)", id).AddStack(nil)
+	default:
+		return NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Task does not exist. id=(%d)", id).AddStack(nil)
+	}
+}
+
+// cancelRemainingTask 取消已经从主邮箱弹出、不会再进入 handleTask 的邮件。
+// 返回 true 表示本次调用实际取消了任务；邮件本身仍由 mailboxOnStop 释放。
+func (at *atomosTaskManager) cancelRemainingTask(am *baseAtomosMail) bool {
+	id := am.mail.id
+	if id == 0 {
+		return false
+	}
+	manager := at
+	if am.atomosTask != nil && am.atomosTask.manager != nil {
+		manager = am.atomosTask.manager
+	}
+	manager.mutex.Lock()
+	t := manager.tasks[id]
+	if t == nil || t.timerState != TaskMailing || (am.atomosTask != nil && am.atomosTask != t) {
+		manager.mutex.Unlock()
+		return false
+	}
+	var callback func(string)
+	if t.helper != nil {
+		callback = t.helper.cancelCallback
+	}
+	t.timerState = TaskCancelled
+	manager.releaseCancelledTask(t)
+	manager.mutex.Unlock()
+	manager.runCancelCallback(id, callback, "Cancel due to exit")
+	return true
+}
+
+func (at *atomosTaskManager) runCancelCallback(id uint64, callback func(string), reason string) {
+	if callback == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			at.log.pushFrameworkErrorLog("AtomosTask: Cancel callback panics. id=(%d),reason=(%v)", id, r)
+		}
+	}()
+	callback(reason)
 }
 
 // Atomos正式开始处理任务。
@@ -475,6 +468,22 @@ func (at *atomosTaskManager) handleTask(am *baseAtomosMail) {
 	}()
 
 	if am.taskClosure != nil {
+		at.mutex.Lock()
+		t := at.tasks[am.mail.id]
+		if t == nil || t.timerState != TaskMailing {
+			at.mutex.Unlock()
+			return
+		}
+		t.timerState = TaskExecuting
+		at.mutex.Unlock()
+		defer func() {
+			at.mutex.Lock()
+			t.timerState = TaskDone
+			if at.tasks[t.id] == t {
+				delete(at.tasks, t.id)
+			}
+			at.mutex.Unlock()
+		}()
 		am.taskClosure(am.mail.id)
 		return
 	}

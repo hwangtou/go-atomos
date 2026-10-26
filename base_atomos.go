@@ -838,10 +838,8 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 	// 停机清账:在途回调逐一以 ErrAsyncCallbackCancelledByHalt 同步终结。
 	// 注意:清账发生在 setStopping 之前(保持本线既有顺序),asyncCancelAll 会先落
 	// asyncCleared 标记,此后到达的注册一律在 asyncSet 内同步终结,不依赖停机状态。
+	a.task.beginStopping()
 	a.asyncCancelAll()
-
-	a.task.stopLock()
-	defer a.task.stopUnlock()
 
 	// State is thread-safe get.
 	state := a.GetState()
@@ -940,14 +938,10 @@ func (a *BaseAtomos) mailboxOnStop(killMail, remainMail *mail, num uint32) (err 
 					case BaseAtomosMailOnAsyncCallback:
 						a.log.Info("Atomos: Stopping so async message callback mail will log but cannot callback. id=(%s),mailID=(%d),name=(%s),asyncID=(%d)", a.String(), remainMail.id, remainAtomMail.name, remainAtomMail.asyncID)
 					case BaseAtomosMailTask:
-						// 正常，因为可能因为断点等原因阻塞，导致在执行关闭atomos的过程中，有任务的计时器到达时间，从而导致此逻辑。
-						// Is it needed? It just for preventing new mails receive after cancelAllSchedulingTasks,
-						// but it's impossible to add task after locking.
 						a.log.Info("Atomos: Stopping task mails have been sent after start closing. id=(%s),mailID=(%d)", a.String(), remainMail.id)
-						if err := a.task.cancelTask(remainMail.id, true, value.atomosTask); err == nil {
+						if a.task.cancelRemainingTask(value) {
 							cancels = append(cancels, remainMail.id)
 						}
-						// TODO ? Mail dealloc in atomosTaskManager.cancelTask.
 					case BaseAtomosMailWormhole:
 						remainAtomMail.sendReply(nil, err)
 						// TODO ? Mail dealloc in AtomCore.pushWormholeMail.
