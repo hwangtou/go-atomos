@@ -421,7 +421,7 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 	cli, ctx, cancel, cerr := a.getCli(atomosClientTimeout)
 	if cerr != nil {
 		// TODO: need retry?
-		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback getCli error. name=(%s),reply=(%v),err=(%v),cliErr=(%v)", name, reply, err, cerr)
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback getCli error. name=(%s),err=(%v),cliErr=(%v)", name, err, cerr)
 		return
 	}
 	defer cancel()
@@ -431,7 +431,7 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 	if reply != nil {
 		anyReply, er = anypb.New(reply)
 		if er != nil {
-			a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback marshal reply error. name=(%s),reply=(%v),err=(%v),marshalErr=(%v)", name, reply, err, er)
+			a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback marshal reply error. name=(%s),err=(%v),marshalErr=(%v)", name, err, er)
 			return
 		}
 	}
@@ -443,13 +443,14 @@ func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, 
 		Message:    name,
 		Args:       anyReply,
 		Error:      asError(err),
+		CallerId:   a.cosmos.process.local.GetIDInfo(),
 	})
 	if er != nil {
-		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response error. name=(%s),reply=(%v),err=(%v),respErr=(%v)", name, reply, err, er)
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response error. name=(%s),err=(%v),respErr=(%v)", name, err, er)
 		return
 	}
 	if rsp != nil && rsp.Error != nil {
-		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response returned error. name=(%s),reply=(%v),err=(%v),respErr=(%v)", name, reply, err, rsp.Error)
+		a.cosmos.process.logging.pushFrameworkErrorLog("PushAsyncMessageCallback response returned error. name=(%s),err=(%v),respErr=(%v)", name, err, rsp.Error)
 	}
 }
 

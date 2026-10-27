@@ -57,12 +57,17 @@ func NewCosmosNodeConfigFromYamlPath(filepath string, runnable *CosmosRunnable) 
 			EtcdEndpoints: cluster.EtcdEndpoints,
 			OptionalPorts: cluster.OptionalPorts,
 			EnableCert:    nil,
+			AllowInsecure: cluster.AllowInsecure,
+			AdminNodes:    append([]string(nil), cluster.AdminNodes...),
 		}
 		if cert := cluster.EnableCert; cert != nil {
 			conf.EnableCluster.EnableCert = &CertConfig{
 				CertPath:           cert.CertPath,
 				KeyPath:            cert.KeyPath,
 				InsecureSkipVerify: cert.InsecureSkipVerify,
+				ClientCertPath:     cert.ClientCertPath,
+				ClientKeyPath:      cert.ClientKeyPath,
+				ClientCaPath:       cert.ClientCaPath,
 			}
 		}
 	}
@@ -93,6 +98,19 @@ func (x *Config) ValidateSupervisorConfig() error {
 	}
 	if len(x.EnableCluster.EtcdEndpoints) == 0 {
 		return NewError(ErrCodeCosmosConfigInvalid, "Cluster enabled but no etcd endpoints configured").AddStack(nil)
+	}
+	for _, node := range x.EnableCluster.AdminNodes {
+		if !checkNodeName(node) {
+			return NewErrorf(ErrCodeCosmosConfigInvalid, "Cluster admin node invalid. node=(%s)", node).AddStack(nil)
+		}
+	}
+	if cert := x.EnableCluster.EnableCert; cert != nil && !x.EnableCluster.AllowInsecure {
+		if cert.CertPath == "" || cert.KeyPath == "" || cert.ClientCertPath == "" || cert.ClientKeyPath == "" || cert.ClientCaPath == "" {
+			return NewError(ErrCodeCosmosConfigInvalid, "Secure cluster TLS requires server cert/key, client cert/key, and client CA paths").AddStack(nil)
+		}
+		if cert.InsecureSkipVerify {
+			return NewError(ErrCodeCosmosConfigInvalid, "Secure cluster TLS forbids insecure-skip-verify").AddStack(nil)
+		}
 	}
 	return nil
 }
@@ -164,12 +182,17 @@ type ClusterYAMLConfig struct {
 	EtcdEndpoints []string        `yaml:"etcd-endpoints"`
 	OptionalPorts []int32         `yaml:"optional-ports"`
 	EnableCert    *CertYAMLConfig `yaml:"enable-cert"`
+	AllowInsecure bool            `yaml:"allow-insecure"`
+	AdminNodes    []string        `yaml:"admin-nodes"`
 }
 
 type CertYAMLConfig struct {
 	CertPath           string `yaml:"cert-path"`
 	KeyPath            string `yaml:"key-path"`
 	InsecureSkipVerify bool   `yaml:"insecure-skip-verify"`
+	ClientCertPath     string `yaml:"client-cert-path"`
+	ClientKeyPath      string `yaml:"client-key-path"`
+	ClientCaPath       string `yaml:"client-ca-path"`
 }
 
 // applyEnvOverrides overlays environment variables onto the Config struct.

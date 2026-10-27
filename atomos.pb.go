@@ -1651,7 +1651,11 @@ type CosmosClusterConfig struct {
 	EtcdEndpoints []string `protobuf:"bytes,2,rep,name=etcd_endpoints,json=etcdEndpoints,proto3" json:"etcd_endpoints,omitempty"`
 	OptionalPorts []int32  `protobuf:"varint,3,rep,packed,name=optional_ports,json=optionalPorts,proto3" json:"optional_ports,omitempty"`
 	// 证书配置
-	EnableCert    *CertConfig `protobuf:"bytes,4,opt,name=enable_cert,json=enableCert,proto3" json:"enable_cert,omitempty"`
+	EnableCert *CertConfig `protobuf:"bytes,4,opt,name=enable_cert,json=enableCert,proto3" json:"enable_cert,omitempty"`
+	// 仅允许本机/测试传输使用无认证模式。
+	AllowInsecure bool `protobuf:"varint,5,opt,name=allow_insecure,json=allowInsecure,proto3" json:"allow_insecure,omitempty"`
+	// 允许执行远程节点管理操作的已认证节点。
+	AdminNodes    []string `protobuf:"bytes,6,rep,name=admin_nodes,json=adminNodes,proto3" json:"admin_nodes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1714,11 +1718,28 @@ func (x *CosmosClusterConfig) GetEnableCert() *CertConfig {
 	return nil
 }
 
+func (x *CosmosClusterConfig) GetAllowInsecure() bool {
+	if x != nil {
+		return x.AllowInsecure
+	}
+	return false
+}
+
+func (x *CosmosClusterConfig) GetAdminNodes() []string {
+	if x != nil {
+		return x.AdminNodes
+	}
+	return nil
+}
+
 type CertConfig struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	CertPath           string                 `protobuf:"bytes,1,opt,name=cert_path,json=certPath,proto3" json:"cert_path,omitempty"`
 	KeyPath            string                 `protobuf:"bytes,2,opt,name=key_path,json=keyPath,proto3" json:"key_path,omitempty"`
 	InsecureSkipVerify bool                   `protobuf:"varint,3,opt,name=insecure_skip_verify,json=insecureSkipVerify,proto3" json:"insecure_skip_verify,omitempty"`
+	ClientCertPath     string                 `protobuf:"bytes,4,opt,name=client_cert_path,json=clientCertPath,proto3" json:"client_cert_path,omitempty"`
+	ClientKeyPath      string                 `protobuf:"bytes,5,opt,name=client_key_path,json=clientKeyPath,proto3" json:"client_key_path,omitempty"`
+	ClientCaPath       string                 `protobuf:"bytes,6,opt,name=client_ca_path,json=clientCaPath,proto3" json:"client_ca_path,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1772,6 +1793,27 @@ func (x *CertConfig) GetInsecureSkipVerify() bool {
 		return x.InsecureSkipVerify
 	}
 	return false
+}
+
+func (x *CertConfig) GetClientCertPath() string {
+	if x != nil {
+		return x.ClientCertPath
+	}
+	return ""
+}
+
+func (x *CertConfig) GetClientKeyPath() string {
+	if x != nil {
+		return x.ClientKeyPath
+	}
+	return ""
+}
+
+func (x *CertConfig) GetClientCaPath() string {
+	if x != nil {
+		return x.ClientCaPath
+	}
+	return ""
 }
 
 type ElementConfig struct {
@@ -3749,6 +3791,7 @@ type CosmosRemoteAsyncOnMessageCallbackReq struct {
 	Message       string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
 	Args          *anypb.Any             `protobuf:"bytes,6,opt,name=args,proto3" json:"args,omitempty"`
 	Error         *Error                 `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
+	CallerId      *IDInfo                `protobuf:"bytes,8,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3828,6 +3871,13 @@ func (x *CosmosRemoteAsyncOnMessageCallbackReq) GetArgs() *anypb.Any {
 func (x *CosmosRemoteAsyncOnMessageCallbackReq) GetError() *Error {
 	if x != nil {
 		return x.Error
+	}
+	return nil
+}
+
+func (x *CosmosRemoteAsyncOnMessageCallbackReq) GetCallerId() *IDInfo {
+	if x != nil {
+		return x.CallerId
 	}
 	return nil
 }
@@ -4972,18 +5022,24 @@ const file_atomos_proto_rawDesc = "" +
 	"\tcustomize\x18\f \x03(\v2\x1d.atomos.Config.CustomizeEntryR\tcustomize\x1a<\n" +
 	"\x0eCustomizeEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xb0\x01\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xf8\x01\n" +
 	"\x13CosmosClusterConfig\x12\x16\n" +
 	"\x06enable\x18\x01 \x01(\bR\x06enable\x12%\n" +
 	"\x0eetcd_endpoints\x18\x02 \x03(\tR\retcdEndpoints\x12%\n" +
 	"\x0eoptional_ports\x18\x03 \x03(\x05R\roptionalPorts\x123\n" +
 	"\venable_cert\x18\x04 \x01(\v2\x12.atomos.CertConfigR\n" +
-	"enableCert\"v\n" +
+	"enableCert\x12%\n" +
+	"\x0eallow_insecure\x18\x05 \x01(\bR\rallowInsecure\x12\x1f\n" +
+	"\vadmin_nodes\x18\x06 \x03(\tR\n" +
+	"adminNodes\"\xee\x01\n" +
 	"\n" +
 	"CertConfig\x12\x1b\n" +
 	"\tcert_path\x18\x01 \x01(\tR\bcertPath\x12\x19\n" +
 	"\bkey_path\x18\x02 \x01(\tR\akeyPath\x120\n" +
-	"\x14insecure_skip_verify\x18\x03 \x01(\bR\x12insecureSkipVerify\"\xd6\x01\n" +
+	"\x14insecure_skip_verify\x18\x03 \x01(\bR\x12insecureSkipVerify\x12(\n" +
+	"\x10client_cert_path\x18\x04 \x01(\tR\x0eclientCertPath\x12&\n" +
+	"\x0fclient_key_path\x18\x05 \x01(\tR\rclientKeyPath\x12$\n" +
+	"\x0eclient_ca_path\x18\x06 \x01(\tR\fclientCaPath\"\xd6\x01\n" +
 	"\rElementConfig\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x12?\n" +
@@ -5130,7 +5186,7 @@ const file_atomos_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\b \x01(\tR\tmessageId\"J\n" +
 	"#CosmosRemoteAsyncMessagingByNameRsp\x12#\n" +
-	"\x05error\x18\x01 \x01(\v2\r.atomos.ErrorR\x05error\"\xa0\x02\n" +
+	"\x05error\x18\x01 \x01(\v2\r.atomos.ErrorR\x05error\"\xcd\x02\n" +
 	"%CosmosRemoteAsyncOnMessageCallbackReq\x12#\n" +
 	"\x05to_id\x18\x01 \x01(\v2\x0e.atomos.IDInfoR\x04toId\x12/\n" +
 	"\vcallback_id\x18\x02 \x01(\v2\x0e.atomos.IDInfoR\n" +
@@ -5140,7 +5196,8 @@ const file_atomos_proto_rawDesc = "" +
 	"\basync_id\x18\x04 \x01(\x04R\aasyncId\x12\x18\n" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x12(\n" +
 	"\x04args\x18\x06 \x01(\v2\x14.google.protobuf.AnyR\x04args\x12#\n" +
-	"\x05error\x18\a \x01(\v2\r.atomos.ErrorR\x05error\"L\n" +
+	"\x05error\x18\a \x01(\v2\r.atomos.ErrorR\x05error\x12+\n" +
+	"\tcaller_id\x18\b \x01(\v2\x0e.atomos.IDInfoR\bcallerId\"L\n" +
 	"%CosmosRemoteAsyncOnMessageCallbackRsp\x12#\n" +
 	"\x05error\x18\x01 \x01(\v2\r.atomos.ErrorR\x05error\"\x9b\x01\n" +
 	"\x17CosmosRemoteKillAtomReq\x12+\n" +
@@ -5453,84 +5510,85 @@ var file_atomos_proto_depIdxs = []int32{
 	7,   // 58: atomos.CosmosRemoteAsyncOnMessageCallbackReq.callback_id:type_name -> atomos.IDInfo
 	85,  // 59: atomos.CosmosRemoteAsyncOnMessageCallbackReq.args:type_name -> google.protobuf.Any
 	9,   // 60: atomos.CosmosRemoteAsyncOnMessageCallbackReq.error:type_name -> atomos.Error
-	9,   // 61: atomos.CosmosRemoteAsyncOnMessageCallbackRsp.error:type_name -> atomos.Error
-	7,   // 62: atomos.CosmosRemoteKillAtomReq.caller_id:type_name -> atomos.IDInfo
-	7,   // 63: atomos.CosmosRemoteKillAtomReq.id:type_name -> atomos.IDInfo
-	70,  // 64: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
-	9,   // 65: atomos.CosmosRemoteKillAtomRsp.error:type_name -> atomos.Error
-	7,   // 66: atomos.CosmosRemoteElementBroadcastReq.caller_id:type_name -> atomos.IDInfo
-	9,   // 67: atomos.CosmosRemoteElementBroadcastRsp.error:type_name -> atomos.Error
-	7,   // 68: atomos.CosmosRemoteSpawnAtomControlledReq.caller_id:type_name -> atomos.IDInfo
-	85,  // 69: atomos.CosmosRemoteSpawnAtomControlledReq.args:type_name -> google.protobuf.Any
-	70,  // 70: atomos.CosmosRemoteSpawnAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
-	38,  // 71: atomos.CosmosRemoteSpawnAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
-	9,   // 72: atomos.CosmosRemoteSpawnAtomControlledRsp.error:type_name -> atomos.Error
-	40,  // 73: atomos.CosmosRemoteSpawnAtomControlledRsp.result:type_name -> atomos.AtomControlResult
-	7,   // 74: atomos.CosmosRemoteHaltAtomControlledReq.caller_id:type_name -> atomos.IDInfo
-	7,   // 75: atomos.CosmosRemoteHaltAtomControlledReq.id:type_name -> atomos.IDInfo
-	70,  // 76: atomos.CosmosRemoteHaltAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
-	38,  // 77: atomos.CosmosRemoteHaltAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
-	9,   // 78: atomos.CosmosRemoteHaltAtomControlledRsp.error:type_name -> atomos.Error
-	40,  // 79: atomos.CosmosRemoteHaltAtomControlledRsp.result:type_name -> atomos.AtomControlResult
-	7,   // 80: atomos.CosmosRemoteLookupAtomReq.id:type_name -> atomos.IDInfo
-	9,   // 81: atomos.CosmosRemoteLookupAtomRsp.error:type_name -> atomos.Error
-	4,   // 82: atomos.CosmosRemoteLookupAtomRsp.state:type_name -> atomos.AtomLifecycleState
-	38,  // 83: atomos.CosmosRemoteLookupAtomRsp.ownership:type_name -> atomos.AtomOwnershipInfo
-	39,  // 84: atomos.CosmosRemoteLookupAtomRsp.operation:type_name -> atomos.AtomOperationInfo
-	7,   // 85: atomos.CosmosRemoteLookupAtomRsp.id:type_name -> atomos.IDInfo
-	9,   // 86: atomos.CosmosRemoteGetAtomOperationRsp.error:type_name -> atomos.Error
-	39,  // 87: atomos.CosmosRemoteGetAtomOperationRsp.operation:type_name -> atomos.AtomOperationInfo
-	7,   // 88: atomos.CosmosRemoteTakeoverAtomReq.caller_id:type_name -> atomos.IDInfo
-	7,   // 89: atomos.CosmosRemoteTakeoverAtomReq.id:type_name -> atomos.IDInfo
-	38,  // 90: atomos.CosmosRemoteTakeoverAtomReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
-	7,   // 91: atomos.CosmosRemoteTakeoverAtomReq.previous_id:type_name -> atomos.IDInfo
-	85,  // 92: atomos.CosmosRemoteTakeoverAtomReq.args:type_name -> google.protobuf.Any
-	70,  // 93: atomos.CosmosRemoteTakeoverAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
-	9,   // 94: atomos.CosmosRemoteTakeoverAtomRsp.error:type_name -> atomos.Error
-	40,  // 95: atomos.CosmosRemoteTakeoverAtomRsp.result:type_name -> atomos.AtomControlResult
-	32,  // 96: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
-	7,   // 97: atomos.CosmosNodeVersionInfo.ElementsEntry.value:type_name -> atomos.IDInfo
-	86,  // 98: atomos.atomos_method:extendee -> google.protobuf.MethodOptions
-	3,   // 99: atomos.atomos_method:type_name -> atomos.AtomosMethodType
-	46,  // 100: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
-	48,  // 101: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
-	50,  // 102: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
-	52,  // 103: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
-	54,  // 104: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
-	56,  // 105: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
-	58,  // 106: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
-	60,  // 107: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
-	62,  // 108: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
-	64,  // 109: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
-	66,  // 110: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
-	68,  // 111: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
-	71,  // 112: atomos.AtomosRemoteService.SpawnAtomControlled:input_type -> atomos.CosmosRemoteSpawnAtomControlledReq
-	73,  // 113: atomos.AtomosRemoteService.HaltAtomControlled:input_type -> atomos.CosmosRemoteHaltAtomControlledReq
-	75,  // 114: atomos.AtomosRemoteService.LookupAtom:input_type -> atomos.CosmosRemoteLookupAtomReq
-	77,  // 115: atomos.AtomosRemoteService.GetAtomOperation:input_type -> atomos.CosmosRemoteGetAtomOperationReq
-	79,  // 116: atomos.AtomosRemoteService.TakeoverAtom:input_type -> atomos.CosmosRemoteTakeoverAtomReq
-	47,  // 117: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
-	49,  // 118: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
-	51,  // 119: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
-	53,  // 120: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
-	55,  // 121: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
-	57,  // 122: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
-	59,  // 123: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
-	61,  // 124: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
-	63,  // 125: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
-	65,  // 126: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
-	67,  // 127: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
-	69,  // 128: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
-	72,  // 129: atomos.AtomosRemoteService.SpawnAtomControlled:output_type -> atomos.CosmosRemoteSpawnAtomControlledRsp
-	74,  // 130: atomos.AtomosRemoteService.HaltAtomControlled:output_type -> atomos.CosmosRemoteHaltAtomControlledRsp
-	76,  // 131: atomos.AtomosRemoteService.LookupAtom:output_type -> atomos.CosmosRemoteLookupAtomRsp
-	78,  // 132: atomos.AtomosRemoteService.GetAtomOperation:output_type -> atomos.CosmosRemoteGetAtomOperationRsp
-	80,  // 133: atomos.AtomosRemoteService.TakeoverAtom:output_type -> atomos.CosmosRemoteTakeoverAtomRsp
-	117, // [117:134] is the sub-list for method output_type
-	100, // [100:117] is the sub-list for method input_type
-	99,  // [99:100] is the sub-list for extension type_name
-	98,  // [98:99] is the sub-list for extension extendee
-	0,   // [0:98] is the sub-list for field type_name
+	7,   // 61: atomos.CosmosRemoteAsyncOnMessageCallbackReq.caller_id:type_name -> atomos.IDInfo
+	9,   // 62: atomos.CosmosRemoteAsyncOnMessageCallbackRsp.error:type_name -> atomos.Error
+	7,   // 63: atomos.CosmosRemoteKillAtomReq.caller_id:type_name -> atomos.IDInfo
+	7,   // 64: atomos.CosmosRemoteKillAtomReq.id:type_name -> atomos.IDInfo
+	70,  // 65: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	9,   // 66: atomos.CosmosRemoteKillAtomRsp.error:type_name -> atomos.Error
+	7,   // 67: atomos.CosmosRemoteElementBroadcastReq.caller_id:type_name -> atomos.IDInfo
+	9,   // 68: atomos.CosmosRemoteElementBroadcastRsp.error:type_name -> atomos.Error
+	7,   // 69: atomos.CosmosRemoteSpawnAtomControlledReq.caller_id:type_name -> atomos.IDInfo
+	85,  // 70: atomos.CosmosRemoteSpawnAtomControlledReq.args:type_name -> google.protobuf.Any
+	70,  // 71: atomos.CosmosRemoteSpawnAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
+	38,  // 72: atomos.CosmosRemoteSpawnAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
+	9,   // 73: atomos.CosmosRemoteSpawnAtomControlledRsp.error:type_name -> atomos.Error
+	40,  // 74: atomos.CosmosRemoteSpawnAtomControlledRsp.result:type_name -> atomos.AtomControlResult
+	7,   // 75: atomos.CosmosRemoteHaltAtomControlledReq.caller_id:type_name -> atomos.IDInfo
+	7,   // 76: atomos.CosmosRemoteHaltAtomControlledReq.id:type_name -> atomos.IDInfo
+	70,  // 77: atomos.CosmosRemoteHaltAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
+	38,  // 78: atomos.CosmosRemoteHaltAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
+	9,   // 79: atomos.CosmosRemoteHaltAtomControlledRsp.error:type_name -> atomos.Error
+	40,  // 80: atomos.CosmosRemoteHaltAtomControlledRsp.result:type_name -> atomos.AtomControlResult
+	7,   // 81: atomos.CosmosRemoteLookupAtomReq.id:type_name -> atomos.IDInfo
+	9,   // 82: atomos.CosmosRemoteLookupAtomRsp.error:type_name -> atomos.Error
+	4,   // 83: atomos.CosmosRemoteLookupAtomRsp.state:type_name -> atomos.AtomLifecycleState
+	38,  // 84: atomos.CosmosRemoteLookupAtomRsp.ownership:type_name -> atomos.AtomOwnershipInfo
+	39,  // 85: atomos.CosmosRemoteLookupAtomRsp.operation:type_name -> atomos.AtomOperationInfo
+	7,   // 86: atomos.CosmosRemoteLookupAtomRsp.id:type_name -> atomos.IDInfo
+	9,   // 87: atomos.CosmosRemoteGetAtomOperationRsp.error:type_name -> atomos.Error
+	39,  // 88: atomos.CosmosRemoteGetAtomOperationRsp.operation:type_name -> atomos.AtomOperationInfo
+	7,   // 89: atomos.CosmosRemoteTakeoverAtomReq.caller_id:type_name -> atomos.IDInfo
+	7,   // 90: atomos.CosmosRemoteTakeoverAtomReq.id:type_name -> atomos.IDInfo
+	38,  // 91: atomos.CosmosRemoteTakeoverAtomReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
+	7,   // 92: atomos.CosmosRemoteTakeoverAtomReq.previous_id:type_name -> atomos.IDInfo
+	85,  // 93: atomos.CosmosRemoteTakeoverAtomReq.args:type_name -> google.protobuf.Any
+	70,  // 94: atomos.CosmosRemoteTakeoverAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	9,   // 95: atomos.CosmosRemoteTakeoverAtomRsp.error:type_name -> atomos.Error
+	40,  // 96: atomos.CosmosRemoteTakeoverAtomRsp.result:type_name -> atomos.AtomControlResult
+	32,  // 97: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
+	7,   // 98: atomos.CosmosNodeVersionInfo.ElementsEntry.value:type_name -> atomos.IDInfo
+	86,  // 99: atomos.atomos_method:extendee -> google.protobuf.MethodOptions
+	3,   // 100: atomos.atomos_method:type_name -> atomos.AtomosMethodType
+	46,  // 101: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
+	48,  // 102: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
+	50,  // 103: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
+	52,  // 104: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
+	54,  // 105: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
+	56,  // 106: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
+	58,  // 107: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
+	60,  // 108: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
+	62,  // 109: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
+	64,  // 110: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
+	66,  // 111: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
+	68,  // 112: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
+	71,  // 113: atomos.AtomosRemoteService.SpawnAtomControlled:input_type -> atomos.CosmosRemoteSpawnAtomControlledReq
+	73,  // 114: atomos.AtomosRemoteService.HaltAtomControlled:input_type -> atomos.CosmosRemoteHaltAtomControlledReq
+	75,  // 115: atomos.AtomosRemoteService.LookupAtom:input_type -> atomos.CosmosRemoteLookupAtomReq
+	77,  // 116: atomos.AtomosRemoteService.GetAtomOperation:input_type -> atomos.CosmosRemoteGetAtomOperationReq
+	79,  // 117: atomos.AtomosRemoteService.TakeoverAtom:input_type -> atomos.CosmosRemoteTakeoverAtomReq
+	47,  // 118: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
+	49,  // 119: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
+	51,  // 120: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
+	53,  // 121: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
+	55,  // 122: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
+	57,  // 123: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
+	59,  // 124: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
+	61,  // 125: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
+	63,  // 126: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
+	65,  // 127: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
+	67,  // 128: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
+	69,  // 129: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
+	72,  // 130: atomos.AtomosRemoteService.SpawnAtomControlled:output_type -> atomos.CosmosRemoteSpawnAtomControlledRsp
+	74,  // 131: atomos.AtomosRemoteService.HaltAtomControlled:output_type -> atomos.CosmosRemoteHaltAtomControlledRsp
+	76,  // 132: atomos.AtomosRemoteService.LookupAtom:output_type -> atomos.CosmosRemoteLookupAtomRsp
+	78,  // 133: atomos.AtomosRemoteService.GetAtomOperation:output_type -> atomos.CosmosRemoteGetAtomOperationRsp
+	80,  // 134: atomos.AtomosRemoteService.TakeoverAtom:output_type -> atomos.CosmosRemoteTakeoverAtomRsp
+	118, // [118:135] is the sub-list for method output_type
+	101, // [101:118] is the sub-list for method input_type
+	100, // [100:101] is the sub-list for extension type_name
+	99,  // [99:100] is the sub-list for extension extendee
+	0,   // [0:99] is the sub-list for field type_name
 }
 
 func init() { file_atomos_proto_init() }

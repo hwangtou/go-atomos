@@ -22,7 +22,7 @@ func newStrictLifecycleProcess(t *testing.T, ee *embeddedEtcd, cosmos, node stri
 		t.Fatal(err)
 	}
 	runnable := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: node}).SetLifecycleMode(LifecycleModePerAtomStrict)
-	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{ee.endpoint}, OptionalPorts: []int32{int32(reserveLocalPort(t))}}
+	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{ee.endpoint}, OptionalPorts: []int32{int32(reserveLocalPort(t))}, AllowInsecure: true}
 	runnable.config.Customize = map[string][]byte{configKeyClusterAdvertiseIP: []byte("127.0.0.1")}
 	if err := p.Start(runnable); err != nil {
 		t.Fatalf("strict Start(%s): %v", node, err)
@@ -38,7 +38,7 @@ func newShardLifecycleProcess(t *testing.T, ee *embeddedEtcd, cosmos, node strin
 		t.Fatal(err)
 	}
 	runnable := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: cosmos, Node: node}).SetLifecycleMode(LifecycleModePerShardStrict).SetLifecycleShardCount(1)
-	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{ee.endpoint}, OptionalPorts: []int32{int32(reserveLocalPort(t))}}
+	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{ee.endpoint}, OptionalPorts: []int32{int32(reserveLocalPort(t))}, AllowInsecure: true}
 	runnable.config.Customize = map[string][]byte{configKeyClusterAdvertiseIP: []byte("127.0.0.1")}
 	if err := p.Start(runnable); err != nil {
 		t.Fatalf("shard Start(%s): %v", node, err)

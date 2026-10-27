@@ -128,52 +128,42 @@ func (p *CosmosProcess) getClusterTLSConfig(cli EtcdClient) (bool, *grpc.ServerO
 		}
 	}
 
-	// Create TLS config for gRPC server and client.
+	serverPool := x509.NewCertPool()
+	if ok := serverPool.AppendCertsFromPEM(serverCertPem); !ok {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse server certificate").AddStack(nil)
+	}
 	var serverOption grpc.ServerOption
 	var dialOption grpc.DialOption
 	if clientCertPem == nil {
-		// For server-side
-		// Create TLS config for gRPC server
 		serverOption = grpc.Creds(credentials.NewTLS(&tls.Config{
 			Certificates: []tls.Certificate{serverCert},
 			ClientAuth:   tls.NoClientCert,
+			MinVersion:   tls.VersionTLS12,
 		}))
-
-		// A server-only configuration still verifies the server certificate and
-		// its SAN. The certificate PEM may contain a self-signed certificate or a
-		// chain ending in the cluster CA.
-		serverPool := x509.NewCertPool()
-		if ok := serverPool.AppendCertsFromPEM(serverCertPem); !ok {
-			return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "etcd: failed to parse server certificate").AddStack(nil)
-		}
 		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			RootCAs:    serverPool,
 			MinVersion: tls.VersionTLS12,
 		}))
-
-		return true, &serverOption, &dialOption, nil
-	} else {
-		// For server-side
-		// Create TLS config for gRPC server
-		serverOption = grpc.Creds(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{serverCert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			ClientCAs:    certPool,
-		}))
-
-		// For client-side
-		// Create TLS config for gRPC client
-		dialOption = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{clientCert},
-			RootCAs:      certPool,
-		}))
-
 		return true, &serverOption, &dialOption, nil
 	}
+
+	serverOption = grpc.Creds(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    certPool,
+		MinVersion:   tls.VersionTLS12,
+	}))
+	dialOption = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      serverPool,
+		MinVersion:   tls.VersionTLS12,
+	}))
+	return true, &serverOption, &dialOption, nil
 }
 
-// getClusterTLSConfigFromFiles builds the server-only TLS options configured by
-// YAML. Verification (including SAN) is enabled unless explicitly overridden.
+// getClusterTLSConfigFromFiles builds TLS or mutual-TLS options configured by
+// YAML. Server-name verification is enabled unless explicitly overridden for a
+// local insecure setup.
 func getClusterTLSConfigFromFiles(config *CertConfig) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
 	if config == nil {
 		return false, nil, nil, nil
@@ -194,12 +184,52 @@ func getClusterTLSConfigFromFiles(config *CertConfig) (bool, *grpc.ServerOption,
 	if ok := roots.AppendCertsFromPEM(certPEM); !ok {
 		return false, nil, nil, NewError(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to parse certificate").AddStack(nil)
 	}
+	hasClient := config.ClientCertPath != "" || config.ClientKeyPath != "" || config.ClientCaPath != ""
+	if hasClient && (config.ClientCertPath == "" || config.ClientKeyPath == "" || config.ClientCaPath == "") {
+		return false, nil, nil, NewError(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: client cert, key, and CA paths must be set together").AddStack(nil)
+	}
+	if !hasClient {
+		serverOption := grpc.Creds(credentials.NewTLS(&tls.Config{
+			Certificates: []tls.Certificate{certificate},
+			ClientAuth:   tls.NoClientCert,
+			MinVersion:   tls.VersionTLS12,
+		}))
+		dialOption := grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			RootCAs:            roots,
+			InsecureSkipVerify: config.InsecureSkipVerify,
+			MinVersion:         tls.VersionTLS12,
+		}))
+		return true, &serverOption, &dialOption, nil
+	}
+
+	clientCertPEM, er := os.ReadFile(config.ClientCertPath)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosConfigReadFailed, "cluster: failed to read client certificate. err=(%v)", er).AddStack(nil)
+	}
+	clientKeyPEM, er := os.ReadFile(config.ClientKeyPath)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosConfigReadFailed, "cluster: failed to read client private key. err=(%v)", er).AddStack(nil)
+	}
+	clientCAPEM, er := os.ReadFile(config.ClientCaPath)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosConfigReadFailed, "cluster: failed to read client CA. err=(%v)", er).AddStack(nil)
+	}
+	clientCertificate, er := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	if er != nil {
+		return false, nil, nil, NewErrorf(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to parse client key pair. err=(%v)", er).AddStack(nil)
+	}
+	clientPool := x509.NewCertPool()
+	if ok := clientPool.AppendCertsFromPEM(clientCAPEM); !ok {
+		return false, nil, nil, NewError(ErrCodeCosmosEtcdClusterTLSInvalid, "cluster: failed to parse client CA").AddStack(nil)
+	}
 	serverOption := grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.NoClientCert,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    clientPool,
 		MinVersion:   tls.VersionTLS12,
 	}))
 	dialOption := grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+		Certificates:       []tls.Certificate{clientCertificate},
 		RootCAs:            roots,
 		InsecureSkipVerify: config.InsecureSkipVerify,
 		MinVersion:         tls.VersionTLS12,

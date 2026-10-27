@@ -357,14 +357,14 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 
 func (a *BaseAtomos) PushAsyncMessageCallback(callerID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {
 	if asyncID == 0 {
-		a.Log().Debug("PushAsyncMessageCallback called with empty asyncID. name=(%s),reply=(%v),err=(%v)")
+		a.Log().Debug("PushAsyncMessageCallback called with empty asyncID. name=(%s)", name)
 		return
 	}
 	am := allocBaseAtomosMail()
 	initAsyncMessageCallbackMail(am, callerID, name, startupID, asyncID, reply, asError(err))
 
 	if ok := a.mailbox.pushTail(am.mail); !ok {
-		a.log.logging.pushFrameworkErrorLog("PushAsyncMessageCallback: Atomos is not running. name=(%s),args=(%v)", name, reply)
+		a.log.logging.pushFrameworkErrorLog("PushAsyncMessageCallback: Atomos is not running. name=(%s)", name)
 	}
 
 	//deallocAtomosMail(am)

@@ -4,8 +4,9 @@ package atomos
 // process. Enabled by setting Config.Customize[configKeyDebugServer] to a TCP
 // listen address (YAML `customize: {_debug_server: "127.0.0.1:9099"}` or the
 // WithDebugServer Run option). It serves until CosmosProcess.Stop. Non-loopback
-// listeners also require Config.Customize[configKeyDebugServerToken]. Whenever
-// a token is configured, every endpoint requires Bearer authentication.
+// listeners require HTTPS (configKeyDebugServerCert/Key) and a Bearer token
+// (configKeyDebugServerToken). Whenever a token is configured, every endpoint
+// requires Bearer authentication.
 //
 // Endpoints:
 //   - /elements      human-readable inventory: elements, live atoms, mailbox
@@ -57,9 +58,20 @@ func startDebugServer(p *CosmosProcess, addr string) *debugServer {
 		p.local.coreLog().coreError("DebugServer: Invalid listen address, debug server disabled. addr=(%s),err=(%v)", addr, err)
 		return nil
 	}
-	token := debugServerToken(p.local.runnable.config.Customize)
+	customize := p.local.runnable.config.Customize
+	token := debugServerToken(customize)
+	certPath := strings.TrimSpace(string(customize[configKeyDebugServerCert]))
+	keyPath := strings.TrimSpace(string(customize[configKeyDebugServerKey]))
+	if (certPath == "") != (keyPath == "") {
+		p.local.coreLog().coreError("DebugServer: HTTPS cert and key must be configured together, debug server disabled. addr=(%s)", addr)
+		return nil
+	}
 	if !tcpAddr.IP.IsLoopback() && token == "" {
 		p.local.coreLog().coreError("DebugServer: Non-loopback listen requires a Bearer token, debug server disabled. addr=(%s)", addr)
+		return nil
+	}
+	if !tcpAddr.IP.IsLoopback() && certPath == "" {
+		p.local.coreLog().coreError("DebugServer: Non-loopback listen requires HTTPS, debug server disabled. addr=(%s)", addr)
 		return nil
 	}
 
@@ -68,9 +80,9 @@ func startDebugServer(p *CosmosProcess, addr string) *debugServer {
 		p.local.coreLog().coreError("DebugServer: Listen failed, debug server disabled. addr=(%s),err=(%v)", addr, err)
 		return nil
 	}
-	if token == "" && !listenerIsLoopback(ln) {
+	if !listenerIsLoopback(ln) && (token == "" || certPath == "") {
 		_ = ln.Close()
-		p.local.coreLog().coreError("DebugServer: Non-loopback listener without a token, debug server disabled. addr=(%s)", ln.Addr())
+		p.local.coreLog().coreError("DebugServer: Non-loopback listener without HTTPS and a token, debug server disabled. addr=(%s)", ln.Addr())
 		return nil
 	}
 	ds := &debugServer{
@@ -95,10 +107,17 @@ func startDebugServer(p *CosmosProcess, addr string) *debugServer {
 		Handler:           ds.authenticate(mux),
 		ReadHeaderTimeout: debugReadHeaderTimeout,
 		IdleTimeout:       debugIdleTimeout,
+		MaxHeaderBytes:    16 * 1024,
 	}
 	go func() {
-		if err := ds.server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			p.local.coreLog().coreError("DebugServer: Serve failed, debug server disabled. addr=(%s),err=(%v)", ds.addr(), err)
+		var serveErr error
+		if certPath != "" {
+			serveErr = ds.server.ServeTLS(ln, certPath, keyPath)
+		} else {
+			serveErr = ds.server.Serve(ln)
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			p.local.coreLog().coreError("DebugServer: Serve failed, debug server disabled. addr=(%s),err=(%v)", ds.addr(), serveErr)
 		}
 	}()
 	p.local.coreLog().coreInfo("DebugServer: Serving. addr=(%s)", ds.addr())

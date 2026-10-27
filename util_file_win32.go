@@ -42,22 +42,8 @@ func utilFileEnsureDirectory(dir string, perm os.FileMode, ensureWritable bool) 
 	}
 
 	if ensureWritable {
-		randStrGen := newUtilStringRandomStringGenerator()
-		logTestPath := ""
-		for i := 0; i < 100; i++ {
-			logTestPath = path.Join(dir, "test_"+randStrGen.RandomString(10))
-			if _, er = os.Stat(logTestPath); os.IsNotExist(er) {
-				break
-			}
-		}
-		if logTestPath == "" {
-			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot create test file. dir=(%s)", dir).AddStack(nil)
-		}
-		if er = os.WriteFile(logTestPath, []byte{}, utilFileEnsureDirectoryFilePerm); er != nil {
-			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot write test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
-		}
-		if er = os.Remove(logTestPath); er != nil {
-			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Cannot remove test file. dir=(%s),err=(%v)", dir, er).AddStack(nil)
+		if er = utilFileCheckWritable(dir); er != nil {
+			return NewErrorf(ErrCodeUtilFileEnsureDirectoryFailed, "utilFileEnsureDirectory: Directory write test failed. dir=(%s),err=(%v)", dir, er).AddStack(nil)
 		}
 	}
 	return nil

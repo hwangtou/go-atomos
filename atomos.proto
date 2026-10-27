@@ -162,12 +162,20 @@ message CosmosClusterConfig{
 
   // 证书配置
   CertConfig enable_cert = 4;
+
+  // 仅允许本机/测试传输使用无认证模式。
+  bool allow_insecure = 5;
+  // 允许执行远程节点管理操作的已认证节点。
+  repeated string admin_nodes = 6;
 }
 
 message CertConfig {
   string cert_path = 1;
   string key_path = 2;
   bool insecure_skip_verify = 3;
+  string client_cert_path = 4;
+  string client_key_path = 5;
+  string client_ca_path = 6;
 }
 
 message ElementConfig {
@@ -464,6 +472,7 @@ message CosmosRemoteAsyncOnMessageCallbackReq {
   string message = 5;
   google.protobuf.Any args = 6;
   Error error = 7;
+  IDInfo caller_id = 8;
 }
 message CosmosRemoteAsyncOnMessageCallbackRsp {
   Error error = 1;

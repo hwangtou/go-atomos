@@ -16,6 +16,9 @@ can stand alone or join an etcd-backed multi-node cluster.
   typed element/atom interfaces, ID clients, and message decoders.
 - **Multi-node clusters** — etcd service discovery, cross-node messaging over
   gRPC, version-based hot upgrade and gradual drain (`DESIGN_DRAIN_GRADUAL.md`).
+  Production RPC requires mTLS certificates with per-node Atomos identities;
+  remote node management uses a separate administrator allowlist. See
+  [docs/SECURITY.md](docs/SECURITY.md).
 - **Lifecycle safety** — `IDTracker` reference counting with `Release` /
   `WithID` / `WithRebind`, enforced by the bundled `atomos-vet` analyzers.
 - **Task scheduling** — deferred, timed and crontab tasks plus named serial
@@ -32,10 +35,11 @@ can stand alone or join an etcd-backed multi-node cluster.
   or the `_debug_server` customize key) serving `/elements` (element & atom
   inventory, mailbox depths, idle times, sync wait graph), `/metrics`
   (Prometheus text format), `/healthz`, and `/debug/pprof/*`. Listeners default
-  to loopback-only operation; a non-loopback address requires a non-empty
-  `_debug_server_token` customize value or the server is logged and disabled.
-  Whenever that token is set, every endpoint (including `/healthz`) requires
-  `Authorization: Bearer <token>`. Set `ATOMOS_DEBUG_TOKEN` for `atomosctl`.
+  to loopback-only operation; a non-loopback address requires HTTPS configured
+  with `_debug_server_cert`/`_debug_server_key` plus `_debug_server_token`, or
+  the server is logged and disabled. Whenever that token is set, every endpoint
+  (including `/healthz`) requires `Authorization: Bearer <token>`. Set
+  `ATOMOS_DEBUG_TOKEN` for `atomosctl`.
 
 Requires Go 1.24+.
 

@@ -128,6 +128,9 @@ type CosmosProcess struct {
 		grpcAddress      string
 		grpcServer       *grpc.Server
 		grpcListener     net.Listener
+		allowInsecure    bool
+		mutualTLS        bool
+		adminNodes       map[string]struct{}
 		// GRPC Implementation
 		grpcImpl *atomosRemoteService
 
@@ -1093,9 +1096,9 @@ func (p *CosmosProcess) recoveryMiddleware() grpc.UnaryServerInterceptor {
 					// Recover() needs a SelfID; use the local cosmos as the ID for consistent logging.
 					Recover(p.Self())
 				} else {
-					log.Printf("CosmosProcess: Recovered from gRPC panic. req=(%+v),info=(%+v),recovery=(%v),stack=(%s)", req, info.FullMethod, r, string(debug.Stack()))
+					log.Printf("CosmosProcess: Recovered from gRPC panic. method=(%s),recovery=(%v),stack=(%s)", info.FullMethod, r, string(debug.Stack()))
 				}
-				err = status.Errorf(codes.Internal, "CosmosProcess: gRPC error. req=(%+v),info=(%+v),recovery=(%v)", req, info.FullMethod, r)
+				err = status.Errorf(codes.Internal, "CosmosProcess: internal gRPC failure. method=(%s)", info.FullMethod)
 			}
 		}()
 		return handler(ctx, req)
@@ -1111,6 +1114,12 @@ func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 			return NewError(ErrCodeFencingRequired, "CosmosProcess: strict lifecycle requires an enabled etcd cluster")
 		}
 		return nil
+	}
+
+	p.cluster.allowInsecure = cluster.AllowInsecure
+	p.cluster.adminNodes = make(map[string]struct{}, len(cluster.AdminNodes))
+	for _, node := range cluster.AdminNodes {
+		p.cluster.adminNodes[node] = struct{}{}
 	}
 
 	// Prepare cluster local.
@@ -1140,6 +1149,9 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 				ip = candidate.String()
 			}
 		}
+	}
+	if ip == "" && p.cluster.allowInsecure {
+		ip = "127.0.0.1"
 	}
 	if ip == "" {
 		addrList, er := net.InterfaceAddrs()
@@ -1192,13 +1204,33 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	var serverOption *grpc.ServerOption
 	var dialOption *grpc.DialOption
 	var err *Error
+	var clientCertPEM []byte
 	if cert != nil {
 		isTLS, serverOption, dialOption, err = getClusterTLSConfigFromFiles(cert)
+		p.cluster.mutualTLS = cert.ClientCertPath != "" || cert.ClientKeyPath != "" || cert.ClientCaPath != ""
+		if !p.cluster.allowInsecure && cert.InsecureSkipVerify {
+			return NewError(ErrCodeCosmosConfigInvalid, "CosmosProcess: secure cluster TLS forbids insecure-skip-verify").AddStack(p.local)
+		}
+		if p.cluster.mutualTLS {
+			clientCertPEM, _ = os.ReadFile(cert.ClientCertPath)
+		}
 	} else {
 		isTLS, serverOption, dialOption, err = p.getClusterTLSConfig(cli)
+		clientCertPEM, _, _ = etcdGet(cli, etcdClusterClientCertKey)
+		p.cluster.mutualTLS = clientCertPEM != nil
 	}
 	if err != nil {
 		return err.AddStack(p.local)
+	}
+	if (!isTLS || !p.cluster.mutualTLS) && !p.cluster.allowInsecure {
+		return NewError(ErrCodeCosmosEtcdClusterTLSInvalid, "CosmosProcess: cluster RPC requires mutual TLS; set allow_insecure only for local testing").AddStack(p.local)
+	}
+	if p.cluster.mutualTLS {
+		if identityErr := validateClientCertificateIdentity(clientCertPEM, p.local.GetIDInfo().Cosmos, nodeName); identityErr != nil {
+			return identityErr.AddStack(p.local)
+		}
+	} else if p.cluster.allowInsecure {
+		ip = "127.0.0.1"
 	}
 
 	// Try to get an available port in optionals port list for gRPC server listening.
@@ -1214,6 +1246,8 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		var er error
 		if p.cluster.grpcTransport != nil {
 			listener, er = p.cluster.grpcTransport.Listen(fmt.Sprintf(":%d", port))
+		} else if !p.cluster.mutualTLS && p.cluster.allowInsecure {
+			listener, er = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		} else {
 			listener, er = net.Listen("tcp", fmt.Sprintf(":%d", port))
 		}
@@ -1232,21 +1266,17 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 			grpc.InitialConnWindowSize(grpcServerInitialConnWindowSize),
 			grpc.WriteBufferSize(grpcServerWriteBufferSize),
 			grpc.ReadBufferSize(grpcServerReadBufferSize),
+			grpc.MaxRecvMsgSize(grpcServerMaxRecvMsgSize),
+			grpc.MaxConcurrentStreams(grpcServerMaxConcurrentStreams),
+		}
+		opts := []grpc.ServerOption{
+			grpc.ChainUnaryInterceptor(p.recoveryMiddleware(), p.authenticationMiddleware()),
 		}
 		if isTLS {
-			opts := []grpc.ServerOption{
-				*serverOption,
-				grpc.UnaryInterceptor(p.recoveryMiddleware()),
-			}
-			opts = append(opts, publicOption...)
-			svr = grpc.NewServer(opts...)
-		} else {
-			opts := []grpc.ServerOption{
-				grpc.UnaryInterceptor(p.recoveryMiddleware()),
-			}
-			opts = append(opts, publicOption...)
-			svr = grpc.NewServer(opts...)
+			opts = append(opts, *serverOption)
 		}
+		opts = append(opts, publicOption...)
+		svr = grpc.NewServer(opts...)
 		// Register AtomosRemoteService.
 		p.cluster.grpcImpl = &atomosRemoteService{
 			process: p,

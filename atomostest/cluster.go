@@ -123,6 +123,7 @@ func RunCluster(t *testing.T, cosmos string, nodes []string, newRunnable func(no
 				Enable:        true,
 				EtcdEndpoints: []string{endpoint},
 				OptionalPorts: []int32{int32(reservePort()), int32(reservePort()), int32(reservePort())},
+				AllowInsecure: true,
 			},
 			// Advertise loopback: all fixture processes run on this host,
 			// and the auto-detected LAN address is not always reachable from

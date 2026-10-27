@@ -154,7 +154,7 @@ func NewAppLoggingToFile(logPath string, logFileMaxSize, logPathMaxRatio int64, 
 }
 
 func (l *AppLoggingToFile) openLogFile(path string) (*os.File, *Error) {
-	f, er := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, AppLoggingFilePerm)
+	f, er := utilFileOpenNoFollow(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, AppLoggingFilePerm)
 	if er != nil {
 		return nil, NewErrorf(ErrCodeAppEnvLoggingFileOpenFailed, "log open failed, path=(%s),err=(%v)", path, er).AddStack(nil)
 	}

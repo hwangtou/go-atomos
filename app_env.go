@@ -41,12 +41,8 @@ func (a *appEnv) checkRunPath() *Error {
 		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path is not a directory. err=(%v)", er).AddStack(nil)
 	}
 
-	runTestPath := runPath + "/test"
-	if er = os.WriteFile(runTestPath, []byte{}, 0644); er != nil {
-		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path cannot writ. err=(%v)", er).AddStack(nil)
-	}
-	if er = os.Remove(runTestPath); er != nil {
-		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path test file cannot delete. err=(%v)", er).AddStack(nil)
+	if er = utilFileCheckWritable(runPath); er != nil {
+		return NewErrorf(ErrCodeAppEnvRunPathInvalid, "App: Run path write test failed. err=(%v)", er).AddStack(nil)
 	}
 	return nil
 }
@@ -99,13 +95,9 @@ func (a *appEnv) daemon() *Error {
 	if !isRunningInDocker() {
 		runPIDPath := path.Join(a.config.RunPath, a.config.Node+".pid")
 		pidBuf := strconv.FormatInt(int64(os.Getpid()), 10)
-		// Remove any pre-existing (read-only, 0444) pid file before writing.
-		// MainForWorkingPath invokes LaunchApp() twice; the first call creates
-		// the pid file as read-only, so the second WriteFile would otherwise
-		// fail with EACCES and abort startup. Removing first makes daemon()
-		// idempotent across repeated calls within one process.
+		// MainForWorkingPath may invoke LaunchApp twice in one process.
 		_ = os.Remove(runPIDPath)
-		if er := os.WriteFile(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
+		if er := utilFileWriteFileNoFollow(runPIDPath, []byte(pidBuf), pidPerm); er != nil {
 			return NewErrorf(ErrCodeAppEnvRunPathWritePIDFileFailed, "App: Write pid file failed. err=(%v)", er).AddStack(nil)
 		}
 	}

@@ -12,15 +12,15 @@ func lifecycleManagerNotImplemented(operationID string) *Error {
 	return lifecycleError(operationID, ErrCodeOperationUnsupported, "CosmosRemote: controlled atom lifecycle requires PerAtomStrict")
 }
 
-func lifecycleRequestCaller(a *atomosRemoteService, info *IDInfo) ID {
+func lifecycleRequestCaller(a *atomosRemoteService, info *IDInfo) (ID, *Error) {
 	if info == nil {
-		return a.process.local
+		return nil, NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: controlled lifecycle request missing caller identity")
 	}
 	caller := a.getRemoteInTargetProcessIDFromIDInfo(info, 0, 0)
 	if caller == nil || reflect.ValueOf(caller).IsNil() {
-		return a.process.local
+		return nil, NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: controlled lifecycle request has invalid caller identity")
 	}
-	return caller
+	return caller, nil
 }
 
 func lifecycleUnmarshalArgs(arg *anypb.Any) (proto.Message, *Error) {
@@ -34,7 +34,7 @@ func lifecycleUnmarshalArgs(arg *anypb.Any) (proto.Message, *Error) {
 	return msg, nil
 }
 
-func (a *atomosRemoteService) SpawnAtomControlled(_ context.Context, req *CosmosRemoteSpawnAtomControlledReq) (*CosmosRemoteSpawnAtomControlledRsp, error) {
+func (a *atomosRemoteService) SpawnAtomControlled(ctx context.Context, req *CosmosRemoteSpawnAtomControlledReq) (*CosmosRemoteSpawnAtomControlledRsp, error) {
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteSpawnAtomControlledRsp{}
 	if req == nil {
@@ -45,12 +45,17 @@ func (a *atomosRemoteService) SpawnAtomControlled(_ context.Context, req *Cosmos
 		rsp.Error = lifecycleManagerNotImplemented(req.OperationId)
 		return rsp, nil
 	}
+	caller, callerErr := lifecycleRequestCaller(a, req.CallerId)
+	if callerErr != nil {
+		rsp.Error = callerErr
+		return rsp, nil
+	}
 	arg, err := lifecycleUnmarshalArgs(req.Args)
 	if err != nil {
 		rsp.Error = err
 		return rsp, nil
 	}
-	result, opErr := a.process.lifecycle.spawn(context.Background(), lifecycleRequestCaller(a, req.CallerId), req.Element, req.Atom, arg, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
+	result, opErr := a.process.lifecycle.spawn(ctx, caller, req.Element, req.Atom, arg, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
 	if opErr != nil {
 		rsp.Error = opErr
 	} else {
@@ -59,7 +64,7 @@ func (a *atomosRemoteService) SpawnAtomControlled(_ context.Context, req *Cosmos
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) HaltAtomControlled(_ context.Context, req *CosmosRemoteHaltAtomControlledReq) (*CosmosRemoteHaltAtomControlledRsp, error) {
+func (a *atomosRemoteService) HaltAtomControlled(ctx context.Context, req *CosmosRemoteHaltAtomControlledReq) (*CosmosRemoteHaltAtomControlledRsp, error) {
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteHaltAtomControlledRsp{}
 	if req == nil || req.Id == nil {
@@ -70,7 +75,12 @@ func (a *atomosRemoteService) HaltAtomControlled(_ context.Context, req *CosmosR
 		rsp.Error = lifecycleManagerNotImplemented(req.OperationId)
 		return rsp, nil
 	}
-	result, err := a.process.lifecycle.halt(context.Background(), lifecycleRequestCaller(a, req.CallerId), req.Id, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
+	caller, callerErr := lifecycleRequestCaller(a, req.CallerId)
+	if callerErr != nil {
+		rsp.Error = callerErr
+		return rsp, nil
+	}
+	result, err := a.process.lifecycle.halt(ctx, caller, req.Id, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
 	if err != nil {
 		rsp.Error = err
 	} else {
@@ -79,7 +89,7 @@ func (a *atomosRemoteService) HaltAtomControlled(_ context.Context, req *CosmosR
 	return rsp, nil
 }
 
-func (a *atomosRemoteService) TakeoverAtom(_ context.Context, req *CosmosRemoteTakeoverAtomReq) (*CosmosRemoteTakeoverAtomRsp, error) {
+func (a *atomosRemoteService) TakeoverAtom(ctx context.Context, req *CosmosRemoteTakeoverAtomReq) (*CosmosRemoteTakeoverAtomRsp, error) {
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteTakeoverAtomRsp{}
 	if req == nil || req.Id == nil || req.PreviousId == nil {
@@ -90,12 +100,17 @@ func (a *atomosRemoteService) TakeoverAtom(_ context.Context, req *CosmosRemoteT
 		rsp.Error = lifecycleManagerNotImplemented(req.OperationId)
 		return rsp, nil
 	}
+	caller, callerErr := lifecycleRequestCaller(a, req.CallerId)
+	if callerErr != nil {
+		rsp.Error = callerErr
+		return rsp, nil
+	}
 	arg, err := lifecycleUnmarshalArgs(req.Args)
 	if err != nil {
 		rsp.Error = err
 		return rsp, nil
 	}
-	result, opErr := a.process.lifecycle.takeover(context.Background(), lifecycleRequestCaller(a, req.CallerId), req.Id, req.PreviousId, arg, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
+	result, opErr := a.process.lifecycle.takeover(ctx, caller, req.Id, req.PreviousId, arg, req.OperationId, req.Fingerprint, req.Retain, createExtForCosmosArgs(req.CosmosArgs)...)
 	if opErr != nil {
 		rsp.Error = opErr
 	} else {

@@ -36,7 +36,7 @@ func newDSTLifecycleFixture(t *testing.T, name string) *dstLifecycleFixture {
 		SetLifecycleMode(LifecycleModePerAtomStrict).
 		SetClock(clock).
 		SetEtcdClient(client)
-	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"unused:0"}, OptionalPorts: []int32{0}}
+	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"unused:0"}, OptionalPorts: []int32{0}, AllowInsecure: true}
 	runnable.config.Customize = map[string][]byte{configKeyClusterAdvertiseIP: []byte("127.0.0.1")}
 	if err := process.Start(runnable); err != nil {
 		_ = client.Close()
@@ -276,7 +276,7 @@ func TestDST_LeaseExpiryFencesOldOwner(t *testing.T) {
 	}
 	runnable := newTestCosmosRunnable(&IDInfo{Type: IDType_Cosmos, Cosmos: "dstLeaseExpiry", Node: "nodeB"}).
 		SetLifecycleMode(LifecycleModePerAtomStrict).SetClock(fixture.clock).SetEtcdClient(fixture.client)
-	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"unused:0"}, OptionalPorts: []int32{0}}
+	runnable.config.EnableCluster = &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"unused:0"}, OptionalPorts: []int32{0}, AllowInsecure: true}
 	runnable.config.Customize = map[string][]byte{configKeyClusterAdvertiseIP: []byte("127.0.0.1")}
 	if err := replacement.Start(runnable); err != nil {
 		t.Fatalf("replacement Start: %v", err)

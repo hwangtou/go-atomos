@@ -6,10 +6,20 @@ package atomos
 // and atom inventory; then assert Stop closes the listener.
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -306,7 +316,42 @@ func TestDebugServerDisabledByDefault(t *testing.T) {
 	}
 }
 
-func startDebugServerTestProcess(t *testing.T, addr, token string) (*CosmosProcess, *reproLogger) {
+func writeDebugServerCertificate(t *testing.T) (certPath, keyPath string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "atomos-debug-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	certPath = filepath.Join(dir, "debug.crt")
+	keyPath = filepath.Join(dir, "debug.key")
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return certPath, keyPath
+}
+
+func startDebugServerTestProcess(t *testing.T, addr, token string, secure ...bool) (*CosmosProcess, *reproLogger) {
 	t.Helper()
 	logger := &reproLogger{}
 	process, cerr := newCosmosProcess("debugSecurityCosmos", "debugSecurityNode", logger)
@@ -321,6 +366,11 @@ func startDebugServerTestProcess(t *testing.T, addr, token string) (*CosmosProce
 	runnable.config.Customize = map[string][]byte{configKeyDebugServer: []byte(addr)}
 	if token != "" {
 		runnable.config.Customize[configKeyDebugServerToken] = []byte(token)
+	}
+	if len(secure) > 0 && secure[0] {
+		certPath, keyPath := writeDebugServerCertificate(t)
+		runnable.config.Customize[configKeyDebugServerCert] = []byte(certPath)
+		runnable.config.Customize[configKeyDebugServerKey] = []byte(keyPath)
 	}
 	if err := process.Start(runnable); err != nil {
 		t.Fatalf("process start failed: %v", err)
@@ -339,6 +389,9 @@ func httpGetWithAuthorization(t *testing.T, url, authorization string) (string, 
 		req.Header.Set("Authorization", authorization)
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
+	if strings.HasPrefix(url, "https://") {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // Test-only self-signed certificate.
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s failed: %v", url, err)
@@ -364,12 +417,25 @@ func TestDebugServerNonLoopbackRequiresToken(t *testing.T) {
 	}
 }
 
+func TestDebugServerNonLoopbackRequiresHTTPS(t *testing.T) {
+	process, logger := startDebugServerTestProcess(t, "0.0.0.0:0", "debug-test-token")
+	if process.debugServer != nil {
+		t.Fatalf("non-loopback debug server started without HTTPS")
+	}
+	for deadline := time.Now().Add(2 * time.Second); !logger.hasError("Non-loopback listen requires HTTPS"); {
+		if time.Now().After(deadline) {
+			t.Fatalf("missing HTTPS requirement error log")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestDebugServerBearerAuthentication(t *testing.T) {
 	const token = "debug-test-token"
-	process, _ := startDebugServerTestProcess(t, "0.0.0.0:0", token)
+	process, _ := startDebugServerTestProcess(t, "0.0.0.0:0", token, true)
 	ds := process.debugServer
 	if ds == nil {
-		t.Fatalf("non-loopback debug server with token did not start")
+		t.Fatalf("non-loopback debug server with HTTPS and token did not start")
 	}
 	if listenerIsLoopback(ds.listener) {
 		t.Fatalf("test listener %s is unexpectedly loopback", ds.addr())
@@ -378,7 +444,7 @@ func TestDebugServerBearerAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("split debug address failed: %v", err)
 	}
-	base := "http://127.0.0.1:" + port
+	base := "https://127.0.0.1:" + port
 	paths := []string{"/", "/elements", "/schema", "/metrics", "/healthz", "/debug/pprof/"}
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {

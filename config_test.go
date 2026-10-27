@@ -74,6 +74,10 @@ func Test_ValidateSupervisorConfig(t *testing.T) {
 		{"cluster disabled", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: false}}, true},
 		{"cluster enabled with endpoints", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"localhost:2379"}}}, true},
 		{"cluster enabled without endpoints", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true}}, false},
+		{"secure file TLS complete", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"localhost:2379"}, EnableCert: &CertConfig{CertPath: "s.crt", KeyPath: "s.key", ClientCertPath: "c.crt", ClientKeyPath: "c.key", ClientCaPath: "ca.crt"}}}, true},
+		{"secure file TLS incomplete", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"localhost:2379"}, EnableCert: &CertConfig{CertPath: "s.crt", KeyPath: "s.key"}}}, false},
+		{"secure file TLS skip verify", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"localhost:2379"}, EnableCert: &CertConfig{CertPath: "s.crt", KeyPath: "s.key", ClientCertPath: "c.crt", ClientKeyPath: "c.key", ClientCaPath: "ca.crt", InsecureSkipVerify: true}}}, false},
+		{"invalid admin node", &Config{Cosmos: "c", Node: "n", EnableCluster: &CosmosClusterConfig{Enable: true, EtcdEndpoints: []string{"localhost:2379"}, AdminNodes: []string{"bad/node"}}}, false},
 	}
 	for _, c := range cases {
 		err := c.conf.ValidateSupervisorConfig()
@@ -184,10 +188,14 @@ node: n
 enable-cluster:
   enable: true
   etcd-endpoints: [localhost:2379]
+  admin-nodes: [opsNode]
   enable-cert:
     cert-path: /tmp/cluster.crt
     key-path: /tmp/cluster.key
     insecure-skip-verify: true
+    client-cert-path: /tmp/client.crt
+    client-key-path: /tmp/client.key
+    client-ca-path: /tmp/client-ca.crt
 `)
 	conf, err := NewCosmosNodeConfigFromYamlPath(path, &CosmosRunnable{})
 	if err != nil {
@@ -196,6 +204,12 @@ enable-cluster:
 	cert := conf.EnableCluster.EnableCert
 	if cert == nil || cert.CertPath != "/tmp/cluster.crt" || cert.KeyPath != "/tmp/cluster.key" || !cert.InsecureSkipVerify {
 		t.Fatalf("TLS config was not preserved: %+v", cert)
+	}
+	if cert.ClientCertPath != "/tmp/client.crt" || cert.ClientKeyPath != "/tmp/client.key" || cert.ClientCaPath != "/tmp/client-ca.crt" {
+		t.Fatalf("client TLS config was not preserved: %+v", cert)
+	}
+	if len(conf.EnableCluster.AdminNodes) != 1 || conf.EnableCluster.AdminNodes[0] != "opsNode" {
+		t.Fatalf("admin nodes were not preserved: %v", conf.EnableCluster.AdminNodes)
 	}
 }
 

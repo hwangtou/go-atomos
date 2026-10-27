@@ -214,7 +214,7 @@ type ID interface {
 `/metrics`（Prometheus text 格式，手写 exposition，无 client_golang 依赖：atomos_elements /
 atomos_element_atoms{,_active} / atomos_atom_mails / atomos_atom_idle_seconds / atomos_sync_wait_edges /
 atomos_sync_chains / go_goroutines / go_memstats_*）、`/healthz`（IsHealthy）、`/debug/pprof/*`。
-监听失败仅记错误日志不阻断进程。未做（记录）：RPC latency histogram、remote connection count metrics。
+监听失败仅记错误日志不阻断进程。非回环监听现要求 HTTPS（`_debug_server_cert` / `_debug_server_key`）与 Bearer token。未做（记录）：RPC latency histogram、remote connection count metrics。
 
 ---
 

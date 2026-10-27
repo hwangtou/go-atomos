@@ -41,6 +41,7 @@ func newMemoryClusterFixture(t *testing.T, cosmos string) *memoryClusterFixture 
 					Enable:        true,
 					EtcdEndpoints: []string{"unused:0"},
 					OptionalPorts: []int32{0},
+					AllowInsecure: true,
 				},
 				Customize: map[string][]byte{"_cluster_advertise_ip": []byte("127.0.0.1")},
 			})

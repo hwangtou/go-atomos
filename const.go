@@ -29,17 +29,21 @@ const (
 	// Bearer token required by every debug server endpoint. It is mandatory when
 	// configKeyDebugServer specifies a non-loopback listen address.
 	configKeyDebugServerToken = "_debug_server_token"
+	// Non-loopback debug listeners require this HTTPS certificate/key pair.
+	configKeyDebugServerCert = "_debug_server_cert"
+	configKeyDebugServerKey  = "_debug_server_key"
 
-	// configKeyClusterAdvertiseIP overrides the IP a cluster node advertises
-	// to peers via etcd. By default the first non-loopback IPv4 interface
-	// address is used; containers and test fixtures that communicate over
-	// loopback set this to e.g. "127.0.0.1".
+	// configKeyClusterAdvertiseIP overrides the IP a secure cluster node
+	// advertises to peers via etcd. The default is the first non-loopback IPv4;
+	// explicit insecure mode always advertises and listens on loopback.
 	configKeyClusterAdvertiseIP = "_cluster_advertise_ip"
 
 	grpcServerInitialWindowSize     = 1024 * 128      // 128K
 	grpcServerInitialConnWindowSize = 1024 * 1024 * 1 // 1M
 	grpcServerWriteBufferSize       = 1024 * 32       // 32K
 	grpcServerReadBufferSize        = 1024 * 32       // 32K
+	grpcServerMaxRecvMsgSize        = 4 * 1024 * 1024
+	grpcServerMaxConcurrentStreams  = 128
 
 	grpcClientInitialWindowSize     = 1024 * 128      // 128K
 	grpcClientInitialConnWindowSize = 1024 * 1024 * 1 // 1M

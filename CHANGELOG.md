@@ -7,13 +7,24 @@ branch).
 
 ## v3.0.0 (unreleased)
 
-v3 is a source-incompatible redesign of the public API. The wire protocol is
-**not** renegotiated: `atomos.proto` field numbers, the `Error` proto shape and
-all 131 error-code numeric values are frozen and byte-compatible with v2, and
-v2/v3 nodes can interoperate in a mixed cluster (see the compatibility notes
-at the bottom). Full design rationale: `docs/DESIGN_V3_API.md`.
+v3 is a source-incompatible redesign of the public API. Existing
+`atomos.proto` field numbers, the `Error` proto shape and all 131 error-code
+numeric values remain frozen and byte-compatible with v2. Secure cluster mode
+requires every node to run the authenticated protocol; see `docs/SECURITY.md`
+for certificate and mixed-version migration requirements. Full design
+rationale: `docs/DESIGN_V3_API.md`.
 
 ### Breaking changes & migration
+
+Cluster and debug security
+
+- Cluster RPC now requires mutual TLS with a unique `atomos://cosmos/node`
+  client-certificate identity. `CallerId` is checked against that identity.
+  `allow-insecure: true` is an explicit local-test mode only: TCP is bound to
+  loopback and remote management is disabled.
+- `TryKilling` and `DrainNode` require an authenticated node listed in
+  `admin-nodes`. Non-loopback debug listeners now require HTTPS certificate/
+  key configuration in addition to the Bearer token.
 
 Process entry & global state
 

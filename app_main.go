@@ -63,10 +63,10 @@ func WithStandalone() RunOption {
 
 // WithDebugServer enables the introspection HTTP server on addr (for example,
 // "127.0.0.1:9099"). It serves /elements, /metrics, /healthz and
-// /debug/pprof/* from process start until stop. Non-loopback listeners also
-// require a "_debug_server_token" customize value, used as a Bearer token on
-// every endpoint. Equivalent to the "_debug_server" customize key; an explicit
-// option wins.
+// /debug/pprof/* from process start until stop. Non-loopback listeners require
+// "_debug_server_cert"/"_debug_server_key" for HTTPS and a
+// "_debug_server_token" Bearer token on every endpoint. Equivalent to the
+// "_debug_server" customize key; an explicit option wins.
 func WithDebugServer(addr string) RunOption {
 	return func(c *runConfig) {
 		c.debugServerAddr = addr

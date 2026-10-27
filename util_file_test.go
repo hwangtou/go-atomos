@@ -136,7 +136,7 @@ func TestUtilFileEnsureDirectory(t *testing.T) {
 				perm:           0664,
 				ensureWritable: true,
 			},
-			wantErr: "utilFileEnsureDirectory: Cannot write test file. dir=",
+			wantErr: "utilFileEnsureDirectory: Directory write test failed. dir=",
 		},
 	}
 	for _, tt := range tests {

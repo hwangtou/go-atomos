@@ -8,7 +8,7 @@ import (
 )
 
 func TestRemoteTryKillingRespondsAndStopsDebugServer(t *testing.T) {
-	cluster := newTestCosmosProcessSimulateCluster(t, 51100, "remote_kill_review", "remote_kill_review_node")
+	cluster := newTestCosmosProcessSimulateCluster(t, 56100, "remote_kill_review", "remote_kill_review_node")
 	defer cluster.close()
 
 	target := cluster.targetProcess

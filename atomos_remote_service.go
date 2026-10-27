@@ -91,7 +91,7 @@ func (a *atomosRemoteService) getAtomID(ctx context.Context, req *CosmosRemoteGe
 				rsp.Error = NewError(ErrCodeAtomNotExists, "CosmosRemote: atom not exists")
 				return rsp, nil
 			}
-			controlled, _ := a.SpawnAtomControlled(ctx, &CosmosRemoteSpawnAtomControlledReq{Element: req.Element, Atom: req.Atom})
+			controlled, _ := a.SpawnAtomControlled(ctx, &CosmosRemoteSpawnAtomControlledReq{CallerId: a.process.local.GetIDInfo(), Element: req.Element, Atom: req.Atom})
 			rsp.Error = controlled.Error
 			if controlled.Result != nil {
 				rsp.Id = controlled.Result.Id
@@ -280,12 +280,12 @@ func (a *atomosRemoteService) SyncMessagingByName(ctx context.Context, req *Cosm
 func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
 	defer func() { Recover(a.process.local) }()
 
-	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName req=(%v)", req)
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
 	if req == nil || req.To == nil {
 		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: SyncMessagingByName missing target ID").AddStack(nil)
 		return rsp, nil
 	}
+	a.process.local.Log().Debug("atomosRemoteService: SyncMessagingByName target=(%s) message=(%q)", req.To.Info(), req.Message)
 	if fenceErr := a.process.lifecycle.authorize(req.To); fenceErr != nil {
 		rsp.Error = fenceErr
 		return rsp, nil
@@ -377,12 +377,12 @@ func (a *atomosRemoteService) AsyncMessagingByName(ctx context.Context, req *Cos
 func (a *atomosRemoteService) asyncMessagingByName(ctx context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
 	defer func() { Recover(a.process.local) }()
 
-	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName req=(%v)", req)
 	rsp := &CosmosRemoteAsyncMessagingByNameRsp{}
 	if req == nil || req.ToId == nil {
 		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: AsyncMessagingByName missing target ID").AddStack(nil)
 		return rsp, nil
 	}
+	a.process.local.Log().Debug("atomosRemoteService: AsyncMessagingByName target=(%s) message=(%q)", req.ToId.Info(), req.Message)
 	if fenceErr := a.process.lifecycle.authorize(req.ToId); fenceErr != nil {
 		rsp.Error = fenceErr
 		return rsp, nil
@@ -456,46 +456,36 @@ func (a *atomosRemoteService) asyncMessagingByName(ctx context.Context, req *Cos
 // Management-plane RPC: body-embedded errors only (see TryKilling).
 func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *CosmosRemoteAsyncOnMessageCallbackReq) (*CosmosRemoteAsyncOnMessageCallbackRsp, error) {
 	defer func() { Recover(a.process.local) }()
-
 	rsp := &CosmosRemoteAsyncOnMessageCallbackRsp{}
-
-	//a.process.logging.PushLogging(req.CallbackId, LogLevel_Debug, fmt.Sprintf("Async callback: startupID=(%d) asyncID=(%d) to=(%s) message=(%s) args=(%v) err=(%v)", req.StartupId, req.AsyncId, req.ToId, req.Message, req.Args, req.Error))
-
-	if req.CallbackId == nil {
-		a.log().coreError("atomosRemoteService: AsyncOnMessageCallback no callback id. req=(%+v)", req)
-		rsp.Error = NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "atomosRemoteService: AsyncOnMessageCallback no callback id. req=(%+v)", req).AddStack(nil)
+	fail := func(message string) (*CosmosRemoteAsyncOnMessageCallbackRsp, error) {
+		a.log().coreError("atomosRemoteService: %s", message)
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, message).AddStack(nil)
 		return rsp, nil
+	}
+	if req == nil {
+		return fail("atomosRemoteService: AsyncOnMessageCallback missing request")
+	}
+	if req.CallbackId == nil {
+		return fail("atomosRemoteService: AsyncOnMessageCallback no callback id")
 	}
 	if req.ToId == nil {
-		a.log().coreError("atomosRemoteService: AsyncOnMessageCallback no to id. req=(%+v)", req)
-		rsp.Error = NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "atomosRemoteService: AsyncOnMessageCallback no to id. req=(%+v)", req).AddStack(nil)
-		return rsp, nil
+		return fail("atomosRemoteService: AsyncOnMessageCallback no to id")
 	}
 	if req.StartupId != a.process.startupID {
-		a.log().coreError("atomosRemoteService: AsyncOnMessageCallback invalid startup id. startupID=(%d),req=(%+v)", a.process.startupID, req)
-		rsp.Error = NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "atomosRemoteService: AsyncOnMessageCallback invalid startup id. req=(%+v)", req).AddStack(nil)
-		return rsp, nil
+		return fail("atomosRemoteService: AsyncOnMessageCallback invalid startup id")
 	}
 
-	// callback id
 	callbackID := a.getLocalIDFromIDInfo(req.CallbackId)
 	if callbackID == nil || reflect.ValueOf(callbackID).IsNil() {
-		a.log().coreError("atomosRemoteService: AsyncOnMessageCallback invalid callback id. req=(%+v)", req)
-		rsp.Error = NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "atomosRemoteService: AsyncOnMessageCallback invalid callback id. req=(%+v)", req).AddStack(nil)
-		return rsp, nil
+		return fail("atomosRemoteService: AsyncOnMessageCallback invalid callback id")
 	}
-
-	// to id
 	toID := a.getRemoteInTargetProcessIDFromIDInfo(req.ToId, req.StartupId, req.AsyncId)
 	if toID == nil || reflect.ValueOf(toID).IsNil() {
-		a.log().coreInfo("atomosRemoteService: AsyncOnMessageCallback invalid to id. req=(%+v)", req)
-		rsp.Error = NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "atomosRemoteService: AsyncOnMessageCallback invalid to id. req=(%+v)", req).AddStack(nil)
-		return rsp, nil
+		return fail("atomosRemoteService: AsyncOnMessageCallback invalid to id")
 	}
 
 	var in proto.Message
 	var er error
-	// Unmarshal args.
 	if req.Args != nil {
 		in, er = anypb.UnmarshalNew(req.Args, proto.UnmarshalOptions{})
 		if er != nil {
@@ -503,9 +493,6 @@ func (a *atomosRemoteService) AsyncOnMessageCallback(ctx context.Context, req *C
 			return rsp, nil
 		}
 	}
-	// do callback
-
-	//a.process.logging.PushLogging(callbackID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 4: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callbackID, toID, req.StartupId, req.AsyncId, req.Message, in))
 	callbackIDInternal, err := asIDInternal(callbackID)
 	if err != nil {
 		rsp.Error = err.AddStack(nil)

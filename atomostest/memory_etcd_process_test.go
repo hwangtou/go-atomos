@@ -23,6 +23,7 @@ func TestMemoryEtcdStrictProcessSharedClient(t *testing.T) {
 					Enable:        true,
 					EtcdEndpoints: []string{"unused:0"},
 					OptionalPorts: []int32{int32(reservePort())},
+					AllowInsecure: true,
 				},
 				Customize: map[string][]byte{"_cluster_advertise_ip": []byte("127.0.0.1")},
 			}).

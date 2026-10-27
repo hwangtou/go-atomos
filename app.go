@@ -30,20 +30,20 @@ func NewCosmosNodeAppWithWorkingPath(runnable CosmosRunnable, wd, cosmos, node s
 		return nil, NewErrorf(ErrCodeRunnableConfigNotFound, "App: Args is invalid.").AddStack(nil)
 	}
 	// Check whether the working directory is existed, if exists, then use it; if not, then create it.
-	if err := utilFileEnsureDirectory(wd, os.ModePerm|os.ModeDir, true); err != nil {
+	if err := utilFileEnsureDirectory(wd, 0750, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	// Join log, run, etc path with os separator.
 	logPath := path.Join(wd, "log")
 	runPath := path.Join(wd, "run")
 	etcPath := path.Join(wd, "etc")
-	if err := utilFileEnsureDirectory(logPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(logPath, 0750, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := utilFileEnsureDirectory(runPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(runPath, 0750, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
-	if err := utilFileEnsureDirectory(etcPath, 0777, true); err != nil {
+	if err := utilFileEnsureDirectory(etcPath, 0750, true); err != nil {
 		return nil, err.AddStack(nil)
 	}
 	logMaxSize := AppLoggingDefaultMaxSize
