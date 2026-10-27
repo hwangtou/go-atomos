@@ -104,9 +104,9 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			clientv3.Compare(clientv3.ModRevision(ownerKey), "=", ownerMod),
 			clientv3.Compare(clientv3.Version(opKey), "=", 0),
 		).Then(
-			clientv3.OpPut(recordKey, recordBuf),
-			clientv3.OpPut(ownerKey, ownerBuf, clientv3.WithLease(leaseID)),
-			clientv3.OpPut(opKey, opBuf),
+			EtcdOpPut(recordKey, recordBuf, 0),
+			EtcdOpPut(ownerKey, ownerBuf, leaseID),
+			EtcdOpPut(opKey, opBuf, 0),
 		)
 		rsp, er := txn.Commit()
 		if er != nil {
@@ -190,9 +190,9 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 		if encodeErr != nil {
 			return nil, encodeErr
 		}
-		txn = txn.Then(clientv3.OpPut(m.operationKey(operationID), opBuf), clientv3.OpPut(ownerKey, ownerBuf, clientv3.WithLease(leaseID)))
+		txn = txn.Then(EtcdOpPut(m.operationKey(operationID), opBuf, 0), EtcdOpPut(ownerKey, ownerBuf, leaseID))
 	} else {
-		txn = txn.Then(clientv3.OpPut(m.operationKey(operationID), opBuf), clientv3.OpDelete(ownerKey))
+		txn = txn.Then(EtcdOpPut(m.operationKey(operationID), opBuf, 0), EtcdOpDelete(ownerKey))
 	}
 	rsp, er := txn.Commit()
 	if er != nil {
@@ -348,8 +348,8 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		}
 		ctxTxn, cancel := etcdContext()
 		rsp, er := m.process.cluster.etcdClient.Txn(ctxTxn).If(comparisons...).Then(
-			clientv3.OpPut(m.ownerKey(id.Element, id.Atom), ownerBuf, clientv3.WithLease(clientv3.LeaseID(owner.LeaseId))),
-			clientv3.OpPut(m.operationKey(operationID), opBuf),
+			EtcdOpPut(m.ownerKey(id.Element, id.Atom), ownerBuf, clientv3.LeaseID(owner.LeaseId)),
+			EtcdOpPut(m.operationKey(operationID), opBuf, 0),
 		).Commit()
 		cancel()
 		if er != nil {
@@ -421,7 +421,7 @@ func (m *lifecycleManager) joinStoppingHalt(ctx context.Context, operationID, fi
 		return nil, encodeErr
 	}
 	ctxTxn, cancel := etcdContext()
-	rsp, er := m.process.cluster.etcdClient.Txn(ctxTxn).If(clientv3.Compare(clientv3.Version(m.operationKey(operationID)), "=", 0)).Then(clientv3.OpPut(m.operationKey(operationID), buf)).Commit()
+	rsp, er := m.process.cluster.etcdClient.Txn(ctxTxn).If(clientv3.Compare(clientv3.Version(m.operationKey(operationID)), "=", 0)).Then(EtcdOpPut(m.operationKey(operationID), buf, 0)).Commit()
 	cancel()
 	if er != nil {
 		return nil, asError(er)
@@ -491,7 +491,7 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 		comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(m.shardOwnerKey(id.ShardId)), "=", shardMod))
 	}
 	ctx, cancel := etcdContext()
-	rsp, er := m.process.cluster.etcdClient.Txn(ctx).If(comparisons...).Then(clientv3.OpPut(m.operationKey(operationID), opBuf), clientv3.OpPut(m.recordKey(id.Element, id.Atom), recordBuf), clientv3.OpDelete(m.ownerKey(id.Element, id.Atom))).Commit()
+	rsp, er := m.process.cluster.etcdClient.Txn(ctx).If(comparisons...).Then(EtcdOpPut(m.operationKey(operationID), opBuf, 0), EtcdOpPut(m.recordKey(id.Element, id.Atom), recordBuf, 0), EtcdOpDelete(m.ownerKey(id.Element, id.Atom))).Commit()
 	cancel()
 	if er != nil {
 		return nil, asError(er)
@@ -522,7 +522,7 @@ func (m *lifecycleManager) supersedeOperation(operationID, takeoverID string) {
 		return
 	}
 	ctx, cancel := etcdContext()
-	_, _ = m.process.cluster.etcdClient.Txn(ctx).If(clientv3.Compare(clientv3.ModRevision(m.operationKey(operationID)), "=", mod)).Then(clientv3.OpPut(m.operationKey(operationID), buf)).Commit()
+	_, _ = m.process.cluster.etcdClient.Txn(ctx).If(clientv3.Compare(clientv3.ModRevision(m.operationKey(operationID)), "=", mod)).Then(EtcdOpPut(m.operationKey(operationID), buf, 0)).Commit()
 	cancel()
 }
 

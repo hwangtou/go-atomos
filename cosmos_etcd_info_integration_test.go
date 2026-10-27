@@ -16,11 +16,12 @@ func TestEtcdInfoPublishRetriesLatestStateAfterOutage(t *testing.T) {
 	dir := t.TempDir()
 	e1 := startEmbeddedEtcdAt(t, dir, clientPort)
 	endpoint := fmt.Sprintf("127.0.0.1:%d", clientPort)
-	cli, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
+	raw, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
 	if err != nil {
 		e1.Close()
 		t.Fatalf("client: %v", err)
 	}
+	cli := NewEtcdClientV3(raw)
 	t.Cleanup(func() { _ = cli.Close() })
 
 	oldTimeout, oldRegistrationBackoff, oldPublishBackoff, oldAttempts := etcdOpTimeout, etcdRegistrationBackoff, etcdInfoPublishBackoff, etcdRegistrationAttempts

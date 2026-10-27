@@ -63,12 +63,14 @@ async retry 与 drain 使用同一个注入 Clock。
 租约到期回调（虚拟时钟驱动）+ watch 订阅者列表，复刻 CAS 语义。
 故障注入套件（716b9d9）的场景可以逐个迁移为确定性版本。
 
-当前实现：`atomostest/memory_etcd.go` 提供 `EtcdClient` / `EtcdTxn` /
-`EtcdOp` 窄接缝，覆盖 Get/Put/Delete/Txn/Watch/Grant/KeepAlive/Revoke/Close。
-请求、响应、Compare 和选项使用 `clientv3` 类型；Put 与事务 `EtcdOpPut`
-显式携带 LeaseID，避免用 unsafe/反射读取 `clientv3.Op` 的私有 lease。
-`atomostest/memory_etcd_integration_test.go` 的 `contractClientV3` 展示真实
-适配方法；尚未把该接缝接入 `CosmosProcess`。
+当前实现：`internal/etcd` 提供 `Client` / `Txn` / `Op` 窄接缝，覆盖
+Get/Put/Delete/Txn/Watch/Grant/KeepAlive/Revoke/Close。根包以
+`EtcdClient` / `EtcdTxn` / `EtcdOp` 别名公开该接缝，`atomostest` 保留同名
+兼容别名与操作构造函数。请求、响应、Compare 和选项使用 `clientv3` 类型；
+Put 与事务 `EtcdOpPut` 显式携带 LeaseID，避免用 unsafe/反射读取
+`clientv3.Op` 的私有 lease。生产 adapter 位于 `internal/etcd`，真实启动和
+共享契约测试共同复用它。`CosmosRunnable.SetEtcdClient` 可注入 MemoryEtcd；
+process 只关闭自己创建的客户端，外部注入的共享后端由调用方管理。
 
 已实现的内存语义：
 

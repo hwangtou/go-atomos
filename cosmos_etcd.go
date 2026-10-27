@@ -70,7 +70,7 @@ func etcdCosmosNodeVersionURI(cosmosName, nodeName string, version int64) string
 
 // getClusterTLSConfig
 // 获取集群的TLS配置
-func (p *CosmosProcess) getClusterTLSConfig(cli *clientv3.Client) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
+func (p *CosmosProcess) getClusterTLSConfig(cli EtcdClient) (bool, *grpc.ServerOption, *grpc.DialOption, *Error) {
 	// Server-side
 	serverCertPem, _, err := etcdGet(cli, etcdClusterServerCertKey)
 	if err != nil {
@@ -491,7 +491,7 @@ func (p *CosmosProcess) handleWatchEvent(event *clientv3.Event, keyPrefix string
 // watchCluster loads an authoritative snapshot, then watches from its revision
 // plus one. Any terminated/canceled stream causes a fresh snapshot and revision
 // reconciliation, with cancellation-aware backoff between attempts.
-func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
+func (p *CosmosProcess) watchCluster(cli EtcdClient) *Error {
 	keyPrefix := etcdCosmosNodeWatchAllURI(p.local.runnable.config.Cosmos)
 	getResp, err := etcdGetPrefix(cli, keyPrefix)
 	if err != nil {

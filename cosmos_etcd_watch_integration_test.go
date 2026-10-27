@@ -43,7 +43,7 @@ func newWatchProcess(t *testing.T, cosmos, node string) (*CosmosProcess, *reproL
 }
 
 // startWatch starts watchCluster and cancels it when the test ends.
-func startWatch(t *testing.T, p *CosmosProcess, cli *clientv3.Client) {
+func startWatch(t *testing.T, p *CosmosProcess, cli EtcdClient) {
 	t.Helper()
 	if err := p.watchCluster(cli); err != nil {
 		t.Fatalf("watchCluster failed: %v", err)
@@ -273,11 +273,12 @@ func Test_etcdWatch_ServerRestartReconnectsAndResumes(t *testing.T) {
 
 	e1 := startEmbeddedEtcdAt(t, dir, clientPort)
 	endpoint := fmt.Sprintf("127.0.0.1:%d", clientPort)
-	cli, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
+	raw, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
 	if err != nil {
 		e1.Close()
 		t.Fatalf("client: %v", err)
 	}
+	cli := NewEtcdClientV3(raw)
 	t.Cleanup(func() { _ = cli.Close() })
 
 	const cosmos, nodeA = "restartCosmos", "nodeA"

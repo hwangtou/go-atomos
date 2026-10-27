@@ -24,7 +24,7 @@ var (
 
 type lifecycleManager struct {
 	process       *CosmosProcess
-	cli           *clientv3.Client
+	cli           EtcdClient
 	leaseID       atomic.Int64
 	healthy       atomic.Bool
 	watchHealthy  atomic.Bool
@@ -143,7 +143,7 @@ func (m *lifecycleManager) operationKey(operationID string) string {
 	return m.operationPrefix() + lifecycleEscape(operationID)
 }
 
-func lifecycleGet(cli *clientv3.Client, key string, out proto.Message) (int64, bool, *Error) {
+func lifecycleGet(cli EtcdClient, key string, out proto.Message) (int64, bool, *Error) {
 	ctx, cancel := etcdContext()
 	defer cancel()
 	rsp, err := cli.Get(ctx, key)
@@ -365,7 +365,7 @@ func (m *lifecycleManager) deleteExpiredOperations(now time.Time) {
 			continue
 		}
 		ctx, cancel := etcdContext()
-		_, _ = cli.Txn(ctx).If(clientv3.Compare(clientv3.ModRevision(string(kv.Key)), "=", kv.ModRevision)).Then(clientv3.OpDelete(string(kv.Key))).Commit()
+		_, _ = cli.Txn(ctx).If(clientv3.Compare(clientv3.ModRevision(string(kv.Key)), "=", kv.ModRevision)).Then(EtcdOpDelete(string(kv.Key))).Commit()
 		cancel()
 	}
 }

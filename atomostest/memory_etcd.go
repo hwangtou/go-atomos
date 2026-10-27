@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	internaletcd "github.com/hwangtou/go-atomos/internal/etcd"
 	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -21,48 +22,28 @@ var ErrMemoryEtcdClosed = errors.New("atomostest: memory etcd is closed")
 var ErrMemoryEtcdUnsupported = errors.New("atomostest: unsupported memory etcd operation")
 
 // EtcdClient is the narrow etcd seam shared by the memory implementation and
-// production adapters. Put and transaction operations carry lease IDs
-// explicitly because clientv3.Op does not expose its lease option.
-type EtcdClient interface {
-	Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error)
-	Put(ctx context.Context, key, value string, lease clientv3.LeaseID) (*clientv3.PutResponse, error)
-	Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.DeleteResponse, error)
-	Txn(ctx context.Context) EtcdTxn
-	Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan
-	Grant(ctx context.Context, ttl int64) (*clientv3.LeaseGrantResponse, error)
-	KeepAlive(ctx context.Context, id clientv3.LeaseID) (<-chan *clientv3.LeaseKeepAliveResponse, error)
-	Revoke(ctx context.Context, id clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error)
-	Close() error
-}
+// production adapters.
+type EtcdClient = internaletcd.Client
 
 // EtcdTxn is the transaction subset implemented by MemoryEtcd.
-type EtcdTxn interface {
-	If(cmps ...clientv3.Cmp) EtcdTxn
-	Then(ops ...EtcdOp) EtcdTxn
-	Else(ops ...EtcdOp) EtcdTxn
-	Commit() (*clientv3.TxnResponse, error)
-}
+type EtcdTxn = internaletcd.Txn
 
-// EtcdOp wraps a clientv3 operation with the lease information that clientv3
-// keeps private. Lease must be zero for non-put operations.
-type EtcdOp struct {
-	Op    clientv3.Op
-	Lease clientv3.LeaseID
-}
+// EtcdOp wraps a clientv3 operation with explicit lease information.
+type EtcdOp = internaletcd.Op
 
 // EtcdOpGet constructs a transaction Get operation.
 func EtcdOpGet(key string, opts ...clientv3.OpOption) EtcdOp {
-	return EtcdOp{Op: clientv3.OpGet(key, opts...)}
+	return internaletcd.OpGet(key, opts...)
 }
 
 // EtcdOpPut constructs a transaction Put operation with an explicit lease.
 func EtcdOpPut(key, value string, lease clientv3.LeaseID) EtcdOp {
-	return EtcdOp{Op: clientv3.OpPut(key, value), Lease: lease}
+	return internaletcd.OpPut(key, value, lease)
 }
 
 // EtcdOpDelete constructs a transaction Delete operation.
 func EtcdOpDelete(key string, opts ...clientv3.OpOption) EtcdOp {
-	return EtcdOp{Op: clientv3.OpDelete(key, opts...)}
+	return internaletcd.OpDelete(key, opts...)
 }
 
 // MemoryEtcdOperation identifies an operation whose result can be fault-injected.

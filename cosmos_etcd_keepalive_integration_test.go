@@ -20,7 +20,7 @@ import (
 // newKeepaliveClusterProcess returns a started process with the cluster fields
 // wired the way prepareClusterLocalNode would leave them, so the production
 // registration/keepalive path runs against the embedded etcd.
-func newKeepaliveClusterProcess(t *testing.T, cli *clientv3.Client, cosmos, node string, version int64) (*CosmosProcess, *reproLogger) {
+func newKeepaliveClusterProcess(t *testing.T, cli EtcdClient, cosmos, node string, version int64) (*CosmosProcess, *reproLogger) {
 	t.Helper()
 	logger := &reproLogger{}
 	p, err := newCosmosProcess(cosmos, node, logger)
@@ -39,9 +39,9 @@ func newKeepaliveClusterProcess(t *testing.T, cli *clientv3.Client, cosmos, node
 	return p, logger
 }
 
-// readLockWithClient reads the version-lock entry with a raw client (the
+// readLockWithClient reads the version-lock entry with an EtcdClient (the
 // readLock helper in the version-lock tests takes an *embeddedEtcd).
-func readLockWithClient(t *testing.T, cli *clientv3.Client, cosmos, node string) *CosmosNodeVersionLock {
+func readLockWithClient(t *testing.T, cli EtcdClient, cosmos, node string) *CosmosNodeVersionLock {
 	t.Helper()
 	buf, _, err := etcdGet(cli, etcdCosmosNodeLockURI(cosmos, node))
 	if err != nil {
@@ -63,11 +63,12 @@ func Test_etcdKeepaliveRetry_OutageThenRecover(t *testing.T) {
 
 	e1 := startEmbeddedEtcdAt(t, dir, clientPort)
 	endpoint := fmt.Sprintf("127.0.0.1:%d", clientPort)
-	cli, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
+	raw, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
 	if err != nil {
 		e1.Close()
 		t.Fatalf("client: %v", err)
 	}
+	cli := NewEtcdClientV3(raw)
 	t.Cleanup(func() { _ = cli.Close() })
 
 	const cosmos, node = "kaCosmos", "kaNode"
@@ -137,23 +138,14 @@ func Test_etcdKeepaliveRetry_OutageThenRecover(t *testing.T) {
 		t.Fatalf("lock after recovery: %+v, want current=%d", lock, version)
 	}
 
-	// Graceful stop must tear the whole registration down: the watcher exits
-	// (unloadClusterLocalNode's etcdExitCh handshake), the lock releases the
-	// version, the key disappears and the etcd client is closed.
+	// Graceful stop tears down registration without closing the injected client.
 	if err := p.Stop(); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	// Stop closed the shared client, so verify the aftermath through a fresh
-	// one (what an operator inspecting etcd after the node exited would use).
-	verifyCli, err := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
-	if err != nil {
-		t.Fatalf("verify client: %v", err)
+	if buf, _, err := etcdGet(cli, versionKey); err != nil || buf != nil {
+		t.Fatalf("version key after Stop: buf=(%s), err=(%v)", buf, err)
 	}
-	t.Cleanup(func() { _ = verifyCli.Close() })
-	if buf, _, _ := etcdGet(verifyCli, versionKey); buf != nil {
-		t.Fatalf("version key still present after Stop: %s", buf)
-	}
-	if lock := readLockWithClient(t, verifyCli, cosmos, node); lock == nil || len(lock.Versions) != 0 {
+	if lock := readLockWithClient(t, cli, cosmos, node); lock == nil || len(lock.Versions) != 0 {
 		t.Fatalf("lock after Stop: %+v, want empty versions", lock)
 	}
 	if p.cluster.etcdClient != nil || p.cluster.etcdInfoCh != nil {
@@ -166,11 +158,12 @@ func Test_etcdKeepaliveLost_ReregistersAndRestoresHealthAndWatch(t *testing.T) {
 	dir := t.TempDir()
 	e1 := startEmbeddedEtcdAt(t, dir, clientPort)
 	endpoint := fmt.Sprintf("127.0.0.1:%d", clientPort)
-	cli, er := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
+	raw, er := clientv3.New(clientv3.Config{Endpoints: []string{endpoint}, DialTimeout: 5 * time.Second})
 	if er != nil {
 		e1.Close()
 		t.Fatal(er)
 	}
+	cli := NewEtcdClientV3(raw)
 	t.Cleanup(func() { _ = cli.Close() })
 
 	oldTimeout, oldBackoff, oldAttempts := etcdOpTimeout, etcdRegistrationBackoff, etcdRegistrationAttempts

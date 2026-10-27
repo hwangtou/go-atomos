@@ -19,7 +19,7 @@ import (
 // watch / txn semantics use this instead of mocking.
 type embeddedEtcd struct {
 	server   *embed.Etcd
-	client   *clientv3.Client
+	client   EtcdClient
 	endpoint string
 }
 
@@ -54,9 +54,10 @@ func newEmbeddedEtcd(t *testing.T) *embeddedEtcd {
 		t.Fatalf("embedded_etcd: client failed: %v", err)
 	}
 
-	ee := &embeddedEtcd{server: e, client: cli, endpoint: endpoint}
+	client := NewEtcdClientV3(cli)
+	ee := &embeddedEtcd{server: e, client: client, endpoint: endpoint}
 	t.Cleanup(func() {
-		cli.Close()
+		_ = client.Close()
 		e.Close()
 	})
 	return ee

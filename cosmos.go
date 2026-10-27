@@ -74,6 +74,7 @@ func lifecycleStrictMode(mode LifecycleMode) bool {
 type CosmosRunnable struct {
 	config       *Config
 	clock        Clock
+	etcdClient   EtcdClient
 	implements   map[string]*ElementImplementation
 	spawnElement map[string]bool
 	spawnOrder   []string
@@ -200,6 +201,14 @@ func (r *CosmosRunnable) GetConfig() *Config {
 // keeps the production system clock.
 func (r *CosmosRunnable) SetClock(clock Clock) *CosmosRunnable {
 	r.clock = clock
+	return r
+}
+
+// SetEtcdClient injects the etcd client used by an enabled cluster. The caller
+// retains ownership: stopping this process does not close the client, so it may
+// be shared with other processes. A nil client restores normal client creation.
+func (r *CosmosRunnable) SetEtcdClient(client EtcdClient) *CosmosRunnable {
+	r.etcdClient = client
 	return r
 }
 

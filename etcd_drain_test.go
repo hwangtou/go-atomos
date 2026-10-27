@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // TestEtcdDrain_StateBroadcastAndWatch 验证 drain 的 etcd 广播链路：
@@ -120,7 +118,7 @@ func TestEtcdDrain_StateBroadcastAndWatch(t *testing.T) {
 // writeNodeInfo marshals and puts a CosmosNodeVersionInfo to etcd.
 // writeNodeInfo JSON-marshals and puts a CosmosNodeVersionInfo to etcd.
 // Uses JSON (not proto) to match cosmos_etcd.go's etcdNodeVersion serialization.
-func writeNodeInfo(t *testing.T, cli *clientv3.Client, key string, info *CosmosNodeVersionInfo) {
+func writeNodeInfo(t *testing.T, cli EtcdClient, key string, info *CosmosNodeVersionInfo) {
 	t.Helper()
 	buf, er := json.Marshal(info)
 	if er != nil {
@@ -128,14 +126,14 @@ func writeNodeInfo(t *testing.T, cli *clientv3.Client, key string, info *CosmosN
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_, er = cli.Put(ctx, key, string(buf))
+	_, er = cli.Put(ctx, key, string(buf), 0)
 	if er != nil {
 		t.Fatalf("writeNodeInfo put: %v", er)
 	}
 }
 
 // writeLockInfo JSON-marshals and puts a CosmosNodeVersionLock to etcd.
-func writeLockInfo(t *testing.T, cli *clientv3.Client, key string, lock *CosmosNodeVersionLock) {
+func writeLockInfo(t *testing.T, cli EtcdClient, key string, lock *CosmosNodeVersionLock) {
 	t.Helper()
 	buf, er := json.Marshal(lock)
 	if er != nil {
@@ -143,7 +141,7 @@ func writeLockInfo(t *testing.T, cli *clientv3.Client, key string, lock *CosmosN
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_, er = cli.Put(ctx, key, string(buf))
+	_, er = cli.Put(ctx, key, string(buf), 0)
 	if er != nil {
 		t.Fatalf("writeLockInfo put: %v", er)
 	}

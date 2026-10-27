@@ -17,7 +17,7 @@ var (
 // etcdUpdateVersionLock performs an optimistic, bounded read/CAS loop. Etcd's
 // ModRevision changes on every write; key Version does not and therefore cannot
 // detect all competing updates.
-func etcdUpdateVersionLock(cli *etcdClient.Client, lockURI string, update func(*CosmosNodeVersionLock) (bool, *Error)) *Error {
+func etcdUpdateVersionLock(cli EtcdClient, lockURI string, update func(*CosmosNodeVersionLock) (bool, *Error)) *Error {
 	var lastErr *Error
 	for attempt := 0; attempt < etcdVersionLockAttempts; attempt++ {
 		if attempt > 0 {
@@ -55,7 +55,7 @@ func etcdUpdateVersionLock(cli *etcdClient.Client, lockURI string, update func(*
 		} else {
 			txn = txn.If(etcdClient.Compare(etcdClient.Version(lockURI), "=", 0))
 		}
-		resp, er := txn.Then(etcdClient.OpPut(lockURI, string(newBuf))).Commit()
+		resp, er := txn.Then(EtcdOpPut(lockURI, string(newBuf), 0)).Commit()
 		cancel()
 		if er != nil {
 			lastErr = NewErrorf(ErrCodeCosmosEtcdClusterVersionLockFailed, "etcd: failed to commit transaction. err=(%s)", er).AddStack(nil)
@@ -101,7 +101,7 @@ func removeVersion(lockInfo *CosmosNodeVersionLock, version int64) bool {
 // reclaimCrashedVersions removes versions whose leased registration key has
 // disappeared. It is only needed when the lock is full, avoiding interference
 // with the usual startup window of a second version.
-func (p *CosmosProcess) reclaimCrashedVersions(cli *etcdClient.Client, nodeName string, lockInfo *CosmosNodeVersionLock) *Error {
+func (p *CosmosProcess) reclaimCrashedVersions(cli EtcdClient, nodeName string, lockInfo *CosmosNodeVersionLock) *Error {
 	versions := append([]int64(nil), lockInfo.Versions...)
 	for _, version := range versions {
 		key := etcdCosmosNodeVersionURI(p.local.runnable.config.Cosmos, nodeName, version)
@@ -120,7 +120,7 @@ func (p *CosmosProcess) reclaimCrashedVersions(cli *etcdClient.Client, nodeName 
 }
 
 // 启动时，检查并锁定版本。重复锁定同一版本是幂等操作。
-func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli *etcdClient.Client, nodeName string, version int64) *Error {
+func (p *CosmosProcess) etcdStartUpTryLockingVersionNodeLock(cli EtcdClient, nodeName string, version int64) *Error {
 	lockURI := etcdCosmosNodeLockURI(p.local.runnable.config.Cosmos, nodeName)
 	return etcdUpdateVersionLock(cli, lockURI, func(lockInfo *CosmosNodeVersionLock) (bool, *Error) {
 		if hasVersion(lockInfo, version) {

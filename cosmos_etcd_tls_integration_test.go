@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -95,7 +94,7 @@ func newTestCertWithSAN(t *testing.T, cn string, isCA bool, parent *testCert, wi
 
 // ---- TLS material in etcd ----
 
-func putTLSKey(t *testing.T, cli *clientv3.Client, key string, value []byte) {
+func putTLSKey(t *testing.T, cli EtcdClient, key string, value []byte) {
 	t.Helper()
 	if value == nil {
 		return
@@ -105,7 +104,7 @@ func putTLSKey(t *testing.T, cli *clientv3.Client, key string, value []byte) {
 	}
 }
 
-func clearTLSCfg(t *testing.T, cli *clientv3.Client) {
+func clearTLSCfg(t *testing.T, cli EtcdClient) {
 	t.Helper()
 	for _, key := range []string{etcdClusterServerCertKey, etcdClusterServerKeyKey, etcdClusterClientCertKey, etcdClusterClientKeyKey} {
 		if err := etcdDelete(cli, key); err != nil {

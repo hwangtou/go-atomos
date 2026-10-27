@@ -22,7 +22,7 @@ import (
 // newDeadEndpointClient returns a client pointed at a loopback port where
 // nothing listens: connections are refused immediately and the endpoint never
 // becomes reachable, which is exactly the "etcd is down" production scenario.
-func newDeadEndpointClient(t *testing.T) *clientv3.Client {
+func newDeadEndpointClient(t *testing.T) EtcdClient {
 	t.Helper()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:1"},
@@ -32,7 +32,7 @@ func newDeadEndpointClient(t *testing.T) *clientv3.Client {
 		t.Fatalf("client create failed: %v", err)
 	}
 	t.Cleanup(func() { _ = cli.Close() })
-	return cli
+	return NewEtcdClientV3(cli)
 }
 
 func Test_etcdKeepalive_UnreachableFailsFast(t *testing.T) {
@@ -78,7 +78,7 @@ func Test_etcdHelpers_UnreachableReturnCodedErrors(t *testing.T) {
 // comes. This is the unresponsive-server scenario: a hung etcd, or a
 // middlebox that completes the handshake then drops all packets. Only the
 // helper's own RPC deadline can break the wait — WaitForReady never will.
-func newTarpitClient(t *testing.T) *clientv3.Client {
+func newTarpitClient(t *testing.T) EtcdClient {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -105,7 +105,7 @@ func newTarpitClient(t *testing.T) *clientv3.Client {
 		t.Fatalf("client create failed: %v", err)
 	}
 	t.Cleanup(func() { _ = cli.Close() })
-	return cli
+	return NewEtcdClientV3(cli)
 }
 
 func Test_etcdKeepalive_HungEndpointFailsFast(t *testing.T) {

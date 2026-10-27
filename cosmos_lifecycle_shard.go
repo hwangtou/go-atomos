@@ -135,8 +135,8 @@ func (m *lifecycleManager) ensureShardOwnership(ctx context.Context, element, at
 			clientv3.Compare(clientv3.ModRevision(recordKey), "=", recordMod),
 			clientv3.Compare(clientv3.ModRevision(ownerKey), "=", ownerMod),
 		).Then(
-			clientv3.OpPut(recordKey, recordBuf),
-			clientv3.OpPut(ownerKey, ownerBuf, clientv3.WithLease(leaseID)),
+			EtcdOpPut(recordKey, recordBuf, 0),
+			EtcdOpPut(ownerKey, ownerBuf, leaseID),
 		).Commit()
 		if er != nil {
 			return nil, asError(er)
