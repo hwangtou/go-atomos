@@ -16,7 +16,7 @@ import (
 //  1. 节点 A 写入自己的版本信息到 etcd（Started）
 //  2. 节点 B 的 watch 感知到 A，建 remote，refresh 后 enable=true
 //  3. A 的状态变为 Draining，写入 etcd
-//  4. B 的 watch 感知到状态变化，refresh 后路由绕开 Draining（若有 Started 版本则选它）
+//  4. B 的 watch 感知到状态变化；没有其他 Started 版本时保留 Draining current
 //
 // 这验证了真实 etcd watch 的端到端行为（非 mock）。
 func TestEtcdDrain_StateBroadcastAndWatch(t *testing.T) {
@@ -39,8 +39,8 @@ func TestEtcdDrain_StateBroadcastAndWatch(t *testing.T) {
 			Cosmos: cosmosName,
 			Node:   nodeName,
 		},
-		State:    ClusterNodeState_Started,
-		Elements: map[string]*IDInfo{},
+		State:     ClusterNodeState_Started,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 111,
 	}
 	writeNodeInfo(t, cli, versionKey, infoStarted)
@@ -88,8 +88,8 @@ func TestEtcdDrain_StateBroadcastAndWatch(t *testing.T) {
 			Cosmos: cosmosName,
 			Node:   nodeName,
 		},
-		State:    ClusterNodeState_Draining,
-		Elements: map[string]*IDInfo{},
+		State:     ClusterNodeState_Draining,
+		Elements:  map[string]*IDInfo{},
 		StartupId: 111, // 同 startupId = 同代状态刷新
 	}
 	writeNodeInfo(t, cli, versionKey, infoDraining)
@@ -97,12 +97,19 @@ func TestEtcdDrain_StateBroadcastAndWatch(t *testing.T) {
 
 	// Step 4: 等待 watch 传播 Draining 状态，验证 refresh 结果
 	// Draining 后且没有其他 Started 版本 → enable 应保留（优雅降级不硬失败）
-	time.Sleep(500 * time.Millisecond) // 等 watch 传播
-	remote.mutex.RLock()
-	drainingState := remote.current.info.GetState()
-	remote.mutex.RUnlock()
-	if drainingState != ClusterNodeState_Draining {
-		t.Fatalf("Step 4: remote should reflect Draining state, got=%v", drainingState)
+	deadline := time.Now().Add(3 * time.Second)
+	var drainingState ClusterNodeState
+	for {
+		remote.mutex.RLock()
+		drainingState = remote.current.info.GetState()
+		remote.mutex.RUnlock()
+		if drainingState == ClusterNodeState_Draining {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Step 4: remote should reflect Draining state, got=%v", drainingState)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Logf("Step 4: node B observed Draining state via watch. state=%v", drainingState)
 	t.Logf("[验证] etcd drain 状态广播 + watch 感知链路正常工作")

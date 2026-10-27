@@ -5,17 +5,10 @@ import (
 	"time"
 )
 
-// TestChaos_DrainThenKillServer 验证混沌场景：drain 后 target 的 gRPC server 被 kill。
-//
-// 场景：
-// 1. source 在 target spawn atom，拿到 pinned ID
-// 2. target 进入 drain（停止接新 spawn）
-// 3. target 的 gRPC server 被强杀（模拟进程崩溃）
-// 4. 存量调用：pinned 连接失效 → validPinnedConn 检测到 → 降级到 getCurrentClient
-//    （此时 current 也失效，调用会报错，但不会卡死/panic —— 这是预期的优雅降级）
-//
-// 这个测试证明：连接故障不会导致 panic 或死锁，框架优雅地返回错误。
-func TestChaos_DrainThenKillServer(t *testing.T) {
+// TestRemoteCall_ServerStopReturnsBoundedError verifies that stopping the
+// target gRPC server makes the next call fail within its deadline rather than
+// panic or block indefinitely.
+func TestRemoteCall_ServerStopReturnsBoundedError(t *testing.T) {
 	cluster := newTestCosmosProcessSimulateCluster(t, 50600, "chaos_cosmos", "chaos_node")
 	defer cluster.close()
 
@@ -63,13 +56,10 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 
 	select {
 	case err := <-done:
-		// 预期：err != nil（连接断了），但没有 panic
 		if err == nil {
-			t.Log("Step 3: call after kill succeeded (unexpected but not fatal — conn may have recovered).")
-		} else {
-			t.Logf("Step 3: call after kill returned error (expected): %v", err)
+			t.Fatal("call after server stop succeeded, want a bounded connection error")
 		}
-		t.Logf("[验证] drain + kill server: no panic/deadlock, graceful error returned.")
+		t.Logf("call after server stop returned a bounded error: %v", err)
 	case <-time.After(15 * time.Second):
 		t.Fatal("Step 3: call after kill hung (deadlock!) — should have returned error.")
 	}
@@ -85,9 +75,9 @@ func TestChaos_DrainThenKillServer(t *testing.T) {
 	}
 }
 
-// TestChaos_DrainSpawnRejectedThenRecover 验证：drain 期间 spawn 被拒，
-// 取消 drain（状态回退）后 spawn 恢复正常。
-func TestChaos_DrainSpawnRejectedThenRecover(t *testing.T) {
+// TestAtomSpawnAdmission_InternalDrainTransition exercises the internal
+// admission flags directly. It is not a public CancelDrain API test.
+func TestAtomSpawnAdmission_InternalDrainTransition(t *testing.T) {
 	cluster := newTestCosmosProcessSimulateCluster(t, 50700, "recover_cosmos", "recover_node")
 	defer cluster.close()
 
@@ -114,26 +104,20 @@ func TestChaos_DrainSpawnRejectedThenRecover(t *testing.T) {
 	}
 	t.Logf("Step 1: spawn succeeded before drain.")
 
-	// 2. target 进入 drain
 	cluster.targetProcess.mutex.Lock()
 	cluster.targetProcess.draining = true
+	cluster.targetProcess.atomSpawnAccepting = false
 	cluster.targetProcess.mutex.Unlock()
-	t.Logf("Step 2: target entered drain mode.")
 
-	// 3. drain 期间 spawn 应被拒（ErrCosmosNodeDraining）
-	//    注意：远程 spawn 经 gRPC 到 target，target 的 SpawnAtom 检查 isDraining
 	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_2", nil, nil, ArgBaseAtomosFromLocalOnly())
-	if err == nil {
-		t.Log("Step 3: spawn during drain succeeded (may be expected if remote drain check not wired to this path).")
-	} else {
-		t.Logf("Step 3: spawn during drain rejected (expected): %v", err)
+	if CodeOf(err) != ErrCodeCosmosNodeDraining {
+		t.Fatalf("spawn during internal drain state error = %v, want ErrCosmosNodeDraining", err)
 	}
 
-	// 4. 取消 drain（状态回退），spawn 恢复
 	cluster.targetProcess.mutex.Lock()
 	cluster.targetProcess.draining = false
+	cluster.targetProcess.atomSpawnAccepting = true
 	cluster.targetProcess.mutex.Unlock()
-	t.Logf("Step 4: cancelled drain.")
 
 	_, _, err = sourceElemRemote.SpawnAtom(cluster.sourceProcess.local, "recover_atom_3", nil, nil, ArgBaseAtomosFromLocalOnly())
 	if err != nil {

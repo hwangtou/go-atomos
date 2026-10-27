@@ -37,7 +37,7 @@ func (g *drainGate) expire(t *testing.T) bool {
 	return false
 }
 
-func TestAsyncDrainWindow(t *testing.T) {
+func TestIdleCleanup_PendingCallbackDeferral(t *testing.T) {
 	logger := &reproLogger{}
 	process, elem := startClearCosmos(t, logger)
 	svc := &atomosRemoteService{process: process}

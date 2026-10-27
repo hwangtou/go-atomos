@@ -94,12 +94,10 @@ func TestIDRouting_CurrentSwitchBreaksExistingCalls(t *testing.T) {
 	t.Logf("This proves: pinned connection survives current switch (存量不断裂).")
 }
 
-// TestIDRouting_PinnedConnFailover 验证阶段3：当 pinned 连接失效（节点重启/Close）后，
-// 调用能自动降级到 getCurrentClient，而不是永久卡死在死连接上。
-//
-// 场景：spawn atom 拿到 pinned ID → Close 掉 pinned 连接（模拟远端重启）
-// → getCli 检测到 Shutdown 状态 → 清除 pin → 降级到 current 连接 → 调用仍成功。
-func TestIDRouting_PinnedConnFailover(t *testing.T) {
+// TestBaseRemote_PinnedConnClearedAfterShutdown verifies only the pin
+// invalidation behavior. current and pinned intentionally share the closed
+// connection, so this fixture does not claim recovery to a new version.
+func TestBaseRemote_PinnedConnClearedAfterShutdown(t *testing.T) {
 	cluster := newTestCosmosProcessSimulateCluster(t, 50300, "failover_cosmos", "failover_node")
 	defer cluster.close()
 
@@ -137,13 +135,8 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 	if pinned == nil {
 		t.Fatal("pinnedConn should be set after SpawnAtom")
 	}
-	// current 也指向同一个 target 连接；为了让降级后仍能成功，我们需要 current 有一个可用的连接。
-	// 这里 Close pinned 后，validPinnedConn 应检测到 Shutdown 并降级到 getCurrentClient。
-	// 由于测试中 current 和 pinned 是同一个 conn，Close 后两者都失效——
-	// 为了测试"降级到 current 能成功"，我们先把 current 换成一个新的可用连接。
-	newConn := targetRemote.current.client // current 还是好的（未 Close）
-	_ = newConn
-	// 关闭 pinned（=current 同一个连接会导致两边都失效，所以这里验证的是"检测到 Shutdown"的行为本身）
+	// current and pinned intentionally share this connection, so the call must
+	// fail after Shutdown while still exercising pin invalidation.
 	pinned.Close()
 	t.Logf("Closed pinned connection to simulate node restart.")
 
@@ -156,11 +149,8 @@ func TestIDRouting_PinnedConnFailover(t *testing.T) {
 		t.Fatal("pinnedConn should be cleared after Shutdown detection (failover triggered)")
 	}
 	t.Logf("[验证] pinnedConn cleared after Shutdown detection — failover logic triggered correctly.")
-	// err 预期非 nil（因为 current 连接也被 Close 了），但关键是 pin 被清除了
-	if err != nil {
-		t.Logf("(预期) Call after failover returned error because current conn also closed: %v", err)
-	} else {
-		t.Logf("Call after failover succeeded (current conn still usable).")
+	if err == nil {
+		t.Fatal("call succeeded after current and pinned connections were both closed")
 	}
 }
 
@@ -230,13 +220,10 @@ func TestDrain_RefreshBypassesDrainingVersion(t *testing.T) {
 	t.Logf("[验证] refresh kept Draining V1 when no Started version available (graceful degradation).")
 }
 
-// TestDrain_ExistingCallsSurviveNewTrafficRedirects 验证 drain 的核心价值链：
-// 1. source 在 target spawn atom（pinned 到 target 连接）
-// 2. target 进入 Draining，refresh 把新流量路由目标切到另一个 Started 版本
-// 3. 存量调用（pinned）仍成功路由到 target（不断裂）
-//
-// 这是 drain 灰度的端到端证明：存量不断 + 新流量可绕开。
-func TestDrain_ExistingCallsSurviveNewTrafficRedirects(t *testing.T) {
+// TestDrain_ExistingCallsSurviveRoutingMetadataChange verifies that changing
+// routing metadata does not break an existing pinned call. This fixture has no
+// second Started version and does not assert new-traffic failover.
+func TestDrain_ExistingCallsSurviveRoutingMetadataChange(t *testing.T) {
 	cluster := newTestCosmosProcessSimulateCluster(t, 50400, "ed_cosmos", "ed_node")
 	defer cluster.close()
 
