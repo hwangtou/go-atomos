@@ -26,14 +26,15 @@ test-race:
 # test-integration runs the tests behind the "integration" build tag, against
 # an embedded etcd (real lease/watch/txn semantics): version lock lifecycle
 # and CAS races, drain broadcast, watch fault injection (server restart, lease
-# expiry, dirty data), TLS handshake matrix, keepalive outage recovery. Needs
-# no external etcd; everything runs in-process on ephemeral ports. The
+# expiry, dirty data), TLS handshake matrix, keepalive outage recovery, and the
+# shared memory/real etcd contract. Needs no external etcd; everything runs
+# in-process on ephemeral ports. The
 # gRPC-level chaos tests live in the default suite (chaos_test.go).
 test-integration:
-	go test . -tags integration -count=1 -timeout 900s
+	go test . ./atomostest -tags integration -count=1 -timeout 900s
 
 test-integration-race:
-	go test . -tags integration -race -count=1 -timeout 900s
+	go test . ./atomostest -tags integration -race -count=1 -timeout 900s
 
 # bench runs the root package benchmarks.
 bench:
