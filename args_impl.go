@@ -20,6 +20,7 @@ const (
 	// mail. Not exposed as a public Arg constructor.
 	ArgTypeBaseAtomosWaitChain   ArgType = 8
 	ArgTypeBaseAtomosOperationID ArgType = 9
+	ArgTypeBaseAtomosRetryable   ArgType = 10
 
 	// ArgsForTask
 
@@ -136,6 +137,13 @@ func (argBaseAtomosOperationID) getArgType() ArgType {
 	return ArgTypeBaseAtomosOperationID
 }
 func (argBaseAtomosOperationID) argForBaseAtomos() {}
+
+type argBaseAtomosRetryable struct {
+	messageID string
+}
+
+func (argBaseAtomosRetryable) getArgType() ArgType { return ArgTypeBaseAtomosRetryable }
+func (argBaseAtomosRetryable) argForBaseAtomos()   {}
 
 type argBaseAtomosLifecycle struct {
 	identity    *IDInfo

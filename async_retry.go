@@ -137,6 +137,9 @@ func (m *asyncRetryManager) run(target string, queue *asyncRetryQueue) {
 }
 
 func (m *asyncRetryManager) close() {
+	if m == nil {
+		return
+	}
 	m.mutex.Lock()
 	m.closed = true
 	var terminal []*asyncRetryRequest

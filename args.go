@@ -112,6 +112,14 @@ func ArgBaseAtomosOperationID(operationID string) ArgsForBaseAtomos {
 	return argBaseAtomosOperationID{operationID: operationID}
 }
 
+// ArgBaseAtomosRetryable marks a remote asynchronous message as safe for
+// at-least-once retry. messageID must be non-empty and stable across every
+// retry of the same logical message. The handler must be idempotent or deduplicate
+// this ID. It does not make Spawn, Kill, or synchronous calls retryable.
+func ArgBaseAtomosRetryable(messageID string) ArgsForBaseAtomos {
+	return argBaseAtomosRetryable{messageID: messageID}
+}
+
 // Task
 
 // ArgTaskMark creates an argument that specifies a marking string for the task.

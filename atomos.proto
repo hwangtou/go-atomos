@@ -435,6 +435,7 @@ message CosmosRemoteAsyncMessagingByNameReq {
   uint64 async_id = 5;
   string message = 6;
   google.protobuf.Any args = 7;
+  string message_id = 8;
 }
 message CosmosRemoteAsyncMessagingByNameRsp {
   Error error = 1;

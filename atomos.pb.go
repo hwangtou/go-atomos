@@ -3468,6 +3468,7 @@ type CosmosRemoteAsyncMessagingByNameReq struct {
 	AsyncId       uint64                 `protobuf:"varint,5,opt,name=async_id,json=asyncId,proto3" json:"async_id,omitempty"`
 	Message       string                 `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
 	Args          *anypb.Any             `protobuf:"bytes,7,opt,name=args,proto3" json:"args,omitempty"`
+	MessageId     string                 `protobuf:"bytes,8,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3549,6 +3550,13 @@ func (x *CosmosRemoteAsyncMessagingByNameReq) GetArgs() *anypb.Any {
 		return x.Args
 	}
 	return nil
+}
+
+func (x *CosmosRemoteAsyncMessagingByNameReq) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
 }
 
 type CosmosRemoteAsyncMessagingByNameRsp struct {
@@ -4960,7 +4968,7 @@ const file_atomos_proto_rawDesc = "" +
 	"\x04args\x18\x06 \x01(\v2\x14.google.protobuf.AnyR\x04args\"u\n" +
 	"\"CosmosRemoteSyncMessagingByNameRsp\x12*\n" +
 	"\x05reply\x18\x01 \x01(\v2\x14.google.protobuf.AnyR\x05reply\x12#\n" +
-	"\x05error\x18\x02 \x01(\v2\r.atomos.ErrorR\x05error\"\xaa\x02\n" +
+	"\x05error\x18\x02 \x01(\v2\r.atomos.ErrorR\x05error\"\xc9\x02\n" +
 	"#CosmosRemoteAsyncMessagingByNameReq\x12+\n" +
 	"\tcaller_id\x18\x01 \x01(\v2\x0e.atomos.IDInfoR\bcallerId\x12#\n" +
 	"\x05to_id\x18\x02 \x01(\v2\x0e.atomos.IDInfoR\x04toId\x123\n" +
@@ -4970,7 +4978,9 @@ const file_atomos_proto_rawDesc = "" +
 	"startup_id\x18\x04 \x01(\x04R\tstartupId\x12\x19\n" +
 	"\basync_id\x18\x05 \x01(\x04R\aasyncId\x12\x18\n" +
 	"\amessage\x18\x06 \x01(\tR\amessage\x12(\n" +
-	"\x04args\x18\a \x01(\v2\x14.google.protobuf.AnyR\x04args\"J\n" +
+	"\x04args\x18\a \x01(\v2\x14.google.protobuf.AnyR\x04args\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\b \x01(\tR\tmessageId\"J\n" +
 	"#CosmosRemoteAsyncMessagingByNameRsp\x12#\n" +
 	"\x05error\x18\x01 \x01(\v2\r.atomos.ErrorR\x05error\"\xa0\x02\n" +
 	"%CosmosRemoteAsyncOnMessageCallbackReq\x12#\n" +

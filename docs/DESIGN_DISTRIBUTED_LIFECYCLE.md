@@ -261,7 +261,7 @@ ownership 随 lease 消失不应同时抹掉所有 operation 结果。去重只�
 
 - 在 operation/message 去重之前，不对 Kill 和非幂等消息做透明传输重试。
 - `WithRebind` 只能用于明确的 stale 引用等安全场景；连接失败不等于安全重试条件。
-- 普通异步消息采用 at-least-once 时，message ID 必须在所有重试和 WAL 重放中保持不变。
+- 普通异步消息采用 at-least-once 时，message ID 必须在所有重试和 WAL 重放中保持不变。当前通过显式 `ArgBaseAtomosRetryable(messageID)` 启用；首次与重试共享 async ID，成功入队后继续等待业务回复，最终失败才终结回调。
 - Lookup/State 必须只读且保留错误细节，不能把 Unknown、Stale、NotFound 全部压成 Halt。
 
 ## 八、分阶段实施路线

@@ -98,6 +98,7 @@ type CosmosProcess struct {
 	logging   *loggingAtomos
 	local     *CosmosLocal
 	lifecycle *lifecycleManager
+	retry     *asyncRetryManager
 
 	// debugServer is the optional introspection HTTP server, started by Start
 	// when Config.Customize carries configKeyDebugServer and stopped first in
@@ -191,6 +192,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
 	p.rpcMetrics = newRPCMetrics()
+	p.retry = newAsyncRetryManager(systemClock{}, isAsyncRetryableError, nil)
 	p.atomSpawnAccepting = true
 
 	// Init Info.
@@ -577,6 +579,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		return nil
 	}(); err != nil {
 		p.local.coreLog().coreError("CosmosProcess: Start failed. err=(%v)", err)
+		p.retry.close()
 		p.lifecycle.close()
 		p.handleStartUpFailedLocalCleanUp()
 		p.handleStartUpFailedClusterCleanUp()
@@ -926,6 +929,7 @@ func (p *CosmosProcess) Stop() error {
 		return err
 	}
 
+	defer p.retry.close()
 	defer p.lifecycle.close()
 
 	// Stop the debug server first: no new introspection requests once
@@ -1300,6 +1304,7 @@ func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
 // unloadClusterLocalNode 卸载集群本地节点。
 // Unload cluster local node.
 func (p *CosmosProcess) unloadClusterLocalNode() {
+	p.retry.close()
 	p.lifecycle.close()
 	// 删除etcd中的watcher。
 	if exitCh := p.closeEtcdInfoChannel(); exitCh != nil {

@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -262,74 +263,126 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 	if p := a.rpcProcess(); p != nil {
 		defer p.observeRPC("AsyncMessaging", time.Now())
 	}
-	var asyncID uint64
-	var callerInternal idInternal
 	fail := func(failure error) error {
-		terminalCallback := callback
-		if callerInternal != nil && asyncID != 0 {
-			terminalCallback = callerInternal.asyncPop(asyncID)
-		}
-		a.terminateAsyncMessageCallback(name, terminalCallback, failure)
+		a.terminateAsyncMessageCallback(name, callback, failure)
 		return failure
 	}
-
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
 		return fail(helper.getError())
 	}
-
-	var er error
 	var arg *anypb.Any
 	if in != nil {
+		var er error
 		arg, er = anypb.New(in)
 		if er != nil {
 			return fail(NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
 		}
 	}
-
-	client, ctx, cancel, cerr := a.getCli(helper.timeout)
-	if cerr != nil {
-		return fail(cerr.AddStack(nil))
+	if helper.retryableID != "" {
+		return a.pushRetryableAsyncMessage(callerID, name, arg, callback, helper)
 	}
-	defer cancel()
+	return a.pushAsyncMessageOnce(callerID, name, arg, callback, helper, "")
+}
 
-	var startupID uint64
+func (a *BaseRemote) pushAsyncMessageOnce(callerID ID, name string, arg *anypb.Any, callback func(proto.Message, error), helper *baseAtomosHelper, messageID string) error {
+	var callerInternal idInternal
+	var startupID, asyncID uint64
 	if callback != nil {
-		var intErr *Error
-		callerInternal, intErr = asIDInternal(callerID)
-		if intErr != nil {
-			return fail(intErr.AddStack(nil))
+		var err *Error
+		callerInternal, err = asIDInternal(callerID)
+		if err != nil {
+			a.terminateAsyncMessageCallback(name, callback, err)
+			return err
 		}
 		startupID, asyncID = callerInternal.asyncSet(callback)
 		if asyncID == 0 {
 			return nil
 		}
-		if startupID != a.cosmos.process.startupID {
-			// This should never happen, just in case.
-			a.cosmos.process.logging.pushFrameworkFatalLog("BaseRemote: AsyncMessagingByName asyncSet returned unexpected startupID. expected=(%d) actual=(%d)", a.cosmos.process.startupID, startupID)
+	}
+	if err := a.sendAsyncMessage(callerID, name, arg, helper, messageID, startupID, asyncID); err != nil {
+		terminalCallback := callback
+		if callerInternal != nil && asyncID != 0 {
+			terminalCallback = callerInternal.asyncPop(asyncID)
 		}
-	}
-
-	//a.cosmos.process.logging.PushLogging(callerID.GetIDInfo(), LogLevel_Debug, fmt.Sprintf("Async Step 1: (%s)=>(%s) startupID=(%d) asyncID=(%d) message=(%s) args=(%v)", callerID, a.info.Info(), startupID, asyncID, name, in))
-	rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
-		CallerId:   callerID.GetIDInfo(),
-		ToId:       a.info,
-		CosmosArgs: helper.getRemoteArg(),
-		StartupId:  startupID,
-		AsyncId:    asyncID,
-		Message:    name,
-		Args:       arg,
-	})
-	if er != nil {
-		return fail(grpcErrorToError(er).AddStack(nil))
-	}
-	if rsp == nil {
-		return fail(NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName empty response.").AddStack(nil))
-	}
-	if rsp.Error != nil {
-		return fail(rsp.Error.AddStack(nil))
+		a.terminateAsyncMessageCallback(name, terminalCallback, err)
+		return err
 	}
 	return nil
+}
+
+func (a *BaseRemote) pushRetryableAsyncMessage(callerID ID, name string, arg *anypb.Any, callback func(proto.Message, error), helper *baseAtomosHelper) error {
+	var callerInternal idInternal
+	var startupID, asyncID uint64
+	if callback != nil {
+		var err *Error
+		callerInternal, err = asIDInternal(callerID)
+		if err != nil {
+			a.terminateAsyncMessageCallback(name, callback, err)
+			return err
+		}
+		startupID, asyncID = callerInternal.asyncSet(callback)
+		if asyncID == 0 {
+			return nil
+		}
+	}
+	terminate := func(failure error) {
+		if failure == nil {
+			return
+		}
+		terminalCallback := callback
+		if callerInternal != nil && asyncID != 0 {
+			terminalCallback = callerInternal.asyncPop(asyncID)
+		}
+		a.terminateAsyncMessageCallback(name, terminalCallback, failure)
+	}
+	process := a.rpcProcess()
+	if process == nil || process.retry == nil {
+		err := NewError(ErrCodeCosmosRemoteConnectFailed, "BaseRemote: async retry manager is unavailable").AddStack(nil)
+		terminate(err)
+		return err
+	}
+	target := fmt.Sprintf("%s#%d/%d/%d", a.info.Info(), a.info.Incarnation, a.info.StartupId, a.info.Fence)
+	deliver := func(int) error {
+		return a.sendAsyncMessage(callerID, name, arg, helper, helper.retryableID, startupID, asyncID)
+	}
+	if err := process.retry.submit(target, helper.retryableID, deliver, terminate); err != nil {
+		terminate(err)
+		return err
+	}
+	return nil
+}
+
+func (a *BaseRemote) sendAsyncMessage(callerID ID, name string, arg *anypb.Any, helper *baseAtomosHelper, messageID string, startupID, asyncID uint64) error {
+	client, ctx, cancel, err := a.getCli(helper.timeout)
+	if err != nil {
+		return err.AddStack(nil)
+	}
+	defer cancel()
+	rsp, er := client.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
+		CallerId: callerID.GetIDInfo(), ToId: a.info, CosmosArgs: helper.getRemoteArg(),
+		StartupId: startupID, AsyncId: asyncID, Message: name, Args: arg, MessageId: messageID,
+	})
+	if er != nil {
+		return grpcErrorToError(er).AddStack(nil)
+	}
+	if rsp == nil {
+		return NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName empty response.").AddStack(nil)
+	}
+	if rsp.Error != nil {
+		return rsp.Error.AddStack(nil)
+	}
+	return nil
+}
+
+func isAsyncRetryableError(err error) bool {
+	switch CodeOf(err) {
+	case ErrCodeCosmosRemoteConnectFailed, ErrCodeAtomosPushTimeoutHandling,
+		ErrCodeAtomosPushTimeoutReject, ErrCodeOperationStillRunning:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *BaseRemote) terminateAsyncMessageCallback(name string, callback func(out proto.Message, err error), err error) {

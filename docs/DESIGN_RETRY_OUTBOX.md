@@ -1,6 +1,6 @@
 # 设计方案:异步投递重试与 WAL Outbox(进程重启不丢)
 
-> 状态:实施中。远程发送失败的回调终结已落地；进程级 FIFO/退避调度器已实现但尚未接入发送路径。WAL outbox 未实施。
+> 状态:Phase 0 与进程内 Phase 1 已实施。显式 `ArgBaseAtomosRetryable(messageID)` 启用 at-least-once 重试；普通异步默认不重试，strict ID 不 rebind。WAL outbox 未实施。
 > 日期:2026-10-24
 > 关联文件:`base_remote.go` / `atomos_remote_service.go` / `element_local.go` / `base_atomos.go` / `cosmos_etcd.go` / `mail.go` / `atomos.proto`
 > 关联文档:`DESIGN_V3_API.md` §8(协议演进)、`DESIGN_DRAIN_GRADUAL.md`(逻辑寻址,见开放问题)、`DEADLOCK.md`
@@ -75,11 +75,11 @@
 ### Phase 1:进程级重试器
 
 - 位置:`cosmosProcess` 级单例 retry manager(不挂在任何 atom 上,发送方 atom 死亡不中断重试)。
-- 队列:按目标节点分组的串行队列(保序),指数退避(初始 500ms、上限 30s、可配),复用 `time.AfterFunc` 思路(参照 `atomosTaskManager.AddAfter`)。
-- 重投:重新走 `BaseRemote.PushAsyncMessage` 全流程(重新 `asyncSet`?否——见开放问题 3)。
-- 终结:永久失败/耗尽 → `asyncPop` + 错误终结;`coreError` 死信日志 + 指标 `atomos_retry_dead_letter_total`。
-- 进程退出:retry manager 随进程消亡,未竟重试丢失(Phase 2 解决)。
-- 测试:`atomostest.RunCluster` 双节点夹具 + gRPC 拦截器注入 Unavailable;断言最终投递、退避单调、永久失败即终结。
+- 队列:按完整目标身份分组 FIFO,默认 8 次 attempt、100ms 起始指数退避(上限 3s),每目标积压上限 1024。
+- 启用:仅显式 `ArgBaseAtomosRetryable(messageID)`;wire `message_id` 在所有 attempt 保持不变,strict fenced ID 不 rebind。
+- 重投:复用同一 async ID 和回调注册;成功入队后仍等业务回复,永久失败/耗尽才 `asyncPop` 并以最终错误终结一次。
+- 进程退出:manager 终止排队请求并清账;未竟重试不持久化(Phase 2 才处理)。
+- 测试:调度器单测 + bufconn 响应失败/恢复、重复投递、messageID/asyncID 稳定、默认不重试和 Stop 清账。
 
 ### Phase 2:WAL outbox
 

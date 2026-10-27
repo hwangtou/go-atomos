@@ -1101,6 +1101,7 @@ type baseAtomosHelper struct {
 	appendToHead bool
 	waitKilled   bool
 	operationID  string
+	retryableID  string
 	// waitChain is the cross-node wait chain carried by a remote-originated
 	// sync call (internal arg; not recorded in fields — it is runtime
 	// metadata, not a user argument).
@@ -1197,6 +1198,27 @@ func createBaseAtomosHelper(mailType BaseAtomosMailType, ext []ArgsForBaseAtomos
 				continue
 			}
 			helper.fields = append(helper.fields, int32(ArgTypeBaseAtomosOperationID))
+		case ArgTypeBaseAtomosRetryable:
+			if mailType != BaseAtomosMailAsync {
+				helper.addInvalidArg(i, v, "Retryable argument is only valid for Async mails")
+				continue
+			}
+			if helper.retryableID != "" {
+				helper.addConflictArg(i, v, "Retryable argument conflict")
+				continue
+			}
+			switch arg := v.(type) {
+			case argBaseAtomosRetryable:
+				helper.retryableID = arg.messageID
+			case *argBaseAtomosRetryable:
+				helper.retryableID = arg.messageID
+			default:
+				helper.addInvalidArg(i, v, "Retryable argument type is invalid")
+				continue
+			}
+			if helper.retryableID == "" {
+				helper.addInvalidArg(i, v, "Retryable message ID is empty")
+			}
 		default:
 			helper.addInvalidArg(i, v, "Argument type is invalid")
 		}
