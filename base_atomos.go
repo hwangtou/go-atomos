@@ -669,11 +669,15 @@ func (a *BaseAtomos) setSpawning() {
 }
 
 func (a *BaseAtomos) setSpawn() {
+	a.setSpawnWaiting()
+	a.process.onIDSpawn(a.id)
+}
+
+func (a *BaseAtomos) setSpawnWaiting() {
 	a.mailbox.mutex.Lock()
 	a.state = BaseAtomosWaiting
 	a.mt.spawn()
 	a.mailbox.mutex.Unlock()
-	a.process.onIDSpawn(a.id)
 }
 
 func (a *BaseAtomos) setBusy(message string, arg proto.Message) {
@@ -731,8 +735,8 @@ func (a *BaseAtomos) setHalted(err *Error) {
 
 // Mailbox
 
-func (a *BaseAtomos) start(fn func() *Error) *Error {
-	return a.mailbox.start(fn)
+func (a *BaseAtomos) start(fn func() *Error, onReady ...func()) *Error {
+	return a.mailbox.start(fn, onReady...)
 }
 
 // 处理邮箱启动
@@ -740,12 +744,61 @@ func (a *BaseAtomos) mailboxOnStartUp(fn func() *Error) *Error {
 	a.setSpawning()
 	if fn != nil {
 		if err := fn(); err != nil {
-			a.setHalted(err.AddStack(nil))
 			return err
 		}
 	}
-	a.setSpawn()
+	a.setSpawnWaiting()
 	return nil
+}
+
+func (a *BaseAtomos) mailboxOnReady() {
+	a.process.onIDSpawn(a.id)
+}
+
+func (a *BaseAtomos) mailboxOnAbort(startErr *Error, remainMail *mail) {
+	defer releaseAtomosMessageTracker(&a.mt)
+	defer releaseAtomosTasksManager(&a.task)
+	defer a.setHalted(startErr)
+
+	a.task.beginStopping()
+	a.asyncCancelAll()
+	a.task.cancelAllSchedulingTasks()
+
+	for ; remainMail != nil; remainMail = remainMail.next {
+		mailErr := NewErrorf(ErrCodeAtomosIsNotRunning, "Atomos: Spawn aborted. atomos=(%s),err=(%v)", a.String(), startErr).AddStack(nil)
+		switch value := remainMail.data.(type) {
+		case *mailExitCommand:
+			if value == nil {
+				continue
+			}
+			am, ok := value.data.(*baseAtomosMail)
+			if ok && am.mailType == BaseAtomosMailKill {
+				am.sendReply(nil, mailErr)
+			}
+		case *baseAtomosMail:
+			switch value.mailType {
+			case BaseAtomosMailKill, BaseAtomosMailSync, BaseAtomosMailWormhole:
+				value.sendReply(nil, mailErr)
+			case BaseAtomosMailAsync:
+				if value.asyncID != 0 {
+					if fromInternal, err := asIDInternal(value.from); err != nil {
+						a.log.coreError("Atomos: Spawn abort async reply dropped, caller ID invalid. err=(%v)", err)
+					} else if callback := fromInternal.asyncPop(value.asyncID); callback != nil {
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									a.Log().Error("Atomos: Spawn abort async callback panics. err=(%v)", r)
+								}
+							}()
+							callback(nil, mailErr)
+						}()
+					}
+				}
+			case BaseAtomosMailTask:
+				a.task.cancelRemainingTask(value)
+			}
+		}
+	}
 }
 
 // 处理邮箱消息。

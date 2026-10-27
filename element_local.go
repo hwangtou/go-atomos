@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -38,7 +39,7 @@ type ElementLocal struct {
 	// Lock.
 	lock sync.RWMutex
 
-	spawnLockMap Map[string, *sync.Mutex]
+	spawnOperations map[string]*atomSpawnOperation
 
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
@@ -60,13 +61,13 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		Version: main.atomos.id.Version,
 	}
 	e := &ElementLocal{
-		cosmosLocal:  main,
-		atomos:       nil,
-		atoms:        nil,
-		names:        list.New(),
-		lock:         sync.RWMutex{},
-		spawnLockMap: NewMapGoWithRefCount[string, *sync.Mutex](),
-		elemImpl:     impl,
+		cosmosLocal:     main,
+		atomos:          nil,
+		atoms:           nil,
+		names:           list.New(),
+		lock:            sync.RWMutex{},
+		spawnOperations: map[string]*atomSpawnOperation{},
+		elemImpl:        impl,
 	}
 	var logLevel LogLevel
 	if customizeLogLevel, ok := impl.Developer.(ElementLogLevel); ok {
@@ -288,6 +289,7 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, args ...Ar
 	}
 	e.lock.RLock()
 	atom, hasAtom := e.atoms[name]
+	spawnOp := e.spawnOperations[name]
 	e.lock.RUnlock()
 	if hasAtom && atom.atomos.isNotHalt() {
 		if fromLocalOrRemote {
@@ -295,6 +297,14 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, args ...Ar
 		} else {
 			return atom, nil, nil
 		}
+	}
+	if spawnOp != nil {
+		if spawnOp.owner.Load() == getGoID() {
+			return nil, nil, NewErrorf(ErrCodeAtomosIsNotRunning, "Atom: Get cannot wait for its own spawn. name=(%s)", name).AddStack(e)
+		}
+		atom, err := e.waitAtomSpawnReady(name, spawnOp, atomSpawnReadyTimeout)
+		result, t, err := e.atomSpawnResult(atom, tracker, fromLocalOrRemote, err)
+		return result, t, errOrNil(err)
 	}
 	// Auto data persistence.
 	persistence, ok := e.elemImpl.Developer.(AutoData)
@@ -570,148 +580,164 @@ autoLoad:
 // 内部实现
 // INTERNAL
 
+type atomSpawnOperation struct {
+	done  chan struct{}
+	owner atomic.Uint64
+	atom  *AtomLocal
+	err   *Error
+}
+
+const (
+	atomSpawnStoppingTimeout = 10 * time.Second
+	atomSpawnReadyTimeout    = 10 * time.Second
+)
+
+func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, timeout time.Duration, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
+	if oldLock != nil {
+		oldLock.Unlock()
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-oldAtom.atomos.stoppingChan:
+	case <-timer.C:
+		return nil, nil, NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
+	}
+	return e.elementAtomSpawn(nil, name, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
+}
+
 func (e *ElementLocal) elementAtomSpawn(callerID ID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
 
-	// Fixed:
-	// Race in spawnLockMap.Remove ordering — the lock is removed from the map before it's unlocked
-	//
-	// Let me understand the spawn lock map implementation first.
-	//
-	// Actually, looking at this more carefully — spawnLockMap uses MapGoWithRefCount, so Remove decrements a ref count and only deletes the entry when it reaches 0. The race I originally
-	// described is prevented because a waiting goroutine's GetOrPut increments the ref count, keeping the lock in the map.
-	//
-	// However, the unlock-before-remove ordering is still fragile — if anyone changes the map implementation to not use ref counting, the race becomes real. The fix is to remove from the map
-	// while still holding the lock, then unlock.
-	// Now Remove fires first (while the lock is still held), then Unlock releases it. This means any new goroutine calling GetOrPut after the remove gets a fresh lock rather than the one being
-	// released — which is fine because the current holder has finished its critical section. The ordering no longer depends on ref-counting to be correct.
-	lock, _ := e.spawnLockMap.GetOrPut(name, &sync.Mutex{})
-	lock.Lock()
-	defer func() {
-		e.spawnLockMap.Remove(name)
-		lock.Unlock()
-	}()
-
-	return e.elementAtomSpawnUnderLocking(callerID, name, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
-}
-
-func (e *ElementLocal) elementAtomSpawnUnderLocking(callerID ID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
-	// Element的容器逻辑。
-	// Alloc an atomos and try setting.
-	// If not exist, lock and set a new one.
 	e.lock.Lock()
+	if op := e.spawnOperations[name]; op != nil {
+		e.lock.Unlock()
+		if spawnOrGet {
+			return nil, nil, NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
+		}
+		if op.owner.Load() == getGoID() {
+			return nil, nil, NewErrorf(ErrCodeAtomosIsNotRunning, "Atom: Get cannot wait for its own spawn. name=(%s)", name).AddStack(e)
+		}
+		atom, err := e.waitAtomSpawnReady(name, op, atomSpawnReadyTimeout)
+		return e.atomSpawnResult(atom, t, fromLocalOrRemote, err)
+	}
+	op := &atomSpawnOperation{done: make(chan struct{})}
+	op.owner.Store(getGoID())
+	if e.spawnOperations == nil {
+		e.spawnOperations = map[string]*atomSpawnOperation{}
+	}
+	e.spawnOperations[name] = op
 	oldAtom, has := e.atoms[name]
 	e.lock.Unlock()
-	// If exists and running, release new and return error.
-	// 不用担心两个Atom同时创建的问题，因为Atom创建的时候就是AtomSpawning了，除非其中一个在极端短的时间内AtomHalt了
+
 	if has {
-		return e.elementAtomSpawnMeetsExistAtom(name, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
-	} else {
-		return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
-	}
-}
-
-func (e *ElementLocal) elementAtomSpawnMeetsExistAtom(name string, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
-	oldLock := &oldAtom.atomos.mailbox.mutex
-	oldLock.Lock()
-	switch oldAtom.atomos.state {
-	case BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy:
-		// TODO 如果邮箱里面有kill mail，那就说明这个Atom正在被停止，这时候应该当成Stopping来处理。但一定要确保kill mail不会被删除。
-		return e.elementAtomSpawnInternalFoundRunning(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
-	case BaseAtomosStopping:
-		return e.elementAtomSpawnInternalFoundStopping(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, atomSpawnStoppingTimeout)
-	case BaseAtomosHalt:
-		return e.elementAtomSpawnNewAtom(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
-	default:
-		e.Log().Fatal("Element: Atom in unknown state. name=(%s), state=(%d)", name, oldAtom.atomos.state)
-		return e.elementAtomSpawnNewAtom(name, oldLock, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote)
-	}
-}
-
-func (e *ElementLocal) elementAtomSpawnInternalFoundRunning(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool) (*AtomLocal, *IDTracker, *Error) {
-	if oldLock != nil {
-		defer oldLock.Unlock()
-	}
-
-	if spawnOrGet {
-		return oldAtom, nil, NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
-	}
-
-	if fromLocalOrRemote {
-		return oldAtom, e.addRefAtom(oldAtom, t), nil
-	} else {
-		return oldAtom, nil, nil
-	}
-}
-
-const atomSpawnStoppingTimeout = 10 * time.Second
-
-func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, timeout time.Duration, args ...ArgsForBaseAtomos) (toReturn *AtomLocal, idTracker *IDTracker, err *Error) {
-	if oldLock != nil {
+		oldLock := &oldAtom.atomos.mailbox.mutex
+		oldLock.Lock()
+		state := oldAtom.atomos.state
 		oldLock.Unlock()
+		switch state {
+		case BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy:
+			if spawnOrGet {
+				err := NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
+				e.finishAtomSpawn(name, op, oldAtom, nil)
+				return oldAtom, nil, err
+			}
+			e.finishAtomSpawn(name, op, oldAtom, nil)
+			return e.atomSpawnResult(oldAtom, t, fromLocalOrRemote, nil)
+		case BaseAtomosStopping:
+			timer := time.NewTimer(atomSpawnStoppingTimeout)
+			select {
+			case <-oldAtom.atomos.stoppingChan:
+				timer.Stop()
+			case <-timer.C:
+				err := NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, atomSpawnStoppingTimeout).AddStack(e)
+				e.finishAtomSpawn(name, op, nil, err)
+				return nil, nil, err
+			}
+		case BaseAtomosHalt:
+		default:
+			e.Log().Fatal("Element: Atom in unknown state. name=(%s), state=(%d)", name, state)
+		}
 	}
+	return e.elementAtomSpawnNewAtom(name, op, oldAtom, arg, current, persistence, t, fromLocalOrRemote, args...)
+}
 
+func (e *ElementLocal) waitAtomSpawnReady(name string, op *atomSpawnOperation, timeout time.Duration) (*AtomLocal, *Error) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case <-oldAtom.atomos.stoppingChan:
-		e.Log().Info("Element: AtomSpawn meets an atom in stopping state, but it stopped successfully. name=(%s)", name)
+	case <-op.done:
+		return op.atom, op.err
 	case <-timer.C:
-		e.Log().Warn("Element: AtomSpawn cannot replace an atom that is still stopping. name=(%s)", name)
-		return nil, nil, NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
+		return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Element: Get timed out waiting for atom to become ready. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
 	}
-	return e.elementAtomSpawnNewAtom(name, nil, oldAtom, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
 }
 
-func (e *ElementLocal) elementAtomSpawnNewAtom(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet bool, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
-	if oldLock != nil {
-		oldLock.Unlock()
-	}
-
-	atom, err := newAtomLocal(name, e, current, e.atomos.log.level)
+func (e *ElementLocal) atomSpawnResult(atom *AtomLocal, t *IDTrackerInfo, fromLocalOrRemote bool, err *Error) (*AtomLocal, *IDTracker, *Error) {
 	if err != nil {
-		return nil, nil, err.AddStack(e)
+		return nil, nil, err
 	}
+	if fromLocalOrRemote {
+		return atom, e.addRefAtom(atom, t), nil
+	}
+	return atom, nil, nil
+}
 
+func (e *ElementLocal) finishAtomSpawn(name string, op *atomSpawnOperation, atom *AtomLocal, err *Error) {
 	e.lock.Lock()
+	if e.spawnOperations[name] != op {
+		e.lock.Unlock()
+		return
+	}
+	delete(e.spawnOperations, name)
+	op.atom = atom
+	op.err = err
+	e.lock.Unlock()
+	close(op.done)
+}
+
+func (e *ElementLocal) publishAtomSpawn(name string, op *atomSpawnOperation, oldAtom, atom *AtomLocal) {
+	e.lock.Lock()
+	if e.spawnOperations[name] != op {
+		e.lock.Unlock()
+		return
+	}
 	e.atoms[name] = atom
 	if oldAtom != nil {
-		// Respawn under the same name: the old (halted) instance is replaced by
-		// this new one. Carry over the name list node and the async callback id
-		// counter. We intentionally do NOT do the old `*oldAtom = *atom` struct
-		// overlay nor migrate a shared IDTracker manager:
-		//   - References are now accounted per-instanceID in atomRefState (keyed
-		//     by name, surviving respawn). Old trackers bound to the old
-		//     instanceID keep Release()ing against their own cell, which drains
-		//     independently of the new instance. No manager rewiring needed.
-		//   - External holders obtained an `ID` interface / `*IDTracker`, not a
-		//     raw `*AtomLocal`, so letting the old struct become unreachable is
-		//     safe; the runtime GCs it once no one references it.
 		atom.nameElement = oldAtom.nameElement
-		atom.atomos.asyncCallbackID = oldAtom.atomos.asyncCallbackID // asyncCallbackMap is NOT copied: the old map was already drained (each pending callback failed with not-running) during the old atom's mailboxOnStop, so carrying stale entries would only risk delivering a reply to the wrong (new) atom.
+		atom.atomos.asyncCallbackID = oldAtom.atomos.asyncCallbackID
 	} else {
 		atom.nameElement = e.names.PushBack(name)
 	}
+	delete(e.spawnOperations, name)
+	op.atom = atom
 	e.lock.Unlock()
+	close(op.done)
+}
 
-	// Atom的Spawn逻辑。
+func (e *ElementLocal) elementAtomSpawnNewAtom(name string, op *atomSpawnOperation, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
+	atom, err := newAtomLocal(name, e, current, e.atomos.log.level)
+	if err != nil {
+		e.finishAtomSpawn(name, op, nil, err)
+		return nil, nil, err.AddStack(e)
+	}
+
 	if err = atom.atomos.start(func() *Error {
+		op.owner.Store(getGoID())
 		if err := atom.elementAtomSpawn(current, persistence, arg, args...); err != nil {
 			return err.AddStack(nil)
 		}
 		return nil
+	}, func() {
+		e.publishAtomSpawn(name, op, oldAtom, atom)
 	}); err != nil {
-		//e.atomos.stop() // TODO: 这里的stop是不是应该放到start里面去？
+		e.finishAtomSpawn(name, op, nil, err)
 		e.elementAtomRelease(atom)
 		return nil, nil, err.AddStack(nil)
 	}
-	if fromLocalOrRemote {
-		return atom, e.addRefAtom(atom, t), nil
-	} else {
-		return atom, nil, nil
-	}
+	return e.atomSpawnResult(atom, t, fromLocalOrRemote, nil)
 }
 
 // addRefAtom records a new IDTracker reference against atom's instanceID and

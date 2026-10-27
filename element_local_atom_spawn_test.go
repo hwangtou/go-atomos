@@ -1,67 +1,9 @@
 package atomos
 
 import (
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
-
-func TestElementLocal_AtomSpawn_SpawnLockMap(t *testing.T) {
-	e := &ElementLocal{
-		spawnLockMap: NewMapGoWithRefCount[string, *sync.Mutex](),
-	}
-
-	f := func(name string, exe func()) {
-		lock, _ := e.spawnLockMap.GetOrPut(name, &sync.Mutex{})
-		defer e.spawnLockMap.Remove(name)
-
-		lock.Lock()
-		defer lock.Unlock()
-
-		exe()
-	}
-
-	var counter int64
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go f("test1", func() {
-		if !atomic.CompareAndSwapInt64(&counter, 0, 1) {
-			t.Error("Expected counter to be 0, got", counter)
-		}
-		defer func() {
-			if !atomic.CompareAndSwapInt64(&counter, 1, 0) {
-				t.Error("Expected counter to be 1, got", counter)
-			}
-		}()
-
-		t.Log("Executing test1")
-		if l := e.spawnLockMap.Len(); l != 1 {
-			t.Error("Expected spawnLockMap length to be 1, got", l)
-		}
-		wg.Done()
-	})
-	go f("test1", func() {
-		if !atomic.CompareAndSwapInt64(&counter, 0, 2) {
-			t.Error("Expected counter to be 0, got", counter)
-		}
-		defer func() {
-			if !atomic.CompareAndSwapInt64(&counter, 2, 0) {
-				t.Error("Expected counter to be 2, got", counter)
-			}
-		}()
-
-		t.Log("Executing test1 again")
-		if l := e.spawnLockMap.Len(); l != 1 {
-			t.Error("Expected spawnLockMap length to be 1, got", l)
-		}
-		wg.Done()
-	})
-	wg.Wait()
-	if l := e.spawnLockMap.Len(); l != 0 {
-		t.Error("Expected spawnLockMap length to be 0 after execution, got", l)
-	}
-}
 
 func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 	testElementLocalAtomSpawnHelper(t, func(p *CosmosProcess) {

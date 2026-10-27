@@ -55,13 +55,13 @@ func newAtomLocal(name string, e *ElementLocal, current *ElementImplementation, 
 	instance, err := func() (at Atomos, err *Error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = NewError(ErrCodeFrameworkRecoverFromPanic, "Atom: AtomConstructor panic.").AddStack(a)
+				err = NewError(ErrCodeFrameworkRecoverFromPanic, "Atom: AtomConstructor panic.").AddStack(nil)
 				a.element.cosmosLocal.Log().Error("AtomLocal: AtomConstructor panic. err=(%v)", r)
 			}
 		}()
 		at = current.Developer.AtomConstructor(name)
 		if at == nil {
-			return nil, NewError(ErrCodeFrameworkIncorrectUsage, "Atom: AtomConstructor return nil.").AddStack(a)
+			return nil, NewError(ErrCodeFrameworkIncorrectUsage, "Atom: AtomConstructor return nil.").AddStack(nil)
 		}
 		return at, nil
 	}()

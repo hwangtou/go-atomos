@@ -136,6 +136,14 @@ type mailboxHandler interface {
 	mailboxOnStop(stopMail, remainMails *mail, num uint32) *Error
 }
 
+type mailboxReadyHandler interface {
+	mailboxOnReady()
+}
+
+type mailboxAbortHandler interface {
+	mailboxOnAbort(startErr *Error, remainMails *mail)
+}
+
 // mailBox 邮箱
 // Some thoughts about mailbox design:
 //  1. Mailbox has a goroutine to process mails.
@@ -219,7 +227,7 @@ func (mb *mailBox) getNum() uint32 {
 	return mb.num
 }
 
-func (mb *mailBox) start(fn func() *Error) *Error {
+func (mb *mailBox) start(fn func() *Error, onReady ...func()) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
@@ -227,7 +235,7 @@ func (mb *mailBox) start(fn func() *Error) *Error {
 	}
 	mb.running = true
 	mb.mutex.Unlock()
-	if err := mb.startLoop(fn); err != nil {
+	if err := mb.startLoop(fn, onReady...); err != nil {
 		return err.AddStack(nil)
 	}
 	return nil
@@ -462,9 +470,9 @@ func (mb *mailBox) stopIfNoMail(onDone func()) (killed bool) {
 	return true
 }
 
-func (mb *mailBox) startLoop(fn func() *Error) *Error {
+func (mb *mailBox) startLoop(fn func() *Error, onReady ...func()) *Error {
 	waitStart := make(chan *Error, 1)
-	go mb.loop(waitStart, fn)
+	go mb.loop(waitStart, fn, onReady...)
 	err := <-waitStart
 	if err != nil {
 		mb.mutex.Lock()
@@ -475,7 +483,48 @@ func (mb *mailBox) startLoop(fn func() *Error) *Error {
 	return nil
 }
 
-func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
+func (mb *mailBox) startup(fn func() *Error, onReady func()) (err *Error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Mailbox: Start recovers from panic.").AddPanicStack(nil, 3, r)
+		}
+	}()
+	if err = mb.handler.mailboxOnStartUp(fn); err != nil {
+		return err.AddStack(nil)
+	}
+	if onReady != nil {
+		onReady()
+	}
+	if handler, ok := mb.handler.(mailboxReadyHandler); ok {
+		handler.mailboxOnReady()
+	}
+	return nil
+}
+
+func (mb *mailBox) abortStartup(err *Error) {
+	mb.mutex.Lock()
+	mb.running = false
+	mb.mutex.Unlock()
+	mails, _ := mb.popAll()
+	defer func() {
+		if r := recover(); r != nil {
+			mb.logging.pushFrameworkErrorLog("Mailbox: Recover from panic while aborting start. reason=(%v),stack=(%s)", r, string(debug.Stack()))
+		}
+		for ; mails != nil; mails = mails.next {
+			releaseMail(mails)
+		}
+	}()
+	if handler, ok := mb.handler.(mailboxAbortHandler); ok {
+		handler.mailboxOnAbort(err, mails)
+	}
+	for m := mails; m != nil; m = m.next {
+		if command, ok := m.data.(*mailExitCommand); ok && command != nil && command.onDone != nil {
+			command.onDone()
+		}
+	}
+}
+
+func (mb *mailBox) loop(wait chan *Error, fn func() *Error, onReady ...func()) {
 	// 获取当前进程Goroutine ID。
 	// Get current goroutine ID.
 	mb.goID = func() uint64 {
@@ -500,7 +549,12 @@ func (mb *mailBox) loop(wait chan *Error, fn func() *Error) {
 		mb.logging.pushFrameworkInfoLog("Mailbox: Stop. name=(%s)", mb.name)
 	}()
 
-	if err := mb.handler.mailboxOnStartUp(fn); err != nil {
+	var ready func()
+	if len(onReady) > 0 {
+		ready = onReady[0]
+	}
+	if err := mb.startup(fn, ready); err != nil {
+		mb.abortStartup(err)
 		wait <- err.AddStack(nil)
 		return
 	}
