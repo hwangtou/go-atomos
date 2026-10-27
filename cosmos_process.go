@@ -1207,6 +1207,9 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		if er != nil {
 			continue
 		}
+		if port == 0 {
+			grpcListenAddress = fmt.Sprintf("%s:%d", ip, listener.Addr().(*net.TCPAddr).Port)
+		}
 		// Try to start grpc server.
 		var svr *grpc.Server
 		var publicOption = []grpc.ServerOption{
