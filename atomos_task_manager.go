@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -110,7 +111,8 @@ type atomosTask struct {
 	// Atomos mail that send to Atomos mailbox.
 	atomosMail *baseAtomosMail
 
-	helper *taskHelper
+	helper      *taskHelper
+	queueHelper atomic.Pointer[taskHelper]
 
 	// Atomos任务的定时器，决定了多久之后把邮件发送到Atomos的邮箱。
 	// Timer of atomos task, which determines when to send Atomos mail to Atomos mailbox.

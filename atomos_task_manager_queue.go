@@ -76,6 +76,7 @@ func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnW
 	}
 	task := at.genTaskIDLocked(helper.delay > 0 || helper.cronSchedule != nil)
 	task.helper = helper
+	task.queueHelper.Store(helper)
 	helper.atomosTask = task
 	am := allocBaseAtomosMail()
 	initTaskQueueMail(am, at.closureInfo(1), helper)
@@ -120,6 +121,7 @@ func (at *atomosTaskManager) runCronTask(mailbox *mailBox, scheduled *atomosTask
 	task := at.genTaskIDLocked(false)
 	helper.atomosTask = task
 	task.helper = &helper
+	task.queueHelper.Store(&helper)
 	am := allocBaseAtomosMail()
 	initTaskQueueMail(am, name, &helper)
 	_, failed := at.addToQueueLocked(mailbox, task)
@@ -478,7 +480,7 @@ func (at *atomosTaskManager) closeTaskMailboxIfIdleLocked(mailbox *mailBox) {
 		return
 	}
 	for _, task := range at.tasks {
-		if task.helper != nil && task.helper.mailbox == mailbox {
+		if helper := task.queueHelper.Load(); helper != nil && helper.mailbox == mailbox {
 			return
 		}
 	}
@@ -673,5 +675,6 @@ func (h *taskHelper) buildAtomosTask() {
 		return
 	}
 	task.helper = h
+	task.queueHelper.Store(h)
 	h.atomosTask = task
 }
