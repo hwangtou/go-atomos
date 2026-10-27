@@ -91,12 +91,12 @@ func (m *lifecycleManager) startJanitor() {
 	}
 	go func() {
 		defer close(m.stopped)
-		ticker := time.NewTicker(time.Minute)
+		ticker := m.process.getClock().NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ticker.C:
-				m.deleteExpiredOperations(time.Now())
+			case <-ticker.C():
+				m.deleteExpiredOperations(m.process.getClock().Now())
 			case <-m.stop:
 				return
 			}
@@ -297,7 +297,7 @@ func (m *lifecycleManager) existingOperation(operationID, fingerprint string, ki
 	return &AtomControlResult{OperationId: operationID, Operation: op.Operation}, true, nil
 }
 
-func lifecycleRetention(accepted bool, retain bool) int64 {
+func lifecycleRetention(now time.Time, accepted bool, retain bool) int64 {
 	if accepted {
 		return 0
 	}
@@ -305,13 +305,13 @@ func lifecycleRetention(accepted bool, retain bool) int64 {
 	if retain {
 		ttl *= 24
 	}
-	return time.Now().Add(ttl).UnixNano()
+	return now.Add(ttl).UnixNano()
 }
 
-func newOperationInfo(id string, kind AtomOperationKind, fingerprint string, atomID *IDInfo) *AtomOperationInfo {
+func newOperationInfo(now time.Time, id string, kind AtomOperationKind, fingerprint string, atomID *IDInfo) *AtomOperationInfo {
 	return &AtomOperationInfo{
 		OperationId: id, Kind: kind, State: AtomOperationState_AtomOperationStateRunning,
-		Id: atomID, Fingerprint: fingerprint, StartTime: timestamppb.Now(),
+		Id: atomID, Fingerprint: fingerprint, StartTime: timestamppb.New(now),
 	}
 }
 
@@ -319,8 +319,10 @@ func (m *lifecycleManager) waitOperation(ctx context.Context, operationID, finge
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, lifecycleOperationWait)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	timeout := m.process.getClock().AfterFunc(lifecycleOperationWait, cancel)
+	defer timeout.Stop()
 	for {
 		op, _, err := m.loadOperation(operationID)
 		if err != nil {
@@ -332,12 +334,12 @@ func (m *lifecycleManager) waitOperation(ctx context.Context, operationID, finge
 		if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
 			return proto.Clone(op.Result).(*AtomControlResult), nil
 		}
-		timer := time.NewTimer(lifecyclePollInterval)
+		timer := m.process.getClock().NewTimer(lifecyclePollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return &AtomControlResult{OperationId: operationID, Operation: op.Operation, Error: NewError(ErrCodeOperationStillRunning, "lifecycle: operation still running")}, nil
-		case <-timer.C:
+		case <-timer.C():
 		}
 	}
 }

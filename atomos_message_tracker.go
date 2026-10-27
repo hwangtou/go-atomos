@@ -111,7 +111,7 @@ func (t *atomosMessageTracker) set(message string, info *IDInfo, process *Cosmos
 
 	counter := atomic.AddInt64(&t.counter, 1)
 	if process.messageTimeoutTracer {
-		time.AfterFunc(process.messageTimeoutDefault, func() {
+		process.getClock().AfterFunc(process.messageTimeoutDefault, func() {
 			if atomic.LoadInt64(&t.counter) == counter {
 				defer func() {
 					if r := recover(); r != nil {

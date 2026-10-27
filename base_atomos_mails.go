@@ -326,10 +326,12 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 	if waitCh == nil {
 		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
 	}
+	timer := a.process.getClock().NewTimer(timeout)
+	defer timer.Stop()
 	var reply *mailReply
 	select {
 	case reply = <-waitCh:
-	case <-time.After(timeout):
+	case <-timer.C():
 		if a.mailbox.removeMail(m.mail) {
 			releaseMail(m.mail)
 			err := NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)
@@ -369,10 +371,12 @@ func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id I
 	}
 
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
+	timer := a.process.getClock().NewTimer(timeout)
+	defer timer.Stop()
 	var reply *mailReply
 	select {
 	case reply = <-waitCh:
-	case <-time.After(timeout):
+	case <-timer.C():
 		if a.mailbox.removeMail(m.mail) {
 			releaseMail(m.mail)
 			return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Atomos: Message is timeout and rejected. id=(%s),name=(%s),timeout=(%v)", a.id.Info(), m.name, timeout).AddStack(nil)

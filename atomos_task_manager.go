@@ -116,7 +116,7 @@ type atomosTask struct {
 
 	// Atomos任务的定时器，决定了多久之后把邮件发送到Atomos的邮箱。
 	// Timer of atomos task, which determines when to send Atomos mail to Atomos mailbox.
-	timer   *time.Timer
+	timer   Timer
 	cronEID cron.EntryID
 
 	// Atomos任务的状态。
@@ -250,7 +250,7 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 	t := &atomosTask{id: curID, manager: at, atomosMail: am, timerState: TaskScheduling}
 	am.atomosTask = t
 	at.tasks[curID] = t
-	t.timer = time.AfterFunc(after, func() {
+	t.timer = at.atomos.process.getClock().AfterFunc(after, func() {
 		at.mutex.Lock()
 		it, has := at.tasks[t.id]
 		if at.stopping || !has || it != t || it.timerState != TaskScheduling {

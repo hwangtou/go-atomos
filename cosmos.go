@@ -73,6 +73,7 @@ func lifecycleStrictMode(mode LifecycleMode) bool {
 //	atomos.Run(runnable)
 type CosmosRunnable struct {
 	config       *Config
+	clock        Clock
 	implements   map[string]*ElementImplementation
 	spawnElement map[string]bool
 	spawnOrder   []string
@@ -192,6 +193,14 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 // GetConfig returns the Config currently set on the runnable (nil if unset).
 func (r *CosmosRunnable) GetConfig() *Config {
 	return r.config
+}
+
+// SetClock sets the clock used by local timers and timeouts that have been
+// migrated to Clock; it does not control all process scheduling. A nil clock
+// keeps the production system clock.
+func (r *CosmosRunnable) SetClock(clock Clock) *CosmosRunnable {
+	r.clock = clock
+	return r
 }
 
 // SetLifecycleMode configures the lifecycle guarantees for the process.

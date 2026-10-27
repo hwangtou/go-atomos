@@ -136,26 +136,26 @@ func (m *lifecycleManager) watchOwners(ctx context.Context, revision int64) {
 		if revision == 0 {
 			updated, err := m.syncOwnerSnapshot(ctx)
 			if err != nil {
-				timer := time.NewTimer(lifecycleWatchReconnect)
+				timer := m.process.getClock().NewTimer(lifecycleWatchReconnect)
 				select {
 				case <-ctx.Done():
 					timer.Stop()
 					return
-				case <-timer.C:
+				case <-timer.C():
 				}
 				continue
 			}
 			revision = updated + 1
 		}
 		watchCh := m.cli.Watch(clientv3.WithRequireLeader(ctx), m.ownerPrefix(), clientv3.WithPrefix(), clientv3.WithRev(revision))
-		probe := time.NewTicker(lifecycleWatchProbe)
+		probe := m.process.getClock().NewTicker(lifecycleWatchProbe)
 		reconnect := false
 		for !reconnect {
 			select {
 			case <-ctx.Done():
 				probe.Stop()
 				return
-			case <-probe.C:
+			case <-probe.C():
 				if !m.probeOwnerWatch(ctx) {
 					m.watchHealthy.Store(false)
 					reconnect = true
@@ -207,12 +207,12 @@ func (m *lifecycleManager) watchOwners(ctx context.Context, revision int64) {
 			}
 		}
 		probe.Stop()
-		timer := time.NewTimer(lifecycleWatchReconnect)
+		timer := m.process.getClock().NewTimer(lifecycleWatchReconnect)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return
-		case <-timer.C:
+		case <-timer.C():
 		}
 		updated, err := m.syncOwnerSnapshot(ctx)
 		if err != nil {

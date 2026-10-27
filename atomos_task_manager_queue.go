@@ -84,7 +84,7 @@ func (at *atomosTaskManager) addToAtomos(mailbox *mailBox, t TaskFn, tCb TaskFnW
 	failed := false
 	switch {
 	case helper.delay > 0:
-		task.timer = time.AfterFunc(helper.delay, func() {
+		task.timer = at.atomos.process.getClock().AfterFunc(helper.delay, func() {
 			at.delayAddToQueue(mailbox, task)
 		})
 	case helper.cronSchedule != nil:

@@ -570,7 +570,7 @@ func TestAtomosTaskManager_AddToQueue_KillInMid(t *testing.T) {
 		// #14 #15 tasks are delayed
 		if i > 12 {
 			timerWg.Add(1)
-			time.AfterFunc(task.helper.delay, func() {
+			systemClock{}.AfterFunc(task.helper.delay, func() {
 				t.Logf("Adding task with ID which is delayed task after killing mail with ID=(%d), i=(%d), delay=(%v)", task.id, i, task.helper.delay)
 				at.delayAddToQueue(at.atomos.mailbox, task)
 				timerWg.Done()
@@ -784,7 +784,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelSchedulingTask(t *testing.T) {
 		t.Fatal("Expected task to be registered in AtomosTaskManager tasks map.")
 	}
 
-	task.timer = time.AfterFunc(helper.delay, func() {
+	task.timer = systemClock{}.AfterFunc(helper.delay, func() {
 		at.delayAddToQueue(at.atomos.mailbox, task)
 	})
 	if err := at.cancelTaskQueue(task, false, "test cancel"); err != nil {
@@ -883,7 +883,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 		t.Fatal("Expected 2 allocated mails after initializing first mailing task queue mail, got ", getAllocMailDebugNum())
 	}
 
-	task1.timer = time.AfterFunc(helper1.delay, func() {
+	task1.timer = systemClock{}.AfterFunc(helper1.delay, func() {
 		at.delayAddToQueue(at.atomos.mailbox, task1)
 	})
 
@@ -927,7 +927,7 @@ func TestAtomosTaskManager_CancelTaskQueue_CancelMailingTask(t *testing.T) {
 	at.mutex.Unlock()
 
 	wait2 := make(chan struct{})
-	task2.timer = time.AfterFunc(time.Millisecond, func() {
+	task2.timer = systemClock{}.AfterFunc(time.Millisecond, func() {
 		at.delayAddToQueue(at.atomos.mailbox, task2)
 		wait2 <- struct{}{}
 	})

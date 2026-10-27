@@ -255,13 +255,13 @@ func (p *CosmosProcess) etcdRegisterWithRetry(key string, info *etcdInfoUpdate, 
 	var lastErr *Error
 	for attempt := 0; attempt < etcdRegistrationAttempts; attempt++ {
 		if attempt > 0 {
-			timer := time.NewTimer(etcdRegistrationBackoff)
+			timer := p.getClock().NewTimer(etcdRegistrationBackoff)
 			select {
-			case <-timer.C:
+			case <-timer.C():
 			case updated, more := <-infoCh:
 				if !timer.Stop() {
 					select {
-					case <-timer.C:
+					case <-timer.C():
 					default:
 					}
 				}
@@ -323,7 +323,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 	go func(lease *clientv3.LeaseGrantResponse, keepAliveCh <-chan *clientv3.LeaseKeepAliveResponse) {
 		orderly := false
 		publishedSeq := info.seq
-		var retryTimer *time.Timer
+		var retryTimer Timer
 		var retryCh <-chan time.Time
 		stopRetry := func() {
 			if retryTimer == nil {
@@ -331,7 +331,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			}
 			if !retryTimer.Stop() {
 				select {
-				case <-retryTimer.C:
+				case <-retryTimer.C():
 				default:
 				}
 			}
@@ -348,8 +348,8 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				p.lifecycle.publishLease(0, false)
 				p.etcdErrorHandler(err)
 				stopRetry()
-				retryTimer = time.NewTimer(etcdInfoPublishBackoff)
-				retryCh = retryTimer.C
+				retryTimer = p.getClock().NewTimer(etcdInfoPublishBackoff)
+				retryCh = retryTimer.C()
 				return
 			}
 			publishedSeq = info.seq
@@ -543,12 +543,12 @@ func (p *CosmosProcess) watchCluster(cli *clientv3.Client) *Error {
 			runtime.watchHealthy.Store(false)
 
 			for {
-				timer := time.NewTimer(backoff)
+				timer := p.getClock().NewTimer(backoff)
 				select {
 				case <-ctx.Done():
 					timer.Stop()
 					return
-				case <-timer.C:
+				case <-timer.C():
 				}
 				snapshot, err := etcdGetPrefix(cli, keyPrefix)
 				if err != nil {

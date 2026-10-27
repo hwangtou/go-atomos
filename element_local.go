@@ -513,7 +513,7 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 			}
 		}(atom, name)
 		if stopGap > 0 {
-			<-time.After(stopGap)
+			<-e.cosmosLocal.process.getClock().After(stopGap)
 		}
 	}
 	exitWG.Wait()
@@ -669,11 +669,11 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLoc
 	if oldLock != nil {
 		oldLock.Unlock()
 	}
-	timer := time.NewTimer(timeout)
+	timer := e.cosmosLocal.process.getClock().NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case <-oldAtom.atomos.stoppingChan:
-	case <-timer.C:
+	case <-timer.C():
 		return nil, nil, NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
 	}
 	return e.elementAtomSpawn(nil, name, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
@@ -727,11 +727,11 @@ func (e *ElementLocal) elementAtomSpawnAdmitted(callerID ID, name string, arg pr
 			e.finishAtomSpawn(name, op, oldAtom, nil)
 			return e.atomSpawnResult(oldAtom, t, fromLocalOrRemote, nil)
 		case BaseAtomosStopping:
-			timer := time.NewTimer(atomSpawnStoppingTimeout)
+			timer := e.cosmosLocal.process.getClock().NewTimer(atomSpawnStoppingTimeout)
 			select {
 			case <-oldAtom.atomos.stoppingChan:
 				timer.Stop()
-			case <-timer.C:
+			case <-timer.C():
 				err := NewErrorf(ErrCodeAtomosIsStopping, "Element: AtomSpawn timed out waiting for the previous instance to halt. name=(%s),timeout=(%v)", name, atomSpawnStoppingTimeout).AddStack(e)
 				e.finishAtomSpawn(name, op, nil, err)
 				return nil, nil, err
@@ -745,12 +745,12 @@ func (e *ElementLocal) elementAtomSpawnAdmitted(callerID ID, name string, arg pr
 }
 
 func (e *ElementLocal) waitAtomSpawnReady(name string, op *atomSpawnOperation, timeout time.Duration) (*AtomLocal, *Error) {
-	timer := time.NewTimer(timeout)
+	timer := e.cosmosLocal.process.getClock().NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case <-op.done:
 		return op.atom, op.err
-	case <-timer.C:
+	case <-timer.C():
 		return nil, NewErrorf(ErrCodeAtomosPushTimeoutReject, "Element: Get timed out waiting for atom to become ready. name=(%s),timeout=(%v)", name, timeout).AddStack(e)
 	}
 }

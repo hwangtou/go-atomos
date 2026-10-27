@@ -1,31 +1,29 @@
 package atomos
 
-import "time"
+import (
+	"time"
+
+	internalclock "github.com/hwangtou/go-atomos/internal/clock"
+)
 
 // Clock supplies time for lifecycle scheduling. Implementations must be safe
 // for concurrent use.
-type Clock interface {
-	Now() time.Time
-	After(time.Duration) <-chan time.Time
-	AfterFunc(time.Duration, func()) Timer
-	NewTimer(time.Duration) Timer
-	NewTicker(time.Duration) Ticker
-}
+type Clock = internalclock.Clock
 
 // Timer is a schedulable timer. AfterFunc timers have a nil channel.
-type Timer interface {
-	C() <-chan time.Time
-	Stop() bool
-	Reset(time.Duration) bool
-}
+type Timer = internalclock.Timer
 
 // Ticker is a repeating timer.
-type Ticker interface {
-	C() <-chan time.Time
-	Stop()
-}
+type Ticker = internalclock.Ticker
 
 type systemClock struct{}
+
+func (p *CosmosProcess) getClock() Clock {
+	if p == nil || p.clock == nil {
+		return systemClock{}
+	}
+	return p.clock
+}
 
 func (systemClock) Now() time.Time { return time.Now() }
 func (systemClock) After(d time.Duration) <-chan time.Time {

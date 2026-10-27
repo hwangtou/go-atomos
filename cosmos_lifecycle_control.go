@@ -75,7 +75,7 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 		if shard != nil {
 			atomID.ShardId = shard.ShardId
 		}
-		op := newOperationInfo(operationID, kind, fingerprint, atomID)
+		op := newOperationInfo(m.process.getClock().Now(), operationID, kind, fingerprint, atomID)
 		ownership := &AtomOwnershipInfo{Id: atomID, Incarnation: incarnation, StartupId: m.process.startupID, Fence: fence, State: AtomLifecycleState_AtomLifecycleStateSpawning}
 		owner = &AtomOwnershipRecord{Ownership: ownership, LeaseId: int64(leaseID), OperationId: operationID}
 		if record == nil {
@@ -148,9 +148,9 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 	result.Ownership = proto.Clone(owner.Ownership).(*AtomOwnershipInfo)
 	result.Error = businessErr
 	opRecord.Operation.State = AtomOperationState_AtomOperationStateSucceeded
-	opRecord.Operation.FinishTime = timestamppb.Now()
+	opRecord.Operation.FinishTime = timestamppb.New(m.process.getClock().Now())
 	opRecord.Operation.Error = businessErr
-	opRecord.Operation.RetainUntilUnixNano = lifecycleRetention(false, claim.retain)
+	opRecord.Operation.RetainUntilUnixNano = lifecycleRetention(m.process.getClock().Now(), false, claim.retain)
 	if businessErr != nil {
 		opRecord.Operation.State = AtomOperationState_AtomOperationStateFailed
 	}
@@ -326,7 +326,7 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		if owner == nil || !lifecycleSameIdentity(id, owner.Ownership) {
 			return &AtomControlResult{OperationId: operationID, Id: id, Error: lifecycleError(operationID, ErrCodeStaleFence, "lifecycle: halt stale identity")}, nil
 		}
-		op := newOperationInfo(operationID, AtomOperationKind_AtomOperationKindHalt, fingerprint, id)
+		op := newOperationInfo(m.process.getClock().Now(), operationID, AtomOperationKind_AtomOperationKindHalt, fingerprint, id)
 		ownership := proto.Clone(owner.Ownership).(*AtomOwnershipInfo)
 		ownership.State = AtomLifecycleState_AtomLifecycleStateStopping
 		operation := &AtomOperationRecord{Operation: op, Result: &AtomControlResult{OperationId: operationID, Id: id, Ownership: ownership, Operation: op}}
@@ -405,12 +405,12 @@ func (m *lifecycleManager) joinStoppingHalt(ctx context.Context, operationID, fi
 	if err != nil {
 		return nil, err
 	}
-	now := timestamppb.Now()
+	now := timestamppb.New(m.process.getClock().Now())
 	op := &AtomOperationInfo{
 		OperationId: operationID, Kind: AtomOperationKind_AtomOperationKindHalt,
 		State: joinedResult.Operation.State, Id: owner.Ownership.Id, Fingerprint: fingerprint,
 		StartTime: now, FinishTime: now, Error: joinedResult.Error,
-		RetainUntilUnixNano: lifecycleRetention(false, retain),
+		RetainUntilUnixNano: lifecycleRetention(m.process.getClock().Now(), false, retain),
 	}
 	result := proto.Clone(joinedResult).(*AtomControlResult)
 	result.OperationId = operationID
@@ -456,8 +456,8 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 	result := &AtomControlResult{OperationId: operationID, Id: id, Ownership: owner.Ownership, Operation: op.Operation, Error: businessErr}
 	op.Operation.State = AtomOperationState_AtomOperationStateSucceeded
 	op.Operation.Error = businessErr
-	op.Operation.FinishTime = timestamppb.Now()
-	op.Operation.RetainUntilUnixNano = lifecycleRetention(false, retain)
+	op.Operation.FinishTime = timestamppb.New(m.process.getClock().Now())
+	op.Operation.RetainUntilUnixNano = lifecycleRetention(m.process.getClock().Now(), false, retain)
 	if businessErr != nil {
 		op.Operation.State = AtomOperationState_AtomOperationStateFailed
 	}
@@ -509,9 +509,9 @@ func (m *lifecycleManager) supersedeOperation(operationID, takeoverID string) {
 		return
 	}
 	op.Operation.State = AtomOperationState_AtomOperationStateFailed
-	op.Operation.FinishTime = timestamppb.Now()
+	op.Operation.FinishTime = timestamppb.New(m.process.getClock().Now())
 	op.Operation.Error = lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: operation superseded by takeover %s", takeoverID)
-	op.Operation.RetainUntilUnixNano = lifecycleRetention(false, false)
+	op.Operation.RetainUntilUnixNano = lifecycleRetention(m.process.getClock().Now(), false, false)
 	if op.Result == nil {
 		op.Result = &AtomControlResult{OperationId: operationID, Id: op.Operation.Id}
 	}

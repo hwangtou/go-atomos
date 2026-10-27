@@ -28,6 +28,7 @@ type CosmosProcess struct {
 	state CosmosProcessState
 
 	startupID uint64
+	clock     Clock
 
 	// app is the owning App, set when the process is created via
 	// App.NewCosmosProcess. Nil for processes constructed directly in tests;
@@ -180,6 +181,7 @@ func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ..
 // init 初始化进程
 func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, args ...any) *Error {
 	p.startupID = newProcessStartupID()
+	p.clock = systemClock{}
 
 	// Per-process mutable defaults.
 	p.messageTimeoutTracer = true
@@ -194,7 +196,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
 	p.rpcMetrics = newRPCMetrics()
-	p.retry = newAsyncRetryManager(systemClock{}, isAsyncRetryableError, nil)
+	p.retry = newAsyncRetryManager(p.clock, isAsyncRetryableError, nil)
 	p.atomSpawnAccepting = true
 
 	// Init Info.
@@ -512,6 +514,10 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 
 		// Apply per-process settings carried by the runnable. Unset options
 		// keep the CosmosProcess defaults established in init.
+		if runnable.clock != nil {
+			p.clock = runnable.clock
+			p.retry = newAsyncRetryManager(p.clock, isAsyncRetryableError, nil)
+		}
 		if runnable.messageTimeoutTracer != nil {
 			p.messageTimeoutTracer = *runnable.messageTimeoutTracer
 			p.messageTimeoutDefault = runnable.messageTimeoutDefault
@@ -786,9 +792,10 @@ func (p *CosmosProcess) drainWatcher(deadline time.Duration, drainCancel chan st
 			p.local.coreLog().coreError("CosmosProcess: drainWatcher panicked. reason=(%v)", r)
 		}
 	}()
-	deadlineTimer := time.NewTimer(deadline)
+	clock := p.getClock()
+	deadlineTimer := clock.NewTimer(deadline)
 	defer deadlineTimer.Stop()
-	ticker := time.NewTicker(drainCheckInterval)
+	ticker := clock.NewTicker(drainCheckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -800,10 +807,10 @@ func (p *CosmosProcess) drainWatcher(deadline time.Duration, drainCancel chan st
 		case <-drainCancel:
 			p.local.coreLog().coreInfo("CosmosProcess: Drain cancelled by Stop(). Exiting drainWatcher.")
 			return
-		case <-ticker.C:
+		case <-ticker.C():
 			p.local.coreLog().coreInfo("CosmosProcess: Drain polling. active_atoms=(%d),pending_spawns=(%d)", active, pending)
 		case <-drained:
-		case <-deadlineTimer.C:
+		case <-deadlineTimer.C():
 			p.local.coreLog().coreInfo("CosmosProcess: Drain deadline reached with %d active atoms and %d pending spawns. Force exiting.", active, pending)
 			p.exitAfterDrain()
 			return
