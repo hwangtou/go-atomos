@@ -35,7 +35,7 @@ func newKeepaliveClusterProcess(t *testing.T, cli *clientv3.Client, cosmos, node
 	p.cluster.enable = true
 	p.cluster.etcdClient = cli
 	p.cluster.etcdVersion = version
-	p.cluster.etcdInfoCh = make(chan string)
+	p.cluster.etcdInfoCh = make(chan etcdInfoUpdate, 1)
 	return p, logger
 }
 

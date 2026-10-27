@@ -83,8 +83,12 @@ type CosmosProcess struct {
 	// (count/diagnosis split); added here to be wired in later.
 	idTrackerDebug bool
 	// draining is set true by Drain(); the drainWatcher goroutine then waits
-	// for active atoms to reach zero before triggering graceful exit.
-	draining bool
+	// for active atoms and admitted spawn operations to reach zero before
+	// triggering graceful exit.
+	draining           bool
+	atomSpawnAccepting bool
+	atomSpawnPending   int
+	atomSpawnDrained   chan struct{}
 	// drainCancel, when non-nil, is closed by Stop() to signal drainWatcher to
 	// exit promptly. Without it, drainWatcher keeps polling (and logging) after
 	// the process has stopped, which races with test/teardown logging.
@@ -107,7 +111,8 @@ type CosmosProcess struct {
 		// ETCD
 		etcdClient      *clientv3.Client
 		etcdVersion     int64
-		etcdInfoCh      chan string
+		etcdInfoSeq     uint64
+		etcdInfoCh      chan etcdInfoUpdate
 		etcdExitCh      chan struct{}
 		etcdCancelWatch context.CancelFunc
 		// GRPC
@@ -183,6 +188,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
 	p.rpcMetrics = newRPCMetrics()
+	p.atomSpawnAccepting = true
 
 	// Init Info.
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}
@@ -592,6 +598,7 @@ func (p *CosmosProcess) stopFromOtherNode() *Error {
 			return NewError(ErrCodeCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
+			p.atomSpawnAccepting = false
 			// Signal drainWatcher (if running) to exit promptly so its polling
 			// goroutine does not outlive the process and race with teardown.
 			if p.drainCancel != nil {
@@ -661,16 +668,51 @@ const (
 	drainDefaultDeadline = 1 * time.Hour
 )
 
-// isDraining reports whether the process has entered drain mode. Spawn paths
-// check this to reject new atoms locally (see ElementLocal.SpawnAtom).
+// isDraining reports whether the process has entered drain mode.
 func (p *CosmosProcess) isDraining() bool {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return p.draining
 }
 
+func (p *CosmosProcess) beginAtomSpawn() *Error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if !p.atomSpawnAccepting {
+		if p.draining {
+			return NewError(ErrCodeCosmosNodeDraining, "CosmosProcess: Atom spawn rejected, node is draining.").AddStack(nil)
+		}
+		return NewError(ErrCodeAtomosIsStopping, "CosmosProcess: Atom spawn rejected, process is stopping.").AddStack(nil)
+	}
+	if p.atomSpawnPending == 0 {
+		p.atomSpawnDrained = make(chan struct{})
+	}
+	p.atomSpawnPending++
+	return nil
+}
+
+func (p *CosmosProcess) endAtomSpawn() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if p.atomSpawnPending <= 0 {
+		return
+	}
+	p.atomSpawnPending--
+	if p.atomSpawnPending == 0 && p.atomSpawnDrained != nil {
+		close(p.atomSpawnDrained)
+		p.atomSpawnDrained = nil
+	}
+}
+
+func (p *CosmosProcess) atomSpawnPendingSnapshot() (int, <-chan struct{}) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return p.atomSpawnPending, p.atomSpawnDrained
+}
+
 // Drain enters drain mode: stop accepting new atoms, keep serving existing
-// ones, and exit gracefully once all atoms finish (or deadline elapses).
+// ones, and exit gracefully once all atoms and admitted spawns finish (or the
+// deadline elapses).
 //
 // deadline <= 0 means use the default (1h). The drain runs in a background
 // goroutine; this method returns immediately after marking the state.
@@ -680,8 +722,9 @@ func (p *CosmosProcess) Drain(deadline time.Duration) error {
 	}
 	p.mutex.Lock()
 	if p.state != CosmosProcessStateRunning {
+		state := p.state
 		p.mutex.Unlock()
-		return NewErrorf(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", p.state).AddStack(nil)
+		return NewErrorf(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", state).AddStack(nil)
 	}
 	if p.draining {
 		p.mutex.Unlock()
@@ -689,6 +732,7 @@ func (p *CosmosProcess) Drain(deadline time.Duration) error {
 		return nil
 	}
 	p.draining = true
+	p.atomSpawnAccepting = false
 	p.drainCancel = make(chan struct{})
 	// drainCancel 会被 Stop 并发地 close 并置 nil(锁内)。watcher 里再读这个字段
 	// 会与置 nil 构成数据竞争,因此在锁内快照,按参数传给 watcher。
@@ -700,8 +744,6 @@ func (p *CosmosProcess) Drain(deadline time.Duration) error {
 	}
 	p.local.coreLog().coreInfo("CosmosProcess: Drain started. deadline=(%v)", deadline)
 
-	// Broadcast Draining state via etcd so other nodes stop routing new atoms here.
-	// Best-effort: if etcd update fails, drain still proceeds locally.
 	if p.cluster.enable {
 		if err := p.updateNodeState(ClusterNodeState_Draining); err != nil {
 			p.local.coreLog().coreError("CosmosProcess: Drain failed to broadcast Draining state via etcd. err=(%v)", err)
@@ -712,10 +754,9 @@ func (p *CosmosProcess) Drain(deadline time.Duration) error {
 	return nil
 }
 
-// drainWatcher polls active atom count and triggers graceful exit when all
-// elements reach zero, or force-stops after the deadline. drainCancel 是 Drain
-// 时快照的取消通道:Stop 关闭它即退出,不直接读 p.drainCancel(该字段会被 Stop
-// 并发置 nil)。
+// drainWatcher polls active atoms and also listens for admitted spawns to
+// publish or clean up. drainCancel 是 Drain 时快照的取消通道:Stop 关闭它即退出,
+// 不直接读 p.drainCancel(该字段会被 Stop 并发置 nil)。
 func (p *CosmosProcess) drainWatcher(deadline time.Duration, drainCancel chan struct{}) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -728,21 +769,24 @@ func (p *CosmosProcess) drainWatcher(deadline time.Duration, drainCancel chan st
 	defer ticker.Stop()
 
 	for {
+		// Read pending before active: admission is closed, so a zero pending
+		// snapshot guarantees every admitted publication precedes the atom count.
+		pending, drained := p.atomSpawnPendingSnapshot()
+		active := p.countActiveAtoms()
 		select {
 		case <-drainCancel:
 			p.local.coreLog().coreInfo("CosmosProcess: Drain cancelled by Stop(). Exiting drainWatcher.")
 			return
 		case <-ticker.C:
-			active := p.countActiveAtoms()
-			p.local.coreLog().coreInfo("CosmosProcess: Drain polling. active_atoms=(%d)", active)
-			if active == 0 {
-				p.local.coreLog().coreInfo("CosmosProcess: Drain complete, all atoms finished. Exiting.")
-				p.exitAfterDrain()
-				return
-			}
+			p.local.coreLog().coreInfo("CosmosProcess: Drain polling. active_atoms=(%d),pending_spawns=(%d)", active, pending)
+		case <-drained:
 		case <-deadlineTimer.C:
-			active := p.countActiveAtoms()
-			p.local.coreLog().coreInfo("CosmosProcess: Drain deadline reached with %d active atoms. Force exiting.", active)
+			p.local.coreLog().coreInfo("CosmosProcess: Drain deadline reached with %d active atoms and %d pending spawns. Force exiting.", active, pending)
+			p.exitAfterDrain()
+			return
+		}
+		if active == 0 && pending == 0 {
+			p.local.coreLog().coreInfo("CosmosProcess: Drain complete, all atoms and admitted spawns finished. Exiting.")
 			p.exitAfterDrain()
 			return
 		}
@@ -792,13 +836,28 @@ func (p *CosmosProcess) updateNodeState(state ClusterNodeState) *Error {
 }
 
 func (p *CosmosProcess) queueEtcdInfo(info string) {
-	p.mutex.RLock()
-	defer p.mutex.RUnlock()
-	if p.cluster.etcdInfoCh != nil {
-		select {
-		case p.cluster.etcdInfoCh <- info:
-		default:
-		}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	infoCh := p.cluster.etcdInfoCh
+	if infoCh == nil {
+		return
+	}
+	p.cluster.etcdInfoSeq++
+	updated := etcdInfoUpdate{seq: p.cluster.etcdInfoSeq, info: info}
+	select {
+	case infoCh <- updated:
+		return
+	default:
+	}
+	// The production channel has capacity one. Replace an unconsumed value so
+	// the publisher always observes the newest complete node state.
+	select {
+	case <-infoCh:
+	default:
+	}
+	select {
+	case infoCh <- updated:
+	default:
 	}
 }
 
@@ -835,6 +894,7 @@ func (p *CosmosProcess) Stop() error {
 			return NewError(ErrCodeCosmosProcessCannotStopStartupState, "CosmosProcess: Stopping app is starting up.").AddStack(p.local)
 		case CosmosProcessStateRunning:
 			p.state = CosmosProcessStateShutdown
+			p.atomSpawnAccepting = false
 			// Signal drainWatcher (if running) to exit promptly so its polling
 			// goroutine does not outlive the process and race with teardown.
 			if p.drainCancel != nil {
@@ -1068,7 +1128,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		return NewErrorf(ErrCodeCosmosEtcdConnectFailed, "CosmosProcess: Failed to connect etcd. err=(%v)", er).AddStack(p.local)
 	}
 	p.cluster.etcdClient = cli
-	p.cluster.etcdInfoCh = make(chan string)
+	p.cluster.etcdInfoCh = make(chan etcdInfoUpdate, 1)
 
 	// 检查etcd中同一个cosmos的node有多少个version。因为version是用于热更的设计，而不是为了支持多个版本，所以集群同时只应该有不超过两个version。
 	// 当检查到当前cosmos的node已经有两个version，且两个version都不是自己时，应该主动退出。

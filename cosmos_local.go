@@ -296,6 +296,18 @@ func (c *CosmosLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 func (c *CosmosLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 	c.Log().Info("Cosmos: Now exiting.")
 
+	// Close every element before stopping any one of them, so a late spawn on a
+	// later element cannot publish after that element's final snapshot.
+	c.mutex.RLock()
+	elements := make([]*ElementLocal, 0, len(c.elements))
+	for _, elem := range c.elements {
+		elements = append(elements, elem)
+	}
+	c.mutex.RUnlock()
+	for _, elem := range elements {
+		elem.closeAtomSpawnAdmission()
+	}
+
 	// runnable is nil in bare test fixtures (and cannot contain elements then);
 	// guard instead of panicking on the nil dereference.
 	if c.runnable == nil {

@@ -15,10 +15,11 @@ import (
 func newTestCosmosProcessWithoutCluster(t *testing.T, cosmosName, cosmosNode string) *CosmosProcess {
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: cosmosName, Node: cosmosNode}
 	p := &CosmosProcess{
-		mutex:     sync.RWMutex{},
-		state:     CosmosProcessStateRunning,
-		startupID: uint64(time.Now().UnixNano()),
-		logging:   &loggingAtomos{},
+		mutex:              sync.RWMutex{},
+		state:              CosmosProcessStateRunning,
+		startupID:          uint64(time.Now().UnixNano()),
+		atomSpawnAccepting: true,
+		logging:            &loggingAtomos{},
 		local: &CosmosLocal{
 			process:  nil,
 			runnable: nil,

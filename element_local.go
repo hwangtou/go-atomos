@@ -39,7 +39,10 @@ type ElementLocal struct {
 	// Lock.
 	lock sync.RWMutex
 
-	spawnOperations map[string]*atomSpawnOperation
+	spawnOperations    map[string]*atomSpawnOperation
+	atomSpawnAccepting bool
+	atomSpawnPending   int
+	atomSpawnDrained   chan struct{}
 
 	// 当前ElementImplementation的引用。
 	// Reference to current in use ElementImplementation.
@@ -61,13 +64,14 @@ func newElementLocal(main *CosmosLocal, runnable *CosmosRunnable, impl *ElementI
 		Version: main.atomos.id.Version,
 	}
 	e := &ElementLocal{
-		cosmosLocal:     main,
-		atomos:          nil,
-		atoms:           nil,
-		names:           list.New(),
-		lock:            sync.RWMutex{},
-		spawnOperations: map[string]*atomSpawnOperation{},
-		elemImpl:        impl,
+		cosmosLocal:        main,
+		atomos:             nil,
+		atoms:              nil,
+		names:              list.New(),
+		lock:               sync.RWMutex{},
+		spawnOperations:    map[string]*atomSpawnOperation{},
+		atomSpawnAccepting: true,
+		elemImpl:           impl,
 	}
 	var logLevel LogLevel
 	if customizeLogLevel, ok := impl.Developer.(ElementLogLevel); ok {
@@ -304,6 +308,9 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, args ...Ar
 		}
 		atom, err := e.waitAtomSpawnReady(name, spawnOp, atomSpawnReadyTimeout)
 		result, t, err := e.atomSpawnResult(atom, tracker, fromLocalOrRemote, err)
+		if err != nil && result == nil {
+			return nil, nil, err
+		}
 		return result, t, errOrNil(err)
 	}
 	// Auto data persistence.
@@ -312,6 +319,9 @@ func (e *ElementLocal) GetAtomID(name string, tracker *IDTrackerInfo, args ...Ar
 		return nil, nil, NewErrorf(ErrCodeAtomNotExists, "Atom: Atom not exists. name=(%s)", name).AddStack(e)
 	}
 	atom, t, serr := e.elementAtomSpawn(e, name, nil, e.elemImpl, persistence, tracker, false, fromLocalOrRemote)
+	if serr != nil && atom == nil {
+		return nil, nil, serr
+	}
 	return atom, t, errOrNil(serr)
 }
 
@@ -370,19 +380,13 @@ func (e *ElementLocal) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 
 func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tracker *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	fromLocalOrRemote := argsFromLocalOrRemote(args)
-	// Reject new atoms while the node is draining. Routing already steers new
-	// traffic away from Draining nodes, but callers with stale routes or pinned
-	// connections can still land a spawn here — refuse it so the caller can
-	// re-resolve onto a Started node instead of silently anchoring a new atom
-	// on a node that is trying to empty out.
-	if p := e.cosmosLocal.process; p != nil && p.isDraining() {
-		return nil, nil, NewErrorf(ErrCodeCosmosNodeDraining,
-			"Element: SpawnAtom rejected, node is draining. element=(%s),atom=(%s)", e.atomos.id.Element, name).AddStack(e)
-	}
 	// Auto data persistence.
 	persistence, _ := e.elemImpl.Developer.(AutoData)
 	id, t, err := e.elementAtomSpawn(callerID, name, arg, e.elemImpl, persistence, tracker, true, fromLocalOrRemote, args...)
 	if err != nil {
+		if id == nil {
+			return nil, nil, err.AddStack(e)
+		}
 		return id, t, err.AddStack(e)
 	}
 	return id, t, nil
@@ -447,6 +451,10 @@ func (e *ElementLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 }
 
 func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
+	e.closeAtomSpawnAdmission()
+	e.waitAtomSpawnDrained()
+
+	// Pending is zero and admission is closed, so this is the final snapshot.
 	// Send Kill to all atoms.
 	var stopTimeout, stopGap time.Duration
 	elemExit, ok := e.elemImpl.Developer.(ElementAtomExit)
@@ -592,6 +600,67 @@ const (
 	atomSpawnReadyTimeout    = 10 * time.Second
 )
 
+func (e *ElementLocal) beginAtomSpawn(name string) *Error {
+	p := e.cosmosLocal.process
+	if p != nil {
+		if err := p.beginAtomSpawn(); err != nil {
+			return err.AddStack(e)
+		}
+	}
+
+	e.lock.Lock()
+	if !e.atomSpawnAccepting {
+		e.lock.Unlock()
+		if p != nil {
+			p.endAtomSpawn()
+		}
+		return NewErrorf(ErrCodeAtomosIsStopping, "Element: Atom spawn rejected, element is stopping. element=(%s),atom=(%s)", e.atomos.id.Element, name).AddStack(e)
+	}
+	if e.atomSpawnPending == 0 {
+		e.atomSpawnDrained = make(chan struct{})
+	}
+	e.atomSpawnPending++
+	e.lock.Unlock()
+	return nil
+}
+
+func (e *ElementLocal) endAtomSpawn() {
+	e.lock.Lock()
+	if e.atomSpawnPending <= 0 {
+		e.lock.Unlock()
+		return
+	}
+	e.atomSpawnPending--
+	if e.atomSpawnPending == 0 && e.atomSpawnDrained != nil {
+		close(e.atomSpawnDrained)
+		e.atomSpawnDrained = nil
+	}
+	e.lock.Unlock()
+
+	if p := e.cosmosLocal.process; p != nil {
+		p.endAtomSpawn()
+	}
+}
+
+func (e *ElementLocal) closeAtomSpawnAdmission() {
+	e.lock.Lock()
+	e.atomSpawnAccepting = false
+	e.lock.Unlock()
+}
+
+func (e *ElementLocal) waitAtomSpawnDrained() {
+	for {
+		e.lock.RLock()
+		if e.atomSpawnPending == 0 {
+			e.lock.RUnlock()
+			return
+		}
+		drained := e.atomSpawnDrained
+		e.lock.RUnlock()
+		<-drained
+	}
+}
+
 func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLock *sync.Mutex, oldAtom *AtomLocal, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, timeout time.Duration, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	if oldLock != nil {
 		oldLock.Unlock()
@@ -607,10 +676,17 @@ func (e *ElementLocal) elementAtomSpawnInternalFoundStopping(name string, oldLoc
 }
 
 func (e *ElementLocal) elementAtomSpawn(callerID ID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
+	if err := e.beginAtomSpawn(name); err != nil {
+		return nil, nil, err
+	}
+	defer e.endAtomSpawn()
 	if fromLocalOrRemote && t == nil {
 		return nil, nil, NewErrorf(ErrCodeFrameworkInternalError, "Element: Spawn atom failed, id tracker is nil. name=(%s)", name).AddStack(e)
 	}
+	return e.elementAtomSpawnAdmitted(callerID, name, arg, current, persistence, t, spawnOrGet, fromLocalOrRemote, args...)
+}
 
+func (e *ElementLocal) elementAtomSpawnAdmitted(callerID ID, name string, arg proto.Message, current *ElementImplementation, persistence AutoData, t *IDTrackerInfo, spawnOrGet, fromLocalOrRemote bool, args ...ArgsForBaseAtomos) (*AtomLocal, *IDTracker, *Error) {
 	e.lock.Lock()
 	if op := e.spawnOperations[name]; op != nil {
 		e.lock.Unlock()
