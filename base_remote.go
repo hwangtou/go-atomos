@@ -171,7 +171,7 @@ func (a *BaseRemote) IdleTime() time.Duration {
 	defer cancel()
 
 	rsp, er := cli.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{Id: a.info})
-	if er != nil {
+	if er != nil || rsp == nil || rsp.Error != nil {
 		return 0
 	}
 

@@ -15,10 +15,65 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TestBaseRemote_LifeCycle
-
 func TestBaseRemote_LifeCycle(t *testing.T) {
+	service := &baseRemoteTestService{
+		stateRsp:    &CosmosRemoteGetIDStateRsp{State: int32(BaseAtomosWaiting)},
+		idleTimeRsp: &CosmosRemoteGetIDIdleTimeRsp{IdleTime: int64(250 * time.Millisecond)},
+		syncRsp:     &CosmosRemoteSyncMessagingByNameRsp{Reply: toAnyPb(t, &ForTestGreetingO{})},
+		rsp:         &CosmosRemoteAsyncMessagingByNameRsp{},
+		killRsp:     &CosmosRemoteKillAtomRsp{},
+	}
+	remote, process := newBaseRemoteTestRemote(t, service)
 
+	state, err := remote.stateWithError()
+	if err != nil || state != BaseAtomosWaiting {
+		t.Fatalf("stateWithError = (%v, %v), want (Waiting, nil)", state, err)
+	}
+	if state := remote.State(); state != BaseAtomosWaiting {
+		t.Fatalf("State = %v, want Waiting", state)
+	}
+	if idleTime := remote.IdleTime(); idleTime != 250*time.Millisecond {
+		t.Fatalf("IdleTime = %v, want 250ms", idleTime)
+	}
+	out, err := remote.PushSyncMessage(process.local, "Greeting", &ForTestGreetingI{Mode: 7})
+	if err != nil {
+		t.Fatalf("PushSyncMessage failed: %v", err)
+	}
+	if _, ok := out.(*ForTestGreetingO); !ok {
+		t.Fatalf("PushSyncMessage reply type = %T, want *ForTestGreetingO", out)
+	}
+	if err := remote.PushAsyncMessage(process.local, "Greeting", &ForTestGreetingI{Mode: 8}, nil); err != nil {
+		t.Fatalf("PushAsyncMessage failed: %v", err)
+	}
+	if err := remote.Kill(process.local); err != nil {
+		t.Fatalf("Kill failed: %v", err)
+	}
+
+	service.mutex.Lock()
+	defer service.mutex.Unlock()
+	if len(service.stateRequests) != 2 || len(service.idleTimeRequests) != 1 ||
+		len(service.syncRequests) != 1 || len(service.requests) != 1 || len(service.killRequests) != 1 {
+		t.Fatalf("unexpected request counts: state=%d idle=%d sync=%d async=%d kill=%d",
+			len(service.stateRequests), len(service.idleTimeRequests), len(service.syncRequests), len(service.requests), len(service.killRequests))
+	}
+	if !proto.Equal(service.stateRequests[0].Id, remote.info) || !proto.Equal(service.idleTimeRequests[0].Id, remote.info) {
+		t.Fatal("state or idle-time request carries the wrong target ID")
+	}
+	syncReq := service.syncRequests[0]
+	if !proto.Equal(syncReq.To, remote.info) || syncReq.Message != "Greeting" || !proto.Equal(syncReq.CallerId, process.local.GetIDInfo()) {
+		t.Fatalf("unexpected sync request: %v", syncReq)
+	}
+	var syncArg ForTestGreetingI
+	if err := syncReq.Args.UnmarshalTo(&syncArg); err != nil || syncArg.Mode != 7 {
+		t.Fatalf("sync argument = (%v, %v), want mode 7", &syncArg, err)
+	}
+	asyncReq := service.requests[0]
+	if !proto.Equal(asyncReq.ToId, remote.info) || asyncReq.Message != "Greeting" || asyncReq.AsyncId != 0 {
+		t.Fatalf("unexpected async request: %v", asyncReq)
+	}
+	if !proto.Equal(service.killRequests[0].Id, remote.info) || !proto.Equal(service.killRequests[0].CallerId, process.local.GetIDInfo()) {
+		t.Fatalf("unexpected kill request: %v", service.killRequests[0])
+	}
 }
 
 // TestBaseRemote_PinnedConnConcurrentAccess hammers validPinnedConn from
@@ -90,17 +145,50 @@ func newBaseRemoteForTest(t *testing.T, cosmos *CosmosRemote, info *IDInfo) *Bas
 	}
 }
 
-type baseRemoteAsyncTestService struct {
+type baseRemoteTestService struct {
 	UnimplementedAtomosRemoteServiceServer
-	mutex    sync.Mutex
-	rsp      *CosmosRemoteAsyncMessagingByNameRsp
-	err      error
-	failures int
-	calls    int
-	requests []*CosmosRemoteAsyncMessagingByNameReq
+	mutex            sync.Mutex
+	stateRsp         *CosmosRemoteGetIDStateRsp
+	stateErr         error
+	idleTimeRsp      *CosmosRemoteGetIDIdleTimeRsp
+	idleTimeErr      error
+	syncRsp          *CosmosRemoteSyncMessagingByNameRsp
+	syncErr          error
+	rsp              *CosmosRemoteAsyncMessagingByNameRsp
+	err              error
+	killRsp          *CosmosRemoteKillAtomRsp
+	killErr          error
+	failures         int
+	calls            int
+	stateRequests    []*CosmosRemoteGetIDStateReq
+	idleTimeRequests []*CosmosRemoteGetIDIdleTimeReq
+	syncRequests     []*CosmosRemoteSyncMessagingByNameReq
+	requests         []*CosmosRemoteAsyncMessagingByNameReq
+	killRequests     []*CosmosRemoteKillAtomReq
 }
 
-func (s *baseRemoteAsyncTestService) AsyncMessagingByName(_ context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
+func (s *baseRemoteTestService) GetIDState(_ context.Context, req *CosmosRemoteGetIDStateReq) (*CosmosRemoteGetIDStateRsp, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.stateRequests = append(s.stateRequests, proto.Clone(req).(*CosmosRemoteGetIDStateReq))
+	return s.stateRsp, s.stateErr
+}
+
+func (s *baseRemoteTestService) GetIDIdleTime(_ context.Context, req *CosmosRemoteGetIDIdleTimeReq) (*CosmosRemoteGetIDIdleTimeRsp, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.idleTimeRequests = append(s.idleTimeRequests, proto.Clone(req).(*CosmosRemoteGetIDIdleTimeReq))
+	return s.idleTimeRsp, s.idleTimeErr
+}
+
+func (s *baseRemoteTestService) SyncMessagingByName(_ context.Context, req *CosmosRemoteSyncMessagingByNameReq) (*CosmosRemoteSyncMessagingByNameRsp, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.syncRequests = append(s.syncRequests, proto.Clone(req).(*CosmosRemoteSyncMessagingByNameReq))
+	return s.syncRsp, s.syncErr
+}
+
+func (s *baseRemoteTestService) AsyncMessagingByName(_ context.Context, req *CosmosRemoteAsyncMessagingByNameReq) (*CosmosRemoteAsyncMessagingByNameRsp, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.calls++
@@ -110,6 +198,13 @@ func (s *baseRemoteAsyncTestService) AsyncMessagingByName(_ context.Context, req
 		return nil, status.Error(codes.Unavailable, "injected response failure")
 	}
 	return s.rsp, s.err
+}
+
+func (s *baseRemoteTestService) KillAtom(_ context.Context, req *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.killRequests = append(s.killRequests, proto.Clone(req).(*CosmosRemoteKillAtomReq))
+	return s.killRsp, s.killErr
 }
 
 func newBaseRemoteTestProcess(t *testing.T, cosmosName string) *CosmosProcess {
@@ -126,7 +221,7 @@ func newBaseRemoteTestProcess(t *testing.T, cosmosName string) *CosmosProcess {
 	return process
 }
 
-func newBaseRemoteAsyncTestRemote(t *testing.T, service *baseRemoteAsyncTestService) (*BaseRemote, *CosmosProcess) {
+func newBaseRemoteTestRemote(t *testing.T, service *baseRemoteTestService) (*BaseRemote, *CosmosProcess) {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -168,21 +263,28 @@ func newBaseRemoteAsyncTestRemote(t *testing.T, service *baseRemoteAsyncTestServ
 func TestBaseRemotePushAsyncMessageTerminatesCallbackOnFailure(t *testing.T) {
 	tests := []struct {
 		name        string
-		service     *baseRemoteAsyncTestService
+		service     *baseRemoteTestService
 		wantCode    int64
 		callbackPan bool
 	}{
 		{
 			name: "body error with panicking callback",
-			service: &baseRemoteAsyncTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{
+			service: &baseRemoteTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{
 				Error: NewError(ErrCodeCosmosRemoteResponseFailed, "body failure"),
 			}},
 			wantCode:    ErrCodeCosmosRemoteResponseFailed,
 			callbackPan: true,
 		},
 		{
+			name: "status error with Atomos details",
+			service: &baseRemoteTestService{
+				err: grpcStatusFromError(NewError(ErrCodeAtomInstanceMismatch, "stale instance").AddStack(nil)),
+			},
+			wantCode: ErrCodeAtomInstanceMismatch,
+		},
+		{
 			name: "transport error",
-			service: &baseRemoteAsyncTestService{
+			service: &baseRemoteTestService{
 				err: status.Error(codes.Unavailable, "transport failure"),
 			},
 			wantCode: ErrCodeCosmosRemoteStatusUnavailable,
@@ -190,7 +292,7 @@ func TestBaseRemotePushAsyncMessageTerminatesCallbackOnFailure(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			remote, process := newBaseRemoteAsyncTestRemote(t, tt.service)
+			remote, process := newBaseRemoteTestRemote(t, tt.service)
 			callbackCalls := 0
 			var callbackErr error
 			returnedErr := remote.PushAsyncMessage(process.local, "message", nil, func(out proto.Message, err error) {
@@ -236,9 +338,141 @@ func TestBaseRemoteStateConnectionError(t *testing.T) {
 	}
 }
 
+func TestBaseRemoteStateAndIdleTimeErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		bodyErr  *Error
+		rpcErr   error
+		wantCode int64
+	}{
+		{
+			name:     "body error",
+			bodyErr:  NewError(ErrCodeAtomIsStopping, "atom is stopping").AddStack(nil),
+			wantCode: ErrCodeAtomIsStopping,
+		},
+		{
+			name:     "status error with Atomos details",
+			rpcErr:   grpcStatusFromError(NewError(ErrCodeAtomInstanceMismatch, "stale instance").AddStack(nil)),
+			wantCode: ErrCodeAtomInstanceMismatch,
+		},
+		{
+			name:     "bare transport status",
+			rpcErr:   status.Error(codes.Unavailable, "connection unavailable"),
+			wantCode: ErrCodeCosmosRemoteStatusUnavailable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &baseRemoteTestService{
+				stateRsp:    &CosmosRemoteGetIDStateRsp{State: int32(BaseAtomosWaiting), Error: tt.bodyErr},
+				stateErr:    tt.rpcErr,
+				idleTimeRsp: &CosmosRemoteGetIDIdleTimeRsp{IdleTime: int64(time.Second), Error: tt.bodyErr},
+				idleTimeErr: tt.rpcErr,
+			}
+			remote, _ := newBaseRemoteTestRemote(t, service)
+			state, err := remote.stateWithError()
+			if state != BaseAtomosInvalidState || CodeOf(err) != tt.wantCode {
+				t.Fatalf("stateWithError = (%v, %v), want (Invalid, code %d)", state, err, tt.wantCode)
+			}
+			if idleTime := remote.IdleTime(); idleTime != 0 {
+				t.Fatalf("IdleTime = %v, want 0 on failure", idleTime)
+			}
+		})
+	}
+}
+
+func TestBaseRemotePushSyncMessageErrors(t *testing.T) {
+	malformedReply := toAnyPb(t, &ForTestGreetingO{})
+	malformedReply.TypeUrl = "type.googleapis.com/atomos.DoesNotExist"
+	tests := []struct {
+		name      string
+		rsp       *CosmosRemoteSyncMessagingByNameRsp
+		rpcErr    error
+		wantCode  int64
+		wantReply bool
+	}{
+		{
+			name: "body error preserves partial reply",
+			rsp: &CosmosRemoteSyncMessagingByNameRsp{
+				Reply: toAnyPb(t, &ForTestGreetingO{}),
+				Error: NewError(ErrCodeAtomIsStopping, "atom is stopping").AddStack(nil),
+			},
+			wantCode:  ErrCodeAtomIsStopping,
+			wantReply: true,
+		},
+		{
+			name:     "status error with Atomos details",
+			rpcErr:   grpcStatusFromError(NewError(ErrCodeAtomInstanceMismatch, "stale instance").AddStack(nil)),
+			wantCode: ErrCodeAtomInstanceMismatch,
+		},
+		{
+			name:     "bare transport status",
+			rpcErr:   status.Error(codes.Unavailable, "connection unavailable"),
+			wantCode: ErrCodeCosmosRemoteStatusUnavailable,
+		},
+		{
+			name:     "malformed reply",
+			rsp:      &CosmosRemoteSyncMessagingByNameRsp{Reply: malformedReply},
+			wantCode: ErrCodeCosmosRemoteResponseInvalid,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			remote, process := newBaseRemoteTestRemote(t, &baseRemoteTestService{syncRsp: tt.rsp, syncErr: tt.rpcErr})
+			out, err := remote.PushSyncMessage(process.local, "Greeting", &ForTestGreetingI{Mode: 1})
+			if CodeOf(err) != tt.wantCode {
+				t.Fatalf("PushSyncMessage error = %v, want code %d", err, tt.wantCode)
+			}
+			if len(asError(err).CallStacks) == 0 {
+				t.Fatal("PushSyncMessage error lost its call stack")
+			}
+			if (out != nil) != tt.wantReply {
+				t.Fatalf("PushSyncMessage reply = %v, wantReply=%v", out, tt.wantReply)
+			}
+		})
+	}
+}
+
+func TestBaseRemoteKillErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		rsp      *CosmosRemoteKillAtomRsp
+		rpcErr   error
+		wantCode int64
+	}{
+		{
+			name:     "body error",
+			rsp:      &CosmosRemoteKillAtomRsp{Error: NewError(ErrCodeAtomIsStopping, "atom is stopping").AddStack(nil)},
+			wantCode: ErrCodeAtomIsStopping,
+		},
+		{
+			name:     "status error with Atomos details",
+			rpcErr:   grpcStatusFromError(NewError(ErrCodeAtomInstanceMismatch, "stale instance").AddStack(nil)),
+			wantCode: ErrCodeAtomInstanceMismatch,
+		},
+		{
+			name:     "bare transport status",
+			rpcErr:   status.Error(codes.Unavailable, "connection unavailable"),
+			wantCode: ErrCodeCosmosRemoteStatusUnavailable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			remote, process := newBaseRemoteTestRemote(t, &baseRemoteTestService{killRsp: tt.rsp, killErr: tt.rpcErr})
+			err := remote.Kill(process.local)
+			if CodeOf(err) != tt.wantCode {
+				t.Fatalf("Kill error = %v, want code %d", err, tt.wantCode)
+			}
+			if len(asError(err).CallStacks) == 0 {
+				t.Fatal("Kill error lost its call stack")
+			}
+		})
+	}
+}
+
 func TestBaseRemoteRetryableAsyncMessage(t *testing.T) {
-	service := &baseRemoteAsyncTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 1}
-	remote, process := newBaseRemoteAsyncTestRemote(t, service)
+	service := &baseRemoteTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 1}
+	remote, process := newBaseRemoteTestRemote(t, service)
 	process.retry.maxAttempts = 3
 	process.retry.backoff = func(int) time.Duration { return 0 }
 	callback := make(chan error, 1)
@@ -276,8 +510,8 @@ func TestBaseRemoteRetryableAsyncMessage(t *testing.T) {
 }
 
 func TestBaseRemoteRetryableAsyncMessageExhaustion(t *testing.T) {
-	service := &baseRemoteAsyncTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 2}
-	remote, process := newBaseRemoteAsyncTestRemote(t, service)
+	service := &baseRemoteTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 2}
+	remote, process := newBaseRemoteTestRemote(t, service)
 	process.retry.maxAttempts = 2
 	process.retry.backoff = func(int) time.Duration { return 0 }
 	callback := make(chan error, 1)
@@ -303,8 +537,8 @@ func TestBaseRemoteRetryableAsyncMessageExhaustion(t *testing.T) {
 }
 
 func TestBaseRemoteAsyncMessageNotRetriedByDefault(t *testing.T) {
-	service := &baseRemoteAsyncTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 1}
-	remote, process := newBaseRemoteAsyncTestRemote(t, service)
+	service := &baseRemoteTestService{rsp: &CosmosRemoteAsyncMessagingByNameRsp{}, failures: 1}
+	remote, process := newBaseRemoteTestRemote(t, service)
 	callback := make(chan error, 1)
 	if err := remote.PushAsyncMessage(process.local, "ordinary", nil, func(_ proto.Message, err error) {
 		callback <- err
@@ -324,7 +558,7 @@ func TestBaseRemoteAsyncMessageNotRetriedByDefault(t *testing.T) {
 	}
 }
 
-func waitBaseRemoteAsyncRequests(t *testing.T, service *baseRemoteAsyncTestService, want int) []*CosmosRemoteAsyncMessagingByNameReq {
+func waitBaseRemoteAsyncRequests(t *testing.T, service *baseRemoteTestService, want int) []*CosmosRemoteAsyncMessagingByNameReq {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {

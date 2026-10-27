@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -141,6 +142,161 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	// Wait a moment to let logs flush.
 	//<-time.After(time.Minute)
 	<-time.After(time.Millisecond)
+}
+
+func TestCosmosRemote_CallClassErrorStatusContract(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 36400, "test_cosmos", "status_node")
+	defer cluster.close()
+	cli := NewAtomosRemoteServiceClient(cluster.sourceProcess.cluster.remoteCosmos["status_node_target"].current.client)
+
+	tests := []struct {
+		name       string
+		wantStatus codes.Code
+		wantCode   int64
+		call       func(context.Context, AtomosRemoteServiceClient) (proto.Message, error)
+	}{
+		{
+			name:       "GetAtomID",
+			wantStatus: codes.NotFound,
+			wantCode:   ErrCodeElementNotFound,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.GetAtomID(ctx, &CosmosRemoteGetAtomIDReq{})
+			},
+		},
+		{
+			name:       "GetIDState",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.GetIDState(ctx, &CosmosRemoteGetIDStateReq{})
+			},
+		},
+		{
+			name:       "GetIDIdleTime",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.GetIDIdleTime(ctx, &CosmosRemoteGetIDIdleTimeReq{})
+			},
+		},
+		{
+			name:       "SpawnAtom",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{})
+			},
+		},
+		{
+			name:       "SyncMessagingByName",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{})
+			},
+		},
+		{
+			name:       "AsyncMessagingByName",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{})
+			},
+		},
+		{
+			name:       "KillAtom",
+			wantStatus: codes.InvalidArgument,
+			wantCode:   ErrCodeCosmosRemoteRequestInvalid,
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (proto.Message, error) {
+				return cli.KillAtom(ctx, &CosmosRemoteKillAtomReq{})
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			rsp, err := tt.call(ctx, cli)
+			if err == nil {
+				t.Fatalf("call succeeded unexpectedly: rsp=%v", rsp)
+			}
+			if rsp != nil && !reflect.ValueOf(rsp).IsNil() {
+				t.Fatalf("non-OK call returned a response body: %v", rsp)
+			}
+			st, ok := status.FromError(err)
+			if !ok || st.Code() != tt.wantStatus {
+				t.Fatalf("status = %v, want %v (err=%v)", st.Code(), tt.wantStatus, err)
+			}
+			if restored := grpcErrorToError(err); restored.Code != tt.wantCode {
+				t.Fatalf("restored code = %d, want %d (err=%v)", restored.Code, tt.wantCode, err)
+			}
+		})
+	}
+}
+
+func TestCosmosRemote_ManagementErrorsKeepTransportOK(t *testing.T) {
+	process := newBaseRemoteTestProcess(t, "management")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := grpc.NewServer()
+	RegisterAtomosRemoteServiceServer(server, &atomosRemoteService{process: process})
+	go func() { _ = server.Serve(listener) }()
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	conn, err := grpc.DialContext(dialCtx, listener.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	dialCancel()
+	if err != nil {
+		server.Stop()
+		_ = listener.Close()
+		t.Fatalf("dial management service: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Close()
+		server.Stop()
+		_ = listener.Close()
+	})
+	cli := NewAtomosRemoteServiceClient(conn)
+
+	tests := []struct {
+		name string
+		call func(context.Context, AtomosRemoteServiceClient) (*Error, error)
+	}{
+		{
+			name: "AsyncOnMessageCallback",
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (*Error, error) {
+				rsp, err := cli.AsyncOnMessageCallback(ctx, &CosmosRemoteAsyncOnMessageCallbackReq{})
+				if rsp == nil {
+					return nil, err
+				}
+				return rsp.Error, err
+			},
+		},
+		{
+			name: "ElementBroadcast",
+			call: func(ctx context.Context, cli AtomosRemoteServiceClient) (*Error, error) {
+				rsp, err := cli.ElementBroadcast(ctx, &CosmosRemoteElementBroadcastReq{})
+				if rsp == nil {
+					return nil, err
+				}
+				return rsp.Error, err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			bodyErr, transportErr := tt.call(ctx, cli)
+			if transportErr != nil {
+				t.Fatalf("management call returned a non-OK transport status: %v", transportErr)
+			}
+			if bodyErr == nil || bodyErr.Code != ErrCodeCosmosRemoteRequestInvalid {
+				t.Fatalf("body error = %v, want ErrCodeCosmosRemoteRequestInvalid", bodyErr)
+			}
+		})
+	}
 }
 
 func TestCosmosRemote_UnknownCallerUsesOpaqueID(t *testing.T) {
