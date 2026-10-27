@@ -1,8 +1,23 @@
 package atomos
 
-import "time"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"time"
+)
 
 // Atom
+
+// NewOperationID returns a random 128-bit operation ID encoded as 32 lowercase
+// hexadecimal characters. Reuse the same ID when retrying one controlled
+// lifecycle operation.
+func NewOperationID() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(id[:]), nil
+}
 
 // Base Atomos
 
@@ -89,6 +104,12 @@ func ArgBaseAtomosFromLocalOnly() ArgsForBaseAtomos {
 // elem.SpawnAtom(callerID, name, arg, tracker, atomos.ArgBaseAtomosFromRemoteOnly())
 func ArgBaseAtomosFromRemoteOnly() ArgsForBaseAtomos {
 	return argBaseAtomosFromRemoteOnly{}
+}
+
+// ArgBaseAtomosOperationID associates a stable operation ID with a lifecycle
+// operation. Controlled RPCs carry it separately from CosmosArgs.
+func ArgBaseAtomosOperationID(operationID string) ArgsForBaseAtomos {
+	return argBaseAtomosOperationID{operationID: operationID}
 }
 
 // Task

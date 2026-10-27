@@ -22,6 +22,9 @@ message IDInfo {
   string atom = 5;
   uint64 version = 6;
   uint64 instance_id = 7;
+  uint64 incarnation = 8;
+  uint64 startup_id = 9;
+  uint64 fence = 10;
 }
 
 enum LogLevel {
@@ -46,6 +49,7 @@ message Error {
   int64 code = 1;
   string message = 2;
   repeated ErrorCallerInfo call_stacks = 5;
+  string operation_id = 6;
 }
 
 message ErrorCallerInfo {
@@ -206,6 +210,7 @@ message CosmosNodeVersionInfo {
   // must drop the old connection/state instead of treating it as the same
   // version registration.
   uint64 startup_id = 6;
+  uint32 protocol_version = 7;
 }
 
 enum ClusterNodeState {
@@ -245,6 +250,57 @@ enum AtomosMethodType {
   AtomosAtomSpawn = 4;
 }
 
+enum AtomLifecycleState {
+  AtomLifecycleStateUnknown = 0;
+  AtomLifecycleStateAbsent = 1;
+  AtomLifecycleStateSpawning = 2;
+  AtomLifecycleStateRunning = 3;
+  AtomLifecycleStateStopping = 4;
+  AtomLifecycleStateHalted = 5;
+}
+
+enum AtomOperationKind {
+  AtomOperationKindUnknown = 0;
+  AtomOperationKindSpawn = 1;
+  AtomOperationKindHalt = 2;
+  AtomOperationKindTakeover = 3;
+}
+
+enum AtomOperationState {
+  AtomOperationStateUnknown = 0;
+  AtomOperationStateRunning = 1;
+  AtomOperationStateSucceeded = 2;
+  AtomOperationStateFailed = 3;
+}
+
+message AtomOwnershipInfo {
+  IDInfo id = 1;
+  uint64 incarnation = 2;
+  uint64 startup_id = 3;
+  uint64 fence = 4;
+  AtomLifecycleState state = 5;
+}
+
+message AtomOperationInfo {
+  string operation_id = 1;
+  AtomOperationKind kind = 2;
+  AtomOperationState state = 3;
+  IDInfo id = 4;
+  string fingerprint = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp finish_time = 7;
+  Error error = 8;
+  int64 retain_until_unix_nano = 9;
+}
+
+message AtomControlResult {
+  string operation_id = 1;
+  IDInfo id = 2;
+  AtomOwnershipInfo ownership = 3;
+  AtomOperationInfo operation = 4;
+  Error error = 5;
+}
+
 service AtomosRemoteService {
   rpc TryKilling(CosmosRemoteTryKillingReq) returns (CosmosRemoteTryKillingRsp) {}
 
@@ -264,6 +320,12 @@ service AtomosRemoteService {
   rpc KillAtom(CosmosRemoteKillAtomReq) returns (CosmosRemoteKillAtomRsp) {}
 
   rpc ElementBroadcast(CosmosRemoteElementBroadcastReq) returns (CosmosRemoteElementBroadcastRsp) {}
+
+  rpc SpawnAtomControlled(CosmosRemoteSpawnAtomControlledReq) returns (CosmosRemoteSpawnAtomControlledRsp) {}
+  rpc HaltAtomControlled(CosmosRemoteHaltAtomControlledReq) returns (CosmosRemoteHaltAtomControlledRsp) {}
+  rpc LookupAtom(CosmosRemoteLookupAtomReq) returns (CosmosRemoteLookupAtomRsp) {}
+  rpc GetAtomOperation(CosmosRemoteGetAtomOperationReq) returns (CosmosRemoteGetAtomOperationRsp) {}
+  rpc TakeoverAtom(CosmosRemoteTakeoverAtomReq) returns (CosmosRemoteTakeoverAtomRsp) {}
 }
 
 // Try Killing Remote
@@ -404,4 +466,70 @@ message CosmosArgs {
   // first. Entries use IDInfo.Info() format. Older nodes ignore it and
   // degrade to timeout-based protection.
   repeated string wait_chain = 5;
+  uint32 protocol_version = 6;
+}
+
+// Controlled atom lifecycle operations. The response-level error reports a
+// query/transport-handling failure; result.error is the accepted operation's
+// business result. A formed control result is returned with transport OK.
+message CosmosRemoteSpawnAtomControlledReq {
+  IDInfo caller_id = 1;
+  string element = 2;
+  string atom = 3;
+  google.protobuf.Any args = 4;
+  CosmosArgs cosmos_args = 5;
+  string operation_id = 6;
+  AtomOwnershipInfo expected_ownership = 7;
+  string fingerprint = 8;
+  bool retain = 9;
+}
+message CosmosRemoteSpawnAtomControlledRsp {
+  Error error = 1;
+  AtomControlResult result = 2;
+}
+
+message CosmosRemoteHaltAtomControlledReq {
+  IDInfo caller_id = 1;
+  IDInfo id = 2;
+  CosmosArgs cosmos_args = 3;
+  string operation_id = 4;
+  AtomOwnershipInfo expected_ownership = 5;
+  string fingerprint = 6;
+  bool retain = 7;
+}
+message CosmosRemoteHaltAtomControlledRsp {
+  Error error = 1;
+  AtomControlResult result = 2;
+}
+
+message CosmosRemoteLookupAtomReq {
+  IDInfo id = 1;
+}
+message CosmosRemoteLookupAtomRsp {
+  Error error = 1;
+  AtomLifecycleState state = 2;
+  AtomOwnershipInfo ownership = 3;
+  AtomOperationInfo operation = 4;
+  IDInfo id = 5;
+}
+
+message CosmosRemoteGetAtomOperationReq {
+  string operation_id = 1;
+}
+message CosmosRemoteGetAtomOperationRsp {
+  Error error = 1;
+  AtomOperationInfo operation = 2;
+}
+
+message CosmosRemoteTakeoverAtomReq {
+  IDInfo caller_id = 1;
+  IDInfo id = 2;
+  string operation_id = 3;
+  AtomOwnershipInfo expected_ownership = 4;
+  string fingerprint = 5;
+  bool retain = 6;
+}
+message CosmosRemoteTakeoverAtomRsp {
+  Error error = 1;
+  AtomControlResult result = 2;
 }

@@ -1049,6 +1049,7 @@ type baseAtomosHelper struct {
 	timeout      time.Duration
 	appendToHead bool
 	waitKilled   bool
+	operationID  string
 	// waitChain is the cross-node wait chain carried by a remote-originated
 	// sync call (internal arg; not recorded in fields — it is runtime
 	// metadata, not a user argument).
@@ -1130,6 +1131,21 @@ func createBaseAtomosHelper(mailType BaseAtomosMailType, ext []ArgsForBaseAtomos
 					continue
 				}
 			}
+		case ArgTypeBaseAtomosOperationID:
+			if helper.operationID != "" {
+				helper.addConflictArg(i, v, "OperationID argument conflict")
+				continue
+			}
+			switch arg := v.(type) {
+			case argBaseAtomosOperationID:
+				helper.operationID = arg.operationID
+			case *argBaseAtomosOperationID:
+				helper.operationID = arg.operationID
+			default:
+				helper.addInvalidArg(i, v, "OperationID argument type is invalid")
+				continue
+			}
+			helper.fields = append(helper.fields, int32(ArgTypeBaseAtomosOperationID))
 		default:
 			helper.addInvalidArg(i, v, "Argument type is invalid")
 		}

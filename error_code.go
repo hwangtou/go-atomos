@@ -192,4 +192,14 @@ const (
 	// not carry the framework-internal idInternal extension) into a framework
 	// kernel path. It is a programming error, not a runtime condition.
 	ErrCodeFrameworkInvalidID = 130
+
+	// Distributed atom lifecycle control.
+	ErrCodeOwnershipLost         = 131
+	ErrCodeStaleFence            = 132
+	ErrCodeOperationStillRunning = 133
+	ErrCodeOperationNotFound     = 134
+	ErrCodeOperationConflict     = 135
+	ErrCodeTakeoverRequired      = 136
+	ErrCodeOperationUnknown      = 137
+	ErrCodeFencingRequired       = 138
 )

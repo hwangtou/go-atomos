@@ -9,16 +9,17 @@ const (
 
 	// ArgsForBaseAtomos
 
-	ArgTypeBaseAtomosTimeout      ArgType = 2
-	ArgTypeBaseAtomosAppendToHead ArgType = 3
-	ArgTypeBaseAtomosWaitKilled   ArgType = 4
-	ArgTypeBaseAtomosWithAny      ArgType = 5
+	ArgTypeBaseAtomosTimeout        ArgType = 2
+	ArgTypeBaseAtomosAppendToHead   ArgType = 3
+	ArgTypeBaseAtomosWaitKilled     ArgType = 4
+	ArgTypeBaseAtomosWithAny        ArgType = 5
 	ArgTypeBaseAtomosFromLocalOnly  ArgType = 6
 	ArgTypeBaseAtomosFromRemoteOnly ArgType = 7
 	// ArgTypeBaseAtomosWaitChain is internal-only: it carries the cross-node
 	// wait chain from CosmosArgs.wait_chain into a remote-originated sync
 	// mail. Not exposed as a public Arg constructor.
-	ArgTypeBaseAtomosWaitChain ArgType = 8
+	ArgTypeBaseAtomosWaitChain   ArgType = 8
+	ArgTypeBaseAtomosOperationID ArgType = 9
 
 	// ArgsForTask
 
@@ -127,6 +128,15 @@ func (argBaseAtomosWaitChain) getArgType() ArgType {
 }
 func (argBaseAtomosWaitChain) argForBaseAtomos() {}
 
+type argBaseAtomosOperationID struct {
+	operationID string
+}
+
+func (argBaseAtomosOperationID) getArgType() ArgType {
+	return ArgTypeBaseAtomosOperationID
+}
+func (argBaseAtomosOperationID) argForBaseAtomos() {}
+
 // For Task
 
 type ArgsForTask interface {
@@ -197,4 +207,3 @@ func (argTaskRecoverFunc) getArgType() ArgType {
 	return ArgTypeTaskRecoverFunc
 }
 func (argTaskRecoverFunc) argForTask() {}
-

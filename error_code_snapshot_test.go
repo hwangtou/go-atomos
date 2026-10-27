@@ -138,6 +138,14 @@ var errorCodeSnapshot = map[string]int64{
 	"ErrCodeCosmosNodeDraining":                             128,
 	"ErrCodeAsyncCallbackCancelledByHalt":                   129,
 	"ErrCodeFrameworkInvalidID":                             130,
+	"ErrCodeOwnershipLost":                                  131,
+	"ErrCodeStaleFence":                                     132,
+	"ErrCodeOperationStillRunning":                          133,
+	"ErrCodeOperationNotFound":                              134,
+	"ErrCodeOperationConflict":                              135,
+	"ErrCodeTakeoverRequired":                               136,
+	"ErrCodeOperationUnknown":                               137,
+	"ErrCodeFencingRequired":                                138,
 }
 
 func TestErrorCodesFrozen(t *testing.T) {
@@ -283,6 +291,14 @@ func TestErrorCodeValues(t *testing.T) {
 		"ErrCodeCosmosNodeDraining":                             ErrCodeCosmosNodeDraining,
 		"ErrCodeAsyncCallbackCancelledByHalt":                   ErrCodeAsyncCallbackCancelledByHalt,
 		"ErrCodeFrameworkInvalidID":                             ErrCodeFrameworkInvalidID,
+		"ErrCodeOwnershipLost":                                  ErrCodeOwnershipLost,
+		"ErrCodeStaleFence":                                     ErrCodeStaleFence,
+		"ErrCodeOperationStillRunning":                          ErrCodeOperationStillRunning,
+		"ErrCodeOperationNotFound":                              ErrCodeOperationNotFound,
+		"ErrCodeOperationConflict":                              ErrCodeOperationConflict,
+		"ErrCodeTakeoverRequired":                               ErrCodeTakeoverRequired,
+		"ErrCodeOperationUnknown":                               ErrCodeOperationUnknown,
+		"ErrCodeFencingRequired":                                ErrCodeFencingRequired,
 	}
 	for name, got := range codes {
 		if want := errorCodeSnapshot[name]; got != want {

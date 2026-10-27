@@ -32,8 +32,14 @@ func grpcCodeOfErrCode(code int64) codes.Code {
 		ErrCodeCosmosRemoteElementNotFound,
 		ErrCodeAtomosTaskNotExists,
 		ErrCodeAtomDataNotFound,
-		ErrCodeAtomNotExists:
+		ErrCodeAtomNotExists,
+		ErrCodeOperationNotFound:
 		return codes.NotFound
+
+	case ErrCodeOperationConflict:
+		return codes.AlreadyExists
+	case ErrCodeOwnershipLost, ErrCodeStaleFence:
+		return codes.Aborted
 
 	// State-rejection class: draining, stopping, not running, already
 	// running, spawn conflicts and stale-instance mismatches.
@@ -46,7 +52,10 @@ func grpcCodeOfErrCode(code int64) codes.Code {
 		ErrCodeAtomSpawningAnExistedAtom,
 		ErrCodeAtomInstanceMismatch,
 		ErrCodeCosmosNodeDraining,
-		ErrCodeAsyncCallbackCancelledByHalt:
+		ErrCodeAsyncCallbackCancelledByHalt,
+		ErrCodeOperationStillRunning,
+		ErrCodeTakeoverRequired,
+		ErrCodeFencingRequired:
 		return codes.FailedPrecondition
 
 	// Invalid-argument class, including type mismatches and programming

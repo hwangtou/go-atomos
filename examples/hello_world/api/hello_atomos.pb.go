@@ -62,8 +62,8 @@ type GreeterAtomID struct {
 func (c *GreeterAtomID) String() string { return c.ID.String() }
 
 // Create (spawn) an atom in a node and return the AtomID.
-func SpawnGreeterAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *HelloSpawnArg) (*GreeterAtomID, error) {
-	id, tracker, err := c.CosmosSpawnAtom(caller, GreeterName, name, arg)
+func SpawnGreeterAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *HelloSpawnArg, ext ...go_atomos.ArgsForBaseAtomos) (*GreeterAtomID, error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, GreeterName, name, arg, ext...)
 	if id == nil {
 		return nil, err
 	}

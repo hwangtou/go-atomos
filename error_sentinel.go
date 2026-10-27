@@ -36,6 +36,14 @@ var (
 	ErrAtomInstanceMismatch                error = &Error{Code: ErrCodeAtomInstanceMismatch, Message: "atom instance mismatch"}
 	ErrCosmosNodeDraining                  error = &Error{Code: ErrCodeCosmosNodeDraining, Message: "cosmos node is draining"}
 	ErrAsyncCallbackCancelledByHalt        error = &Error{Code: ErrCodeAsyncCallbackCancelledByHalt, Message: "async callback cancelled by atom halt"}
+	ErrOwnershipLost                       error = &Error{Code: ErrCodeOwnershipLost, Message: "atom ownership lost"}
+	ErrStaleFence                          error = &Error{Code: ErrCodeStaleFence, Message: "stale atom fence"}
+	ErrOperationStillRunning               error = &Error{Code: ErrCodeOperationStillRunning, Message: "atom operation still running"}
+	ErrOperationNotFound                   error = &Error{Code: ErrCodeOperationNotFound, Message: "atom operation not found"}
+	ErrOperationConflict                   error = &Error{Code: ErrCodeOperationConflict, Message: "atom operation conflict"}
+	ErrTakeoverRequired                    error = &Error{Code: ErrCodeTakeoverRequired, Message: "atom takeover required"}
+	ErrOperationUnknown                    error = &Error{Code: ErrCodeOperationUnknown, Message: "atom operation outcome unknown"}
+	ErrFencingRequired                     error = &Error{Code: ErrCodeFencingRequired, Message: "atom fencing required"}
 )
 
 // Is reports whether x matches target by error code: target must be an

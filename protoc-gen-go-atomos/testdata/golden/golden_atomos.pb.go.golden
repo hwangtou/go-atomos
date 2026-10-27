@@ -78,8 +78,8 @@ type GoldenOptionAtomID struct {
 func (c *GoldenOptionAtomID) String() string { return c.ID.String() }
 
 // Create (spawn) an atom in a node and return the AtomID.
-func SpawnGoldenOptionAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *GoldenSpawnArg) (*GoldenOptionAtomID, error) {
-	id, tracker, err := c.CosmosSpawnAtom(caller, GoldenOptionName, name, arg)
+func SpawnGoldenOptionAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *GoldenSpawnArg, ext ...go_atomos.ArgsForBaseAtomos) (*GoldenOptionAtomID, error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, GoldenOptionName, name, arg, ext...)
 	if id == nil {
 		return nil, err
 	}
@@ -255,8 +255,8 @@ type GoldenPrefixAtomID struct {
 func (c *GoldenPrefixAtomID) String() string { return c.ID.String() }
 
 // Create (spawn) an atom in a node and return the AtomID.
-func SpawnGoldenPrefixAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *GoldenSpawnArg) (*GoldenPrefixAtomID, error) {
-	id, tracker, err := c.CosmosSpawnAtom(caller, GoldenPrefixName, name, arg)
+func SpawnGoldenPrefixAtom(caller go_atomos.SelfID, c go_atomos.CosmosNode, name string, arg *GoldenSpawnArg, ext ...go_atomos.ArgsForBaseAtomos) (*GoldenPrefixAtomID, error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, GoldenPrefixName, name, arg, ext...)
 	if id == nil {
 		return nil, err
 	}

@@ -70,6 +70,7 @@ type CosmosProcess struct {
 	// ArgBaseAtomosTimeout: it is the local waitReply fallback and the remote
 	// client-side deadline base. Default 10s.
 	syncCallDefaultTimeout time.Duration
+	lifecycleMode          LifecycleMode
 
 	// Per-process mutable settings (formerly package-level vars).
 	messageTimeoutTracer  bool
@@ -184,6 +185,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.idTrackerDebug = false
 	p.syncDeadlockDebug = false
 	p.syncCallDefaultTimeout = 10 * time.Second
+	p.lifecycleMode = LifecycleModeLegacyUnsafe
 	p.waitGraph = map[uint64]waitEdge{}
 	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
@@ -521,6 +523,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		if runnable.syncCallDefaultTimeout > 0 {
 			p.syncCallDefaultTimeout = runnable.syncCallDefaultTimeout
 		}
+		p.lifecycleMode = runnable.lifecycleMode
 
 		// 启动时初始化脚本。
 		if err := p.mainScriptOnBootProtect(); err != nil {

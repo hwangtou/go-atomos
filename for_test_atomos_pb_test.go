@@ -75,8 +75,8 @@ type ForTestAtomosAtomID struct {
 func (c *ForTestAtomosAtomID) String() string { return c.ID.String() }
 
 // Create (spawn) an atom in a node and return the AtomID.
-func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg) (*ForTestAtomosAtomID, error) {
-	id, tracker, err := c.CosmosSpawnAtom(caller, ForTestAtomosName, name, arg)
+func SpawnForTestAtomosAtom(caller SelfID, c CosmosNode, name string, arg *ForTestSpawnArg, ext ...ArgsForBaseAtomos) (*ForTestAtomosAtomID, error) {
+	id, tracker, err := c.CosmosSpawnAtom(caller, ForTestAtomosName, name, arg, ext...)
 	if id == nil {
 		return nil, err
 	}

@@ -41,6 +41,17 @@ type CosmosNode interface {
 	ElementBroadcast(callerID ID, key, contentType string, contentBuffer []byte) (err error)
 }
 
+// LifecycleMode selects the atom lifecycle guarantees for a process.
+type LifecycleMode int
+
+const (
+	// LifecycleModeLegacyUnsafe preserves the existing router-driven lifecycle.
+	LifecycleModeLegacyUnsafe LifecycleMode = iota
+	// LifecycleModePerAtomStrict reserves per-atom ownership and fencing.
+	// The ownership manager is not implemented by this configuration alone.
+	LifecycleModePerAtomStrict
+)
+
 // CosmosRunnable is the application builder. Every Atomos process creates one,
 // registers Element implementations and hooks, then passes it to Run (or
 // atomostest.Run in tests).
@@ -77,12 +88,13 @@ type CosmosRunnable struct {
 
 	// Per-process settings applied to the CosmosProcess at Start. Nil fields
 	// keep the CosmosProcess defaults.
-	messageTimeoutTracer  *bool
-	messageTimeoutDefault time.Duration
-	muteKeepaliveLog      *bool
-	idTrackerDebug        *bool
-	syncDeadlockDebug     *bool
+	messageTimeoutTracer   *bool
+	messageTimeoutDefault  time.Duration
+	muteKeepaliveLog       *bool
+	idTrackerDebug         *bool
+	syncDeadlockDebug      *bool
 	syncCallDefaultTimeout time.Duration
+	lifecycleMode          LifecycleMode
 }
 
 // Check reports whether the CosmosRunnable is correctly constructed: a Config
@@ -166,6 +178,14 @@ func (r *CosmosRunnable) SetConfig(config *Config) *CosmosRunnable {
 // GetConfig returns the Config currently set on the runnable (nil if unset).
 func (r *CosmosRunnable) GetConfig() *Config {
 	return r.config
+}
+
+// SetLifecycleMode configures the lifecycle guarantees for the process.
+// LifecycleModeLegacyUnsafe is the default. Selecting PerAtomStrict does not
+// install an ownership manager or enable partial ownership checks.
+func (r *CosmosRunnable) SetLifecycleMode(mode LifecycleMode) *CosmosRunnable {
+	r.lifecycleMode = mode
+	return r
 }
 
 // SetMessageTimeoutTracer enables or disables the message timeout tracer on

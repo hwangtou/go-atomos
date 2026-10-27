@@ -100,6 +100,14 @@ func TestSentinelsMatchCodes(t *testing.T) {
 		"ErrAtomInstanceMismatch":                ErrAtomInstanceMismatch,
 		"ErrCosmosNodeDraining":                  ErrCosmosNodeDraining,
 		"ErrAsyncCallbackCancelledByHalt":        ErrAsyncCallbackCancelledByHalt,
+		"ErrOwnershipLost":                       ErrOwnershipLost,
+		"ErrStaleFence":                          ErrStaleFence,
+		"ErrOperationStillRunning":               ErrOperationStillRunning,
+		"ErrOperationNotFound":                   ErrOperationNotFound,
+		"ErrOperationConflict":                   ErrOperationConflict,
+		"ErrTakeoverRequired":                    ErrTakeoverRequired,
+		"ErrOperationUnknown":                    ErrOperationUnknown,
+		"ErrFencingRequired":                     ErrFencingRequired,
 	}
 	for name, s := range sentinels {
 		wantName := "ErrCode" + name[3:]

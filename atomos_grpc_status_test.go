@@ -19,6 +19,10 @@ func TestGRPCCodeOfErrCode(t *testing.T) {
 		{ErrCodeAtomosTaskNotExists, codes.NotFound},
 		{ErrCodeAtomDataNotFound, codes.NotFound},
 		{ErrCodeAtomNotExists, codes.NotFound},
+		{ErrCodeOperationNotFound, codes.NotFound},
+		{ErrCodeOperationConflict, codes.AlreadyExists},
+		{ErrCodeOwnershipLost, codes.Aborted},
+		{ErrCodeStaleFence, codes.Aborted},
 
 		// State-rejection class.
 		{ErrCodeCosmosIsClosed, codes.FailedPrecondition},
@@ -31,6 +35,9 @@ func TestGRPCCodeOfErrCode(t *testing.T) {
 		{ErrCodeAtomInstanceMismatch, codes.FailedPrecondition},
 		{ErrCodeCosmosNodeDraining, codes.FailedPrecondition},
 		{ErrCodeAsyncCallbackCancelledByHalt, codes.FailedPrecondition},
+		{ErrCodeOperationStillRunning, codes.FailedPrecondition},
+		{ErrCodeTakeoverRequired, codes.FailedPrecondition},
+		{ErrCodeFencingRequired, codes.FailedPrecondition},
 
 		// Invalid-argument class.
 		{ErrCodeFrameworkIncorrectUsage, codes.InvalidArgument},
@@ -58,6 +65,7 @@ func TestGRPCCodeOfErrCode(t *testing.T) {
 		{ErrCodeCosmosRemoteConnectFailed, codes.Unknown},
 		{ErrCodeCosmosRemoteResponseInvalid, codes.Unknown},
 		{ErrCodeElementMessageHandlerNotExists, codes.Unknown},
+		{ErrCodeOperationUnknown, codes.Unknown},
 		{999999, codes.Unknown},
 	}
 	for _, c := range cases {

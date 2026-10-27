@@ -31,6 +31,11 @@ const (
 	AtomosRemoteService_AsyncOnMessageCallback_FullMethodName = "/atomos.AtomosRemoteService/AsyncOnMessageCallback"
 	AtomosRemoteService_KillAtom_FullMethodName               = "/atomos.AtomosRemoteService/KillAtom"
 	AtomosRemoteService_ElementBroadcast_FullMethodName       = "/atomos.AtomosRemoteService/ElementBroadcast"
+	AtomosRemoteService_SpawnAtomControlled_FullMethodName    = "/atomos.AtomosRemoteService/SpawnAtomControlled"
+	AtomosRemoteService_HaltAtomControlled_FullMethodName     = "/atomos.AtomosRemoteService/HaltAtomControlled"
+	AtomosRemoteService_LookupAtom_FullMethodName             = "/atomos.AtomosRemoteService/LookupAtom"
+	AtomosRemoteService_GetAtomOperation_FullMethodName       = "/atomos.AtomosRemoteService/GetAtomOperation"
+	AtomosRemoteService_TakeoverAtom_FullMethodName           = "/atomos.AtomosRemoteService/TakeoverAtom"
 )
 
 // AtomosRemoteServiceClient is the client API for AtomosRemoteService service.
@@ -51,6 +56,11 @@ type AtomosRemoteServiceClient interface {
 	AsyncOnMessageCallback(ctx context.Context, in *CosmosRemoteAsyncOnMessageCallbackReq, opts ...grpc.CallOption) (*CosmosRemoteAsyncOnMessageCallbackRsp, error)
 	KillAtom(ctx context.Context, in *CosmosRemoteKillAtomReq, opts ...grpc.CallOption) (*CosmosRemoteKillAtomRsp, error)
 	ElementBroadcast(ctx context.Context, in *CosmosRemoteElementBroadcastReq, opts ...grpc.CallOption) (*CosmosRemoteElementBroadcastRsp, error)
+	SpawnAtomControlled(ctx context.Context, in *CosmosRemoteSpawnAtomControlledReq, opts ...grpc.CallOption) (*CosmosRemoteSpawnAtomControlledRsp, error)
+	HaltAtomControlled(ctx context.Context, in *CosmosRemoteHaltAtomControlledReq, opts ...grpc.CallOption) (*CosmosRemoteHaltAtomControlledRsp, error)
+	LookupAtom(ctx context.Context, in *CosmosRemoteLookupAtomReq, opts ...grpc.CallOption) (*CosmosRemoteLookupAtomRsp, error)
+	GetAtomOperation(ctx context.Context, in *CosmosRemoteGetAtomOperationReq, opts ...grpc.CallOption) (*CosmosRemoteGetAtomOperationRsp, error)
+	TakeoverAtom(ctx context.Context, in *CosmosRemoteTakeoverAtomReq, opts ...grpc.CallOption) (*CosmosRemoteTakeoverAtomRsp, error)
 }
 
 type atomosRemoteServiceClient struct {
@@ -181,6 +191,56 @@ func (c *atomosRemoteServiceClient) ElementBroadcast(ctx context.Context, in *Co
 	return out, nil
 }
 
+func (c *atomosRemoteServiceClient) SpawnAtomControlled(ctx context.Context, in *CosmosRemoteSpawnAtomControlledReq, opts ...grpc.CallOption) (*CosmosRemoteSpawnAtomControlledRsp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CosmosRemoteSpawnAtomControlledRsp)
+	err := c.cc.Invoke(ctx, AtomosRemoteService_SpawnAtomControlled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *atomosRemoteServiceClient) HaltAtomControlled(ctx context.Context, in *CosmosRemoteHaltAtomControlledReq, opts ...grpc.CallOption) (*CosmosRemoteHaltAtomControlledRsp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CosmosRemoteHaltAtomControlledRsp)
+	err := c.cc.Invoke(ctx, AtomosRemoteService_HaltAtomControlled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *atomosRemoteServiceClient) LookupAtom(ctx context.Context, in *CosmosRemoteLookupAtomReq, opts ...grpc.CallOption) (*CosmosRemoteLookupAtomRsp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CosmosRemoteLookupAtomRsp)
+	err := c.cc.Invoke(ctx, AtomosRemoteService_LookupAtom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *atomosRemoteServiceClient) GetAtomOperation(ctx context.Context, in *CosmosRemoteGetAtomOperationReq, opts ...grpc.CallOption) (*CosmosRemoteGetAtomOperationRsp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CosmosRemoteGetAtomOperationRsp)
+	err := c.cc.Invoke(ctx, AtomosRemoteService_GetAtomOperation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *atomosRemoteServiceClient) TakeoverAtom(ctx context.Context, in *CosmosRemoteTakeoverAtomReq, opts ...grpc.CallOption) (*CosmosRemoteTakeoverAtomRsp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CosmosRemoteTakeoverAtomRsp)
+	err := c.cc.Invoke(ctx, AtomosRemoteService_TakeoverAtom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AtomosRemoteServiceServer is the server API for AtomosRemoteService service.
 // All implementations must embed UnimplementedAtomosRemoteServiceServer
 // for forward compatibility
@@ -199,6 +259,11 @@ type AtomosRemoteServiceServer interface {
 	AsyncOnMessageCallback(context.Context, *CosmosRemoteAsyncOnMessageCallbackReq) (*CosmosRemoteAsyncOnMessageCallbackRsp, error)
 	KillAtom(context.Context, *CosmosRemoteKillAtomReq) (*CosmosRemoteKillAtomRsp, error)
 	ElementBroadcast(context.Context, *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error)
+	SpawnAtomControlled(context.Context, *CosmosRemoteSpawnAtomControlledReq) (*CosmosRemoteSpawnAtomControlledRsp, error)
+	HaltAtomControlled(context.Context, *CosmosRemoteHaltAtomControlledReq) (*CosmosRemoteHaltAtomControlledRsp, error)
+	LookupAtom(context.Context, *CosmosRemoteLookupAtomReq) (*CosmosRemoteLookupAtomRsp, error)
+	GetAtomOperation(context.Context, *CosmosRemoteGetAtomOperationReq) (*CosmosRemoteGetAtomOperationRsp, error)
+	TakeoverAtom(context.Context, *CosmosRemoteTakeoverAtomReq) (*CosmosRemoteTakeoverAtomRsp, error)
 	mustEmbedUnimplementedAtomosRemoteServiceServer()
 }
 
@@ -241,6 +306,21 @@ func (UnimplementedAtomosRemoteServiceServer) KillAtom(context.Context, *CosmosR
 }
 func (UnimplementedAtomosRemoteServiceServer) ElementBroadcast(context.Context, *CosmosRemoteElementBroadcastReq) (*CosmosRemoteElementBroadcastRsp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ElementBroadcast not implemented")
+}
+func (UnimplementedAtomosRemoteServiceServer) SpawnAtomControlled(context.Context, *CosmosRemoteSpawnAtomControlledReq) (*CosmosRemoteSpawnAtomControlledRsp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SpawnAtomControlled not implemented")
+}
+func (UnimplementedAtomosRemoteServiceServer) HaltAtomControlled(context.Context, *CosmosRemoteHaltAtomControlledReq) (*CosmosRemoteHaltAtomControlledRsp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HaltAtomControlled not implemented")
+}
+func (UnimplementedAtomosRemoteServiceServer) LookupAtom(context.Context, *CosmosRemoteLookupAtomReq) (*CosmosRemoteLookupAtomRsp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupAtom not implemented")
+}
+func (UnimplementedAtomosRemoteServiceServer) GetAtomOperation(context.Context, *CosmosRemoteGetAtomOperationReq) (*CosmosRemoteGetAtomOperationRsp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAtomOperation not implemented")
+}
+func (UnimplementedAtomosRemoteServiceServer) TakeoverAtom(context.Context, *CosmosRemoteTakeoverAtomReq) (*CosmosRemoteTakeoverAtomRsp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TakeoverAtom not implemented")
 }
 func (UnimplementedAtomosRemoteServiceServer) mustEmbedUnimplementedAtomosRemoteServiceServer() {}
 
@@ -471,6 +551,96 @@ func _AtomosRemoteService_ElementBroadcast_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AtomosRemoteService_SpawnAtomControlled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CosmosRemoteSpawnAtomControlledReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtomosRemoteServiceServer).SpawnAtomControlled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtomosRemoteService_SpawnAtomControlled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtomosRemoteServiceServer).SpawnAtomControlled(ctx, req.(*CosmosRemoteSpawnAtomControlledReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AtomosRemoteService_HaltAtomControlled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CosmosRemoteHaltAtomControlledReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtomosRemoteServiceServer).HaltAtomControlled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtomosRemoteService_HaltAtomControlled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtomosRemoteServiceServer).HaltAtomControlled(ctx, req.(*CosmosRemoteHaltAtomControlledReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AtomosRemoteService_LookupAtom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CosmosRemoteLookupAtomReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtomosRemoteServiceServer).LookupAtom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtomosRemoteService_LookupAtom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtomosRemoteServiceServer).LookupAtom(ctx, req.(*CosmosRemoteLookupAtomReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AtomosRemoteService_GetAtomOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CosmosRemoteGetAtomOperationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtomosRemoteServiceServer).GetAtomOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtomosRemoteService_GetAtomOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtomosRemoteServiceServer).GetAtomOperation(ctx, req.(*CosmosRemoteGetAtomOperationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AtomosRemoteService_TakeoverAtom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CosmosRemoteTakeoverAtomReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AtomosRemoteServiceServer).TakeoverAtom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AtomosRemoteService_TakeoverAtom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AtomosRemoteServiceServer).TakeoverAtom(ctx, req.(*CosmosRemoteTakeoverAtomReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AtomosRemoteService_ServiceDesc is the grpc.ServiceDesc for AtomosRemoteService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -525,6 +695,26 @@ var AtomosRemoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ElementBroadcast",
 			Handler:    _AtomosRemoteService_ElementBroadcast_Handler,
+		},
+		{
+			MethodName: "SpawnAtomControlled",
+			Handler:    _AtomosRemoteService_SpawnAtomControlled_Handler,
+		},
+		{
+			MethodName: "HaltAtomControlled",
+			Handler:    _AtomosRemoteService_HaltAtomControlled_Handler,
+		},
+		{
+			MethodName: "LookupAtom",
+			Handler:    _AtomosRemoteService_LookupAtom_Handler,
+		},
+		{
+			MethodName: "GetAtomOperation",
+			Handler:    _AtomosRemoteService_GetAtomOperation_Handler,
+		},
+		{
+			MethodName: "TakeoverAtom",
+			Handler:    _AtomosRemoteService_TakeoverAtom_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
