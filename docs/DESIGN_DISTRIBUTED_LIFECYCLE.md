@@ -232,6 +232,10 @@ ownership 随 lease 消失不应同时抹掉所有 operation 结果。去重只�
 - 新 owner 使用更高 fence；
 - 外部数据库或资源拒绝低 fence 写入。
 
+已实现可选 `FencedAtomAutoData`：owned ID 带 incarnation/fence 时，Halt
+优先调用 `SetAtomDataAtFence`；实现方必须原子拒绝不大于已存 fence 的写入。
+未实现该扩展的现有 AutoData 继续走 `SetAtomData`，Legacy 行为不变。
+
  lease/fencing 不能撤销已经开始的用户 goroutine。若外部副作用不能 fencing，框架只能收窄脑裂窗口，不能宣称物理上绝对单活。无法承受该边界的业务应禁止自动接管，先人工或外部系统确认旧 owner 已失效。
 
 ### 6.7 per-Atom 与 shard ownership

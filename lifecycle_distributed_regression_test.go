@@ -80,8 +80,9 @@ func (a *lifecycleAtom) Halt(ID, []uint64) (bool, proto.Message) {
 }
 
 type lifecycleDev struct {
-	atom       *lifecycleAtom
-	setDataErr error
+	atom        *lifecycleAtom
+	setDataErr  error
+	fencedStore *fakeFencedAtomStore
 }
 
 func (d *lifecycleDev) ElementConstructor() Atomos       { return &lifecycleAtom{name: "element"} }

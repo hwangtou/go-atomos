@@ -31,9 +31,9 @@ import (
 //
 // Lifecycle order:
 //  1. OnBoot    — called once before any elements are spawned. Use for
-//                 database connections, config validation, etc.
+//     database connections, config validation, etc.
 //  2. OnStartUp — called after all elements are spawned and the cluster is ready.
-//                 Use for initial Atoms, scheduled jobs, etc.
+//     Use for initial Atoms, scheduled jobs, etc.
 //  3. OnShutdown — called when the process is stopping. Use for graceful cleanup.
 type CosmosMainScript interface {
 	OnBoot(local *CosmosProcess) error
@@ -93,6 +93,14 @@ type AutoData interface {
 type AtomAutoData interface {
 	GetAtomData(name string) (proto.Message, error)
 	SetAtomData(name string, data proto.Message) error
+}
+
+// FencedAtomAutoData is an optional AtomAutoData extension for storage that
+// accepts writes only from the newest atom ownership generation. Implementations
+// must atomically reject a fence lower than or equal to the fence already stored
+// for the same Atom; returning success without that check does not provide fencing.
+type FencedAtomAutoData interface {
+	SetAtomDataAtFence(name string, data proto.Message, incarnation, fence uint64) error
 }
 
 // ElementAutoData reads and writes Element-level state.

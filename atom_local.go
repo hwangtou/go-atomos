@@ -358,7 +358,12 @@ func (a *AtomLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 		return NewErrorf(ErrCodeAtomKillElementNotImplementAutoDataPersistence, "Atom: Stopping save data error. no atom auto data persistence. id=(%s),element=(%+v)",
 			a.atomos.GetIDInfo().Info(), a.element).AddStack(a)
 	}
-	if err = asError(atomPersistence.SetAtomData(a.atomos.id.Atom, data)); err != nil {
+	if fenced, ok := atomPersistence.(FencedAtomAutoData); ok && a.atomos.id.Incarnation != 0 && a.atomos.id.Fence != 0 {
+		err = asError(fenced.SetAtomDataAtFence(a.atomos.id.Atom, data, a.atomos.id.Incarnation, a.atomos.id.Fence))
+	} else {
+		err = asError(atomPersistence.SetAtomData(a.atomos.id.Atom, data))
+	}
+	if err != nil {
 		a.Log().Fatal("Atom: Stopping save data error. id=(%s),element=(%+v),data=(%v),err=(%v)", a.atomos.GetIDInfo().Info(), a.element, data, err)
 		return err.AddStack(a, data)
 	}
