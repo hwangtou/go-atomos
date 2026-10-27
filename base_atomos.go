@@ -535,13 +535,13 @@ func (a *BaseAtomos) onAsyncMessaging(fromID, toID ID, name string, handler Mess
 		if err != nil {
 			err = err.AddStack(nil)
 		}
-		fromInternal, intErr := asIDInternal(fromID)
-		if intErr != nil {
-			a.log.coreFatal("BaseAtomos: onAsyncMessaging caller ID invalid, reply dropped. err=(%v)", intErr)
-		} else {
-			fromInternal.asyncCallback(toID, name, startupID, asyncID, out, errOrNil(err))
-		}
 	}()
+	fromInternal, intErr := asIDInternal(fromID)
+	if intErr != nil {
+		a.log.coreFatal("BaseAtomos: onAsyncMessaging caller ID invalid, reply dropped. err=(%v)", intErr)
+	} else {
+		fromInternal.asyncCallback(toID, name, startupID, asyncID, out, errOrNil(err))
+	}
 }
 
 func (a *BaseAtomos) onAsyncMessagingCallback(asyncID uint64, in proto.Message, err error) {
