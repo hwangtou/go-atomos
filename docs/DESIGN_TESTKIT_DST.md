@@ -1,6 +1,6 @@
 # 确定性模拟测试（DST）与 I/O 接口化设计
 
-状态：实施中（2026-10-27）。Clock 接口、`atomostest.VirtualClock`、核心生产计时点迁移、内存 etcd 契约实现、lifecycle 恢复协议 DST 和 gRPC 故障注入器已落地；cron、远程 I/O Deadline 与完整内存互连仍待完成。
+状态：核心接缝已落地（2026-10-27）。Clock、MemoryEtcd、lifecycle 故障恢复、真实 service 的 bufconn 多节点互连和 gRPC 故障注入均已实现；cron、网络 Deadline 虚拟化、随机调度器和其余 chaos 场景迁移仍待完成。
 
 ## 目标
 
@@ -110,24 +110,29 @@ Compare、watch filters/progress/created/fragment、鉴权与多 endpoint 暂不
 内；不要把相应选项的静默缺省当作真实 etcd 支持。内存断流采用调用方显式
 WithRev 恢复，不模拟 clientv3 的自动重连；watch 故障注入只生成 canceled/compacted
 响应，不伪造任意私有 close error。其余既有 chaos 场景的 DST 化仍待完成；
-当前 lifecycle DST 不覆盖真实传输重排、自动重试或 WAL 重放。
+当前 lifecycle DST 不覆盖自动重试或 WAL 重放。
 
 ### C. gRPC 传输
 
-跨节点调用走 `BaseRemote/ElementRemote` 的 `getCli`。定义传输工厂接缝
-（dial/conn），测试实现为进程内内存管道（带可注入延迟/分区/重排）。
-"多节点"退化为多个 CosmosProcess + 内存互连，`_cluster_advertise_ip`
-经验（loopback 优先）在此不再需要——根本没有 TCP。
+生产连接统一经过 `CosmosRunnable.SetGRPCTransport` 注入的 `GRPCTransport`。
+nil 保持 TCP listener 和标准 `grpc.NewClient`；自定义实现负责 Listen/Dial，
+listener 与 connection 返回后仍由 process 关闭。节点注册使用 listener 的虚拟
+地址，因此内存集群不需要 TCP 或预留端口；TCP 的 `OptionalPorts: {0}` 也会发布
+实际 ephemeral 端口。
 
-当前实现：`atomostest/fault.go` 可通过真实 gRPC client interceptor 注入
-drop-request、执行后 drop-response、delay/hold、duplicate/reorder、blackhole
-和 heal，并记录事件顺序。生产 dial factory 和全节点内存互连尚未完成。
+`atomostest.MemoryNetwork` 为每个节点提供独立 transport，以 bufconn 运行真实
+`AtomosRemoteService`，不是绕过 RPC 的 fake。每个有向节点对都有独立
+`FaultController`，支持 drop-request、执行后 drop-response、delay/hold、
+duplicate、blackhole 和 heal，并记录故障顺序。`TestDST_MemoryNetwork` 覆盖：
+Spawn 响应丢失后的同 operation 重放、请求丢失未执行、重复 Halt 去重、精确
+虚拟延迟边界和 blackhole 后 heal。网络 RPC deadline 与连接就绪等待仍使用真实
+时间，虚拟时钟只控制显式注入的延迟和框架已迁移计时器。
 
-## 验收样例（设计目标）
+## 验收样例与后续目标
 
-以虚拟时钟重放"节点 A 处理中、etcd lease 过期、B 抢占版本锁、A 回写"
-的交错，seed 固定则断言时序逐微秒一致；同一用例注入 100ms 分区与不注入
-分别断言两种结局。这类断言今天写不出来——真实时间下 lease 过期是睡出来的。
+固定 gate 的 lease 过期、CAS、提交后响应丢失、传输丢包与重放已经可以确定性
+复现。后续可增加带固定 seed 的调度器，随机选择可运行 goroutine/故障事件并记录
+trace；当前实现是显式交错测试，不宣称已经具备随机调度搜索或完整状态空间探索。
 
 ## 冻结决策：G5/G7/G9 与 Messenger 泛型精简
 

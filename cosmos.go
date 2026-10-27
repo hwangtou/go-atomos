@@ -72,14 +72,15 @@ func lifecycleStrictMode(mode LifecycleMode) bool {
 //		AddElementImplementationWithSpawn(myElementImpl)
 //	atomos.Run(runnable)
 type CosmosRunnable struct {
-	config       *Config
-	clock        Clock
-	etcdClient   EtcdClient
-	implements   map[string]*ElementImplementation
-	spawnElement map[string]bool
-	spawnOrder   []string
-	mainScript   CosmosMainScript
-	mainRouter   CosmosMainGlobalRouter
+	config        *Config
+	clock         Clock
+	etcdClient    EtcdClient
+	grpcTransport GRPCTransport
+	implements    map[string]*ElementImplementation
+	spawnElement  map[string]bool
+	spawnOrder    []string
+	mainScript    CosmosMainScript
+	mainRouter    CosmosMainGlobalRouter
 
 	// Lifecycle hooks invoked at each stage of an actor's lifecycle.
 	// All hooks receive the *IDInfo of the affected actor.
@@ -209,6 +210,14 @@ func (r *CosmosRunnable) SetClock(clock Clock) *CosmosRunnable {
 // be shared with other processes. A nil client restores normal client creation.
 func (r *CosmosRunnable) SetEtcdClient(client EtcdClient) *CosmosRunnable {
 	r.etcdClient = client
+	return r
+}
+
+// SetGRPCTransport injects the cluster listener and dialer. A nil transport
+// uses TCP listeners and the standard gRPC client. The transport does not own
+// listeners or connections after returning them to the process.
+func (r *CosmosRunnable) SetGRPCTransport(transport GRPCTransport) *CosmosRunnable {
+	r.grpcTransport = transport
 	return r
 }
 

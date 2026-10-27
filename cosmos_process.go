@@ -124,6 +124,7 @@ type CosmosProcess struct {
 		// GRPC
 		grpcServerOption *grpc.ServerOption
 		grpcDialOption   *grpc.DialOption
+		grpcTransport    GRPCTransport
 		grpcAddress      string
 		grpcServer       *grpc.Server
 		grpcListener     net.Listener
@@ -1200,14 +1201,23 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	var grpcListenAddress string
 	var grpcListener net.Listener
 	var grpcServer *grpc.Server
+	p.cluster.grpcTransport = p.local.runnable.grpcTransport
 	for _, port := range ports {
 		// Try to listen.
 		grpcListenAddress = fmt.Sprintf("%s:%d", ip, port)
-		listener, er := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		var listener net.Listener
+		var er error
+		if p.cluster.grpcTransport != nil {
+			listener, er = p.cluster.grpcTransport.Listen(fmt.Sprintf(":%d", port))
+		} else {
+			listener, er = net.Listen("tcp", fmt.Sprintf(":%d", port))
+		}
 		if er != nil {
 			continue
 		}
-		if port == 0 {
+		if p.cluster.grpcTransport != nil {
+			grpcListenAddress = listener.Addr().String()
+		} else if port == 0 {
 			grpcListenAddress = fmt.Sprintf("%s:%d", ip, listener.Addr().(*net.TCPAddr).Port)
 		}
 		// Try to start grpc server.

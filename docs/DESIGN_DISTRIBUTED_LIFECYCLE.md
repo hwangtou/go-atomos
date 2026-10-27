@@ -1,6 +1,6 @@
 # 分布式生命周期梳理与优化计划
 
-> 状态：阶段 0–4 已实施；阶段 5 的 lifecycle DST 已落地，真实传输 DST、混部兼容与容量验证仍待完成
+> 状态：阶段 0–4 已实施；阶段 5 的 lifecycle 与 bufconn 多节点 DST 已落地，随机调度、真实 TCP 故障矩阵、混部兼容与容量验证仍待完成
 > 日期：2026-10-27
 > 范围：Atom 的分布式身份、Spawn、Halt、Drain、超时重试与故障接管
 > 关联设计：[Drain](DESIGN_DRAIN_GRADUAL.md)、[Retry/Outbox](DESIGN_RETRY_OUTBOX.md)、[Deadlock](DEADLOCK.md)、[DST](DESIGN_TESTKIT_DST.md)、[v3 API](DESIGN_V3_API.md)
@@ -9,7 +9,7 @@
 
 - **现状**：当前代码已经实现的行为及其保证边界。
 - **已实施阶段**：本地生命周期、受控协议、ownership/fencing、operation 恢复、Takeover、Drain 和 shard。
-- **待完成**：真实传输 DST、旧新节点混部验证、高规模容量测试及独立文档中的 WAL/outbox 等后续工作。
+- **待完成**：随机调度搜索、真实 TCP 故障矩阵、旧新节点混部验证、高规模容量测试及独立文档中的 WAL/outbox 等后续工作。
 
 默认 `LifecycleModeLegacyUnsafe` 保留兼容行为；下述分布式保证需要显式启用
 `LifecycleModePerAtomStrict` 或 `LifecycleModePerShardStrict`，并配置 etcd。
@@ -281,7 +281,9 @@ Spawn/Takeover 与 Halt 的 claim、completion 事务都按“提交可能成功
 
 根包 `TestDST_` 用 MemoryEtcd 的确定性提交后丢响应、keepalive 断流和虚拟
 lease/backoff 覆盖上述交错，并以 constructor/Halt 次数、持久化终态、旧 fence
-拒绝和 watch snapshot 重建验证实际行为。真实传输 DST、自动重试与 WAL 重放
+拒绝和 watch snapshot 重建验证实际行为。`atomostest.TestDST_MemoryNetwork`
+再通过 bufconn 运行真实 gRPC service，覆盖跨节点请求/响应丢失、重复 Halt、
+虚拟延迟和分区恢复。真实 TCP 故障矩阵、随机调度搜索、自动重试与 WAL 重放
 仍属于后续工作。
 
 ## 七、错误与重试契约
@@ -312,7 +314,7 @@ lease/backoff 覆盖上述交错，并以 constructor/Halt 次数、持久化终
 | 2 ✅ | per-Atom ownership；RPC fencing；失租 fail-closed | 跨节点并发 Spawn 单活，stale Kill 跨重启被拒绝 |
 | 3 ✅（受控生命周期） | 同 operation 恢复、结果保留和显式接管；普通异步透明重试/WAL 不在此范围 | 响应丢失后可按原 operation 对账，重复控制操作不重复执行 |
 | 4 ✅（per-Atom/per-Shard 与 Drain；高规模优化除外） | Drain 与 ownership 统一；稳定 shard ownership 和重平衡 | Drain 无准入绕过，重平衡有明确 CAS 屏障 |
-| 5（部分 ✅） | lifecycle MemoryEtcd/VirtualClock DST 与提交后故障注入已落地；真实传输 DST、混部兼容和性能测试待完成 | 已覆盖关键 lifecycle 交错可重放；完整兼容矩阵和容量边界仍待明确 |
+| 5（核心 ✅） | MemoryEtcd/VirtualClock、提交后故障及真实 service 的 bufconn 多节点 DST 已落地；随机调度、真实 TCP 故障矩阵、混部兼容和性能测试待完成 | 关键 lifecycle 与跨节点交错可重放；完整兼容矩阵和容量边界仍待明确 |
 
 每阶段独立可回滚，不把本地状态机、wire、ownership 和自动重试一次性混入同一改动。
 

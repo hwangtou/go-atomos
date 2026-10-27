@@ -561,10 +561,14 @@ func (c *cosmosRemoteVersion) check() bool {
 
 	var er error
 	var client *grpc.ClientConn
-	if c.process.cluster.grpcDialOption == nil {
-		client, er = grpc.NewClient(info.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if c.process.cluster.grpcDialOption != nil {
+		dialOptions[0] = *c.process.cluster.grpcDialOption
+	}
+	if c.process.cluster.grpcTransport != nil {
+		client, er = c.process.cluster.grpcTransport.Dial(info.Address, dialOptions...)
 	} else {
-		client, er = grpc.NewClient(info.Address, *c.process.cluster.grpcDialOption)
+		client, er = grpc.NewClient(info.Address, dialOptions...)
 	}
 	if er != nil {
 		c.process.local.coreLog().coreFatal("CosmosRemote: NewClient failed. addr=(%s),err=(%v)", info.Address, er)
@@ -588,9 +592,13 @@ func (c *cosmosRemoteVersion) check() bool {
 		if !client.WaitForStateChange(ctx, st) {
 			// Timed out waiting for readiness.
 			client.Close()
-			conn, connEr := net.DialTimeout("tcp", info.Address, time.Second*1)
-			if conn != nil {
-				conn.Close()
+			var conn net.Conn
+			var connEr error
+			if c.process.cluster.grpcTransport == nil {
+				conn, connEr = net.DialTimeout("tcp", info.Address, time.Second*1)
+				if conn != nil {
+					conn.Close()
+				}
 			}
 			c.process.local.coreLog().coreFatal("CosmosRemote: Connect failed. addr=(%s),state=(%v),conn=(%v),connEr=(%v)", info.Address, st, conn, connEr)
 			c.dialMu.Lock()

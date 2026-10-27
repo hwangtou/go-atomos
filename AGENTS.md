@@ -5,8 +5,9 @@ Guidance for AI agents and contributors working in this repository.
 ## Repository layout
 
 - Root package `atomos` — the actor-model framework runtime.
-- `atomostest/` — test helpers: `Run` (in-process test runtime) and fakes
-  (`FakeID`, `FakeSelfID`, `FakeLogging`, `FakeTask`).
+- `atomostest/` — test helpers: `Run` (in-process test runtime), fakes
+  (`FakeID`, `FakeSelfID`, `FakeLogging`, `FakeTask`), and DST primitives
+  (`VirtualClock`, `MemoryEtcd`, `MemoryNetwork`, `FaultController`).
 - `protoc-gen-go-atomos/` — the protoc plugin that generates element/atom
   interfaces, ID clients and decoders from `.proto` services.
 - `cmd/atomos-vet/` — static analyzers (`syncdeadlock`, `deferrelease`).
@@ -24,6 +25,7 @@ go build ./...
 go vet ./...
 go test . -count=1 -timeout 600s          # root package suite (~20s)
 go test ./atomostest/ ./cmd/atomos-vet/... ./protoc-gen-go-atomos/ ./examples/...
+go test . ./atomostest -run '^TestDST_' -count=1 -timeout 300s
 make test-race                           # all packages in both modules, twice
 make test-integration                    # embedded etcd integration suite
 make test-integration-race               # integration suite with race detector
