@@ -50,7 +50,16 @@ const (
 	// LifecycleModePerAtomStrict enables per-atom etcd ownership, operation
 	// deduplication, incarnation checks and lease fencing. It requires a cluster.
 	LifecycleModePerAtomStrict
+	// LifecycleModePerShardStrict shares a leased fence generation across atoms
+	// assigned to the same shard while retaining per-atom incarnations.
+	LifecycleModePerShardStrict
 )
+
+const defaultLifecycleShardCount = 64
+
+func lifecycleStrictMode(mode LifecycleMode) bool {
+	return mode == LifecycleModePerAtomStrict || mode == LifecycleModePerShardStrict
+}
 
 // CosmosRunnable is the application builder. Every Atomos process creates one,
 // registers Element implementations and hooks, then passes it to Run (or
@@ -95,6 +104,8 @@ type CosmosRunnable struct {
 	syncDeadlockDebug      *bool
 	syncCallDefaultTimeout time.Duration
 	lifecycleMode          LifecycleMode
+	lifecycleShardCount    int
+	lifecycleShardCountSet bool
 }
 
 // Check reports whether the CosmosRunnable is correctly constructed: a Config
@@ -111,6 +122,9 @@ func (r *CosmosRunnable) Check() error {
 	// Implements
 	if r.implements == nil {
 		r.implements = map[string]*ElementImplementation{}
+	}
+	if r.lifecycleShardCountSet && r.lifecycleShardCount <= 0 {
+		return NewError(ErrCodeCosmosConfigInvalid, "Runnable: lifecycle shard count must be positive").AddStack(nil)
 	}
 	// MainScript
 	if r.mainScript == nil {
@@ -181,10 +195,18 @@ func (r *CosmosRunnable) GetConfig() *Config {
 }
 
 // SetLifecycleMode configures the lifecycle guarantees for the process.
-// LifecycleModeLegacyUnsafe is the default. PerAtomStrict requires an enabled
-// etcd cluster and routes ordinary Spawn/Get/Kill through controlled lifecycle.
+// LifecycleModeLegacyUnsafe is the default. PerAtomStrict and PerShardStrict
+// require etcd and route ordinary Spawn/Get/Kill through controlled lifecycle.
 func (r *CosmosRunnable) SetLifecycleMode(mode LifecycleMode) *CosmosRunnable {
 	r.lifecycleMode = mode
+	return r
+}
+
+// SetLifecycleShardCount sets the stable shard count used by PerShardStrict.
+// The default is 64. Check rejects non-positive explicit values.
+func (r *CosmosRunnable) SetLifecycleShardCount(count int) *CosmosRunnable {
+	r.lifecycleShardCount = count
+	r.lifecycleShardCountSet = true
 	return r
 }
 

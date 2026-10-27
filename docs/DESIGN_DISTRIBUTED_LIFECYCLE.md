@@ -245,6 +245,13 @@ ownership 随 lease 消失不应同时抹掉所有 operation 结果。去重只�
 
 两种模式共享相同的 Spawn/Halt、operation 和 fencing 语义，不能退回到“多份 Router 配置碰巧一致”。
 
+已实现 `LifecycleModePerShardStrict`：`SetLifecycleShardCount` 配置稳定 FNV-1a
+映射（默认 64），shard record/owner 通过同一 CAS 获取或接管并绑定 process
+lease。Atom fence 等于 shard fence，同节点同 lease 的后续 Atom 激活不提升
+fence；每个 Atom 仍有独立 incarnation、operation 和 owner lookup。Atom 与
+shard owner watch 共用本地快照，普通消息不读取 etcd。跨节点接管同时使该
+shard 的旧 Atom 准入和旧 operation 写回失败。这里不宣称高规模性能优化完成。
+
 ## 七、错误与重试契约
 
 控制操作需要区分：
@@ -272,7 +279,7 @@ ownership 随 lease 消失不应同时抹掉所有 operation 结果。去重只�
 | 1 ✅ | proto 追加 operation/startup/incarnation/fence；只读 Lookup/OperationStatus；远程 Spawn 参数对齐 | 能识别并对账未知操作，旧错误码不变 |
 | 2 ✅ | per-Atom ownership；RPC fencing；失租 fail-closed | 跨节点并发 Spawn 单活，stale Kill 跨重启被拒绝 |
 | 3 ✅（受控生命周期） | 同 operation 恢复、结果保留和显式接管；普通异步透明重试/WAL 不在此范围 | 响应丢失后可按原 operation 对账，重复控制操作不重复执行 |
-| 4 | Drain 与 ownership 统一；分片和高规模优化 | Drain 无准入绕过，重平衡有明确屏障 |
+| 4 ✅（per-Atom/per-Shard 与 Drain；高规模优化除外） | Drain 与 ownership 统一；稳定 shard ownership 和重平衡 | Drain 无准入绕过，重平衡有明确 CAS 屏障 |
 | 5 | DST、真实故障注入、混部兼容和性能测试 | 关键交错可重放，兼容矩阵和容量边界明确 |
 
 每阶段独立可回滚，不把本地状态机、wire、ownership 和自动重试一次性混入同一改动。

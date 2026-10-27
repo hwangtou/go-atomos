@@ -18,6 +18,7 @@ func TestLifecycleProtoCompatibility(t *testing.T) {
 		{(&IDInfo{}).ProtoReflect(), "incarnation", 8},
 		{(&IDInfo{}).ProtoReflect(), "startup_id", 9},
 		{(&IDInfo{}).ProtoReflect(), "fence", 10},
+		{(&IDInfo{}).ProtoReflect(), "shard_id", 11},
 		{(&Error{}).ProtoReflect(), "operation_id", 6},
 		{(&CosmosNodeVersionInfo{}).ProtoReflect(), "protocol_version", 7},
 		{(&CosmosArgs{}).ProtoReflect(), "protocol_version", 6},

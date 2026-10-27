@@ -434,6 +434,7 @@ type IDInfo struct {
 	Incarnation   uint64                 `protobuf:"varint,8,opt,name=incarnation,proto3" json:"incarnation,omitempty"`
 	StartupId     uint64                 `protobuf:"varint,9,opt,name=startup_id,json=startupId,proto3" json:"startup_id,omitempty"`
 	Fence         uint64                 `protobuf:"varint,10,opt,name=fence,proto3" json:"fence,omitempty"`
+	ShardId       uint32                 `protobuf:"varint,11,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -534,6 +535,13 @@ func (x *IDInfo) GetStartupId() uint64 {
 func (x *IDInfo) GetFence() uint64 {
 	if x != nil {
 		return x.Fence
+	}
+	return 0
+}
+
+func (x *IDInfo) GetShardId() uint32 {
+	if x != nil {
+		return x.ShardId
 	}
 	return 0
 }
@@ -2580,6 +2588,134 @@ func (x *AtomOwnershipRecord) GetOperationId() string {
 	return ""
 }
 
+type ShardLifecycleRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ShardId       uint32                 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	NextFence     uint64                 `protobuf:"varint,2,opt,name=next_fence,json=nextFence,proto3" json:"next_fence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShardLifecycleRecord) Reset() {
+	*x = ShardLifecycleRecord{}
+	mi := &file_atomos_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShardLifecycleRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShardLifecycleRecord) ProtoMessage() {}
+
+func (x *ShardLifecycleRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShardLifecycleRecord.ProtoReflect.Descriptor instead.
+func (*ShardLifecycleRecord) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ShardLifecycleRecord) GetShardId() uint32 {
+	if x != nil {
+		return x.ShardId
+	}
+	return 0
+}
+
+func (x *ShardLifecycleRecord) GetNextFence() uint64 {
+	if x != nil {
+		return x.NextFence
+	}
+	return 0
+}
+
+type ShardOwnershipRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ShardId       uint32                 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	Fence         uint64                 `protobuf:"varint,2,opt,name=fence,proto3" json:"fence,omitempty"`
+	StartupId     uint64                 `protobuf:"varint,3,opt,name=startup_id,json=startupId,proto3" json:"startup_id,omitempty"`
+	Node          string                 `protobuf:"bytes,4,opt,name=node,proto3" json:"node,omitempty"`
+	LeaseId       int64                  `protobuf:"varint,5,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ShardOwnershipRecord) Reset() {
+	*x = ShardOwnershipRecord{}
+	mi := &file_atomos_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ShardOwnershipRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ShardOwnershipRecord) ProtoMessage() {}
+
+func (x *ShardOwnershipRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_atomos_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ShardOwnershipRecord.ProtoReflect.Descriptor instead.
+func (*ShardOwnershipRecord) Descriptor() ([]byte, []int) {
+	return file_atomos_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ShardOwnershipRecord) GetShardId() uint32 {
+	if x != nil {
+		return x.ShardId
+	}
+	return 0
+}
+
+func (x *ShardOwnershipRecord) GetFence() uint64 {
+	if x != nil {
+		return x.Fence
+	}
+	return 0
+}
+
+func (x *ShardOwnershipRecord) GetStartupId() uint64 {
+	if x != nil {
+		return x.StartupId
+	}
+	return 0
+}
+
+func (x *ShardOwnershipRecord) GetNode() string {
+	if x != nil {
+		return x.Node
+	}
+	return ""
+}
+
+func (x *ShardOwnershipRecord) GetLeaseId() int64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
 type AtomOperationRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Operation     *AtomOperationInfo     `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
@@ -2590,7 +2726,7 @@ type AtomOperationRecord struct {
 
 func (x *AtomOperationRecord) Reset() {
 	*x = AtomOperationRecord{}
-	mi := &file_atomos_proto_msgTypes[36]
+	mi := &file_atomos_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2602,7 +2738,7 @@ func (x *AtomOperationRecord) String() string {
 func (*AtomOperationRecord) ProtoMessage() {}
 
 func (x *AtomOperationRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[36]
+	mi := &file_atomos_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2615,7 +2751,7 @@ func (x *AtomOperationRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AtomOperationRecord.ProtoReflect.Descriptor instead.
 func (*AtomOperationRecord) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{36}
+	return file_atomos_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *AtomOperationRecord) GetOperation() *AtomOperationInfo {
@@ -2641,7 +2777,7 @@ type CosmosRemoteTryKillingReq struct {
 
 func (x *CosmosRemoteTryKillingReq) Reset() {
 	*x = CosmosRemoteTryKillingReq{}
-	mi := &file_atomos_proto_msgTypes[37]
+	mi := &file_atomos_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2653,7 +2789,7 @@ func (x *CosmosRemoteTryKillingReq) String() string {
 func (*CosmosRemoteTryKillingReq) ProtoMessage() {}
 
 func (x *CosmosRemoteTryKillingReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[37]
+	mi := &file_atomos_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2666,7 +2802,7 @@ func (x *CosmosRemoteTryKillingReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteTryKillingReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteTryKillingReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{37}
+	return file_atomos_proto_rawDescGZIP(), []int{39}
 }
 
 type CosmosRemoteTryKillingRsp struct {
@@ -2678,7 +2814,7 @@ type CosmosRemoteTryKillingRsp struct {
 
 func (x *CosmosRemoteTryKillingRsp) Reset() {
 	*x = CosmosRemoteTryKillingRsp{}
-	mi := &file_atomos_proto_msgTypes[38]
+	mi := &file_atomos_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2690,7 +2826,7 @@ func (x *CosmosRemoteTryKillingRsp) String() string {
 func (*CosmosRemoteTryKillingRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteTryKillingRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[38]
+	mi := &file_atomos_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2703,7 +2839,7 @@ func (x *CosmosRemoteTryKillingRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteTryKillingRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteTryKillingRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{38}
+	return file_atomos_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CosmosRemoteTryKillingRsp) GetError() *Error {
@@ -2725,7 +2861,7 @@ type CosmosRemoteDrainNodeReq struct {
 
 func (x *CosmosRemoteDrainNodeReq) Reset() {
 	*x = CosmosRemoteDrainNodeReq{}
-	mi := &file_atomos_proto_msgTypes[39]
+	mi := &file_atomos_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2737,7 +2873,7 @@ func (x *CosmosRemoteDrainNodeReq) String() string {
 func (*CosmosRemoteDrainNodeReq) ProtoMessage() {}
 
 func (x *CosmosRemoteDrainNodeReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[39]
+	mi := &file_atomos_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2750,7 +2886,7 @@ func (x *CosmosRemoteDrainNodeReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteDrainNodeReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteDrainNodeReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{39}
+	return file_atomos_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CosmosRemoteDrainNodeReq) GetDeadlineSec() int64 {
@@ -2769,7 +2905,7 @@ type CosmosRemoteDrainNodeRsp struct {
 
 func (x *CosmosRemoteDrainNodeRsp) Reset() {
 	*x = CosmosRemoteDrainNodeRsp{}
-	mi := &file_atomos_proto_msgTypes[40]
+	mi := &file_atomos_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +2917,7 @@ func (x *CosmosRemoteDrainNodeRsp) String() string {
 func (*CosmosRemoteDrainNodeRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteDrainNodeRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[40]
+	mi := &file_atomos_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +2930,7 @@ func (x *CosmosRemoteDrainNodeRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteDrainNodeRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteDrainNodeRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{40}
+	return file_atomos_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CosmosRemoteDrainNodeRsp) GetError() *Error {
@@ -2815,7 +2951,7 @@ type CosmosRemoteGetAtomIDReq struct {
 
 func (x *CosmosRemoteGetAtomIDReq) Reset() {
 	*x = CosmosRemoteGetAtomIDReq{}
-	mi := &file_atomos_proto_msgTypes[41]
+	mi := &file_atomos_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2827,7 +2963,7 @@ func (x *CosmosRemoteGetAtomIDReq) String() string {
 func (*CosmosRemoteGetAtomIDReq) ProtoMessage() {}
 
 func (x *CosmosRemoteGetAtomIDReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[41]
+	mi := &file_atomos_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2840,7 +2976,7 @@ func (x *CosmosRemoteGetAtomIDReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetAtomIDReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetAtomIDReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{41}
+	return file_atomos_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CosmosRemoteGetAtomIDReq) GetElement() string {
@@ -2867,7 +3003,7 @@ type CosmosRemoteGetAtomIDRsp struct {
 
 func (x *CosmosRemoteGetAtomIDRsp) Reset() {
 	*x = CosmosRemoteGetAtomIDRsp{}
-	mi := &file_atomos_proto_msgTypes[42]
+	mi := &file_atomos_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2879,7 +3015,7 @@ func (x *CosmosRemoteGetAtomIDRsp) String() string {
 func (*CosmosRemoteGetAtomIDRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteGetAtomIDRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[42]
+	mi := &file_atomos_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2892,7 +3028,7 @@ func (x *CosmosRemoteGetAtomIDRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetAtomIDRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetAtomIDRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{42}
+	return file_atomos_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CosmosRemoteGetAtomIDRsp) GetId() *IDInfo {
@@ -2919,7 +3055,7 @@ type CosmosRemoteGetIDStateReq struct {
 
 func (x *CosmosRemoteGetIDStateReq) Reset() {
 	*x = CosmosRemoteGetIDStateReq{}
-	mi := &file_atomos_proto_msgTypes[43]
+	mi := &file_atomos_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2931,7 +3067,7 @@ func (x *CosmosRemoteGetIDStateReq) String() string {
 func (*CosmosRemoteGetIDStateReq) ProtoMessage() {}
 
 func (x *CosmosRemoteGetIDStateReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[43]
+	mi := &file_atomos_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2944,7 +3080,7 @@ func (x *CosmosRemoteGetIDStateReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetIDStateReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetIDStateReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{43}
+	return file_atomos_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *CosmosRemoteGetIDStateReq) GetId() *IDInfo {
@@ -2964,7 +3100,7 @@ type CosmosRemoteGetIDStateRsp struct {
 
 func (x *CosmosRemoteGetIDStateRsp) Reset() {
 	*x = CosmosRemoteGetIDStateRsp{}
-	mi := &file_atomos_proto_msgTypes[44]
+	mi := &file_atomos_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2976,7 +3112,7 @@ func (x *CosmosRemoteGetIDStateRsp) String() string {
 func (*CosmosRemoteGetIDStateRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteGetIDStateRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[44]
+	mi := &file_atomos_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2989,7 +3125,7 @@ func (x *CosmosRemoteGetIDStateRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetIDStateRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetIDStateRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{44}
+	return file_atomos_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CosmosRemoteGetIDStateRsp) GetError() *Error {
@@ -3016,7 +3152,7 @@ type CosmosRemoteGetIDIdleTimeReq struct {
 
 func (x *CosmosRemoteGetIDIdleTimeReq) Reset() {
 	*x = CosmosRemoteGetIDIdleTimeReq{}
-	mi := &file_atomos_proto_msgTypes[45]
+	mi := &file_atomos_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3028,7 +3164,7 @@ func (x *CosmosRemoteGetIDIdleTimeReq) String() string {
 func (*CosmosRemoteGetIDIdleTimeReq) ProtoMessage() {}
 
 func (x *CosmosRemoteGetIDIdleTimeReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[45]
+	mi := &file_atomos_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3041,7 +3177,7 @@ func (x *CosmosRemoteGetIDIdleTimeReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetIDIdleTimeReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetIDIdleTimeReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{45}
+	return file_atomos_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *CosmosRemoteGetIDIdleTimeReq) GetId() *IDInfo {
@@ -3061,7 +3197,7 @@ type CosmosRemoteGetIDIdleTimeRsp struct {
 
 func (x *CosmosRemoteGetIDIdleTimeRsp) Reset() {
 	*x = CosmosRemoteGetIDIdleTimeRsp{}
-	mi := &file_atomos_proto_msgTypes[46]
+	mi := &file_atomos_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3073,7 +3209,7 @@ func (x *CosmosRemoteGetIDIdleTimeRsp) String() string {
 func (*CosmosRemoteGetIDIdleTimeRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteGetIDIdleTimeRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[46]
+	mi := &file_atomos_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3086,7 +3222,7 @@ func (x *CosmosRemoteGetIDIdleTimeRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetIDIdleTimeRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetIDIdleTimeRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{46}
+	return file_atomos_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CosmosRemoteGetIDIdleTimeRsp) GetError() *Error {
@@ -3113,7 +3249,7 @@ type CosmosRemoteGetElementInfoReq struct {
 
 func (x *CosmosRemoteGetElementInfoReq) Reset() {
 	*x = CosmosRemoteGetElementInfoReq{}
-	mi := &file_atomos_proto_msgTypes[47]
+	mi := &file_atomos_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3125,7 +3261,7 @@ func (x *CosmosRemoteGetElementInfoReq) String() string {
 func (*CosmosRemoteGetElementInfoReq) ProtoMessage() {}
 
 func (x *CosmosRemoteGetElementInfoReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[47]
+	mi := &file_atomos_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3138,7 +3274,7 @@ func (x *CosmosRemoteGetElementInfoReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetElementInfoReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetElementInfoReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{47}
+	return file_atomos_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CosmosRemoteGetElementInfoReq) GetElement() string {
@@ -3158,7 +3294,7 @@ type CosmosRemoteGetElementInfoRsp struct {
 
 func (x *CosmosRemoteGetElementInfoRsp) Reset() {
 	*x = CosmosRemoteGetElementInfoRsp{}
-	mi := &file_atomos_proto_msgTypes[48]
+	mi := &file_atomos_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3170,7 +3306,7 @@ func (x *CosmosRemoteGetElementInfoRsp) String() string {
 func (*CosmosRemoteGetElementInfoRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteGetElementInfoRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[48]
+	mi := &file_atomos_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3183,7 +3319,7 @@ func (x *CosmosRemoteGetElementInfoRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetElementInfoRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetElementInfoRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{48}
+	return file_atomos_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *CosmosRemoteGetElementInfoRsp) GetAtomsNum() uint64 {
@@ -3214,7 +3350,7 @@ type CosmosRemoteSpawnAtomReq struct {
 
 func (x *CosmosRemoteSpawnAtomReq) Reset() {
 	*x = CosmosRemoteSpawnAtomReq{}
-	mi := &file_atomos_proto_msgTypes[49]
+	mi := &file_atomos_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3226,7 +3362,7 @@ func (x *CosmosRemoteSpawnAtomReq) String() string {
 func (*CosmosRemoteSpawnAtomReq) ProtoMessage() {}
 
 func (x *CosmosRemoteSpawnAtomReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[49]
+	mi := &file_atomos_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3239,7 +3375,7 @@ func (x *CosmosRemoteSpawnAtomReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteSpawnAtomReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSpawnAtomReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{49}
+	return file_atomos_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CosmosRemoteSpawnAtomReq) GetCallerId() *IDInfo {
@@ -3287,7 +3423,7 @@ type CosmosRemoteSpawnAtomRsp struct {
 
 func (x *CosmosRemoteSpawnAtomRsp) Reset() {
 	*x = CosmosRemoteSpawnAtomRsp{}
-	mi := &file_atomos_proto_msgTypes[50]
+	mi := &file_atomos_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +3435,7 @@ func (x *CosmosRemoteSpawnAtomRsp) String() string {
 func (*CosmosRemoteSpawnAtomRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteSpawnAtomRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[50]
+	mi := &file_atomos_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +3448,7 @@ func (x *CosmosRemoteSpawnAtomRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteSpawnAtomRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSpawnAtomRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{50}
+	return file_atomos_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *CosmosRemoteSpawnAtomRsp) GetId() *IDInfo {
@@ -3343,7 +3479,7 @@ type CosmosRemoteSyncMessagingByNameReq struct {
 
 func (x *CosmosRemoteSyncMessagingByNameReq) Reset() {
 	*x = CosmosRemoteSyncMessagingByNameReq{}
-	mi := &file_atomos_proto_msgTypes[51]
+	mi := &file_atomos_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3355,7 +3491,7 @@ func (x *CosmosRemoteSyncMessagingByNameReq) String() string {
 func (*CosmosRemoteSyncMessagingByNameReq) ProtoMessage() {}
 
 func (x *CosmosRemoteSyncMessagingByNameReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[51]
+	mi := &file_atomos_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3368,7 +3504,7 @@ func (x *CosmosRemoteSyncMessagingByNameReq) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CosmosRemoteSyncMessagingByNameReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSyncMessagingByNameReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{51}
+	return file_atomos_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *CosmosRemoteSyncMessagingByNameReq) GetCallerId() *IDInfo {
@@ -3416,7 +3552,7 @@ type CosmosRemoteSyncMessagingByNameRsp struct {
 
 func (x *CosmosRemoteSyncMessagingByNameRsp) Reset() {
 	*x = CosmosRemoteSyncMessagingByNameRsp{}
-	mi := &file_atomos_proto_msgTypes[52]
+	mi := &file_atomos_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3428,7 +3564,7 @@ func (x *CosmosRemoteSyncMessagingByNameRsp) String() string {
 func (*CosmosRemoteSyncMessagingByNameRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteSyncMessagingByNameRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[52]
+	mi := &file_atomos_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3441,7 +3577,7 @@ func (x *CosmosRemoteSyncMessagingByNameRsp) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CosmosRemoteSyncMessagingByNameRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSyncMessagingByNameRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{52}
+	return file_atomos_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CosmosRemoteSyncMessagingByNameRsp) GetReply() *anypb.Any {
@@ -3475,7 +3611,7 @@ type CosmosRemoteAsyncMessagingByNameReq struct {
 
 func (x *CosmosRemoteAsyncMessagingByNameReq) Reset() {
 	*x = CosmosRemoteAsyncMessagingByNameReq{}
-	mi := &file_atomos_proto_msgTypes[53]
+	mi := &file_atomos_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3487,7 +3623,7 @@ func (x *CosmosRemoteAsyncMessagingByNameReq) String() string {
 func (*CosmosRemoteAsyncMessagingByNameReq) ProtoMessage() {}
 
 func (x *CosmosRemoteAsyncMessagingByNameReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[53]
+	mi := &file_atomos_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3500,7 +3636,7 @@ func (x *CosmosRemoteAsyncMessagingByNameReq) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CosmosRemoteAsyncMessagingByNameReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteAsyncMessagingByNameReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{53}
+	return file_atomos_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CosmosRemoteAsyncMessagingByNameReq) GetCallerId() *IDInfo {
@@ -3568,7 +3704,7 @@ type CosmosRemoteAsyncMessagingByNameRsp struct {
 
 func (x *CosmosRemoteAsyncMessagingByNameRsp) Reset() {
 	*x = CosmosRemoteAsyncMessagingByNameRsp{}
-	mi := &file_atomos_proto_msgTypes[54]
+	mi := &file_atomos_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3580,7 +3716,7 @@ func (x *CosmosRemoteAsyncMessagingByNameRsp) String() string {
 func (*CosmosRemoteAsyncMessagingByNameRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteAsyncMessagingByNameRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[54]
+	mi := &file_atomos_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3593,7 +3729,7 @@ func (x *CosmosRemoteAsyncMessagingByNameRsp) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CosmosRemoteAsyncMessagingByNameRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteAsyncMessagingByNameRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{54}
+	return file_atomos_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *CosmosRemoteAsyncMessagingByNameRsp) GetError() *Error {
@@ -3619,7 +3755,7 @@ type CosmosRemoteAsyncOnMessageCallbackReq struct {
 
 func (x *CosmosRemoteAsyncOnMessageCallbackReq) Reset() {
 	*x = CosmosRemoteAsyncOnMessageCallbackReq{}
-	mi := &file_atomos_proto_msgTypes[55]
+	mi := &file_atomos_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3631,7 +3767,7 @@ func (x *CosmosRemoteAsyncOnMessageCallbackReq) String() string {
 func (*CosmosRemoteAsyncOnMessageCallbackReq) ProtoMessage() {}
 
 func (x *CosmosRemoteAsyncOnMessageCallbackReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[55]
+	mi := &file_atomos_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3644,7 +3780,7 @@ func (x *CosmosRemoteAsyncOnMessageCallbackReq) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use CosmosRemoteAsyncOnMessageCallbackReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteAsyncOnMessageCallbackReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{55}
+	return file_atomos_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *CosmosRemoteAsyncOnMessageCallbackReq) GetToId() *IDInfo {
@@ -3705,7 +3841,7 @@ type CosmosRemoteAsyncOnMessageCallbackRsp struct {
 
 func (x *CosmosRemoteAsyncOnMessageCallbackRsp) Reset() {
 	*x = CosmosRemoteAsyncOnMessageCallbackRsp{}
-	mi := &file_atomos_proto_msgTypes[56]
+	mi := &file_atomos_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3717,7 +3853,7 @@ func (x *CosmosRemoteAsyncOnMessageCallbackRsp) String() string {
 func (*CosmosRemoteAsyncOnMessageCallbackRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteAsyncOnMessageCallbackRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[56]
+	mi := &file_atomos_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3730,7 +3866,7 @@ func (x *CosmosRemoteAsyncOnMessageCallbackRsp) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use CosmosRemoteAsyncOnMessageCallbackRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteAsyncOnMessageCallbackRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{56}
+	return file_atomos_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *CosmosRemoteAsyncOnMessageCallbackRsp) GetError() *Error {
@@ -3752,7 +3888,7 @@ type CosmosRemoteKillAtomReq struct {
 
 func (x *CosmosRemoteKillAtomReq) Reset() {
 	*x = CosmosRemoteKillAtomReq{}
-	mi := &file_atomos_proto_msgTypes[57]
+	mi := &file_atomos_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3764,7 +3900,7 @@ func (x *CosmosRemoteKillAtomReq) String() string {
 func (*CosmosRemoteKillAtomReq) ProtoMessage() {}
 
 func (x *CosmosRemoteKillAtomReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[57]
+	mi := &file_atomos_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3777,7 +3913,7 @@ func (x *CosmosRemoteKillAtomReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteKillAtomReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteKillAtomReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{57}
+	return file_atomos_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *CosmosRemoteKillAtomReq) GetCallerId() *IDInfo {
@@ -3810,7 +3946,7 @@ type CosmosRemoteKillAtomRsp struct {
 
 func (x *CosmosRemoteKillAtomRsp) Reset() {
 	*x = CosmosRemoteKillAtomRsp{}
-	mi := &file_atomos_proto_msgTypes[58]
+	mi := &file_atomos_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3822,7 +3958,7 @@ func (x *CosmosRemoteKillAtomRsp) String() string {
 func (*CosmosRemoteKillAtomRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteKillAtomRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[58]
+	mi := &file_atomos_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3835,7 +3971,7 @@ func (x *CosmosRemoteKillAtomRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteKillAtomRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteKillAtomRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{58}
+	return file_atomos_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *CosmosRemoteKillAtomRsp) GetError() *Error {
@@ -3858,7 +3994,7 @@ type CosmosRemoteElementBroadcastReq struct {
 
 func (x *CosmosRemoteElementBroadcastReq) Reset() {
 	*x = CosmosRemoteElementBroadcastReq{}
-	mi := &file_atomos_proto_msgTypes[59]
+	mi := &file_atomos_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3870,7 +4006,7 @@ func (x *CosmosRemoteElementBroadcastReq) String() string {
 func (*CosmosRemoteElementBroadcastReq) ProtoMessage() {}
 
 func (x *CosmosRemoteElementBroadcastReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[59]
+	mi := &file_atomos_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3883,7 +4019,7 @@ func (x *CosmosRemoteElementBroadcastReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteElementBroadcastReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteElementBroadcastReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{59}
+	return file_atomos_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *CosmosRemoteElementBroadcastReq) GetCallerId() *IDInfo {
@@ -3923,7 +4059,7 @@ type CosmosRemoteElementBroadcastRsp struct {
 
 func (x *CosmosRemoteElementBroadcastRsp) Reset() {
 	*x = CosmosRemoteElementBroadcastRsp{}
-	mi := &file_atomos_proto_msgTypes[60]
+	mi := &file_atomos_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3935,7 +4071,7 @@ func (x *CosmosRemoteElementBroadcastRsp) String() string {
 func (*CosmosRemoteElementBroadcastRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteElementBroadcastRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[60]
+	mi := &file_atomos_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3948,7 +4084,7 @@ func (x *CosmosRemoteElementBroadcastRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteElementBroadcastRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteElementBroadcastRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{60}
+	return file_atomos_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *CosmosRemoteElementBroadcastRsp) GetError() *Error {
@@ -3976,7 +4112,7 @@ type CosmosArgs struct {
 
 func (x *CosmosArgs) Reset() {
 	*x = CosmosArgs{}
-	mi := &file_atomos_proto_msgTypes[61]
+	mi := &file_atomos_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3988,7 +4124,7 @@ func (x *CosmosArgs) String() string {
 func (*CosmosArgs) ProtoMessage() {}
 
 func (x *CosmosArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[61]
+	mi := &file_atomos_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4001,7 +4137,7 @@ func (x *CosmosArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosArgs.ProtoReflect.Descriptor instead.
 func (*CosmosArgs) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{61}
+	return file_atomos_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *CosmosArgs) GetTypes() []int32 {
@@ -4066,7 +4202,7 @@ type CosmosRemoteSpawnAtomControlledReq struct {
 
 func (x *CosmosRemoteSpawnAtomControlledReq) Reset() {
 	*x = CosmosRemoteSpawnAtomControlledReq{}
-	mi := &file_atomos_proto_msgTypes[62]
+	mi := &file_atomos_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4078,7 +4214,7 @@ func (x *CosmosRemoteSpawnAtomControlledReq) String() string {
 func (*CosmosRemoteSpawnAtomControlledReq) ProtoMessage() {}
 
 func (x *CosmosRemoteSpawnAtomControlledReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[62]
+	mi := &file_atomos_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4091,7 +4227,7 @@ func (x *CosmosRemoteSpawnAtomControlledReq) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CosmosRemoteSpawnAtomControlledReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSpawnAtomControlledReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{62}
+	return file_atomos_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *CosmosRemoteSpawnAtomControlledReq) GetCallerId() *IDInfo {
@@ -4167,7 +4303,7 @@ type CosmosRemoteSpawnAtomControlledRsp struct {
 
 func (x *CosmosRemoteSpawnAtomControlledRsp) Reset() {
 	*x = CosmosRemoteSpawnAtomControlledRsp{}
-	mi := &file_atomos_proto_msgTypes[63]
+	mi := &file_atomos_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4179,7 +4315,7 @@ func (x *CosmosRemoteSpawnAtomControlledRsp) String() string {
 func (*CosmosRemoteSpawnAtomControlledRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteSpawnAtomControlledRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[63]
+	mi := &file_atomos_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4192,7 +4328,7 @@ func (x *CosmosRemoteSpawnAtomControlledRsp) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CosmosRemoteSpawnAtomControlledRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteSpawnAtomControlledRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{63}
+	return file_atomos_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *CosmosRemoteSpawnAtomControlledRsp) GetError() *Error {
@@ -4224,7 +4360,7 @@ type CosmosRemoteHaltAtomControlledReq struct {
 
 func (x *CosmosRemoteHaltAtomControlledReq) Reset() {
 	*x = CosmosRemoteHaltAtomControlledReq{}
-	mi := &file_atomos_proto_msgTypes[64]
+	mi := &file_atomos_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4236,7 +4372,7 @@ func (x *CosmosRemoteHaltAtomControlledReq) String() string {
 func (*CosmosRemoteHaltAtomControlledReq) ProtoMessage() {}
 
 func (x *CosmosRemoteHaltAtomControlledReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[64]
+	mi := &file_atomos_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4249,7 +4385,7 @@ func (x *CosmosRemoteHaltAtomControlledReq) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CosmosRemoteHaltAtomControlledReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteHaltAtomControlledReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{64}
+	return file_atomos_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *CosmosRemoteHaltAtomControlledReq) GetCallerId() *IDInfo {
@@ -4311,7 +4447,7 @@ type CosmosRemoteHaltAtomControlledRsp struct {
 
 func (x *CosmosRemoteHaltAtomControlledRsp) Reset() {
 	*x = CosmosRemoteHaltAtomControlledRsp{}
-	mi := &file_atomos_proto_msgTypes[65]
+	mi := &file_atomos_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4323,7 +4459,7 @@ func (x *CosmosRemoteHaltAtomControlledRsp) String() string {
 func (*CosmosRemoteHaltAtomControlledRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteHaltAtomControlledRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[65]
+	mi := &file_atomos_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4336,7 +4472,7 @@ func (x *CosmosRemoteHaltAtomControlledRsp) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CosmosRemoteHaltAtomControlledRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteHaltAtomControlledRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{65}
+	return file_atomos_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *CosmosRemoteHaltAtomControlledRsp) GetError() *Error {
@@ -4362,7 +4498,7 @@ type CosmosRemoteLookupAtomReq struct {
 
 func (x *CosmosRemoteLookupAtomReq) Reset() {
 	*x = CosmosRemoteLookupAtomReq{}
-	mi := &file_atomos_proto_msgTypes[66]
+	mi := &file_atomos_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4374,7 +4510,7 @@ func (x *CosmosRemoteLookupAtomReq) String() string {
 func (*CosmosRemoteLookupAtomReq) ProtoMessage() {}
 
 func (x *CosmosRemoteLookupAtomReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[66]
+	mi := &file_atomos_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4387,7 +4523,7 @@ func (x *CosmosRemoteLookupAtomReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteLookupAtomReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteLookupAtomReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{66}
+	return file_atomos_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *CosmosRemoteLookupAtomReq) GetId() *IDInfo {
@@ -4410,7 +4546,7 @@ type CosmosRemoteLookupAtomRsp struct {
 
 func (x *CosmosRemoteLookupAtomRsp) Reset() {
 	*x = CosmosRemoteLookupAtomRsp{}
-	mi := &file_atomos_proto_msgTypes[67]
+	mi := &file_atomos_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4422,7 +4558,7 @@ func (x *CosmosRemoteLookupAtomRsp) String() string {
 func (*CosmosRemoteLookupAtomRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteLookupAtomRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[67]
+	mi := &file_atomos_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4435,7 +4571,7 @@ func (x *CosmosRemoteLookupAtomRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteLookupAtomRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteLookupAtomRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{67}
+	return file_atomos_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *CosmosRemoteLookupAtomRsp) GetError() *Error {
@@ -4482,7 +4618,7 @@ type CosmosRemoteGetAtomOperationReq struct {
 
 func (x *CosmosRemoteGetAtomOperationReq) Reset() {
 	*x = CosmosRemoteGetAtomOperationReq{}
-	mi := &file_atomos_proto_msgTypes[68]
+	mi := &file_atomos_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4494,7 +4630,7 @@ func (x *CosmosRemoteGetAtomOperationReq) String() string {
 func (*CosmosRemoteGetAtomOperationReq) ProtoMessage() {}
 
 func (x *CosmosRemoteGetAtomOperationReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[68]
+	mi := &file_atomos_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4507,7 +4643,7 @@ func (x *CosmosRemoteGetAtomOperationReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetAtomOperationReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetAtomOperationReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{68}
+	return file_atomos_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *CosmosRemoteGetAtomOperationReq) GetOperationId() string {
@@ -4527,7 +4663,7 @@ type CosmosRemoteGetAtomOperationRsp struct {
 
 func (x *CosmosRemoteGetAtomOperationRsp) Reset() {
 	*x = CosmosRemoteGetAtomOperationRsp{}
-	mi := &file_atomos_proto_msgTypes[69]
+	mi := &file_atomos_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4539,7 +4675,7 @@ func (x *CosmosRemoteGetAtomOperationRsp) String() string {
 func (*CosmosRemoteGetAtomOperationRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteGetAtomOperationRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[69]
+	mi := &file_atomos_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4552,7 +4688,7 @@ func (x *CosmosRemoteGetAtomOperationRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteGetAtomOperationRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteGetAtomOperationRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{69}
+	return file_atomos_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CosmosRemoteGetAtomOperationRsp) GetError() *Error {
@@ -4586,7 +4722,7 @@ type CosmosRemoteTakeoverAtomReq struct {
 
 func (x *CosmosRemoteTakeoverAtomReq) Reset() {
 	*x = CosmosRemoteTakeoverAtomReq{}
-	mi := &file_atomos_proto_msgTypes[70]
+	mi := &file_atomos_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4598,7 +4734,7 @@ func (x *CosmosRemoteTakeoverAtomReq) String() string {
 func (*CosmosRemoteTakeoverAtomReq) ProtoMessage() {}
 
 func (x *CosmosRemoteTakeoverAtomReq) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[70]
+	mi := &file_atomos_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4611,7 +4747,7 @@ func (x *CosmosRemoteTakeoverAtomReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteTakeoverAtomReq.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteTakeoverAtomReq) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{70}
+	return file_atomos_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *CosmosRemoteTakeoverAtomReq) GetCallerId() *IDInfo {
@@ -4687,7 +4823,7 @@ type CosmosRemoteTakeoverAtomRsp struct {
 
 func (x *CosmosRemoteTakeoverAtomRsp) Reset() {
 	*x = CosmosRemoteTakeoverAtomRsp{}
-	mi := &file_atomos_proto_msgTypes[71]
+	mi := &file_atomos_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4699,7 +4835,7 @@ func (x *CosmosRemoteTakeoverAtomRsp) String() string {
 func (*CosmosRemoteTakeoverAtomRsp) ProtoMessage() {}
 
 func (x *CosmosRemoteTakeoverAtomRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_atomos_proto_msgTypes[71]
+	mi := &file_atomos_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4712,7 +4848,7 @@ func (x *CosmosRemoteTakeoverAtomRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CosmosRemoteTakeoverAtomRsp.ProtoReflect.Descriptor instead.
 func (*CosmosRemoteTakeoverAtomRsp) Descriptor() ([]byte, []int) {
-	return file_atomos_proto_rawDescGZIP(), []int{71}
+	return file_atomos_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *CosmosRemoteTakeoverAtomRsp) GetError() *Error {
@@ -4750,7 +4886,7 @@ var File_atomos_proto protoreflect.FileDescriptor
 
 const file_atomos_proto_rawDesc = "" +
 	"\n" +
-	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/descriptor.proto\"\x98\x02\n" +
+	"\fatomos.proto\x12\x06atomos\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/descriptor.proto\"\xb3\x02\n" +
 	"\x06IDInfo\x12\"\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x0e.atomos.IDTypeR\x04type\x12\x16\n" +
 	"\x06cosmos\x18\x02 \x01(\tR\x06cosmos\x12\x12\n" +
@@ -4764,7 +4900,8 @@ const file_atomos_proto_rawDesc = "" +
 	"\n" +
 	"startup_id\x18\t \x01(\x04R\tstartupId\x12\x14\n" +
 	"\x05fence\x18\n" +
-	" \x01(\x04R\x05fence\"\x9b\x01\n" +
+	" \x01(\x04R\x05fence\x12\x19\n" +
+	"\bshard_id\x18\v \x01(\rR\ashardId\"\x9b\x01\n" +
 	"\aLogMail\x12\x1e\n" +
 	"\x02id\x18\x01 \x01(\v2\x0e.atomos.IDInfoR\x02id\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12&\n" +
@@ -4917,7 +5054,18 @@ const file_atomos_proto_rawDesc = "" +
 	"\x13AtomOwnershipRecord\x127\n" +
 	"\townership\x18\x01 \x01(\v2\x19.atomos.AtomOwnershipInfoR\townership\x12\x19\n" +
 	"\blease_id\x18\x02 \x01(\x03R\aleaseId\x12!\n" +
-	"\foperation_id\x18\x03 \x01(\tR\voperationId\"\x81\x01\n" +
+	"\foperation_id\x18\x03 \x01(\tR\voperationId\"P\n" +
+	"\x14ShardLifecycleRecord\x12\x19\n" +
+	"\bshard_id\x18\x01 \x01(\rR\ashardId\x12\x1d\n" +
+	"\n" +
+	"next_fence\x18\x02 \x01(\x04R\tnextFence\"\x95\x01\n" +
+	"\x14ShardOwnershipRecord\x12\x19\n" +
+	"\bshard_id\x18\x01 \x01(\rR\ashardId\x12\x14\n" +
+	"\x05fence\x18\x02 \x01(\x04R\x05fence\x12\x1d\n" +
+	"\n" +
+	"startup_id\x18\x03 \x01(\x04R\tstartupId\x12\x12\n" +
+	"\x04node\x18\x04 \x01(\tR\x04node\x12\x19\n" +
+	"\blease_id\x18\x05 \x01(\x03R\aleaseId\"\x81\x01\n" +
 	"\x13AtomOperationRecord\x127\n" +
 	"\toperation\x18\x01 \x01(\v2\x19.atomos.AtomOperationInfoR\toperation\x121\n" +
 	"\x06result\x18\x02 \x01(\v2\x19.atomos.AtomControlResultR\x06result\"\x1b\n" +
@@ -5153,7 +5301,7 @@ func file_atomos_proto_rawDescGZIP() []byte {
 }
 
 var file_atomos_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_atomos_proto_msgTypes = make([]protoimpl.MessageInfo, 75)
+var file_atomos_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
 var file_atomos_proto_goTypes = []any{
 	(IDType)(0),                                   // 0: atomos.IDType
 	(LogLevel)(0),                                 // 1: atomos.LogLevel
@@ -5198,73 +5346,75 @@ var file_atomos_proto_goTypes = []any{
 	(*AtomControlResult)(nil),                     // 40: atomos.AtomControlResult
 	(*AtomLifecycleRecord)(nil),                   // 41: atomos.AtomLifecycleRecord
 	(*AtomOwnershipRecord)(nil),                   // 42: atomos.AtomOwnershipRecord
-	(*AtomOperationRecord)(nil),                   // 43: atomos.AtomOperationRecord
-	(*CosmosRemoteTryKillingReq)(nil),             // 44: atomos.CosmosRemoteTryKillingReq
-	(*CosmosRemoteTryKillingRsp)(nil),             // 45: atomos.CosmosRemoteTryKillingRsp
-	(*CosmosRemoteDrainNodeReq)(nil),              // 46: atomos.CosmosRemoteDrainNodeReq
-	(*CosmosRemoteDrainNodeRsp)(nil),              // 47: atomos.CosmosRemoteDrainNodeRsp
-	(*CosmosRemoteGetAtomIDReq)(nil),              // 48: atomos.CosmosRemoteGetAtomIDReq
-	(*CosmosRemoteGetAtomIDRsp)(nil),              // 49: atomos.CosmosRemoteGetAtomIDRsp
-	(*CosmosRemoteGetIDStateReq)(nil),             // 50: atomos.CosmosRemoteGetIDStateReq
-	(*CosmosRemoteGetIDStateRsp)(nil),             // 51: atomos.CosmosRemoteGetIDStateRsp
-	(*CosmosRemoteGetIDIdleTimeReq)(nil),          // 52: atomos.CosmosRemoteGetIDIdleTimeReq
-	(*CosmosRemoteGetIDIdleTimeRsp)(nil),          // 53: atomos.CosmosRemoteGetIDIdleTimeRsp
-	(*CosmosRemoteGetElementInfoReq)(nil),         // 54: atomos.CosmosRemoteGetElementInfoReq
-	(*CosmosRemoteGetElementInfoRsp)(nil),         // 55: atomos.CosmosRemoteGetElementInfoRsp
-	(*CosmosRemoteSpawnAtomReq)(nil),              // 56: atomos.CosmosRemoteSpawnAtomReq
-	(*CosmosRemoteSpawnAtomRsp)(nil),              // 57: atomos.CosmosRemoteSpawnAtomRsp
-	(*CosmosRemoteSyncMessagingByNameReq)(nil),    // 58: atomos.CosmosRemoteSyncMessagingByNameReq
-	(*CosmosRemoteSyncMessagingByNameRsp)(nil),    // 59: atomos.CosmosRemoteSyncMessagingByNameRsp
-	(*CosmosRemoteAsyncMessagingByNameReq)(nil),   // 60: atomos.CosmosRemoteAsyncMessagingByNameReq
-	(*CosmosRemoteAsyncMessagingByNameRsp)(nil),   // 61: atomos.CosmosRemoteAsyncMessagingByNameRsp
-	(*CosmosRemoteAsyncOnMessageCallbackReq)(nil), // 62: atomos.CosmosRemoteAsyncOnMessageCallbackReq
-	(*CosmosRemoteAsyncOnMessageCallbackRsp)(nil), // 63: atomos.CosmosRemoteAsyncOnMessageCallbackRsp
-	(*CosmosRemoteKillAtomReq)(nil),               // 64: atomos.CosmosRemoteKillAtomReq
-	(*CosmosRemoteKillAtomRsp)(nil),               // 65: atomos.CosmosRemoteKillAtomRsp
-	(*CosmosRemoteElementBroadcastReq)(nil),       // 66: atomos.CosmosRemoteElementBroadcastReq
-	(*CosmosRemoteElementBroadcastRsp)(nil),       // 67: atomos.CosmosRemoteElementBroadcastRsp
-	(*CosmosArgs)(nil),                            // 68: atomos.CosmosArgs
-	(*CosmosRemoteSpawnAtomControlledReq)(nil),    // 69: atomos.CosmosRemoteSpawnAtomControlledReq
-	(*CosmosRemoteSpawnAtomControlledRsp)(nil),    // 70: atomos.CosmosRemoteSpawnAtomControlledRsp
-	(*CosmosRemoteHaltAtomControlledReq)(nil),     // 71: atomos.CosmosRemoteHaltAtomControlledReq
-	(*CosmosRemoteHaltAtomControlledRsp)(nil),     // 72: atomos.CosmosRemoteHaltAtomControlledRsp
-	(*CosmosRemoteLookupAtomReq)(nil),             // 73: atomos.CosmosRemoteLookupAtomReq
-	(*CosmosRemoteLookupAtomRsp)(nil),             // 74: atomos.CosmosRemoteLookupAtomRsp
-	(*CosmosRemoteGetAtomOperationReq)(nil),       // 75: atomos.CosmosRemoteGetAtomOperationReq
-	(*CosmosRemoteGetAtomOperationRsp)(nil),       // 76: atomos.CosmosRemoteGetAtomOperationRsp
-	(*CosmosRemoteTakeoverAtomReq)(nil),           // 77: atomos.CosmosRemoteTakeoverAtomReq
-	(*CosmosRemoteTakeoverAtomRsp)(nil),           // 78: atomos.CosmosRemoteTakeoverAtomRsp
-	nil,                                           // 79: atomos.Config.CustomizeEntry
-	nil,                                           // 80: atomos.ElementConfig.MessagesEntry
-	nil,                                           // 81: atomos.CosmosNodeVersionInfo.ElementsEntry
-	(*timestamppb.Timestamp)(nil),                 // 82: google.protobuf.Timestamp
-	(*anypb.Any)(nil),                             // 83: google.protobuf.Any
-	(*descriptorpb.MethodOptions)(nil),            // 84: google.protobuf.MethodOptions
+	(*ShardLifecycleRecord)(nil),                  // 43: atomos.ShardLifecycleRecord
+	(*ShardOwnershipRecord)(nil),                  // 44: atomos.ShardOwnershipRecord
+	(*AtomOperationRecord)(nil),                   // 45: atomos.AtomOperationRecord
+	(*CosmosRemoteTryKillingReq)(nil),             // 46: atomos.CosmosRemoteTryKillingReq
+	(*CosmosRemoteTryKillingRsp)(nil),             // 47: atomos.CosmosRemoteTryKillingRsp
+	(*CosmosRemoteDrainNodeReq)(nil),              // 48: atomos.CosmosRemoteDrainNodeReq
+	(*CosmosRemoteDrainNodeRsp)(nil),              // 49: atomos.CosmosRemoteDrainNodeRsp
+	(*CosmosRemoteGetAtomIDReq)(nil),              // 50: atomos.CosmosRemoteGetAtomIDReq
+	(*CosmosRemoteGetAtomIDRsp)(nil),              // 51: atomos.CosmosRemoteGetAtomIDRsp
+	(*CosmosRemoteGetIDStateReq)(nil),             // 52: atomos.CosmosRemoteGetIDStateReq
+	(*CosmosRemoteGetIDStateRsp)(nil),             // 53: atomos.CosmosRemoteGetIDStateRsp
+	(*CosmosRemoteGetIDIdleTimeReq)(nil),          // 54: atomos.CosmosRemoteGetIDIdleTimeReq
+	(*CosmosRemoteGetIDIdleTimeRsp)(nil),          // 55: atomos.CosmosRemoteGetIDIdleTimeRsp
+	(*CosmosRemoteGetElementInfoReq)(nil),         // 56: atomos.CosmosRemoteGetElementInfoReq
+	(*CosmosRemoteGetElementInfoRsp)(nil),         // 57: atomos.CosmosRemoteGetElementInfoRsp
+	(*CosmosRemoteSpawnAtomReq)(nil),              // 58: atomos.CosmosRemoteSpawnAtomReq
+	(*CosmosRemoteSpawnAtomRsp)(nil),              // 59: atomos.CosmosRemoteSpawnAtomRsp
+	(*CosmosRemoteSyncMessagingByNameReq)(nil),    // 60: atomos.CosmosRemoteSyncMessagingByNameReq
+	(*CosmosRemoteSyncMessagingByNameRsp)(nil),    // 61: atomos.CosmosRemoteSyncMessagingByNameRsp
+	(*CosmosRemoteAsyncMessagingByNameReq)(nil),   // 62: atomos.CosmosRemoteAsyncMessagingByNameReq
+	(*CosmosRemoteAsyncMessagingByNameRsp)(nil),   // 63: atomos.CosmosRemoteAsyncMessagingByNameRsp
+	(*CosmosRemoteAsyncOnMessageCallbackReq)(nil), // 64: atomos.CosmosRemoteAsyncOnMessageCallbackReq
+	(*CosmosRemoteAsyncOnMessageCallbackRsp)(nil), // 65: atomos.CosmosRemoteAsyncOnMessageCallbackRsp
+	(*CosmosRemoteKillAtomReq)(nil),               // 66: atomos.CosmosRemoteKillAtomReq
+	(*CosmosRemoteKillAtomRsp)(nil),               // 67: atomos.CosmosRemoteKillAtomRsp
+	(*CosmosRemoteElementBroadcastReq)(nil),       // 68: atomos.CosmosRemoteElementBroadcastReq
+	(*CosmosRemoteElementBroadcastRsp)(nil),       // 69: atomos.CosmosRemoteElementBroadcastRsp
+	(*CosmosArgs)(nil),                            // 70: atomos.CosmosArgs
+	(*CosmosRemoteSpawnAtomControlledReq)(nil),    // 71: atomos.CosmosRemoteSpawnAtomControlledReq
+	(*CosmosRemoteSpawnAtomControlledRsp)(nil),    // 72: atomos.CosmosRemoteSpawnAtomControlledRsp
+	(*CosmosRemoteHaltAtomControlledReq)(nil),     // 73: atomos.CosmosRemoteHaltAtomControlledReq
+	(*CosmosRemoteHaltAtomControlledRsp)(nil),     // 74: atomos.CosmosRemoteHaltAtomControlledRsp
+	(*CosmosRemoteLookupAtomReq)(nil),             // 75: atomos.CosmosRemoteLookupAtomReq
+	(*CosmosRemoteLookupAtomRsp)(nil),             // 76: atomos.CosmosRemoteLookupAtomRsp
+	(*CosmosRemoteGetAtomOperationReq)(nil),       // 77: atomos.CosmosRemoteGetAtomOperationReq
+	(*CosmosRemoteGetAtomOperationRsp)(nil),       // 78: atomos.CosmosRemoteGetAtomOperationRsp
+	(*CosmosRemoteTakeoverAtomReq)(nil),           // 79: atomos.CosmosRemoteTakeoverAtomReq
+	(*CosmosRemoteTakeoverAtomRsp)(nil),           // 80: atomos.CosmosRemoteTakeoverAtomRsp
+	nil,                                           // 81: atomos.Config.CustomizeEntry
+	nil,                                           // 82: atomos.ElementConfig.MessagesEntry
+	nil,                                           // 83: atomos.CosmosNodeVersionInfo.ElementsEntry
+	(*timestamppb.Timestamp)(nil),                 // 84: google.protobuf.Timestamp
+	(*anypb.Any)(nil),                             // 85: google.protobuf.Any
+	(*descriptorpb.MethodOptions)(nil),            // 86: google.protobuf.MethodOptions
 }
 var file_atomos_proto_depIdxs = []int32{
 	0,   // 0: atomos.IDInfo.type:type_name -> atomos.IDType
 	7,   // 1: atomos.LogMail.id:type_name -> atomos.IDInfo
-	82,  // 2: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
+	84,  // 2: atomos.LogMail.time:type_name -> google.protobuf.Timestamp
 	1,   // 3: atomos.LogMail.level:type_name -> atomos.LogLevel
 	10,  // 4: atomos.Error.call_stacks:type_name -> atomos.ErrorCallerInfo
 	7,   // 5: atomos.ErrorCallerInfo.id:type_name -> atomos.IDInfo
 	1,   // 6: atomos.Config.log_level:type_name -> atomos.LogLevel
 	29,  // 7: atomos.Config.enable_cluster:type_name -> atomos.CosmosClusterConfig
-	79,  // 8: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
+	81,  // 8: atomos.Config.customize:type_name -> atomos.Config.CustomizeEntry
 	30,  // 9: atomos.CosmosClusterConfig.enable_cert:type_name -> atomos.CertConfig
-	80,  // 10: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
-	83,  // 11: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
-	83,  // 12: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
+	82,  // 10: atomos.ElementConfig.messages:type_name -> atomos.ElementConfig.MessagesEntry
+	85,  // 11: atomos.AtomMessageConfig.in:type_name -> google.protobuf.Any
+	85,  // 12: atomos.AtomMessageConfig.out:type_name -> google.protobuf.Any
 	7,   // 13: atomos.CosmosNodeVersionInfo.id:type_name -> atomos.IDInfo
 	2,   // 14: atomos.CosmosNodeVersionInfo.state:type_name -> atomos.ClusterNodeState
-	81,  // 15: atomos.CosmosNodeVersionInfo.elements:type_name -> atomos.CosmosNodeVersionInfo.ElementsEntry
+	83,  // 15: atomos.CosmosNodeVersionInfo.elements:type_name -> atomos.CosmosNodeVersionInfo.ElementsEntry
 	7,   // 16: atomos.AtomOwnershipInfo.id:type_name -> atomos.IDInfo
 	4,   // 17: atomos.AtomOwnershipInfo.state:type_name -> atomos.AtomLifecycleState
 	5,   // 18: atomos.AtomOperationInfo.kind:type_name -> atomos.AtomOperationKind
 	6,   // 19: atomos.AtomOperationInfo.state:type_name -> atomos.AtomOperationState
 	7,   // 20: atomos.AtomOperationInfo.id:type_name -> atomos.IDInfo
-	82,  // 21: atomos.AtomOperationInfo.start_time:type_name -> google.protobuf.Timestamp
-	82,  // 22: atomos.AtomOperationInfo.finish_time:type_name -> google.protobuf.Timestamp
+	84,  // 21: atomos.AtomOperationInfo.start_time:type_name -> google.protobuf.Timestamp
+	84,  // 22: atomos.AtomOperationInfo.finish_time:type_name -> google.protobuf.Timestamp
 	9,   // 23: atomos.AtomOperationInfo.error:type_name -> atomos.Error
 	7,   // 24: atomos.AtomControlResult.id:type_name -> atomos.IDInfo
 	38,  // 25: atomos.AtomControlResult.ownership:type_name -> atomos.AtomOwnershipInfo
@@ -5284,41 +5434,41 @@ var file_atomos_proto_depIdxs = []int32{
 	7,   // 39: atomos.CosmosRemoteGetIDIdleTimeReq.id:type_name -> atomos.IDInfo
 	9,   // 40: atomos.CosmosRemoteGetIDIdleTimeRsp.error:type_name -> atomos.Error
 	7,   // 41: atomos.CosmosRemoteSpawnAtomReq.caller_id:type_name -> atomos.IDInfo
-	83,  // 42: atomos.CosmosRemoteSpawnAtomReq.args:type_name -> google.protobuf.Any
-	68,  // 43: atomos.CosmosRemoteSpawnAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	85,  // 42: atomos.CosmosRemoteSpawnAtomReq.args:type_name -> google.protobuf.Any
+	70,  // 43: atomos.CosmosRemoteSpawnAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
 	7,   // 44: atomos.CosmosRemoteSpawnAtomRsp.id:type_name -> atomos.IDInfo
 	9,   // 45: atomos.CosmosRemoteSpawnAtomRsp.error:type_name -> atomos.Error
 	7,   // 46: atomos.CosmosRemoteSyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
 	7,   // 47: atomos.CosmosRemoteSyncMessagingByNameReq.to:type_name -> atomos.IDInfo
-	68,  // 48: atomos.CosmosRemoteSyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
-	83,  // 49: atomos.CosmosRemoteSyncMessagingByNameReq.args:type_name -> google.protobuf.Any
-	83,  // 50: atomos.CosmosRemoteSyncMessagingByNameRsp.reply:type_name -> google.protobuf.Any
+	70,  // 48: atomos.CosmosRemoteSyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
+	85,  // 49: atomos.CosmosRemoteSyncMessagingByNameReq.args:type_name -> google.protobuf.Any
+	85,  // 50: atomos.CosmosRemoteSyncMessagingByNameRsp.reply:type_name -> google.protobuf.Any
 	9,   // 51: atomos.CosmosRemoteSyncMessagingByNameRsp.error:type_name -> atomos.Error
 	7,   // 52: atomos.CosmosRemoteAsyncMessagingByNameReq.caller_id:type_name -> atomos.IDInfo
 	7,   // 53: atomos.CosmosRemoteAsyncMessagingByNameReq.to_id:type_name -> atomos.IDInfo
-	68,  // 54: atomos.CosmosRemoteAsyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
-	83,  // 55: atomos.CosmosRemoteAsyncMessagingByNameReq.args:type_name -> google.protobuf.Any
+	70,  // 54: atomos.CosmosRemoteAsyncMessagingByNameReq.cosmos_args:type_name -> atomos.CosmosArgs
+	85,  // 55: atomos.CosmosRemoteAsyncMessagingByNameReq.args:type_name -> google.protobuf.Any
 	9,   // 56: atomos.CosmosRemoteAsyncMessagingByNameRsp.error:type_name -> atomos.Error
 	7,   // 57: atomos.CosmosRemoteAsyncOnMessageCallbackReq.to_id:type_name -> atomos.IDInfo
 	7,   // 58: atomos.CosmosRemoteAsyncOnMessageCallbackReq.callback_id:type_name -> atomos.IDInfo
-	83,  // 59: atomos.CosmosRemoteAsyncOnMessageCallbackReq.args:type_name -> google.protobuf.Any
+	85,  // 59: atomos.CosmosRemoteAsyncOnMessageCallbackReq.args:type_name -> google.protobuf.Any
 	9,   // 60: atomos.CosmosRemoteAsyncOnMessageCallbackReq.error:type_name -> atomos.Error
 	9,   // 61: atomos.CosmosRemoteAsyncOnMessageCallbackRsp.error:type_name -> atomos.Error
 	7,   // 62: atomos.CosmosRemoteKillAtomReq.caller_id:type_name -> atomos.IDInfo
 	7,   // 63: atomos.CosmosRemoteKillAtomReq.id:type_name -> atomos.IDInfo
-	68,  // 64: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	70,  // 64: atomos.CosmosRemoteKillAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
 	9,   // 65: atomos.CosmosRemoteKillAtomRsp.error:type_name -> atomos.Error
 	7,   // 66: atomos.CosmosRemoteElementBroadcastReq.caller_id:type_name -> atomos.IDInfo
 	9,   // 67: atomos.CosmosRemoteElementBroadcastRsp.error:type_name -> atomos.Error
 	7,   // 68: atomos.CosmosRemoteSpawnAtomControlledReq.caller_id:type_name -> atomos.IDInfo
-	83,  // 69: atomos.CosmosRemoteSpawnAtomControlledReq.args:type_name -> google.protobuf.Any
-	68,  // 70: atomos.CosmosRemoteSpawnAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
+	85,  // 69: atomos.CosmosRemoteSpawnAtomControlledReq.args:type_name -> google.protobuf.Any
+	70,  // 70: atomos.CosmosRemoteSpawnAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
 	38,  // 71: atomos.CosmosRemoteSpawnAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
 	9,   // 72: atomos.CosmosRemoteSpawnAtomControlledRsp.error:type_name -> atomos.Error
 	40,  // 73: atomos.CosmosRemoteSpawnAtomControlledRsp.result:type_name -> atomos.AtomControlResult
 	7,   // 74: atomos.CosmosRemoteHaltAtomControlledReq.caller_id:type_name -> atomos.IDInfo
 	7,   // 75: atomos.CosmosRemoteHaltAtomControlledReq.id:type_name -> atomos.IDInfo
-	68,  // 76: atomos.CosmosRemoteHaltAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
+	70,  // 76: atomos.CosmosRemoteHaltAtomControlledReq.cosmos_args:type_name -> atomos.CosmosArgs
 	38,  // 77: atomos.CosmosRemoteHaltAtomControlledReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
 	9,   // 78: atomos.CosmosRemoteHaltAtomControlledRsp.error:type_name -> atomos.Error
 	40,  // 79: atomos.CosmosRemoteHaltAtomControlledRsp.result:type_name -> atomos.AtomControlResult
@@ -5334,48 +5484,48 @@ var file_atomos_proto_depIdxs = []int32{
 	7,   // 89: atomos.CosmosRemoteTakeoverAtomReq.id:type_name -> atomos.IDInfo
 	38,  // 90: atomos.CosmosRemoteTakeoverAtomReq.expected_ownership:type_name -> atomos.AtomOwnershipInfo
 	7,   // 91: atomos.CosmosRemoteTakeoverAtomReq.previous_id:type_name -> atomos.IDInfo
-	83,  // 92: atomos.CosmosRemoteTakeoverAtomReq.args:type_name -> google.protobuf.Any
-	68,  // 93: atomos.CosmosRemoteTakeoverAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
+	85,  // 92: atomos.CosmosRemoteTakeoverAtomReq.args:type_name -> google.protobuf.Any
+	70,  // 93: atomos.CosmosRemoteTakeoverAtomReq.cosmos_args:type_name -> atomos.CosmosArgs
 	9,   // 94: atomos.CosmosRemoteTakeoverAtomRsp.error:type_name -> atomos.Error
 	40,  // 95: atomos.CosmosRemoteTakeoverAtomRsp.result:type_name -> atomos.AtomControlResult
 	32,  // 96: atomos.ElementConfig.MessagesEntry.value:type_name -> atomos.AtomMessageConfig
 	7,   // 97: atomos.CosmosNodeVersionInfo.ElementsEntry.value:type_name -> atomos.IDInfo
-	84,  // 98: atomos.atomos_method:extendee -> google.protobuf.MethodOptions
+	86,  // 98: atomos.atomos_method:extendee -> google.protobuf.MethodOptions
 	3,   // 99: atomos.atomos_method:type_name -> atomos.AtomosMethodType
-	44,  // 100: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
-	46,  // 101: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
-	48,  // 102: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
-	50,  // 103: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
-	52,  // 104: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
-	54,  // 105: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
-	56,  // 106: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
-	58,  // 107: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
-	60,  // 108: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
-	62,  // 109: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
-	64,  // 110: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
-	66,  // 111: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
-	69,  // 112: atomos.AtomosRemoteService.SpawnAtomControlled:input_type -> atomos.CosmosRemoteSpawnAtomControlledReq
-	71,  // 113: atomos.AtomosRemoteService.HaltAtomControlled:input_type -> atomos.CosmosRemoteHaltAtomControlledReq
-	73,  // 114: atomos.AtomosRemoteService.LookupAtom:input_type -> atomos.CosmosRemoteLookupAtomReq
-	75,  // 115: atomos.AtomosRemoteService.GetAtomOperation:input_type -> atomos.CosmosRemoteGetAtomOperationReq
-	77,  // 116: atomos.AtomosRemoteService.TakeoverAtom:input_type -> atomos.CosmosRemoteTakeoverAtomReq
-	45,  // 117: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
-	47,  // 118: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
-	49,  // 119: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
-	51,  // 120: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
-	53,  // 121: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
-	55,  // 122: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
-	57,  // 123: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
-	59,  // 124: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
-	61,  // 125: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
-	63,  // 126: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
-	65,  // 127: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
-	67,  // 128: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
-	70,  // 129: atomos.AtomosRemoteService.SpawnAtomControlled:output_type -> atomos.CosmosRemoteSpawnAtomControlledRsp
-	72,  // 130: atomos.AtomosRemoteService.HaltAtomControlled:output_type -> atomos.CosmosRemoteHaltAtomControlledRsp
-	74,  // 131: atomos.AtomosRemoteService.LookupAtom:output_type -> atomos.CosmosRemoteLookupAtomRsp
-	76,  // 132: atomos.AtomosRemoteService.GetAtomOperation:output_type -> atomos.CosmosRemoteGetAtomOperationRsp
-	78,  // 133: atomos.AtomosRemoteService.TakeoverAtom:output_type -> atomos.CosmosRemoteTakeoverAtomRsp
+	46,  // 100: atomos.AtomosRemoteService.TryKilling:input_type -> atomos.CosmosRemoteTryKillingReq
+	48,  // 101: atomos.AtomosRemoteService.DrainNode:input_type -> atomos.CosmosRemoteDrainNodeReq
+	50,  // 102: atomos.AtomosRemoteService.GetAtomID:input_type -> atomos.CosmosRemoteGetAtomIDReq
+	52,  // 103: atomos.AtomosRemoteService.GetIDState:input_type -> atomos.CosmosRemoteGetIDStateReq
+	54,  // 104: atomos.AtomosRemoteService.GetIDIdleTime:input_type -> atomos.CosmosRemoteGetIDIdleTimeReq
+	56,  // 105: atomos.AtomosRemoteService.GetElementInfo:input_type -> atomos.CosmosRemoteGetElementInfoReq
+	58,  // 106: atomos.AtomosRemoteService.SpawnAtom:input_type -> atomos.CosmosRemoteSpawnAtomReq
+	60,  // 107: atomos.AtomosRemoteService.SyncMessagingByName:input_type -> atomos.CosmosRemoteSyncMessagingByNameReq
+	62,  // 108: atomos.AtomosRemoteService.AsyncMessagingByName:input_type -> atomos.CosmosRemoteAsyncMessagingByNameReq
+	64,  // 109: atomos.AtomosRemoteService.AsyncOnMessageCallback:input_type -> atomos.CosmosRemoteAsyncOnMessageCallbackReq
+	66,  // 110: atomos.AtomosRemoteService.KillAtom:input_type -> atomos.CosmosRemoteKillAtomReq
+	68,  // 111: atomos.AtomosRemoteService.ElementBroadcast:input_type -> atomos.CosmosRemoteElementBroadcastReq
+	71,  // 112: atomos.AtomosRemoteService.SpawnAtomControlled:input_type -> atomos.CosmosRemoteSpawnAtomControlledReq
+	73,  // 113: atomos.AtomosRemoteService.HaltAtomControlled:input_type -> atomos.CosmosRemoteHaltAtomControlledReq
+	75,  // 114: atomos.AtomosRemoteService.LookupAtom:input_type -> atomos.CosmosRemoteLookupAtomReq
+	77,  // 115: atomos.AtomosRemoteService.GetAtomOperation:input_type -> atomos.CosmosRemoteGetAtomOperationReq
+	79,  // 116: atomos.AtomosRemoteService.TakeoverAtom:input_type -> atomos.CosmosRemoteTakeoverAtomReq
+	47,  // 117: atomos.AtomosRemoteService.TryKilling:output_type -> atomos.CosmosRemoteTryKillingRsp
+	49,  // 118: atomos.AtomosRemoteService.DrainNode:output_type -> atomos.CosmosRemoteDrainNodeRsp
+	51,  // 119: atomos.AtomosRemoteService.GetAtomID:output_type -> atomos.CosmosRemoteGetAtomIDRsp
+	53,  // 120: atomos.AtomosRemoteService.GetIDState:output_type -> atomos.CosmosRemoteGetIDStateRsp
+	55,  // 121: atomos.AtomosRemoteService.GetIDIdleTime:output_type -> atomos.CosmosRemoteGetIDIdleTimeRsp
+	57,  // 122: atomos.AtomosRemoteService.GetElementInfo:output_type -> atomos.CosmosRemoteGetElementInfoRsp
+	59,  // 123: atomos.AtomosRemoteService.SpawnAtom:output_type -> atomos.CosmosRemoteSpawnAtomRsp
+	61,  // 124: atomos.AtomosRemoteService.SyncMessagingByName:output_type -> atomos.CosmosRemoteSyncMessagingByNameRsp
+	63,  // 125: atomos.AtomosRemoteService.AsyncMessagingByName:output_type -> atomos.CosmosRemoteAsyncMessagingByNameRsp
+	65,  // 126: atomos.AtomosRemoteService.AsyncOnMessageCallback:output_type -> atomos.CosmosRemoteAsyncOnMessageCallbackRsp
+	67,  // 127: atomos.AtomosRemoteService.KillAtom:output_type -> atomos.CosmosRemoteKillAtomRsp
+	69,  // 128: atomos.AtomosRemoteService.ElementBroadcast:output_type -> atomos.CosmosRemoteElementBroadcastRsp
+	72,  // 129: atomos.AtomosRemoteService.SpawnAtomControlled:output_type -> atomos.CosmosRemoteSpawnAtomControlledRsp
+	74,  // 130: atomos.AtomosRemoteService.HaltAtomControlled:output_type -> atomos.CosmosRemoteHaltAtomControlledRsp
+	76,  // 131: atomos.AtomosRemoteService.LookupAtom:output_type -> atomos.CosmosRemoteLookupAtomRsp
+	78,  // 132: atomos.AtomosRemoteService.GetAtomOperation:output_type -> atomos.CosmosRemoteGetAtomOperationRsp
+	80,  // 133: atomos.AtomosRemoteService.TakeoverAtom:output_type -> atomos.CosmosRemoteTakeoverAtomRsp
 	117, // [117:134] is the sub-list for method output_type
 	100, // [100:117] is the sub-list for method input_type
 	99,  // [99:100] is the sub-list for extension type_name
@@ -5394,7 +5544,7 @@ func file_atomos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atomos_proto_rawDesc), len(file_atomos_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   75,
+			NumMessages:   77,
 			NumExtensions: 1,
 			NumServices:   1,
 		},

@@ -21,7 +21,7 @@ type lifecycleOwnerSnapshot struct {
 }
 
 func (m *lifecycleManager) ownerPrefix() string {
-	return "/cosmos/" + lifecycleEscape(m.process.local.runnable.config.Cosmos) + "/lifecycle/atom/"
+	return "/cosmos/" + lifecycleEscape(m.process.local.runnable.config.Cosmos) + "/lifecycle/"
 }
 
 func (m *lifecycleManager) cacheOwnerPut(key string, record *AtomOwnershipRecord, modRevision int64) {
@@ -65,16 +65,26 @@ func (m *lifecycleManager) syncOwnerSnapshot(ctx context.Context) (int64, *Error
 	}
 	revision := rsp.Header.Revision
 	owners := make(map[string]lifecycleOwnerSnapshot, len(rsp.Kvs))
+	shards := make(map[string]lifecycleShardSnapshot)
 	for _, kv := range rsp.Kvs {
 		key := string(kv.Key)
 		if !strings.HasSuffix(key, "/owner") {
 			continue
 		}
-		record := &AtomOwnershipRecord{}
-		if err := proto.Unmarshal(kv.Value, record); err != nil {
-			return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode owner %s: %v", key, err)
+		switch {
+		case strings.Contains(key, "/lifecycle/atom/"):
+			record := &AtomOwnershipRecord{}
+			if err := proto.Unmarshal(kv.Value, record); err != nil {
+				return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode owner %s: %v", key, err)
+			}
+			owners[key] = lifecycleOwnerSnapshot{record: record, modRevision: kv.ModRevision}
+		case strings.Contains(key, "/lifecycle/shard/"):
+			record := &ShardOwnershipRecord{}
+			if err := proto.Unmarshal(kv.Value, record); err != nil {
+				return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode shard owner %s: %v", key, err)
+			}
+			shards[key] = lifecycleShardSnapshot{record: record, modRevision: kv.ModRevision}
 		}
-		owners[key] = lifecycleOwnerSnapshot{record: record, modRevision: kv.ModRevision}
 	}
 	m.ownerMu.Lock()
 	for key, current := range m.owners {
@@ -84,6 +94,14 @@ func (m *lifecycleManager) syncOwnerSnapshot(ctx context.Context) (int64, *Error
 	}
 	m.owners = owners
 	m.ownerMu.Unlock()
+	m.shardMu.Lock()
+	for key, current := range m.shards {
+		if current.modRevision > revision {
+			shards[key] = current
+		}
+	}
+	m.shards = shards
+	m.shardMu.Unlock()
 	m.watchHealthy.Store(true)
 	return revision, nil
 }
@@ -153,17 +171,36 @@ func (m *lifecycleManager) watchOwners(ctx context.Context, revision int64) {
 					if !strings.HasSuffix(key, "/owner") {
 						continue
 					}
+					isAtomOwner := strings.Contains(key, "/lifecycle/atom/")
+					isShardOwner := strings.Contains(key, "/lifecycle/shard/")
+					if !isAtomOwner && !isShardOwner {
+						continue
+					}
 					switch event.Type {
 					case mvccpb.PUT:
-						record := &AtomOwnershipRecord{}
-						if err := proto.Unmarshal(event.Kv.Value, record); err != nil {
-							m.watchHealthy.Store(false)
-							reconnect = true
-							continue
+						if isShardOwner {
+							record := &ShardOwnershipRecord{}
+							if err := proto.Unmarshal(event.Kv.Value, record); err != nil {
+								m.watchHealthy.Store(false)
+								reconnect = true
+								continue
+							}
+							m.cacheShardPut(key, record, event.Kv.ModRevision)
+						} else {
+							record := &AtomOwnershipRecord{}
+							if err := proto.Unmarshal(event.Kv.Value, record); err != nil {
+								m.watchHealthy.Store(false)
+								reconnect = true
+								continue
+							}
+							m.cacheOwnerPut(key, record, event.Kv.ModRevision)
 						}
-						m.cacheOwnerPut(key, record, event.Kv.ModRevision)
 					case mvccpb.DELETE:
-						m.cacheOwnerDelete(key, event.Kv.ModRevision)
+						if isShardOwner {
+							m.cacheShardDelete(key, event.Kv.ModRevision)
+						} else {
+							m.cacheOwnerDelete(key, event.Kv.ModRevision)
+						}
 					}
 				}
 				revision = rsp.Header.Revision

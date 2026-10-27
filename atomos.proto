@@ -25,6 +25,7 @@ message IDInfo {
   uint64 incarnation = 8;
   uint64 startup_id = 9;
   uint64 fence = 10;
+  uint32 shard_id = 11;
 }
 
 enum LogLevel {
@@ -313,6 +314,19 @@ message AtomOwnershipRecord {
   AtomOwnershipInfo ownership = 1;
   int64 lease_id = 2;
   string operation_id = 3;
+}
+
+message ShardLifecycleRecord {
+  uint32 shard_id = 1;
+  uint64 next_fence = 2;
+}
+
+message ShardOwnershipRecord {
+  uint32 shard_id = 1;
+  uint64 fence = 2;
+  uint64 startup_id = 3;
+  string node = 4;
+  int64 lease_id = 5;
 }
 
 message AtomOperationRecord {

@@ -12,6 +12,7 @@ type lifecycleSpawnClaim struct {
 	operation *AtomOperationRecord
 	owner     *AtomOwnershipRecord
 	result    *AtomControlResult
+	shard     *ShardOwnershipRecord
 	retain    bool
 }
 
@@ -30,6 +31,10 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 	leaseID, healthy := m.currentLease()
 	if !healthy {
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: cannot claim without a healthy process lease")
+	}
+	shard, err := m.ensureShardOwnership(ctx, element, atom, takeover)
+	if err != nil {
+		return nil, lifecycleError(operationID, CodeOf(err), "lifecycle: shard ownership: %s", err.Message)
 	}
 
 	for attempt := 0; attempt < 32; attempt++ {
@@ -54,7 +59,9 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			}
 		}
 		fence := uint64(1)
-		if record != nil && record.NextFence > 0 {
+		if shard != nil {
+			fence = shard.Fence
+		} else if record != nil && record.NextFence > 0 {
 			fence = record.NextFence
 		}
 		incarnation, er := randomNonZeroUint64()
@@ -65,13 +72,18 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			Type: IDType_Atom, Cosmos: m.process.local.runnable.config.Cosmos, Node: m.process.local.GetNodeName(),
 			Element: element, Atom: atom, Incarnation: incarnation, StartupId: m.process.startupID, Fence: fence,
 		}
+		if shard != nil {
+			atomID.ShardId = shard.ShardId
+		}
 		op := newOperationInfo(operationID, kind, fingerprint, atomID)
 		ownership := &AtomOwnershipInfo{Id: atomID, Incarnation: incarnation, StartupId: m.process.startupID, Fence: fence, State: AtomLifecycleState_AtomLifecycleStateSpawning}
 		owner = &AtomOwnershipRecord{Ownership: ownership, LeaseId: int64(leaseID), OperationId: operationID}
 		if record == nil {
 			record = &AtomLifecycleRecord{Element: element, Atom: atom}
 		}
-		record.NextFence = fence + 1
+		if shard == nil {
+			record.NextFence = fence + 1
+		}
 		operation := &AtomOperationRecord{Operation: op, Result: &AtomControlResult{OperationId: operationID, Id: atomID, Ownership: ownership, Operation: op}}
 		recordBuf, err := lifecycleBytes(record)
 		if err != nil {
@@ -102,7 +114,7 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 		}
 		if rsp.Succeeded {
 			m.cacheOwnerPut(ownerKey, owner, rsp.Header.Revision)
-			return &lifecycleSpawnClaim{operation: operation, owner: owner, result: operation.Result}, nil
+			return &lifecycleSpawnClaim{operation: operation, owner: owner, result: operation.Result, shard: shard}, nil
 		}
 		if result, exists, err := m.existingOperation(operationID, fingerprint, kind); err != nil {
 			return nil, err
@@ -154,10 +166,18 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 	if !healthy || leaseID != clientv3.LeaseID(owner.LeaseId) {
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: lease changed before spawn completion")
 	}
-	txn := m.process.cluster.etcdClient.Txn(context.Background()).If(
+	_, shardMod, guardErr := m.shardWriteGuard(claim.owner.Ownership.Id)
+	if guardErr != nil {
+		return nil, lifecycleError(operationID, CodeOf(guardErr), "lifecycle: spawn shard guard: %s", guardErr.Message)
+	}
+	comparisons := []clientv3.Cmp{
 		clientv3.Compare(clientv3.ModRevision(m.operationKey(operationID)), "=", opMod),
 		clientv3.Compare(clientv3.ModRevision(ownerKey), "=", ownerMod),
-	)
+	}
+	if m.perShard() {
+		comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(m.shardOwnerKey(claim.owner.Ownership.Id.ShardId)), "=", shardMod))
+	}
+	txn := m.process.cluster.etcdClient.Txn(context.Background()).If(comparisons...)
 	if businessErr == nil {
 		owner.Ownership.State = AtomLifecycleState_AtomLifecycleStateRunning
 		result.Ownership = proto.Clone(owner.Ownership).(*AtomOwnershipInfo)
@@ -292,6 +312,10 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 	if err := m.authorize(id); err != nil {
 		return &AtomControlResult{OperationId: operationID, Id: id, Error: err}, nil
 	}
+	_, shardMod, guardErr := m.shardWriteGuard(id)
+	if guardErr != nil {
+		return &AtomControlResult{OperationId: operationID, Id: id, Error: guardErr}, nil
+	}
 
 	var claim *AtomOwnershipRecord
 	for attempt := 0; attempt < 16; attempt++ {
@@ -315,11 +339,15 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		if err != nil {
 			return nil, err
 		}
-		ctxTxn, cancel := etcdContext()
-		rsp, er := m.process.cluster.etcdClient.Txn(ctxTxn).If(
+		comparisons := []clientv3.Cmp{
 			clientv3.Compare(clientv3.ModRevision(m.ownerKey(id.Element, id.Atom)), "=", ownerMod),
 			clientv3.Compare(clientv3.Version(m.operationKey(operationID)), "=", 0),
-		).Then(
+		}
+		if m.perShard() {
+			comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(m.shardOwnerKey(id.ShardId)), "=", shardMod))
+		}
+		ctxTxn, cancel := etcdContext()
+		rsp, er := m.process.cluster.etcdClient.Txn(ctxTxn).If(comparisons...).Then(
 			clientv3.OpPut(m.ownerKey(id.Element, id.Atom), ownerBuf, clientv3.WithLease(clientv3.LeaseID(owner.LeaseId))),
 			clientv3.OpPut(m.operationKey(operationID), opBuf),
 		).Commit()
@@ -421,6 +449,10 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 	if !healthy || leaseID != clientv3.LeaseID(currentOwner.LeaseId) {
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: lease changed before halt completion")
 	}
+	_, shardMod, guardErr := m.shardWriteGuard(id)
+	if guardErr != nil {
+		return nil, lifecycleError(operationID, CodeOf(guardErr), "lifecycle: halt shard guard: %s", guardErr.Message)
+	}
 	result := &AtomControlResult{OperationId: operationID, Id: id, Ownership: owner.Ownership, Operation: op.Operation, Error: businessErr}
 	op.Operation.State = AtomOperationState_AtomOperationStateSucceeded
 	op.Operation.Error = businessErr
@@ -450,12 +482,16 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := etcdContext()
-	rsp, er := m.process.cluster.etcdClient.Txn(ctx).If(
+	comparisons := []clientv3.Cmp{
 		clientv3.Compare(clientv3.ModRevision(m.operationKey(operationID)), "=", opMod),
 		clientv3.Compare(clientv3.ModRevision(m.ownerKey(id.Element, id.Atom)), "=", ownerMod),
 		clientv3.Compare(clientv3.ModRevision(m.recordKey(id.Element, id.Atom)), "=", recordMod),
-	).Then(clientv3.OpPut(m.operationKey(operationID), opBuf), clientv3.OpPut(m.recordKey(id.Element, id.Atom), recordBuf), clientv3.OpDelete(m.ownerKey(id.Element, id.Atom))).Commit()
+	}
+	if m.perShard() {
+		comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(m.shardOwnerKey(id.ShardId)), "=", shardMod))
+	}
+	ctx, cancel := etcdContext()
+	rsp, er := m.process.cluster.etcdClient.Txn(ctx).If(comparisons...).Then(clientv3.OpPut(m.operationKey(operationID), opBuf), clientv3.OpPut(m.recordKey(id.Element, id.Atom), recordBuf), clientv3.OpDelete(m.ownerKey(id.Element, id.Atom))).Commit()
 	cancel()
 	if er != nil {
 		return nil, asError(er)
@@ -518,6 +554,9 @@ func (m *lifecycleManager) takeover(ctx context.Context, callerID ID, id, previo
 	previousOwner, _, err := m.loadOwner(id.Element, id.Atom)
 	if err != nil {
 		return nil, err
+	}
+	if previousOwner == nil || !lifecycleSameIdentity(previous, previousOwner.Ownership) {
+		return &AtomControlResult{OperationId: operationID, Id: previous, Error: lifecycleError(operationID, ErrCodeStaleFence, "lifecycle: takeover previous_id does not match current owner")}, nil
 	}
 	if previous.Node == m.process.local.GetNodeName() {
 		elem, localErr := m.process.local.getLocalElement(id.Element)

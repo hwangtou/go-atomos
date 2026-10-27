@@ -71,6 +71,7 @@ type CosmosProcess struct {
 	// client-side deadline base. Default 10s.
 	syncCallDefaultTimeout time.Duration
 	lifecycleMode          LifecycleMode
+	lifecycleShardCount    int
 
 	// Per-process mutable settings (formerly package-level vars).
 	messageTimeoutTracer  bool
@@ -188,6 +189,7 @@ func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, 
 	p.syncDeadlockDebug = false
 	p.syncCallDefaultTimeout = 10 * time.Second
 	p.lifecycleMode = LifecycleModeLegacyUnsafe
+	p.lifecycleShardCount = defaultLifecycleShardCount
 	p.waitGraph = map[uint64]waitEdge{}
 	p.syncWaits = map[string]int{}
 	p.syncChains = map[uint64][]string{}
@@ -527,7 +529,11 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 			p.syncCallDefaultTimeout = runnable.syncCallDefaultTimeout
 		}
 		p.lifecycleMode = runnable.lifecycleMode
-		if p.lifecycleMode == LifecycleModePerAtomStrict {
+		p.lifecycleShardCount = defaultLifecycleShardCount
+		if runnable.lifecycleShardCountSet {
+			p.lifecycleShardCount = runnable.lifecycleShardCount
+		}
+		if lifecycleStrictMode(p.lifecycleMode) {
 			p.lifecycle = newLifecycleManager(p)
 			p.lifecycle.startJanitor()
 		}
@@ -1087,8 +1093,8 @@ func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 	// Check if it is a cluster process.
 	cluster := runnable.config.EnableCluster
 	if cluster == nil || !cluster.Enable {
-		if p.lifecycleMode == LifecycleModePerAtomStrict {
-			return NewError(ErrCodeFencingRequired, "CosmosProcess: PerAtomStrict requires an enabled etcd cluster")
+		if lifecycleStrictMode(p.lifecycleMode) {
+			return NewError(ErrCodeFencingRequired, "CosmosProcess: strict lifecycle requires an enabled etcd cluster")
 		}
 		return nil
 	}

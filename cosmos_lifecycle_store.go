@@ -30,6 +30,8 @@ type lifecycleManager struct {
 	watchHealthy  atomic.Bool
 	ownerMu       sync.RWMutex
 	owners        map[string]lifecycleOwnerSnapshot
+	shardMu       sync.RWMutex
+	shards        map[string]lifecycleShardSnapshot
 	watchCancel   context.CancelFunc
 	watchDone     chan struct{}
 	stop          chan struct{}
@@ -40,7 +42,7 @@ type lifecycleManager struct {
 }
 
 func newLifecycleManager(p *CosmosProcess) *lifecycleManager {
-	return &lifecycleManager{process: p, owners: map[string]lifecycleOwnerSnapshot{}, stop: make(chan struct{}), stopped: make(chan struct{})}
+	return &lifecycleManager{process: p, owners: map[string]lifecycleOwnerSnapshot{}, shards: map[string]lifecycleShardSnapshot{}, stop: make(chan struct{}), stopped: make(chan struct{})}
 }
 
 func randomNonZeroUint64() (uint64, error) {
@@ -230,7 +232,7 @@ func lifecycleSameIdentity(id *IDInfo, ownership *AtomOwnershipInfo) bool {
 }
 
 func (m *lifecycleManager) authorize(id *IDInfo) *Error {
-	if m == nil || m.process.lifecycleMode != LifecycleModePerAtomStrict || id == nil || id.Type != IDType_Atom {
+	if m == nil || !lifecycleStrictMode(m.process.lifecycleMode) || id == nil || id.Type != IDType_Atom {
 		return nil
 	}
 	if id.Incarnation == 0 || id.StartupId == 0 || id.Fence == 0 {
@@ -252,6 +254,15 @@ func (m *lifecycleManager) authorize(id *IDInfo) *Error {
 	}
 	if owner.Ownership.State != AtomLifecycleState_AtomLifecycleStateRunning {
 		return NewErrorf(ErrCodeOperationStillRunning, "lifecycle: atom %s is %s", id.Info(), owner.Ownership.State)
+	}
+	if m.perShard() {
+		if id.ShardId != m.shardID(id.Element, id.Atom) {
+			return NewErrorf(ErrCodeFencingRequired, "lifecycle: atom %s has incorrect shard assignment", id.Info())
+		}
+		shard := m.cachedShard(id.ShardId)
+		if shard == nil || shard.Fence != id.Fence || shard.LeaseId != int64(leaseID) || shard.Node != m.process.local.GetNodeName() || shard.StartupId != id.StartupId {
+			return NewErrorf(ErrCodeOwnershipLost, "lifecycle: shard %d ownership is stale for %s", id.ShardId, id.Info())
+		}
 	}
 	return nil
 }
@@ -364,7 +375,7 @@ func lifecycleError(operationID string, code int64, format string, args ...any) 
 }
 
 func (m *lifecycleManager) requireUsable() *Error {
-	if m == nil || m.process.lifecycleMode != LifecycleModePerAtomStrict || m.process.cluster.etcdClient == nil {
+	if m == nil || !lifecycleStrictMode(m.process.lifecycleMode) || m.process.cluster.etcdClient == nil {
 		return NewError(ErrCodeFencingRequired, "lifecycle: per-atom strict requires an etcd cluster")
 	}
 	return nil
