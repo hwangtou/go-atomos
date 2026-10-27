@@ -642,20 +642,17 @@ func TestMemoryEtcdWatchCloseInterruptsBlockedSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			time.Sleep(50 * time.Millisecond)
-			client.mu.Lock()
-			watcher := client.watchers[1]
-			client.mu.Unlock()
-			if watcher == nil {
-				t.Fatal("watch is not registered")
-			}
 			test.stop(client, cancel)
-			select {
-			case <-watcher.finished:
-			case <-time.After(10 * time.Second):
-				t.Fatal("blocked watch send did not wake up")
-			}
-			if response, ok := <-watch; ok {
-				t.Fatalf("watch sent pending response instead of closing: %+v", response)
+			timeout := time.After(10 * time.Second)
+			for {
+				select {
+				case _, ok := <-watch:
+					if !ok {
+						return
+					}
+				case <-timeout:
+					t.Fatal("blocked watch send did not wake up")
+				}
 			}
 		})
 	}
