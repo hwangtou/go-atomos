@@ -137,6 +137,15 @@ func (argBaseAtomosOperationID) getArgType() ArgType {
 }
 func (argBaseAtomosOperationID) argForBaseAtomos() {}
 
+type argBaseAtomosLifecycle struct {
+	identity    *IDInfo
+	beforeReady func(*IDInfo) *Error
+	internal    bool
+}
+
+func (argBaseAtomosLifecycle) getArgType() ArgType { return ArgTypeBaseAtomosOperationID }
+func (argBaseAtomosLifecycle) argForBaseAtomos()   {}
+
 // For Task
 
 type ArgsForTask interface {

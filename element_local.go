@@ -500,10 +500,14 @@ func (e *ElementLocal) onStopping(from ID, cancelled []uint64) (err *Error) {
 			}()
 			defer exitWG.Done()
 			defer func() { <-sem }() // 任务完成，释放信号量的一个槽位。
-			err = a.atomos.PushKillMail(e,
+			killArgs := []ArgsForBaseAtomos{
 				&argBaseAtomosWaitKilled{},
 				&argBaseAtomosTimeout{timeout: stopTimeout},
-			)
+			}
+			if e.cosmosLocal.process.lifecycle != nil {
+				killArgs = append(killArgs, &argBaseAtomosLifecycle{identity: a.GetIDInfo(), internal: true})
+			}
+			err = a.atomos.PushKillMail(e, killArgs...)
 			if err != nil {
 				e.Log().Error("Element: Kill atom failed. name=(%s),err=(%v)", n, err)
 			}
@@ -799,11 +803,34 @@ func (e *ElementLocal) elementAtomSpawnNewAtom(name string, op *atomSpawnOperati
 		e.finishAtomSpawn(name, op, nil, err)
 		return nil, nil, err.AddStack(e)
 	}
+	var lifecycle *argBaseAtomosLifecycle
+	spawnArgs := args
+	for _, arg := range args {
+		if marker, ok := arg.(*argBaseAtomosLifecycle); ok {
+			lifecycle = marker
+		}
+	}
+	if lifecycle != nil {
+		spawnArgs = make([]ArgsForBaseAtomos, 0, len(args)-1)
+		for _, arg := range args {
+			if _, ok := arg.(*argBaseAtomosLifecycle); !ok {
+				spawnArgs = append(spawnArgs, arg)
+			}
+		}
+		atom.atomos.id.Incarnation = lifecycle.identity.Incarnation
+		atom.atomos.id.StartupId = lifecycle.identity.StartupId
+		atom.atomos.id.Fence = lifecycle.identity.Fence
+	}
 
 	if err = atom.atomos.start(func() *Error {
 		op.owner.Store(getGoID())
-		if err := atom.elementAtomSpawn(current, persistence, arg, args...); err != nil {
+		if err := atom.elementAtomSpawn(current, persistence, arg, spawnArgs...); err != nil {
 			return err.AddStack(nil)
+		}
+		if lifecycle != nil && lifecycle.beforeReady != nil {
+			if err := lifecycle.beforeReady(atom.GetIDInfo()); err != nil {
+				return err
+			}
 		}
 		return nil
 	}, func() {

@@ -265,9 +265,9 @@ ownership 随 lease 消失不应同时抹掉所有 operation 结果。去重只�
 | 阶段 | 内容 | 完成标准 |
 |---|---|---|
 | 0 ✅ | Stopping 禁止超时重生；统一 WaitKilled 屏障；主文档与回归测试 | 本地不变量成立，公开 API/wire 不变 |
-| 1 | proto 追加 operation/startup/incarnation/fence；只读 Lookup/OperationStatus；远程 Spawn 参数对齐 | 能识别并对账未知操作，旧错误码不变 |
-| 2 | per-Atom 或 shard ownership；RPC fencing；失租 fail-closed | 跨节点并发 Spawn 单活，stale Kill 跨重启被拒绝 |
-| 3 | 安全重试、operation 结果保留、恢复和显式接管；再评估自动 rebind | 响应丢失可恢复，重复控制操作不重复执行 |
+| 1 ✅ | proto 追加 operation/startup/incarnation/fence；只读 Lookup/OperationStatus；远程 Spawn 参数对齐 | 能识别并对账未知操作，旧错误码不变 |
+| 2 ✅ | per-Atom ownership；RPC fencing；失租 fail-closed | 跨节点并发 Spawn 单活，stale Kill 跨重启被拒绝 |
+| 3 ✅（受控生命周期） | 同 operation 恢复、结果保留和显式接管；普通异步透明重试/WAL 不在此范围 | 响应丢失后可按原 operation 对账，重复控制操作不重复执行 |
 | 4 | Drain 与 ownership 统一；分片和高规模优化 | Drain 无准入绕过，重平衡有明确屏障 |
 | 5 | DST、真实故障注入、混部兼容和性能测试 | 关键交错可重放，兼容矩阵和容量边界明确 |
 

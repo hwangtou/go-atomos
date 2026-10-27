@@ -68,6 +68,40 @@ func (a *atomosRemoteService) getAtomID(ctx context.Context, req *CosmosRemoteGe
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteGetAtomIDRsp{}
+	if a.process.lifecycle != nil {
+		lookup, err := a.process.lifecycle.lookup(req.Element, req.Atom)
+		if err != nil {
+			rsp.Error = err
+			return rsp, nil
+		}
+		switch lookup.State {
+		case AtomLifecycleState_AtomLifecycleStateRunning:
+			if lookup.Id.Node != a.process.local.GetNodeName() {
+				rsp.Error = NewError(ErrCodeOwnershipLost, "CosmosRemote: GetAtomID reached non-owner")
+			} else {
+				rsp.Id = lookup.Id
+			}
+		case AtomLifecycleState_AtomLifecycleStateAbsent:
+			elem, elemErr := a.process.local.getLocalElement(req.Element)
+			if elemErr != nil {
+				rsp.Error = elemErr
+				return rsp, nil
+			}
+			if persistence, ok := elem.elemImpl.Developer.(AutoData); !ok || persistence == nil {
+				rsp.Error = NewError(ErrCodeAtomNotExists, "CosmosRemote: atom not exists")
+				return rsp, nil
+			}
+			controlled, _ := a.SpawnAtomControlled(ctx, &CosmosRemoteSpawnAtomControlledReq{Element: req.Element, Atom: req.Atom})
+			rsp.Error = controlled.Error
+			if controlled.Result != nil {
+				rsp.Id = controlled.Result.Id
+				rsp.Error = controlled.Result.Error
+			}
+		default:
+			rsp.Error = NewError(ErrCodeOperationStillRunning, "CosmosRemote: atom lifecycle is not Running")
+		}
+		return rsp, nil
+	}
 	// Get element.
 	elem, ierr := a.process.local.getLocalElement(req.Element)
 	if ierr != nil {
@@ -181,6 +215,17 @@ func (a *atomosRemoteService) spawnAtom(ctx context.Context, req *CosmosRemoteSp
 		Recover(a.process.local)
 	}()
 	rsp := &CosmosRemoteSpawnAtomRsp{}
+	if a.process.lifecycle != nil {
+		controlled, _ := a.SpawnAtomControlled(ctx, &CosmosRemoteSpawnAtomControlledReq{
+			CallerId: req.CallerId, Element: req.Element, Atom: req.Atom, Args: req.Args, CosmosArgs: req.CosmosArgs,
+		})
+		rsp.Error = controlled.Error
+		if controlled.Result != nil {
+			rsp.Id = controlled.Result.Id
+			rsp.Error = controlled.Result.Error
+		}
+		return rsp, nil
+	}
 	callerID := a.getRemoteInTargetProcessIDFromIDInfo(req.CallerId, 0, 0)
 	if callerID == nil || reflect.ValueOf(callerID).IsNil() {
 		rsp.Error = NewErrorf(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: SpawnAtom invalid callerID. callerID=(%v)", req.CallerId).AddStack(nil)
@@ -239,6 +284,10 @@ func (a *atomosRemoteService) syncMessagingByName(ctx context.Context, req *Cosm
 	rsp := &CosmosRemoteSyncMessagingByNameRsp{}
 	if req == nil || req.To == nil {
 		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: SyncMessagingByName missing target ID").AddStack(nil)
+		return rsp, nil
+	}
+	if fenceErr := a.process.lifecycle.authorize(req.To); fenceErr != nil {
+		rsp.Error = fenceErr
 		return rsp, nil
 	}
 
@@ -332,6 +381,10 @@ func (a *atomosRemoteService) asyncMessagingByName(ctx context.Context, req *Cos
 	rsp := &CosmosRemoteAsyncMessagingByNameRsp{}
 	if req == nil || req.ToId == nil {
 		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: AsyncMessagingByName missing target ID").AddStack(nil)
+		return rsp, nil
+	}
+	if fenceErr := a.process.lifecycle.authorize(req.ToId); fenceErr != nil {
+		rsp.Error = fenceErr
 		return rsp, nil
 	}
 
@@ -472,6 +525,14 @@ func (a *atomosRemoteService) killAtom(ctx context.Context, req *CosmosRemoteKil
 	rsp := &CosmosRemoteKillAtomRsp{}
 	if req == nil || req.Id == nil {
 		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: KillAtom missing atom ID").AddStack(nil)
+		return rsp, nil
+	}
+	if a.process.lifecycle != nil {
+		controlled, _ := a.HaltAtomControlled(ctx, &CosmosRemoteHaltAtomControlledReq{CallerId: req.CallerId, Id: req.Id, CosmosArgs: req.CosmosArgs})
+		rsp.Error = controlled.Error
+		if controlled.Result != nil {
+			rsp.Error = controlled.Result.Error
+		}
 		return rsp, nil
 	}
 

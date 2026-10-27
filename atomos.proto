@@ -301,6 +301,25 @@ message AtomControlResult {
   Error error = 5;
 }
 
+message AtomLifecycleRecord {
+  string element = 1;
+  string atom = 2;
+  uint64 next_fence = 3;
+  AtomLifecycleState terminal = 4;
+  IDInfo terminal_id = 5;
+}
+
+message AtomOwnershipRecord {
+  AtomOwnershipInfo ownership = 1;
+  int64 lease_id = 2;
+  string operation_id = 3;
+}
+
+message AtomOperationRecord {
+  AtomOperationInfo operation = 1;
+  AtomControlResult result = 2;
+}
+
 service AtomosRemoteService {
   rpc TryKilling(CosmosRemoteTryKillingReq) returns (CosmosRemoteTryKillingRsp) {}
 
@@ -528,6 +547,9 @@ message CosmosRemoteTakeoverAtomReq {
   AtomOwnershipInfo expected_ownership = 4;
   string fingerprint = 5;
   bool retain = 6;
+  IDInfo previous_id = 7;
+  google.protobuf.Any args = 8;
+  CosmosArgs cosmos_args = 9;
 }
 message CosmosRemoteTakeoverAtomRsp {
   Error error = 1;

@@ -95,8 +95,9 @@ type CosmosProcess struct {
 	// the process has stopped, which races with test/teardown logging.
 	drainCancel chan struct{}
 
-	logging *loggingAtomos
-	local   *CosmosLocal
+	logging   *loggingAtomos
+	local     *CosmosLocal
+	lifecycle *lifecycleManager
 
 	// debugServer is the optional introspection HTTP server, started by Start
 	// when Config.Customize carries configKeyDebugServer and stopped first in
@@ -176,7 +177,7 @@ func newCosmosProcess(cosmosName, cosmosNode string, logging appLogging, args ..
 
 // init 初始化进程
 func (p *CosmosProcess) init(cosmosName, cosmosNode string, logging appLogging, args ...any) *Error {
-	p.startupID = uint64(time.Now().UnixNano())
+	p.startupID = newProcessStartupID()
 
 	// Per-process mutable defaults.
 	p.messageTimeoutTracer = true
@@ -524,6 +525,10 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 			p.syncCallDefaultTimeout = runnable.syncCallDefaultTimeout
 		}
 		p.lifecycleMode = runnable.lifecycleMode
+		if p.lifecycleMode == LifecycleModePerAtomStrict {
+			p.lifecycle = newLifecycleManager(p)
+			p.lifecycle.startJanitor()
+		}
 
 		// 启动时初始化脚本。
 		if err := p.mainScriptOnBootProtect(); err != nil {
@@ -538,6 +543,11 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 			return err.AddStack(p.local)
 		}
 		p.local.coreLog().coreInfo("CosmosProcess: Checkpoint - prepareCluster")
+		if p.lifecycle != nil {
+			if err := p.lifecycle.startWatch(); err != nil {
+				return err.AddStack(p.local)
+			}
+		}
 
 		// 已经准备好集群的本地节点环境，尝试启动元素（Elements）。
 		// The local node environment of the cluster is ready, try to start the elements.
@@ -567,6 +577,7 @@ func (p *CosmosProcess) Start(runnable *CosmosRunnable) error {
 		return nil
 	}(); err != nil {
 		p.local.coreLog().coreError("CosmosProcess: Start failed. err=(%v)", err)
+		p.lifecycle.close()
 		p.handleStartUpFailedLocalCleanUp()
 		p.handleStartUpFailedClusterCleanUp()
 		p.mutex.Lock()
@@ -915,6 +926,8 @@ func (p *CosmosProcess) Stop() error {
 		return err
 	}
 
+	defer p.lifecycle.close()
+
 	// Stop the debug server first: no new introspection requests once
 	// shutdown begins (and /healthz already reports unhealthy in Shutdown
 	// state).
@@ -1070,6 +1083,9 @@ func (p *CosmosProcess) prepareCluster(runnable *CosmosRunnable) *Error {
 	// Check if it is a cluster process.
 	cluster := runnable.config.EnableCluster
 	if cluster == nil || !cluster.Enable {
+		if p.lifecycleMode == LifecycleModePerAtomStrict {
+			return NewError(ErrCodeFencingRequired, "CosmosProcess: PerAtomStrict requires an enabled etcd cluster")
+		}
 		return nil
 	}
 
@@ -1284,6 +1300,7 @@ func (p *CosmosProcess) handleStartUpFailedLocalCleanUp() {
 // unloadClusterLocalNode 卸载集群本地节点。
 // Unload cluster local node.
 func (p *CosmosProcess) unloadClusterLocalNode() {
+	p.lifecycle.close()
 	// 删除etcd中的watcher。
 	if exitCh := p.closeEtcdInfoChannel(); exitCh != nil {
 		<-exitCh

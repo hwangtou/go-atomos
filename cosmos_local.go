@@ -167,6 +167,9 @@ func (c *CosmosLocal) CosmosGetElementID(elemName string, args ...ArgsForBaseAto
 }
 
 func (c *CosmosLocal) CosmosGetAtomID(elemName, name string, args ...ArgsForBaseAtomos) (id ID, tracker *IDTracker, err error) {
+	if c.process.lifecycle != nil {
+		return c.strictGet(elemName, name, args...)
+	}
 	e, ierr := c.getGlobalElement(elemName, name)
 	if ierr != nil {
 		return nil, nil, ierr.AddStack(c)
@@ -185,6 +188,9 @@ func (c *CosmosLocal) CosmosSpawnAtom(callerID SelfID, elemName, name string, ar
 	e, err := c.getGlobalElement(elemName, name)
 	if err != nil {
 		return nil, nil, err.AddStack(c)
+	}
+	if c.process.lifecycle != nil {
+		return c.strictSpawn(callerID, e, elemName, name, arg, args...)
 	}
 	localArgs := make([]ArgsForBaseAtomos, 0, len(args)+1)
 	localArgs = append(localArgs, args...)

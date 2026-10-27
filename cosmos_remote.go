@@ -439,6 +439,9 @@ func (c *CosmosRemote) CosmosGetElementID(elem string, args ...ArgsForBaseAtomos
 }
 
 func (c *CosmosRemote) CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
+	if c.process != nil && c.process.lifecycle != nil {
+		return c.process.local.strictGet(elem, name, args...)
+	}
 	element, err := c.getElement(elem)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)

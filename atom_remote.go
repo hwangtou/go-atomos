@@ -128,6 +128,9 @@ func (a *AtomRemote) DecoderByName(name string) (MessageDecoder, MessageDecoder)
 }
 
 func (a *AtomRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
+	if a.element.cosmos != nil && a.element.cosmos.process != nil && a.element.cosmos.process.lifecycle != nil {
+		return errOrNil(a.element.haltControlled(callerID, a.GetIDInfo(), ext...))
+	}
 	return a.remote.Kill(callerID, ext...)
 }
 

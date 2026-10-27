@@ -207,6 +207,9 @@ func (a *BaseAtomos) PushSyncMessage(from ID, name string, in proto.Message, ext
 	if from == nil {
 		return nil, NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
+	if fenceErr := a.process.lifecycle.authorize(a.id); fenceErr != nil {
+		return nil, fenceErr
+	}
 
 	helper := createBaseAtomosHelper(BaseAtomosMailSync, ext)
 	if helper.hasErrors() {
@@ -297,6 +300,12 @@ func (a *BaseAtomos) PushAsyncMessage(from ID, name string, in proto.Message, ca
 	if from == nil {
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
+	if fenceErr := a.process.lifecycle.authorize(a.id); fenceErr != nil {
+		if callback != nil {
+			callback(nil, fenceErr)
+		}
+		return fenceErr
+	}
 
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
@@ -366,7 +375,21 @@ func (a *BaseAtomos) PushKillMail(from ID, ext ...ArgsForBaseAtomos) (err error)
 		return NewErrorf(ErrCodeFrameworkIncorrectUsage, "Atomos: from ID is nil.").AddStack(nil)
 	}
 
-	helper := createBaseAtomosHelper(BaseAtomosMailKill, ext)
+	internal := false
+	killExt := make([]ArgsForBaseAtomos, 0, len(ext))
+	for _, arg := range ext {
+		if marker, ok := arg.(*argBaseAtomosLifecycle); ok {
+			internal = marker.internal
+			continue
+		}
+		killExt = append(killExt, arg)
+	}
+	if !internal {
+		if fenceErr := a.process.lifecycle.authorize(a.id); fenceErr != nil {
+			return fenceErr
+		}
+	}
+	helper := createBaseAtomosHelper(BaseAtomosMailKill, killExt)
 	if helper.hasErrors() {
 		return helper.getError()
 	}
@@ -419,6 +442,10 @@ func (a *BaseAtomos) PushWormholeMailAndWaitReply(from ID, wormhole BaseAtomosWo
 }
 
 func (a *BaseAtomos) PushTaskCallbackMail(name string, callback func(), recoverFn func(any)) {
+	if fenceErr := a.process.lifecycle.authorize(a.id); fenceErr != nil {
+		a.log.logging.pushFrameworkErrorLog("PushTaskCallbackMail: ownership rejected. name=(%s),err=(%v)", name, fenceErr)
+		return
+	}
 	am := allocBaseAtomosMail()
 	initCallbackMail(am, name, callback, recoverFn)
 
@@ -801,10 +828,34 @@ func (a *BaseAtomos) mailboxOnAbort(startErr *Error, remainMail *mail) {
 	}
 }
 
+func (a *BaseAtomos) rejectOwnedMail(am *baseAtomosMail, err *Error) {
+	switch am.mailType {
+	case BaseAtomosMailSync, BaseAtomosMailWormhole:
+		am.sendReply(nil, err)
+	case BaseAtomosMailAsync:
+		if am.asyncID != 0 {
+			if fromInternal, internalErr := asIDInternal(am.from); internalErr == nil {
+				if callback := fromInternal.asyncPop(am.asyncID); callback != nil {
+					callback(nil, err)
+				}
+			}
+		}
+	case BaseAtomosMailTask:
+		a.task.cancelRemainingTask(am)
+	default:
+		a.log.logging.pushFrameworkErrorLog("Atomos: owned mail rejected. type=(%v),err=(%v)", am.mailType, err)
+	}
+	releaseBaseAtomosMail(am)
+}
+
 // 处理邮箱消息。
 // Handle mailbox messages.
 func (a *BaseAtomos) mailboxOnReceive(mail *mail) {
 	am := unwrapBaseAtomosMail(mail)
+	if fenceErr := a.process.lifecycle.authorize(a.id); fenceErr != nil {
+		a.rejectOwnedMail(am, fenceErr)
+		return
+	}
 	if !a.IsInState(BaseAtomosWaiting) {
 		a.log.logging.pushFrameworkErrorLog("Atomos: onReceive meets non-waiting status. atomos=(%v),state=(%d),mail=(%v)",
 			a, a.GetState(), mail)

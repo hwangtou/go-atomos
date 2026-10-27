@@ -137,6 +137,32 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 	if e.cosmos != nil && e.cosmos.process != nil {
 		defer e.cosmos.process.observeRPC("ElementGetAtomID", time.Now())
 	}
+	if e.cosmos != nil && e.cosmos.process != nil && e.cosmos.process.lifecycle != nil {
+		lookup, conn, lookupErr := e.lookupControlled(name)
+		if lookupErr != nil {
+			return nil, nil, lookupErr
+		}
+		switch lookup.State {
+		case AtomLifecycleState_AtomLifecycleStateRunning:
+			if lookup.Id.Node != e.remote.info.Node {
+				return nil, nil, NewError(ErrCodeOwnershipLost, "lifecycle: Get reached non-owner")
+			}
+			return newAtomRemoteInSourceProcessWithPinnedConn(e, lookup.Id, conn), nil, nil
+		case AtomLifecycleState_AtomLifecycleStateAbsent:
+			impl := e.cosmos.process.local.runnable.implements[e.remote.info.Element]
+			if impl == nil {
+				return nil, nil, NewError(ErrCodeMainElementNotFound, "lifecycle: element not registered")
+			}
+			persistence, ok := impl.Developer.(AutoData)
+			if !ok || persistence == nil {
+				return nil, nil, NewError(ErrCodeAtomNotExists, "lifecycle: atom absent and AutoData is unavailable")
+			}
+			id, spawnErr := e.spawnControlled(e.cosmos.process.local, name, nil, args...)
+			return id, nil, errOrNil(spawnErr)
+		default:
+			return nil, nil, NewError(ErrCodeOperationStillRunning, "lifecycle: atom is not Running")
+		}
+	}
 	cli, conn, ctx, cancel, err := e.remote.getCliWithConn(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -201,6 +227,10 @@ func (e *ElementRemote) GetAllInactiveAtomsIDTrackerInfo() map[string]string {
 func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _ *IDTrackerInfo, args ...ArgsForBaseAtomos) (ID, *IDTracker, error) {
 	if e.cosmos != nil && e.cosmos.process != nil {
 		defer e.cosmos.process.observeRPC("ElementSpawnAtom", time.Now())
+	}
+	if e.cosmos != nil && e.cosmos.process != nil && e.cosmos.process.lifecycle != nil {
+		id, err := e.spawnControlled(callerID, name, arg, args...)
+		return id, nil, errOrNil(err)
 	}
 	remoteArgs := make([]ArgsForBaseAtomos, 0, len(args))
 	for _, arg := range args {

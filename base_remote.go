@@ -115,6 +115,9 @@ func (a *BaseRemote) getCliWithConn(timeout time.Duration) (AtomosRemoteServiceC
 	// Return the exact selected connection so a newly resolved ID can be pinned
 	// to the same version that served its resolution RPC.
 	conn := a.validPinnedConn()
+	if conn == nil && a.info != nil && a.info.Fence != 0 {
+		return nil, nil, nil, nil, NewError(ErrCodeOwnershipLost, "AtomRemote: fenced ID connection is no longer valid").AddStack(nil)
+	}
 	if conn == nil {
 		conn = a.cosmos.getCurrentClient()
 	}

@@ -316,6 +316,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 		return err.AddStack(nil)
 	}
 	runtime := p.etcdRuntime()
+	p.lifecycle.publishLease(lease.ID, true)
 	exitCh := make(chan struct{})
 	p.cluster.etcdExitCh = exitCh
 
@@ -344,6 +345,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			p.local.coreLog().coreInfo("etcd: Watcher updates process info. info=(%s)", info.info)
 			if err := etcdPutLease(p.cluster.etcdClient, key, info.info, lease.ID); err != nil {
 				runtime.registrationHealthy.Store(false)
+				p.lifecycle.publishLease(0, false)
 				p.etcdErrorHandler(err)
 				stopRetry()
 				retryTimer = time.NewTimer(etcdInfoPublishBackoff)
@@ -352,6 +354,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			}
 			publishedSeq = info.seq
 			runtime.registrationHealthy.Store(true)
+			p.lifecycle.publishLease(lease.ID, true)
 			stopRetry()
 		}
 		defer func() {
@@ -360,6 +363,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 				p.etcdErrorHandler(NewErrorf(ErrCodeFrameworkInternalError, "etcd: keepalive stopped after panic. reason=(%v)", r).AddStack(nil))
 			}
 			runtime.registrationHealthy.Store(false)
+			p.lifecycle.publishLease(0, false)
 			p.local.coreLog().coreInfo("etcd: registration loop will stop.")
 			if err := etcdDelete(p.cluster.etcdClient, key); err != nil {
 				p.etcdErrorHandler(err)
@@ -378,6 +382,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 			case keepAlive, more := <-keepAliveCh:
 				if !more || keepAlive == nil {
 					runtime.registrationHealthy.Store(false)
+					p.lifecycle.publishLease(0, false)
 					p.local.coreLog().coreError("etcd: keepalive stream closed; re-registering.")
 					stopRetry()
 					lease, keepAliveCh, err = p.etcdRegisterWithRetry(key, &info, infoCh)
@@ -387,6 +392,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 					}
 					publishedSeq = info.seq
 					runtime.registrationHealthy.Store(true)
+					p.lifecycle.publishLease(lease.ID, true)
 					select {
 					case runtime.resyncWatch <- struct{}{}:
 					default:
@@ -424,6 +430,7 @@ func (p *CosmosProcess) trySettingClusterToCurrentAndKeepalive() *Error {
 
 	if err := p.etcdStartedVersionNodeLock(); err != nil {
 		runtime.registrationHealthy.Store(false)
+		p.lifecycle.publishLease(0, false)
 		return err.AddStack(p.local)
 	}
 	runtime.registrationHealthy.Store(true)

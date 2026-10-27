@@ -2,6 +2,7 @@ package atomos
 
 import (
 	"container/list"
+	"context"
 	"runtime/debug"
 	"time"
 
@@ -139,6 +140,16 @@ func (a *AtomLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 		if err := elemAuth.AtomCanKill(callerID); err != nil {
 			return asError(err).AddStack(a)
 		}
+	}
+	if manager := a.element.cosmosLocal.process.lifecycle; manager != nil {
+		result, err := manager.halt(context.Background(), callerID, a.GetIDInfo(), lifecycleOperationArg(ext), "", false, ext...)
+		if err != nil {
+			return err
+		}
+		if result == nil {
+			return NewError(ErrCodeOperationUnknown, "lifecycle: empty halt result")
+		}
+		return errOrNil(result.Error)
 	}
 
 	return a.atomos.PushKillMail(callerID, ext...)

@@ -94,6 +94,19 @@ func TestGeneratedSpawnForwardsExt(t *testing.T) {
 	})
 }
 
+func TestLifecycleKeysEscapeNames(t *testing.T) {
+	p := &CosmosProcess{local: &CosmosLocal{runnable: &CosmosRunnable{config: &Config{Cosmos: "cosmos/with%slash"}}}}
+	manager := &lifecycleManager{process: p}
+	first := manager.recordKey("element/part", "atom")
+	second := manager.recordKey("element", "part/atom")
+	if first == second {
+		t.Fatalf("ambiguous lifecycle keys: %s", first)
+	}
+	if manager.operationKey("operation/part") == manager.operationKey("operation%2Fpart") {
+		t.Fatal("operation key escaping is reversible")
+	}
+}
+
 func TestLifecycleModeSavedOnProcess(t *testing.T) {
 	id := &IDInfo{Type: IDType_Cosmos, Cosmos: "test_cosmos", Node: "test_node"}
 	p, err := newCosmosProcess(id.Cosmos, id.Node, &reproLogger{})
@@ -103,10 +116,10 @@ func TestLifecycleModeSavedOnProcess(t *testing.T) {
 	if p.lifecycleMode != LifecycleModeLegacyUnsafe {
 		t.Fatalf("default lifecycle mode = %v", p.lifecycleMode)
 	}
-	if err := p.Start(newTestCosmosRunnable(id).SetLifecycleMode(LifecycleModePerAtomStrict)); err != nil {
-		t.Fatal(err)
+	runnable := newTestCosmosRunnable(id).SetLifecycleMode(LifecycleModePerAtomStrict)
+	if err := p.Start(runnable); CodeOf(err) != ErrCodeFencingRequired {
+		t.Fatalf("strict start without etcd error = %v, want FencingRequired", err)
 	}
-	t.Cleanup(func() { _ = p.Stop() })
 	if p.lifecycleMode != LifecycleModePerAtomStrict {
 		t.Fatalf("process lifecycle mode = %v, want PerAtomStrict", p.lifecycleMode)
 	}

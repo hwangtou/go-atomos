@@ -47,8 +47,8 @@ type LifecycleMode int
 const (
 	// LifecycleModeLegacyUnsafe preserves the existing router-driven lifecycle.
 	LifecycleModeLegacyUnsafe LifecycleMode = iota
-	// LifecycleModePerAtomStrict reserves per-atom ownership and fencing.
-	// The ownership manager is not implemented by this configuration alone.
+	// LifecycleModePerAtomStrict enables per-atom etcd ownership, operation
+	// deduplication, incarnation checks and lease fencing. It requires a cluster.
 	LifecycleModePerAtomStrict
 )
 
@@ -181,8 +181,8 @@ func (r *CosmosRunnable) GetConfig() *Config {
 }
 
 // SetLifecycleMode configures the lifecycle guarantees for the process.
-// LifecycleModeLegacyUnsafe is the default. Selecting PerAtomStrict does not
-// install an ownership manager or enable partial ownership checks.
+// LifecycleModeLegacyUnsafe is the default. PerAtomStrict requires an enabled
+// etcd cluster and routes ordinary Spawn/Get/Kill through controlled lifecycle.
 func (r *CosmosRunnable) SetLifecycleMode(mode LifecycleMode) *CosmosRunnable {
 	r.lifecycleMode = mode
 	return r
