@@ -1,6 +1,6 @@
 # 确定性模拟测试（DST）与 I/O 接口化设计
 
-状态：实施中（2026-10-27）。Clock 接口、`atomostest.VirtualClock`、核心生产计时点迁移、内存 etcd 契约实现和 gRPC 故障注入器已落地；etcd 生产调用点迁移、cron、远程 I/O Deadline 与完整内存互连仍待完成。
+状态：实施中（2026-10-27）。Clock 接口、`atomostest.VirtualClock`、核心生产计时点迁移、内存 etcd 契约实现、lifecycle 恢复协议 DST 和 gRPC 故障注入器已落地；cron、远程 I/O Deadline 与完整内存互连仍待完成。
 
 ## 目标
 
@@ -90,7 +90,16 @@ process 只关闭自己创建的客户端，外部注入的共享后端由调用
 - lease TTL 完全由共享 `VirtualClock` 驱动，KeepAlive 立即并按 TTL/3 续约；
   过期和 Revoke 在同一 revision 删除全部绑定 key 并产生 DELETE。
 - Get/Put/Delete/Txn/Watch/Grant/KeepAlive/Revoke 支持持续或单次错误注入；
-  watch 另支持无终止响应断流和 canceled 终止。
+  watch 另支持无终止响应断流和 canceled 终止。普通错误仍在执行前注入。
+- `InjectTxnResponseLossAfter(N, err)` 提供提交后丢响应队列：只在 CAS 成功且
+  事务已写入后消费，先让 N 个成功事务正常返回，再对下一个成功事务返回
+  `nil, err`。专项测试直接读取后端，证明调用方收到错误时 key 已提交。
+- `DisconnectKeepAlives` 只关闭 keepalive 流，不撤销 lease 或改变到期时间；
+  配合 Grant 故障与虚拟 backoff 可重放失租、禁止立即重注册和 heal。
+- 根包 `dst_lifecycle_test.go` 使用真实 lifecycle manager、MemoryEtcd 与
+  VirtualClock，覆盖 Spawn claim/completion 丢响应、Halt 两次事务分别丢响应、
+  同 operation replay、constructor/Halt 不重复执行、lease 过期后的高 fence
+  replacement，以及 owner watch 断流后的 snapshot 重建与旧 fence 拒绝。
 - 同一 contract 在默认测试跑内存实现，在 integration 标签下无 skip 地跑真实
   embedded etcd，覆盖 CAS、缺失 key/空 range 比较、keys-only 元数据、watch
   回放/future revision/compaction、revision 边界、lease 续约/过期/撤销及事务
@@ -100,7 +109,8 @@ process 只关闭自己创建的客户端，外部注入的共享后端由调用
 Compare、watch filters/progress/created/fragment、鉴权与多 endpoint 暂不在窄契约
 内；不要把相应选项的静默缺省当作真实 etcd 支持。内存断流采用调用方显式
 WithRev 恢复，不模拟 clientv3 的自动重连；watch 故障注入只生成 canceled/compacted
-响应，不伪造任意私有 close error。生产调用点迁移及既有 chaos 场景的 DST 化仍待完成。
+响应，不伪造任意私有 close error。其余既有 chaos 场景的 DST 化仍待完成；
+当前 lifecycle DST 不覆盖真实传输重排、自动重试或 WAL 重放。
 
 ### C. gRPC 传输
 

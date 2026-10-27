@@ -1,6 +1,6 @@
 # 分布式生命周期梳理与优化计划
 
-> 状态：阶段 0 已实施；阶段 1 及以后为提案
+> 状态：阶段 0–4 已实施；阶段 5 的 lifecycle DST 已落地，真实传输 DST、混部兼容与容量验证仍待完成
 > 日期：2026-10-27
 > 范围：Atom 的分布式身份、Spawn、Halt、Drain、超时重试与故障接管
 > 关联设计：[Drain](DESIGN_DRAIN_GRADUAL.md)、[Retry/Outbox](DESIGN_RETRY_OUTBOX.md)、[Deadlock](DEADLOCK.md)、[DST](DESIGN_TESTKIT_DST.md)、[v3 API](DESIGN_V3_API.md)
@@ -8,18 +8,22 @@
 本文是分布式生命周期改造的主文档。它区分三类内容：
 
 - **现状**：当前代码已经实现的行为及其保证边界。
-- **阶段 0**：本轮落地的本地生命周期修复。
-- **提案**：后续协议和分布式机制，尚未实施，不能当作现有能力依赖。
+- **已实施阶段**：本地生命周期、受控协议、ownership/fencing、operation 恢复、Takeover、Drain 和 shard。
+- **待完成**：真实传输 DST、旧新节点混部验证、高规模容量测试及独立文档中的 WAL/outbox 等后续工作。
+
+默认 `LifecycleModeLegacyUnsafe` 保留兼容行为；下述分布式保证需要显式启用
+`LifecycleModePerAtomStrict` 或 `LifecycleModePerShardStrict`，并配置 etcd。
 
 ## 一、结论与目标
 
 go-atomos 已有完整的单机 actor 基础：串行 mailbox、生命周期、实例代际、IDTracker、任务调度、同步死锁检测、类型生成和测试工具。
 
-当前分布式部分更准确的定位是：
+当前分布式部分包含两层：
 
-> etcd 服务发现 + 用户 Router 显式放置 + gRPC 远程调用。
+- Legacy：etcd 服务发现 + 用户 Router 显式放置 + gRPC 远程调用，不提供全局 Atom 单例或 fencing。
+- Strict：在相同传输之上增加 etcd ownership、incarnation/startup/fence、可恢复控制操作、显式 Takeover 和失租 fail-closed。Get 通过 owner 记录解析，普通消息使用 owner watch 的本地快照校验，不在热路径读取 etcd。
 
-它还不是带全局 Atom 单例、自动激活、可恢复控制操作和 fencing 的分布式 actor 协议。在 Router 一致、无网络分区、控制操作不做盲目重试时，现有模型可以工作；在超时、响应丢失、节点重启和脑裂下，还需要补充明确协议。
+Strict 提供保留窗口内的控制操作去重和显式异步消息 at-least-once 重试；它不是任意外部副作用的 exactly-once 系统，也没有实现透明内存状态迁移或业务 WAL。
 
 改造目标不是追求字面上的 exactly-once，而是建立以下可验证保证：
 
@@ -33,9 +37,9 @@ go-atomos 已有完整的单机 actor 基础：串行 mailbox、生命周期、�
 
 ### 2.1 调用与放置
 
-`CosmosLocal.CosmosSpawnAtom` 和 Get 通过 `getGlobalElement` 选择本地或远程 Element。启用集群后，用户实现的 `CosmosMainGlobalRouter` 返回目标节点名；框架不查询 Atom ownership，也不验证不同节点的 Router 决策是否一致。
+Legacy 的 `CosmosLocal.CosmosSpawnAtom` 和 Get 通过 `getGlobalElement` 选择本地或远程 Element，用户 `CosmosMainGlobalRouter` 是放置依据。Strict 保留初始 Spawn 的路由入口，但由受控生命周期 CAS 决定唯一 owner；Get/Lookup 读取 ownership，Halt/Takeover 精确绑定旧身份，因此 Router 不再是单例正确性的来源。
 
-位置：`cosmos_local.go:184-193`、`cosmos_local.go:338-374`。
+位置：`cosmos_local.go`、`cosmos_lifecycle_client.go`、`cosmos_lifecycle_control.go`。
 
 ### 2.2 节点注册与版本路由
 
@@ -50,7 +54,7 @@ go-atomos 已有完整的单机 actor 基础：串行 mailbox、生命周期、�
 
 位置：`cosmos_etcd.go`、`cosmos_etcd_version_lock.go`、`cosmos_remote.go:119-159`、`base_remote.go:23-127`。
 
-边界：etcd 登记的是节点和 Element，不登记 Atom 所有权。注册健康也不作为 RPC 准入条件。
+Strict 另外登记 per-Atom 或 per-Shard owner，并将其绑定 process lease；owner snapshot/watch 不健康、lease 改变或 fence 不匹配时，相关 RPC 准入失败。节点注册记录与 Atom ownership 是不同键空间，前者本身仍不证明 Atom 所有权。
 
 ### 2.3 本地实例代际
 
@@ -124,21 +128,21 @@ RPC 重试和 WAL 重放天然可能重复。框架可以提供 operation/messag
 | ID | 级别 | 现状与位置 | 故障后果 | 状态 |
 |---|---|---|---|---|
 | DL-01 | P0 | Stopping 等 10 秒后直接创建新实例；`element_local.go:632-644` | 新旧 Halt/Spawn 和持久化重叠，破坏同名单例 | ✅ 阶段 0 已修复 |
-| DL-02 | P0 | 无 Atom ownership/fencing；`cosmos_local.go:338-374` | 路由不一致或分区时同名多活 | 提案 |
-| DL-03 | P0 | keepalive 重注册失败后 gRPC 不自动停止；`cosmos_etcd.go:313-343` | 失租节点仍可接收控制与业务写请求 | 提案 |
-| DL-04 | P0 | Spawn/Kill 无 operation ID、去重、结果查询；`atomos_remote_service.go:179-215,470-504` | 响应丢失后无法安全恢复或重试 | 提案 |
-| DL-05 | P0 | `instance_id` 跨进程可复用，请求未校验目标 startup/incarnation | stale Kill 可能命中重启后的替代实例 | 提案 |
-| DL-06 | P0 | 后排 Kill 提前回复，主 Kill 在 `setHalted` 前回复；`base_atomos.go:829-982` | WaitKilled 不是统一、完整停止屏障 | ✅ 阶段 0 已修复 |
-| DL-07 | P1 | 同名 Spawn 锁跨用户 Spawn；`element_local.go:573-580,679-684` | 同名重入或跨名字成环可永久死锁 | 提案 |
-| DL-08 | P1 | Halt 持 task stopLock；`base_atomos.go:843-844,974` | Halt/取消回调内调用 Task API 自死锁 | 提案 |
-| DL-09 | P1 | 新实例在用户 Spawn 成功前发布；启动失败未走完整停止清理 | waiter/回调/任务不能及时终结 | 提案 |
-| DL-10 | P1 | Drain 检查在锁外，Get 自动 Spawn 无检查；`element_local.go:274-295,344-357` | Drain 后仍可能创建 Atom，存量统计失真 | 提案 |
-| DL-11 | P1 | `WithRebind` 对连接失败直接重新解析并重发；`id_helper.go:31-60` | Kill/非幂等消息可能重复或作用于替代实例 | 提案 |
-| DL-12 | P1 | 远程 Spawn 丢弃 args，未传 CosmosArgs；`cosmos_remote.go:453-462`、`element_remote.go:201-224` | 本地与远程生命周期参数语义不一致 | 提案 |
-| DL-13 | P1 | GetIDState 将 Atom 解析错误压成 Halt；`atomos_remote_service.go:100-119` | 不可达、stale、不存在等状态无法用于恢复 | 提案 |
-| DL-14 | P1 | 旧实例清理可删除新实例共享的 name 节点；`element_local.go:795-820` | 后续 Element 停止可能漏掉新实例 | 提案 |
-| DL-15 | P2 | 远端异步发送失败只清 pending，不以错误终结回调 | 回调语义与 outbox 设计不一致 | 提案 |
-| DL-16 | P2 | Draining 状态更新采用非阻塞发送；`cosmos_process.go:794-802` | 其他节点可能继续按 Started 路由 | 提案 |
+| DL-02 | P0 | 无 Atom ownership/fencing | 路由不一致或分区时同名多活 | ✅ Strict 已实现；Legacy 不提供该保证 |
+| DL-03 | P0 | keepalive 失效后已建 gRPC 连接仍存在 | 失租节点继续处理请求 | ✅ Strict 按 lease/watch/fence fail-closed |
+| DL-04 | P0 | Spawn/Kill 无 operation ID、去重、结果查询 | 响应丢失后无法安全恢复或重试 | ✅ 受控协议与恢复已实现 |
+| DL-05 | P0 | `instance_id` 跨进程可复用，缺少完整身份 | stale Kill 命中替代实例 | ✅ incarnation/startup/fence 联合校验 |
+| DL-06 | P0 | 后排 Kill 提前回复，主 Kill 在 `setHalted` 前回复 | WaitKilled 不是统一、完整停止屏障 | ✅ 阶段 0 已修复 |
+| DL-07 | P1 | 同名 Spawn 锁跨用户 Spawn | 重入或跨名字成环可永久死锁 | ✅ 容器锁序与短锁已修复 |
+| DL-08 | P1 | Halt 持 task stopLock | Halt/取消回调内调用 Task API 自死锁 | ✅ 已修复 |
+| DL-09 | P1 | 用户 Spawn 成功前发布，失败清理不完整 | waiter/回调/任务不能及时终结 | ✅ 两阶段 Ready 与对称清理 |
+| DL-10 | P1 | Drain 检查在锁外，Get 自动 Spawn 无检查 | Drain 后仍创建 Atom | ✅ 统一启动准入 |
+| DL-11 | P1 | `WithRebind` 对连接失败重新解析并重发 | Kill/非幂等消息可能重复 | ✅ 仅明确 stale 错误触发 |
+| DL-12 | P1 | 远程 Spawn 丢弃 args/CosmosArgs | 本地与远程参数不一致 | ✅ 参数、State、callback 语义对齐 |
+| DL-13 | P1 | GetIDState 将解析错误压成 Halt | 错误无法用于恢复 | ✅ 保留传输与服务端错误 |
+| DL-14 | P1 | 旧实例清理删除新实例共享 name 节点 | Element 停止漏掉新实例 | ✅ 容器身份校验 |
+| DL-15 | P2 | 异步发送失败只清 pending，不终结回调 | 回调悬挂 | ✅ 明确失败回调；显式 Retryable 重试 |
+| DL-16 | P2 | Draining 状态非阻塞更新 | 其他节点继续按 Started 路由 | ✅ 最新状态发布与重试 |
 
 ## 五、阶段 0：先修本地生命周期
 
@@ -160,7 +164,7 @@ Spawn 遇到 Stopping 时：
 
 验收重点：Halt 被 gate 阻塞时，任何 WaitKilled 都不能提前成功；Halt 返回错误时，不能出现一个等待者收到错误、另一个收到 nil。
 
-## 六、目标分布式协议（提案）
+## 六、Strict 分布式协议（已实施）
 
 ### 6.1 控制面与数据面分离
 
@@ -252,6 +256,34 @@ fence；每个 Atom 仍有独立 incarnation、operation 和 owner lookup。Atom
 shard owner watch 共用本地快照，普通消息不读取 etcd。跨节点接管同时使该
 shard 的旧 Atom 准入和旧 operation 写回失败。这里不宣称高规模性能优化完成。
 
+### 6.8 已实现的提交后响应丢失恢复
+
+Spawn/Takeover 与 Halt 的 claim、completion 事务都按“提交可能成功而响应丢失”
+处理，不把 commit error 解释成确定未执行：
+
+- claim 返回错误后按原 `operation_id` 读取记录；同 operation replay 也走同一
+  恢复入口。只有 operation 的 fingerprint/kind/identity 与 owner 完全匹配，
+  owner 分别为 Spawning/Stopping，且 owner 属于当前进程、startup 和当前健康
+  lease 时，才重建原 claim 并继续本地 Spawn 或 Kill。per-Shard 同时恢复并校验
+  shard owner/fence/lease；不会生成新 operation、incarnation 或 fence。
+- 其他进程、其他 startup/lease 的 Running operation 只能 join/wait，或在恢复
+  信息不足时返回带 operation ID 的 Unknown；不得重复本地构造或强杀。不同
+  operation 的 Stopping Halt 仍可 join，但不能误 join 自己。
+- completion 返回错误后先按 operation ID 对账。匹配 fingerprint/kind/identity
+  的终态直接返回持久化结果，并同步恢复成功 Spawn 的本地 owner 快照；不会清理
+  已经发布的本地 Atom。仍为 Running 或无法确认时返回 `ErrOperationUnknown`，
+  而不是伪报未执行。CAS/fencing 与既有 Takeover 语义保持不变。
+- 同一进程按 operation ID 串行化 Spawn/Takeover/Halt 执行，锁在完成后删除；
+  并发 replay 不会同时恢复同一个 Running claim，也不会同时进入用户生命周期代码。
+- 同一 operation 的终态 replay 不重新执行用户 Spawn/Halt。该机制是保留窗口内
+  的控制操作去重与结果恢复，不是任意外部副作用的 exactly-once 承诺；不会把
+  Kill/Spawn 自动透明重试成新 operation ID。
+
+根包 `TestDST_` 用 MemoryEtcd 的确定性提交后丢响应、keepalive 断流和虚拟
+lease/backoff 覆盖上述交错，并以 constructor/Halt 次数、持久化终态、旧 fence
+拒绝和 watch snapshot 重建验证实际行为。真实传输 DST、自动重试与 WAL 重放
+仍属于后续工作。
+
 ## 七、错误与重试契约
 
 控制操作需要区分：
@@ -280,7 +312,7 @@ shard 的旧 Atom 准入和旧 operation 写回失败。这里不宣称高规模
 | 2 ✅ | per-Atom ownership；RPC fencing；失租 fail-closed | 跨节点并发 Spawn 单活，stale Kill 跨重启被拒绝 |
 | 3 ✅（受控生命周期） | 同 operation 恢复、结果保留和显式接管；普通异步透明重试/WAL 不在此范围 | 响应丢失后可按原 operation 对账，重复控制操作不重复执行 |
 | 4 ✅（per-Atom/per-Shard 与 Drain；高规模优化除外） | Drain 与 ownership 统一；稳定 shard ownership 和重平衡 | Drain 无准入绕过，重平衡有明确 CAS 屏障 |
-| 5 | DST、真实故障注入、混部兼容和性能测试 | 关键交错可重放，兼容矩阵和容量边界明确 |
+| 5（部分 ✅） | lifecycle MemoryEtcd/VirtualClock DST 与提交后故障注入已落地；真实传输 DST、混部兼容和性能测试待完成 | 已覆盖关键 lifecycle 交错可重放；完整兼容矩阵和容量边界仍待明确 |
 
 每阶段独立可回滚，不把本地状态机、wire、ownership 和自动重试一次性混入同一改动。
 

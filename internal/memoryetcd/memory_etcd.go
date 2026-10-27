@@ -75,11 +75,17 @@ type MemoryEtcd struct {
 	leases          map[clientv3.LeaseID]*memoryEtcdLease
 	nextLeaseID     clientv3.LeaseID
 
-	watchers      map[uint64]*memoryEtcdWatch
-	nextWatcherID uint64
-	faults        map[MemoryEtcdOperation]error
-	nextFaults    map[MemoryEtcdOperation][]error
-	closed        bool
+	watchers        map[uint64]*memoryEtcdWatch
+	nextWatcherID   uint64
+	faults          map[MemoryEtcdOperation]error
+	nextFaults      map[MemoryEtcdOperation][]error
+	txnResponseLoss []memoryEtcdTxnResponseLoss
+	closed          bool
+}
+
+type memoryEtcdTxnResponseLoss struct {
+	successfulCommits int
+	err               error
 }
 
 type memoryEtcdBatch struct {
@@ -148,6 +154,34 @@ func (m *MemoryEtcd) InjectNextError(op MemoryEtcdOperation, err error) {
 	m.nextFaults[op] = append(m.nextFaults[op], err)
 }
 
+// InjectTxnResponseLossAfter queues a lost transaction response. The fault is
+// consumed only by a successful, committed transaction, after successfulCommits
+// further successful transactions have returned normally. The caller receives
+// nil, err even though the selected transaction is durably visible in the store.
+func (m *MemoryEtcd) InjectTxnResponseLossAfter(successfulCommits int, err error) {
+	if successfulCommits < 0 {
+		panic("atomostest: negative successful transaction count")
+	}
+	if err == nil {
+		panic("atomostest: nil injected error")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.txnResponseLoss = append(m.txnResponseLoss, memoryEtcdTxnResponseLoss{successfulCommits: successfulCommits, err: err})
+}
+
+// DisconnectKeepAlives closes all active keepalive streams without revoking or
+// changing lease expiration. Re-registration remains subject to injected faults.
+func (m *MemoryEtcd) DisconnectKeepAlives() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, lease := range m.leases {
+		for keepAlive := range lease.keepAlives {
+			m.stopKeepAliveLocked(id, keepAlive)
+		}
+	}
+}
+
 // DisconnectWatches closes all active watch channels without a terminal
 // response. A consumer can resume with WithRev(lastRevision+1).
 func (m *MemoryEtcd) DisconnectWatches() {
@@ -211,6 +245,20 @@ func (m *MemoryEtcd) Revision() int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.revision
+}
+
+// WatcherCount returns the number of registered watches on the exact key or
+// prefix. It lets deterministic tests wait until a watch exists before breaking it.
+func (m *MemoryEtcd) WatcherCount(key string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, watch := range m.watchers {
+		if watch.key == key {
+			count++
+		}
+	}
+	return count
 }
 
 // Get retrieves keys in ascending bytewise key order.
@@ -460,6 +508,14 @@ func (t *memoryEtcdTxn) Commit() (*clientv3.TxnResponse, error) {
 	responses, revision, err := m.commitLocked(ops)
 	if err != nil {
 		return nil, err
+	}
+	if succeeded && len(m.txnResponseLoss) > 0 {
+		if m.txnResponseLoss[0].successfulCommits == 0 {
+			err = m.txnResponseLoss[0].err
+			m.txnResponseLoss = m.txnResponseLoss[1:]
+			return nil, err
+		}
+		m.txnResponseLoss[0].successfulCommits--
 	}
 	return &clientv3.TxnResponse{
 		Header:    memoryEtcdHeader(revision),

@@ -22,6 +22,11 @@ var (
 	lifecycleResultTTL     = time.Hour
 )
 
+type lifecycleOperationLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
 type lifecycleManager struct {
 	process       *CosmosProcess
 	cli           EtcdClient
@@ -36,6 +41,8 @@ type lifecycleManager struct {
 	watchDone     chan struct{}
 	stop          chan struct{}
 	stopped       chan struct{}
+	operationMu   sync.Mutex
+	operations    map[string]*lifecycleOperationLock
 	janitorActive atomic.Bool
 	closeOnce     sync.Once
 	controlReads  atomic.Int64
@@ -43,6 +50,31 @@ type lifecycleManager struct {
 
 func newLifecycleManager(p *CosmosProcess) *lifecycleManager {
 	return &lifecycleManager{process: p, owners: map[string]lifecycleOwnerSnapshot{}, shards: map[string]lifecycleShardSnapshot{}, stop: make(chan struct{}), stopped: make(chan struct{})}
+}
+
+func (m *lifecycleManager) lockOperation(operationID string) func() {
+	m.operationMu.Lock()
+	if m.operations == nil {
+		m.operations = map[string]*lifecycleOperationLock{}
+	}
+	lock := m.operations[operationID]
+	if lock == nil {
+		lock = &lifecycleOperationLock{}
+		m.operations[operationID] = lock
+	}
+	lock.refs++
+	m.operationMu.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		m.operationMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(m.operations, operationID)
+		}
+		m.operationMu.Unlock()
+	}
 }
 
 func randomNonZeroUint64() (uint64, error) {

@@ -16,11 +16,100 @@ type lifecycleSpawnClaim struct {
 	retain    bool
 }
 
+func lifecycleOperationMatchesIdentity(operation *AtomOperationInfo, id *IDInfo) bool {
+	if operation == nil || operation.Id == nil || id == nil {
+		return false
+	}
+	return operation.Id.Element == id.Element && operation.Id.Atom == id.Atom &&
+		operation.Id.Incarnation == id.Incarnation && operation.Id.StartupId == id.StartupId && operation.Id.Fence == id.Fence
+}
+
+func (m *lifecycleManager) persistedOperationResult(operationID, fingerprint string, kind AtomOperationKind, id *IDInfo) (*AtomControlResult, *Error) {
+	op, _, err := m.loadOperation(operationID)
+	if err != nil {
+		return nil, err
+	}
+	if op.Operation == nil || op.Operation.OperationId != operationID || op.Operation.Fingerprint != fingerprint || op.Operation.Kind != kind || !lifecycleOperationMatchesIdentity(op.Operation, id) {
+		return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: operation fingerprint/kind/identity conflict")
+	}
+	if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
+		if op.Result == nil || op.Result.OperationId != operationID || !lifecycleOperationMatchesIdentity(op.Operation, op.Result.Id) {
+			return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: terminal operation result identity conflict")
+		}
+		return proto.Clone(op.Result).(*AtomControlResult), nil
+	}
+	return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: operation result is unknown")
+}
+
+func (m *lifecycleManager) persistedSpawnResult(operationID string, claim *lifecycleSpawnClaim) (*AtomControlResult, *Error) {
+	result, err := m.persistedOperationResult(operationID, claim.operation.Operation.Fingerprint, claim.operation.Operation.Kind, claim.owner.Ownership.Id)
+	if err != nil || result.Error != nil {
+		return result, err
+	}
+	owner, ownerMod, loadErr := m.loadOwner(claim.owner.Ownership.Id.Element, claim.owner.Ownership.Id.Atom)
+	if loadErr == nil && owner != nil && owner.OperationId == operationID && owner.Ownership.State == AtomLifecycleState_AtomLifecycleStateRunning && lifecycleSameIdentity(claim.owner.Ownership.Id, owner.Ownership) {
+		m.cacheOwnerPut(m.ownerKey(claim.owner.Ownership.Id.Element, claim.owner.Ownership.Id.Atom), owner, ownerMod)
+	}
+	return result, nil
+}
+
+func (m *lifecycleManager) recoverSpawnClaim(operationID, fingerprint string, kind AtomOperationKind) (*lifecycleSpawnClaim, *Error) {
+	op, _, err := m.loadOperation(operationID)
+	if err != nil {
+		return nil, err
+	}
+	if op.Operation == nil || op.Operation.OperationId != operationID || op.Operation.Fingerprint != fingerprint || op.Operation.Kind != kind {
+		return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: operation fingerprint/kind conflict")
+	}
+	if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
+		if op.Result == nil {
+			return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: terminal operation has no result")
+		}
+		return &lifecycleSpawnClaim{result: proto.Clone(op.Result).(*AtomControlResult)}, nil
+	}
+	id := op.Operation.Id
+	if id == nil {
+		return nil, nil
+	}
+	owner, ownerMod, err := m.loadOwner(id.Element, id.Atom)
+	if err != nil || owner == nil || owner.OperationId != operationID || owner.Ownership == nil ||
+		owner.Ownership.State != AtomLifecycleState_AtomLifecycleStateSpawning || !lifecycleOperationMatchesIdentity(op.Operation, owner.Ownership.Id) ||
+		!lifecycleSameIdentity(id, owner.Ownership) {
+		return nil, err
+	}
+	leaseID, healthy := m.currentLease()
+	if !healthy || owner.LeaseId != int64(leaseID) || id.Node != m.process.local.GetNodeName() || id.StartupId != m.process.startupID {
+		return nil, nil
+	}
+	var shard *ShardOwnershipRecord
+	if m.perShard() {
+		var shardMod int64
+		shard, shardMod, err = m.loadShardOwner(id.ShardId)
+		if err != nil || shard == nil || shard.Fence != id.Fence || shard.LeaseId != int64(leaseID) || shard.Node != id.Node || shard.StartupId != id.StartupId {
+			return nil, err
+		}
+		m.cacheShardPut(m.shardOwnerKey(id.ShardId), shard, shardMod)
+	}
+	result := op.Result
+	if result == nil {
+		result = &AtomControlResult{OperationId: operationID, Id: id, Ownership: owner.Ownership, Operation: op.Operation}
+	}
+	m.cacheOwnerPut(m.ownerKey(id.Element, id.Atom), owner, ownerMod)
+	return &lifecycleSpawnClaim{operation: op, owner: owner, result: proto.Clone(result).(*AtomControlResult), shard: shard}, nil
+}
+
 func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerprint string, kind AtomOperationKind, element, atom string, previous *IDInfo, takeover bool) (*lifecycleSpawnClaim, *Error) {
 	if result, exists, err := m.existingOperation(operationID, fingerprint, kind); err != nil {
 		return nil, err
 	} else if exists {
 		if result.Operation != nil && result.Operation.State == AtomOperationState_AtomOperationStateRunning {
+			claim, recoverErr := m.recoverSpawnClaim(operationID, fingerprint, kind)
+			if recoverErr != nil {
+				return nil, recoverErr
+			}
+			if claim != nil {
+				return claim, nil
+			}
 			result, err = m.waitOperation(ctx, operationID, fingerprint, kind)
 			if err != nil {
 				return nil, err
@@ -110,7 +199,17 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 		)
 		rsp, er := txn.Commit()
 		if er != nil {
-			return nil, lifecycleError(operationID, ErrCodeCosmosEtcdUpdateFailed, "lifecycle: claim: %v", er)
+			claim, recoverErr := m.recoverSpawnClaim(operationID, fingerprint, kind)
+			if recoverErr != nil {
+				if CodeOf(recoverErr) == ErrCodeOperationNotFound {
+					return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: claim result is unknown: %v", er)
+				}
+				return nil, recoverErr
+			}
+			if claim == nil {
+				return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: claim result is unknown: %v", er)
+			}
+			return claim, nil
 		}
 		if rsp.Succeeded {
 			m.cacheOwnerPut(ownerKey, owner, rsp.Header.Revision)
@@ -119,6 +218,15 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 		if result, exists, err := m.existingOperation(operationID, fingerprint, kind); err != nil {
 			return nil, err
 		} else if exists {
+			if result.Operation != nil && result.Operation.State == AtomOperationState_AtomOperationStateRunning {
+				claim, recoverErr := m.recoverSpawnClaim(operationID, fingerprint, kind)
+				if recoverErr != nil {
+					return nil, recoverErr
+				}
+				if claim != nil {
+					return claim, nil
+				}
+			}
 			result, err = m.waitOperation(ctx, operationID, fingerprint, kind)
 			return &lifecycleSpawnClaim{result: result}, err
 		}
@@ -130,6 +238,9 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 	opRecord, opMod, err := m.loadOperation(operationID)
 	if err != nil {
 		return nil, err
+	}
+	if opRecord.Operation != nil && opRecord.Operation.State != AtomOperationState_AtomOperationStateRunning {
+		return m.persistedSpawnResult(operationID, claim)
 	}
 	owner, ownerMod, err := m.loadOwner(claim.owner.Ownership.Id.Element, claim.owner.Ownership.Id.Atom)
 	if err != nil {
@@ -196,9 +307,12 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 	}
 	rsp, er := txn.Commit()
 	if er != nil {
-		return nil, lifecycleError(operationID, ErrCodeCosmosEtcdUpdateFailed, "lifecycle: finish spawn: %v", er)
+		return m.persistedSpawnResult(operationID, claim)
 	}
 	if !rsp.Succeeded {
+		if result, resultErr := m.persistedSpawnResult(operationID, claim); resultErr == nil {
+			return result, nil
+		}
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: spawn completion CAS failed")
 	}
 	if businessErr == nil {
@@ -231,6 +345,8 @@ func (m *lifecycleManager) spawn(ctx context.Context, callerID ID, element, atom
 		}
 		fingerprint = lifecycleFingerprint(AtomOperationKind_AtomOperationKindSpawn, element, atom, buf, nil)
 	}
+	unlock := m.lockOperation(operationID)
+	defer unlock()
 	claim, err := m.claimSpawn(ctx, operationID, fingerprint, AtomOperationKind_AtomOperationKindSpawn, element, atom, nil, false)
 	if err != nil {
 		return &AtomControlResult{OperationId: operationID, Error: err}, nil
@@ -277,6 +393,67 @@ func (m *lifecycleManager) spawn(ctx context.Context, callerID ID, element, atom
 	return claim.result, nil
 }
 
+func (m *lifecycleManager) recoverHaltClaim(operationID, fingerprint string, id *IDInfo) (*AtomOwnershipRecord, *AtomControlResult, *Error) {
+	op, _, err := m.loadOperation(operationID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if op.Operation == nil || op.Operation.OperationId != operationID || op.Operation.Fingerprint != fingerprint || op.Operation.Kind != AtomOperationKind_AtomOperationKindHalt || !lifecycleOperationMatchesIdentity(op.Operation, id) {
+		return nil, nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: operation fingerprint/kind/identity conflict")
+	}
+	if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
+		if op.Result == nil {
+			return nil, nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: terminal operation has no result")
+		}
+		return nil, proto.Clone(op.Result).(*AtomControlResult), nil
+	}
+	owner, _, err := m.loadOwner(id.Element, id.Atom)
+	if err != nil || owner == nil || owner.OperationId != operationID || owner.Ownership == nil ||
+		owner.Ownership.State != AtomLifecycleState_AtomLifecycleStateStopping || !lifecycleSameIdentity(id, owner.Ownership) {
+		return nil, nil, err
+	}
+	leaseID, healthy := m.currentLease()
+	if !healthy || owner.LeaseId != int64(leaseID) || id.Node != m.process.local.GetNodeName() || id.StartupId != m.process.startupID {
+		return nil, nil, nil
+	}
+	if m.perShard() {
+		shard, _, shardErr := m.loadShardOwner(id.ShardId)
+		if shardErr != nil || shard == nil || shard.Fence != id.Fence || shard.LeaseId != int64(leaseID) || shard.Node != id.Node || shard.StartupId != id.StartupId {
+			return nil, nil, shardErr
+		}
+	}
+	return owner, nil, nil
+}
+
+func (m *lifecycleManager) executeHalt(callerID ID, id *IDInfo, operationID string, claim *AtomOwnershipRecord, retain bool, args ...ArgsForBaseAtomos) (*AtomControlResult, *Error) {
+	elem, err := m.process.local.getLocalElement(id.Element)
+	if err != nil {
+		return nil, err
+	}
+	atom, err := elem.getAtomFromRemote(id.Atom, id.InstanceId)
+	var businessErr *Error
+	if err != nil {
+		businessErr = err
+	} else {
+		if callerID == nil {
+			callerID = m.process.local
+		}
+		killArgs := append([]ArgsForBaseAtomos{}, args...)
+		waitKilled := false
+		for _, arg := range args {
+			if arg != nil && arg.getArgType() == ArgTypeBaseAtomosWaitKilled {
+				waitKilled = true
+			}
+		}
+		if !waitKilled {
+			killArgs = append(killArgs, ArgBaseAtomosWaitKilled())
+		}
+		killArgs = append(killArgs, &argBaseAtomosLifecycle{identity: id, internal: true})
+		businessErr = asError(atom.atomos.PushKillMail(callerID, killArgs...))
+	}
+	return m.finishHalt(operationID, claim, businessErr, retain)
+}
+
 func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, operationID, fingerprint string, retain bool, args ...ArgsForBaseAtomos) (*AtomControlResult, *Error) {
 	if err := m.requireUsable(); err != nil {
 		return nil, err
@@ -294,10 +471,22 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 	if fingerprint == "" {
 		fingerprint = lifecycleFingerprint(AtomOperationKind_AtomOperationKindHalt, id.Element, id.Atom, nil, id)
 	}
+	unlock := m.lockOperation(operationID)
+	defer unlock()
 	if result, exists, err := m.existingOperation(operationID, fingerprint, AtomOperationKind_AtomOperationKindHalt); err != nil {
 		return nil, err
 	} else if exists {
 		if result.Operation != nil && result.Operation.State == AtomOperationState_AtomOperationStateRunning {
+			claim, recovered, recoverErr := m.recoverHaltClaim(operationID, fingerprint, id)
+			if recoverErr != nil {
+				return nil, recoverErr
+			}
+			if recovered != nil {
+				return recovered, nil
+			}
+			if claim != nil {
+				return m.executeHalt(callerID, id, operationID, claim, retain, args...)
+			}
 			return m.waitOperation(ctx, operationID, fingerprint, AtomOperationKind_AtomOperationKindHalt)
 		}
 		return result, nil
@@ -353,7 +542,20 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		).Commit()
 		cancel()
 		if er != nil {
-			return nil, asError(er)
+			recoveredClaim, result, recoverErr := m.recoverHaltClaim(operationID, fingerprint, id)
+			if recoverErr != nil {
+				if CodeOf(recoverErr) == ErrCodeOperationNotFound {
+					return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: halt claim result is unknown: %v", er)
+				}
+				return nil, recoverErr
+			}
+			if result != nil {
+				return result, nil
+			}
+			if recoveredClaim == nil {
+				return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: halt claim result is unknown: %v", er)
+			}
+			return m.executeHalt(callerID, id, operationID, recoveredClaim, retain, args...)
 		}
 		if rsp.Succeeded {
 			m.cacheOwnerPut(m.ownerKey(id.Element, id.Atom), newOwner, rsp.Header.Revision)
@@ -361,42 +563,29 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 			break
 		}
 		if _, exists, err := m.existingOperation(operationID, fingerprint, AtomOperationKind_AtomOperationKindHalt); err == nil && exists {
+			recoveredClaim, result, recoverErr := m.recoverHaltClaim(operationID, fingerprint, id)
+			if recoverErr != nil {
+				return nil, recoverErr
+			}
+			if result != nil {
+				return result, nil
+			}
+			if recoveredClaim != nil {
+				return m.executeHalt(callerID, id, operationID, recoveredClaim, retain, args...)
+			}
 			return m.waitOperation(ctx, operationID, fingerprint, AtomOperationKind_AtomOperationKindHalt)
 		}
 	}
 	if claim == nil {
 		return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: halt claim contention")
 	}
-
-	elem, err := m.process.local.getLocalElement(id.Element)
-	if err != nil {
-		return nil, err
-	}
-	atom, err := elem.getAtomFromRemote(id.Atom, id.InstanceId)
-	var businessErr *Error
-	if err != nil {
-		businessErr = err
-	} else {
-		if callerID == nil {
-			callerID = m.process.local
-		}
-		killArgs := append([]ArgsForBaseAtomos{}, args...)
-		waitKilled := false
-		for _, arg := range args {
-			if arg != nil && arg.getArgType() == ArgTypeBaseAtomosWaitKilled {
-				waitKilled = true
-			}
-		}
-		if !waitKilled {
-			killArgs = append(killArgs, ArgBaseAtomosWaitKilled())
-		}
-		killArgs = append(killArgs, &argBaseAtomosLifecycle{identity: id, internal: true})
-		businessErr = asError(atom.atomos.PushKillMail(callerID, killArgs...))
-	}
-	return m.finishHalt(operationID, claim, businessErr, retain)
+	return m.executeHalt(callerID, id, operationID, claim, retain, args...)
 }
 
 func (m *lifecycleManager) joinStoppingHalt(ctx context.Context, operationID, fingerprint string, retain bool, owner *AtomOwnershipRecord) (*AtomControlResult, *Error) {
+	if owner.OperationId == operationID {
+		return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: cannot join its own halt operation")
+	}
 	joined, _, err := m.loadOperation(owner.OperationId)
 	if err != nil {
 		return nil, err
@@ -437,6 +626,9 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 	op, opMod, err := m.loadOperation(operationID)
 	if err != nil {
 		return nil, err
+	}
+	if op.Operation != nil && op.Operation.State != AtomOperationState_AtomOperationStateRunning {
+		return m.persistedOperationResult(operationID, op.Operation.Fingerprint, op.Operation.Kind, id)
 	}
 	currentOwner, ownerMod, err := m.loadOwner(id.Element, id.Atom)
 	if err != nil {
@@ -494,9 +686,12 @@ func (m *lifecycleManager) finishHalt(operationID string, owner *AtomOwnershipRe
 	rsp, er := m.process.cluster.etcdClient.Txn(ctx).If(comparisons...).Then(EtcdOpPut(m.operationKey(operationID), opBuf, 0), EtcdOpPut(m.recordKey(id.Element, id.Atom), recordBuf, 0), EtcdOpDelete(m.ownerKey(id.Element, id.Atom))).Commit()
 	cancel()
 	if er != nil {
-		return nil, asError(er)
+		return m.persistedOperationResult(operationID, op.Operation.Fingerprint, op.Operation.Kind, id)
 	}
 	if !rsp.Succeeded {
+		if persisted, resultErr := m.persistedOperationResult(operationID, op.Operation.Fingerprint, op.Operation.Kind, id); resultErr == nil {
+			return persisted, nil
+		}
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: halt completion CAS failed")
 	}
 	m.cacheOwnerDelete(m.ownerKey(id.Element, id.Atom), rsp.Header.Revision)
@@ -551,6 +746,8 @@ func (m *lifecycleManager) takeover(ctx context.Context, callerID ID, id, previo
 	if fingerprint == "" {
 		fingerprint = lifecycleFingerprint(AtomOperationKind_AtomOperationKindTakeover, id.Element, id.Atom, buf, previous)
 	}
+	unlock := m.lockOperation(operationID)
+	defer unlock()
 	previousOwner, _, err := m.loadOwner(id.Element, id.Atom)
 	if err != nil {
 		return nil, err
