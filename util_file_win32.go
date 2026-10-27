@@ -69,10 +69,10 @@ func utilFileFileExist(file string) (bool, *Error) {
 		if os.IsNotExist(er) {
 			return false, nil
 		}
-		return false, NewErrorf(ErrCodeUtilFileFileExistFailed, "utilFileFileExist: Failed to stat file. file=(%s),err=(%v)", file, er).AddStack(nil)
+		return false, NewErrorf(ErrCodeUtilFileExistCheckFailed, "utilFileFileExist: Failed to stat file. file=(%s),err=(%v)", file, er).AddStack(nil)
 	}
 	if pathStat.IsDir() {
-		return false, NewErrorf(ErrCodeUtilFileFileExistFailed, "utilFileFileExist: utilPath is directory. file=(%s)", file).AddStack(nil)
+		return false, NewErrorf(ErrCodeUtilFileExistCheckFailed, "utilFileFileExist: utilPath is directory. file=(%s)", file).AddStack(nil)
 	}
 	return true, nil
 }

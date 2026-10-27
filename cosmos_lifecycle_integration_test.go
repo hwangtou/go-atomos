@@ -391,7 +391,7 @@ func TestLifecycleIntegrationOwnerWatchReconnects(t *testing.T) {
 	if watchStayedHealthy {
 		t.Fatal("owner watch stayed healthy after etcd stopped")
 	}
-	if !errors.Is(disconnectedMessageErr, ErrOwnershipLost) {
+	if !errors.Is(disconnectedMessageErr, ErrOwnershipNotReady) {
 		t.Fatalf("message with disconnected owner watch = %v", disconnectedMessageErr)
 	}
 	deadline = time.Now().Add(15 * time.Second)

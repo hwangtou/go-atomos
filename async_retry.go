@@ -66,12 +66,12 @@ func (m *asyncRetryManager) submit(target, messageID string, deliver func(attemp
 	}
 	if len(queue.requests) >= m.maxQueue {
 		m.mutex.Unlock()
-		return NewError(ErrCodeCosmosRemoteResponseFailed, "AsyncRetry: target queue is full").AddStack(nil)
+		return NewError(ErrCodeAsyncRetryQueueFull, "AsyncRetry: target queue is full").AddStack(nil)
 	}
 	for _, pending := range queue.requests {
 		if pending.messageID == messageID {
 			m.mutex.Unlock()
-			return NewError(ErrCodeOperationConflict, "AsyncRetry: duplicate pending message ID").AddStack(nil)
+			return NewError(ErrCodeAsyncDuplicateMessage, "AsyncRetry: duplicate pending message ID").AddStack(nil)
 		}
 	}
 	queue.requests = append(queue.requests, &asyncRetryRequest{

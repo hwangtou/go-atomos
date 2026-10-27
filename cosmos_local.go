@@ -61,11 +61,11 @@ func (c *CosmosLocal) DecoderByName(name string) (MessageDecoder, MessageDecoder
 }
 
 func (c *CosmosLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
-	return NewError(ErrCodeMainCannotKill, "Cosmos: Cannot kill local.").AddStack(c)
+	return NewError(ErrCodeOperationUnsupported, "Cosmos: Cannot kill local.").AddStack(c)
 }
 
 func (c *CosmosLocal) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
-	return NewError(ErrCodeMainCannotSendWormhole, "Cosmos: Cannot send wormhole to local.").AddStack(c)
+	return NewError(ErrCodeOperationUnsupported, "Cosmos: Cannot send wormhole to local.").AddStack(c)
 }
 
 func (c *CosmosLocal) getGoID() uint64 {
@@ -289,7 +289,7 @@ func (c *CosmosLocal) onFnCallback(callback *atomosCallback) {
 func (c *CosmosLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := c.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		err := NewErrorf(ErrCodeAtomosNotSupportWormhole, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
+		err := NewErrorf(ErrCodeOperationUnsupported, "Cosmos: Not supported wormhole. type=(%T)", c.atomos.instance)
 		c.Log().Error(err.Message)
 		return err
 	}
@@ -368,7 +368,7 @@ func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Err
 
 	nodeName, has := router.GetCosmosNodeName(c.GetNodeName(), elemName, atomName)
 	if !has {
-		return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: GetCosmossNodeName failed. element=(%s),atomName=(%s)", elemName, atomName).AddStack(c)
+		return nil, NewErrorf(ErrCodeElementNotFound, "Cosmos: GetCosmossNodeName failed. element=(%s),atomName=(%s)", elemName, atomName).AddStack(c)
 	}
 
 	if nodeName == c.GetNodeName() {
@@ -382,7 +382,7 @@ func (c *CosmosLocal) getGlobalElement(elemName, atomName string) (Element, *Err
 		defer c.process.cluster.remoteMutex.RUnlock()
 		cr, has := c.process.cluster.remoteCosmos[nodeName]
 		if !has {
-			return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Remote element not found. name=(%s)", elemName).AddStack(c)
+			return nil, NewErrorf(ErrCodeElementNotFound, "Cosmos: Remote element not found. name=(%s)", elemName).AddStack(c)
 		}
 		e, err := cr.getElement(elemName)
 		if err != nil {
@@ -401,7 +401,7 @@ func (c *CosmosLocal) getLocalElement(name string) (elem *ElementLocal, err *Err
 	}
 	elem, has := c.elements[name]
 	if !has {
-		return nil, NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
+		return nil, NewErrorf(ErrCodeElementNotFound, "Cosmos: Local element not found. name=(%s)", name).AddStack(c)
 	}
 	return elem, nil
 }
@@ -426,7 +426,7 @@ func (c *CosmosLocal) trySpawningElements() (err *Error) {
 	for _, name := range c.runnable.spawnOrder {
 		impl := c.runnable.implements[name]
 		if impl == nil {
-			err = NewErrorf(ErrCodeMainElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)
+			err = NewErrorf(ErrCodeElementNotFound, "Cosmos: Element not found. name=(%s)", name).AddStack(c)
 			c.Log().Fatal("Cosmos: Spawning element failed. name=(%s),err=(%s)", name, err.Message)
 			break
 		}

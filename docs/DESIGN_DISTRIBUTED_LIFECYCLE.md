@@ -347,7 +347,7 @@ lease/backoff 覆盖上述交错，并以 constructor/Halt 次数、持久化终
 
 ## 十、兼容与实施纪律
 
-- `atomos.proto` 只追加字段，既有字段和错误码数值冻结。
+- `atomos.proto` 只追加字段，既有字段编号和用途冻结；错误码按 `error_code.go` 的领域号段分配，并在 `error_spec.go` 注册语义，不再沿用本文早期的连续编号冻结规则。
 - 新语义先以追加 RPC/可选能力引入，不在同一版本偷偷改变旧字段含义。
 - 旧节点不理解 operation/fence 时，必须降级为“不提供新保证”，不能伪报安全。
 - 不在没有 operation 身份和幂等契约前上线自动重试或自动接管。

@@ -47,8 +47,8 @@ func Test_etcdKeepalive_UnreachableFailsFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error against unreachable etcd, got nil")
 	}
-	if code := CodeOf(err); code != ErrCodeCosmosEtcdKeepaliveFailed {
-		t.Errorf("Expected ErrCodeCosmosEtcdKeepaliveFailed, got code=(%d), err=(%v)", code, err)
+	if code := CodeOf(err); code != ErrCodeStorageUnavailable {
+		t.Errorf("Expected ErrCodeStorageUnavailable, got code=(%d), err=(%v)", code, err)
 	}
 	// Generous upper bound: the op timeout is 500ms; anything close to the
 	// old behavior (hang until test-timeout) fails here.
@@ -60,14 +60,14 @@ func Test_etcdKeepalive_UnreachableFailsFast(t *testing.T) {
 func Test_etcdHelpers_UnreachableReturnCodedErrors(t *testing.T) {
 	cli := newDeadEndpointClient(t)
 
-	if err := etcdPut(cli, "testKey", []byte("testValue")); CodeOf(err) != ErrCodeCosmosEtcdPutFailed {
-		t.Errorf("etcdPut: expected ErrCodeCosmosEtcdPutFailed, got (%v)", err)
+	if err := etcdPut(cli, "testKey", []byte("testValue")); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdPut: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
-	if _, _, err := etcdGet(cli, "testKey"); CodeOf(err) != ErrCodeCosmosEtcdGetFailed {
-		t.Errorf("etcdGet: expected ErrCodeCosmosEtcdGetFailed, got (%v)", err)
+	if _, _, err := etcdGet(cli, "testKey"); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdGet: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
-	if err := etcdDelete(cli, "testKey"); CodeOf(err) != ErrCodeCosmosEtcdDeleteFailed {
-		t.Errorf("etcdDelete: expected ErrCodeCosmosEtcdDeleteFailed, got (%v)", err)
+	if err := etcdDelete(cli, "testKey"); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdDelete: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
 }
 
@@ -120,8 +120,8 @@ func Test_etcdKeepalive_HungEndpointFailsFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error against unresponsive etcd, got nil")
 	}
-	if code := CodeOf(err); code != ErrCodeCosmosEtcdKeepaliveFailed {
-		t.Errorf("Expected ErrCodeCosmosEtcdKeepaliveFailed, got code=(%d), err=(%v)", code, err)
+	if code := CodeOf(err); code != ErrCodeStorageUnavailable {
+		t.Errorf("Expected ErrCodeStorageUnavailable, got code=(%d), err=(%v)", code, err)
 	}
 	if elapsed > 5*time.Second {
 		t.Errorf("etcdKeepalive blocked %v against a hung endpoint; expected it to fail fast", elapsed)
@@ -131,14 +131,14 @@ func Test_etcdKeepalive_HungEndpointFailsFast(t *testing.T) {
 func Test_etcdHelpers_HungEndpointReturnCodedErrors(t *testing.T) {
 	cli := newTarpitClient(t)
 
-	if err := etcdPut(cli, "testKey", []byte("testValue")); CodeOf(err) != ErrCodeCosmosEtcdPutFailed {
-		t.Errorf("etcdPut: expected ErrCodeCosmosEtcdPutFailed, got (%v)", err)
+	if err := etcdPut(cli, "testKey", []byte("testValue")); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdPut: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
-	if _, _, err := etcdGet(cli, "testKey"); CodeOf(err) != ErrCodeCosmosEtcdGetFailed {
-		t.Errorf("etcdGet: expected ErrCodeCosmosEtcdGetFailed, got (%v)", err)
+	if _, _, err := etcdGet(cli, "testKey"); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdGet: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
-	if err := etcdDelete(cli, "testKey"); CodeOf(err) != ErrCodeCosmosEtcdDeleteFailed {
-		t.Errorf("etcdDelete: expected ErrCodeCosmosEtcdDeleteFailed, got (%v)", err)
+	if err := etcdDelete(cli, "testKey"); CodeOf(err) != ErrCodeStorageUnavailable {
+		t.Errorf("etcdDelete: expected ErrCodeStorageUnavailable, got (%v)", err)
 	}
 }
 

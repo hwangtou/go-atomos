@@ -183,7 +183,7 @@ func TestAtomSpawnAdmissionDrainDeadlineAndRepeat(t *testing.T) {
 		process.mutex.RUnlock()
 		return state == CosmosProcessStateOff
 	}, "Drain deadline did not stop the process")
-	if err := process.Drain(time.Hour); CodeOf(err) != ErrCodeCosmosProcessInvalidState {
-		t.Fatalf("Drain after deadline error = %v, want ErrCodeCosmosProcessInvalidState", err)
+	if err := process.Drain(time.Hour); CodeOf(err) != ErrCodeCosmosProcessInvalidTransition {
+		t.Fatalf("Drain after deadline error = %v, want ErrCodeCosmosProcessInvalidTransition", err)
 	}
 }

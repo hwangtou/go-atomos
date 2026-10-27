@@ -119,11 +119,11 @@ func (e *ElementRemote) DecoderByName(name string) (MessageDecoder, MessageDecod
 }
 
 func (e *ElementRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
-	return NewError(ErrCodeElementRemoteCannotKill, "ElementRemote: Cannot kill remote element.").AddStack(nil)
+	return NewError(ErrCodeOperationUnsupported, "ElementRemote: Cannot kill remote element.").AddStack(nil)
 }
 
 func (e *ElementRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
-	return NewErrorf(ErrCodeElementRemoteCannotSendWormhole, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
+	return NewErrorf(ErrCodeOperationUnsupported, "ElementRemote: Cannot send remote wormhole.").AddStack(nil)
 }
 
 func (e *ElementRemote) getGoID() uint64 {
@@ -151,7 +151,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 		case AtomLifecycleState_AtomLifecycleStateAbsent:
 			impl := e.cosmos.process.local.runnable.implements[e.remote.info.Element]
 			if impl == nil {
-				return nil, nil, NewError(ErrCodeMainElementNotFound, "lifecycle: element not registered")
+				return nil, nil, NewError(ErrCodeElementNotFound, "lifecycle: element not registered")
 			}
 			persistence, ok := impl.Developer.(AutoData)
 			if !ok || persistence == nil {
@@ -160,7 +160,7 @@ func (e *ElementRemote) GetAtomID(name string, _ *IDTrackerInfo, args ...ArgsFor
 			id, spawnErr := e.spawnControlled(e.cosmos.process.local, name, nil, args...)
 			return id, nil, errOrNil(spawnErr)
 		default:
-			return nil, nil, NewError(ErrCodeOperationStillRunning, "lifecycle: atom is not Running")
+			return nil, nil, NewErrorf(lifecycleAtomStateErrorCode(lookup.State), "lifecycle: atom is %s", lookup.State)
 		}
 	}
 	cli, conn, ctx, cancel, err := e.remote.getCliWithConn(atomosClientTimeout)

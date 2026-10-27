@@ -11,8 +11,8 @@ func TestErrorIsByCode(t *testing.T) {
 	if !errors.Is(err, ErrAtomNotExists) {
 		t.Errorf("errors.Is(err, ErrAtomNotExists) = false, want true")
 	}
-	if errors.Is(err, ErrAtomIsRunning) {
-		t.Errorf("errors.Is(err, ErrAtomIsRunning) = true, want false")
+	if errors.Is(err, ErrAtomAlreadyExists) {
+		t.Errorf("errors.Is(err, ErrAtomAlreadyExists) = true, want false")
 	}
 	wrapped := fmt.Errorf("spawn: %w", err)
 	if !errors.Is(wrapped, ErrAtomNotExists) {
@@ -63,14 +63,14 @@ func TestCodeOf(t *testing.T) {
 	if got := CodeOf(errors.New("plain")); got != ErrCodeUnknown {
 		t.Errorf("CodeOf(plain) = %d, want %d (ErrCodeUnknown)", got, ErrCodeUnknown)
 	}
-	if got := CodeOf(ErrAtomIsRunning); got != ErrCodeAtomIsRunning {
-		t.Errorf("CodeOf(sentinel) = %d, want %d", got, ErrCodeAtomIsRunning)
+	if got := CodeOf(ErrAtomAlreadyExists); got != ErrCodeAtomAlreadyExists {
+		t.Errorf("CodeOf(sentinel) = %d, want %d", got, ErrCodeAtomAlreadyExists)
 	}
 }
 
 func TestIsAtomExistDeprecated(t *testing.T) {
-	if !NewError(ErrCodeAtomIsRunning, "x").IsAtomExist() {
-		t.Errorf("IsAtomExist on ErrCodeAtomIsRunning = false, want true")
+	if !NewError(ErrCodeAtomAlreadyExists, "x").IsAtomExist() {
+		t.Errorf("IsAtomExist on ErrCodeAtomAlreadyExists = false, want true")
 	}
 	if NewError(ErrCodeAtomNotExists, "x").IsAtomExist() {
 		t.Errorf("IsAtomExist on ErrCodeAtomNotExists = true, want false")
@@ -79,41 +79,45 @@ func TestIsAtomExistDeprecated(t *testing.T) {
 
 func TestSentinelsMatchCodes(t *testing.T) {
 	sentinels := map[string]error{
-		"ErrFrameworkInternalError":              ErrFrameworkInternalError,
-		"ErrFrameworkRecoverFromPanic":           ErrFrameworkRecoverFromPanic,
-		"ErrFrameworkInvalidID":                  ErrFrameworkInvalidID,
-		"ErrMainElementNotFound":                 ErrMainElementNotFound,
-		"ErrAtomosInvalidArguments":              ErrAtomosInvalidArguments,
-		"ErrAtomosIsStopping":                    ErrAtomosIsStopping,
-		"ErrAtomosIsNotRunning":                  ErrAtomosIsNotRunning,
-		"ErrAtomosNotSupportWormhole":            ErrAtomosNotSupportWormhole,
-		"ErrAtomosPushTimeoutHandling":           ErrAtomosPushTimeoutHandling,
-		"ErrAtomosPushTimeoutReject":             ErrAtomosPushTimeoutReject,
-		"ErrAtomosTaskCannotCancelCancelledTask": ErrAtomosTaskCannotCancelCancelledTask,
-		"ErrAtomosTaskCannotCancelRunningTask":   ErrAtomosTaskCannotCancelRunningTask,
-		"ErrAtomosTaskCannotCancelDoneTask":      ErrAtomosTaskCannotCancelDoneTask,
-		"ErrIDFirstSyncCallDeadlock":             ErrIDFirstSyncCallDeadlock,
-		"ErrAtomNotExists":                       ErrAtomNotExists,
-		"ErrAtomIsRunning":                       ErrAtomIsRunning,
-		"ErrAtomIsStopping":                      ErrAtomIsStopping,
-		"ErrAtomSpawningAnExistedAtom":           ErrAtomSpawningAnExistedAtom,
-		"ErrAtomInstanceMismatch":                ErrAtomInstanceMismatch,
-		"ErrCosmosNodeDraining":                  ErrCosmosNodeDraining,
-		"ErrAsyncCallbackCancelledByHalt":        ErrAsyncCallbackCancelledByHalt,
-		"ErrOwnershipLost":                       ErrOwnershipLost,
-		"ErrStaleFence":                          ErrStaleFence,
-		"ErrOperationStillRunning":               ErrOperationStillRunning,
-		"ErrOperationNotFound":                   ErrOperationNotFound,
-		"ErrOperationConflict":                   ErrOperationConflict,
-		"ErrTakeoverRequired":                    ErrTakeoverRequired,
-		"ErrOperationUnknown":                    ErrOperationUnknown,
-		"ErrFencingRequired":                     ErrFencingRequired,
+		"ErrFrameworkInternalError":       ErrFrameworkInternalError,
+		"ErrFrameworkRecoverFromPanic":    ErrFrameworkRecoverFromPanic,
+		"ErrFrameworkInvalidID":           ErrFrameworkInvalidID,
+		"ErrElementNotFound":              ErrElementNotFound,
+		"ErrAtomosInvalidArguments":       ErrAtomosInvalidArguments,
+		"ErrAtomosIsStopping":             ErrAtomosIsStopping,
+		"ErrAtomosIsNotRunning":           ErrAtomosIsNotRunning,
+		"ErrOperationUnsupported":         ErrOperationUnsupported,
+		"ErrAtomosPushTimeoutHandling":    ErrAtomosPushTimeoutHandling,
+		"ErrAtomosPushTimeoutReject":      ErrAtomosPushTimeoutReject,
+		"ErrAtomosTaskNotCancellable":     ErrAtomosTaskNotCancellable,
+		"ErrIDFirstSyncCallDeadlock":      ErrIDFirstSyncCallDeadlock,
+		"ErrAtomNotExists":                ErrAtomNotExists,
+		"ErrAtomAlreadyExists":            ErrAtomAlreadyExists,
+		"ErrAtomSpawning":                 ErrAtomSpawning,
+		"ErrAtomIsStopping":               ErrAtomIsStopping,
+		"ErrAtomNotRunning":               ErrAtomNotRunning,
+		"ErrAtomInstanceMismatch":         ErrAtomInstanceMismatch,
+		"ErrCosmosNodeDraining":           ErrCosmosNodeDraining,
+		"ErrAsyncCallbackCancelledByHalt": ErrAsyncCallbackCancelledByHalt,
+		"ErrAsyncRetryQueueFull":          ErrAsyncRetryQueueFull,
+		"ErrAsyncDuplicateMessage":        ErrAsyncDuplicateMessage,
+		"ErrAsyncRetryUnavailable":        ErrAsyncRetryUnavailable,
+		"ErrOwnershipLost":                ErrOwnershipLost,
+		"ErrOwnershipNotReady":            ErrOwnershipNotReady,
+		"ErrStaleFence":                   ErrStaleFence,
+		"ErrOperationRunning":             ErrOperationRunning,
+		"ErrOperationNotFound":            ErrOperationNotFound,
+		"ErrOperationConflict":            ErrOperationConflict,
+		"ErrOperationContended":           ErrOperationContended,
+		"ErrTakeoverRequired":             ErrTakeoverRequired,
+		"ErrOperationOutcomeUnknown":      ErrOperationOutcomeUnknown,
+		"ErrFencingRequired":              ErrFencingRequired,
 	}
 	for name, s := range sentinels {
 		wantName := "ErrCode" + name[3:]
 		want, ok := errorCodeSnapshot[wantName]
 		if !ok {
-			t.Errorf("no frozen code found for sentinel %s (looked up %s)", name, wantName)
+			t.Errorf("no registered code found for sentinel %s (looked up %s)", name, wantName)
 			continue
 		}
 		if got := CodeOf(s); got != want {

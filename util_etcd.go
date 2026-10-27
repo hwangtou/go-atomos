@@ -22,7 +22,7 @@ func etcdGetPrefix(cli EtcdClient, key string) (*clientv3.GetResponse, *Error) {
 	defer cancel()
 	resp, er := cli.Get(ctx, key, clientv3.WithPrefix())
 	if er != nil {
-		return nil, NewErrorf(ErrCodeCosmosEtcdGetFailed, "etcd: Get prefix failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return nil, NewErrorf(ErrCodeStorageUnavailable, "etcd: Get prefix failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	return resp, nil
 }
@@ -34,7 +34,7 @@ func etcdPutLease(cli EtcdClient, key, value string, lease clientv3.LeaseID) *Er
 	defer cancel()
 	_, er := cli.Put(ctx, key, value, lease)
 	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdPutFailed, "etcd: Put lease failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return NewErrorf(ErrCodeStorageUnavailable, "etcd: Put lease failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	return nil
 }
@@ -48,20 +48,20 @@ func etcdKeepalive(cli EtcdClient, key, value string, ttl int64) (*clientv3.Leas
 	lease, er := cli.Grant(ctx, ttl)
 	cancel()
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Failed to grant lease. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCodeStorageUnavailable, "etcd: Failed to grant lease. err=(%s)", er).AddStack(nil)
 	}
 
 	ctx, cancel = etcdContext()
 	_, er = cli.Put(ctx, key, value, lease.ID)
 	cancel()
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Failed to register service. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCodeStorageUnavailable, "etcd: Failed to register service. err=(%s)", er).AddStack(nil)
 	}
 
 	// KeepAlive's context governs the whole stream, not an individual RPC.
 	keepAliveCh, er := cli.KeepAlive(context.Background(), lease.ID)
 	if er != nil {
-		return nil, nil, NewErrorf(ErrCodeCosmosEtcdKeepaliveFailed, "etcd: Failed to keepalive. err=(%s)", er).AddStack(nil)
+		return nil, nil, NewErrorf(ErrCodeStorageUnavailable, "etcd: Failed to keepalive. err=(%s)", er).AddStack(nil)
 	}
 
 	return lease, keepAliveCh, nil
@@ -73,7 +73,7 @@ func etcdPut(cli EtcdClient, key string, value []byte) *Error {
 	defer cancel()
 	_, er := cli.Put(ctx, key, string(value), 0)
 	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdPutFailed, "etcd: Put failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return NewErrorf(ErrCodeStorageUnavailable, "etcd: Put failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func etcdGetMeta(cli EtcdClient, key string) ([]byte, int64, int64, *Error) {
 	defer cancel()
 	resp, er := cli.Get(ctx, key)
 	if er != nil {
-		return nil, 0, 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "etcd: Get failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return nil, 0, 0, NewErrorf(ErrCodeStorageUnavailable, "etcd: Get failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	for _, kv := range resp.Kvs {
 		if string(kv.Key) == key {
@@ -107,7 +107,7 @@ func etcdDelete(cli EtcdClient, key string) *Error {
 	defer cancel()
 	_, er := cli.Delete(ctx, key)
 	if er != nil {
-		return NewErrorf(ErrCodeCosmosEtcdDeleteFailed, "etcd: Delete failed. key=(%s),err=(%v)", key, er).AddStack(nil)
+		return NewErrorf(ErrCodeStorageUnavailable, "etcd: Delete failed. key=(%s),err=(%v)", key, er).AddStack(nil)
 	}
 	return nil
 }

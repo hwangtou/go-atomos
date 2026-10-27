@@ -1,205 +1,154 @@
 package atomos
 
-// Error codes are frozen wire values: they travel over RPC and persist in
-// databases, so a code's numeric value must never change once assigned.
-// Append-only: add new codes at the tail with an explicit unused value,
-// and never reuse the value of a deleted code.
+// Error codes are grouped by ownership domain. Ranges allocate codes only;
+// callers must use the error specification, never numeric comparisons, to
+// determine classification, execution outcome, or recovery behavior.
+//
+// 9000-9999 is reserved for the framework, 10000-999999 for official
+// extensions, and values >= 1000000 belong to applications.
 const (
-	OK = 0
+	OK             int64 = 0
+	ErrCodeUnknown int64 = -1
 
-	ErrCodeFrameworkInternalError    = 1
-	ErrCodeFrameworkRecoverFromPanic = 2
-	ErrCodeFrameworkIncorrectUsage   = 3
+	// Common.
 
-	// Cosmos Process
+	ErrCodeFrameworkInternalError    int64 = 1001
+	ErrCodeFrameworkRecoverFromPanic int64 = 1002
+	ErrCodeFrameworkIncorrectUsage   int64 = 1003
+	ErrCodeFrameworkInvalidID        int64 = 1004
+	ErrCodeOperationUnsupported      int64 = 1005
+	ErrCodeAtomosInvalidArguments    int64 = 1006
+	ErrCodeAtomosIsStopping          int64 = 1007
+	ErrCodeAtomosIsNotRunning        int64 = 1008
 
-	ErrCodeCosmosProcessHasNotInitialized       = 4
-	ErrCodeCosmosProcessHasBeenStarted          = 5
-	ErrCodeCosmosProcessOnStartupPanic          = 6
-	ErrCodeCosmosProcessOnShutdownPanic         = 7
-	ErrCodeCosmosProcessCannotStopPrepareState  = 8
-	ErrCodeCosmosProcessCannotStopStartupState  = 9
-	ErrCodeCosmosProcessCannotStopShutdownState = 10
-	ErrCodeCosmosProcessCannotStopOffState      = 11
-	ErrCodeCosmosProcessInvalidState            = 12
+	// Cosmos process and configuration.
 
-	// Cosmos Main
+	ErrCodeCosmosProcessHasNotInitialized       int64 = 2001
+	ErrCodeCosmosProcessHasBeenStarted          int64 = 2002
+	ErrCodeCosmosProcessOnStartupPanic          int64 = 2003
+	ErrCodeCosmosProcessOnShutdownPanic         int64 = 2004
+	ErrCodeCosmosProcessCannotStopPrepareState  int64 = 2005
+	ErrCodeCosmosProcessCannotStopStartupState  int64 = 2006
+	ErrCodeCosmosProcessCannotStopShutdownState int64 = 2007
+	ErrCodeCosmosProcessCannotStopOffState      int64 = 2008
+	ErrCodeCosmosProcessInvalidState            int64 = 2009
+	ErrCodeCosmosProcessInvalidTransition       int64 = 2010
+	ErrCodeMainStartRunningPanic                int64 = 2011
+	ErrCodeMainCannotMessage                    int64 = 2012
+	ErrCodeMainRunnableNotFound                 int64 = 2013
+	ErrCodeRunnableConfigNotFound               int64 = 2014
+	ErrCodeRunnableScriptNotFound               int64 = 2015
+	ErrCodeCosmosConfigInvalid                  int64 = 2020
+	ErrCodeCosmosConfigReadFailed               int64 = 2021
+	ErrCodeCosmosEtcdClusterTLSInvalid          int64 = 2022
+	ErrCodeCosmosEtcdClusterVersionsCheckFailed int64 = 2023
 
-	ErrCodeMainLoadCertFailed       = 13
-	ErrCodeMainElementNotFound      = 14
-	ErrCodeMainStartRunningPanic    = 15
-	ErrCodeMainCannotKill           = 16
-	ErrCodeMainCannotSendWormhole   = 17
-	ErrCodeMainCannotMessage        = 18
-	ErrCodeMainRunnableNotFound     = 19
-	ErrCodeRunnableConfigNotFound   = 20
-	ErrCodeRunnableInterfaceInvalid = 21
-	ErrCodeRunnableImplementInvalid = 22
-	ErrCodeRunnableScriptNotFound   = 23
+	// Remote transport and protocol.
 
-	// Cosmos Global
+	ErrCodeCosmosRemoteNodeNotFound             int64 = 3001
+	ErrCodeCosmosRemoteListenFailed             int64 = 3002
+	ErrCodeCosmosRemoteAddressNotFound          int64 = 3003
+	ErrCodeCosmosRemoteConnectFailed            int64 = 3004
+	ErrCodeCosmosRemoteRequestInvalid           int64 = 3005
+	ErrCodeCosmosRemoteResponseFailed           int64 = 3006
+	ErrCodeCosmosRemoteResponseInvalid          int64 = 3007
+	ErrCodeCosmosRemoteStatusNotFound           int64 = 3008
+	ErrCodeCosmosRemoteStatusFailedPrecondition int64 = 3009
+	ErrCodeCosmosRemoteStatusInvalidArgument    int64 = 3010
+	ErrCodeCosmosRemoteStatusDeadlineExceeded   int64 = 3011
+	ErrCodeCosmosRemoteStatusUnavailable        int64 = 3012
+	ErrCodeCosmosRemoteStatusInternal           int64 = 3013
+	ErrCodeCosmosRemoteStatusPermissionDenied   int64 = 3014
+	ErrCodeCosmosRemoteStatusCanceled           int64 = 3015
+	ErrCodeCosmosRemoteStatusResourceExhausted  int64 = 3016
+	ErrCodeCosmosRemoteStatusUnauthenticated    int64 = 3017
 
-	// Cosmos Remote
+	// Element, atom, and messaging.
 
-	ErrCodeCosmosRemoteElementNotFound            = 24
-	ErrCodeCosmosRemoteListenFailed               = 25
-	ErrCodeCosmosRemoteConnectFailed              = 26
-	ErrCodeCosmosRemoteRequestInvalid             = 27
-	ErrCodeCosmosRemoteResponseFailed             = 28
-	ErrCodeCosmosRemoteResponseInvalid            = 29
-	ErrCodeCosmosRemoteServerInvalidArgs          = 30
-	ErrCodeCosmosRemoteServerInvalidFirstSyncCall = 31
-	ErrCodeCosmosRemoteInfoInvalid                = 32
-	ErrCodeCosmosRemoteCannotMessage              = 33
-	ErrCodeCosmosRemoteCannotSendWormhole         = 34
-	ErrCodeCosmosRemoteCannotKill                 = 35
-	ErrCodeElementRemoteCannotKill                = 36
-	ErrCodeElementRemoteCannotSendWormhole        = 37
+	ErrCodeElementNotFound                                int64 = 4001
+	ErrCodeElementLoaded                                  int64 = 4002
+	ErrCodeMessageHandlerNotFound                         int64 = 4003
+	ErrCodeMessageDecoderNotFound                         int64 = 4004
+	ErrCodeMessageReplyTypeInvalid                        int64 = 4005
+	ErrCodeMessageArgTypeInvalid                          int64 = 4006
+	ErrCodeAtomMessageAtomType                            int64 = 4007
+	ErrCodeElementNotImplemented                          int64 = 4008
+	ErrCodeAtomNotImplemented                             int64 = 4009
+	ErrCodeMessageFromIDInvalid                           int64 = 4010
+	ErrCodeMessageToIDInvalid                             int64 = 4011
+	ErrCodeAtomKillElementNoImplement                     int64 = 4012
+	ErrCodeAtomKillElementNotImplementAutoDataPersistence int64 = 4013
+	ErrCodeAtomDataNotFound                               int64 = 4014
+	ErrCodeAtomNotExists                                  int64 = 4015
+	ErrCodeAtomAlreadyExists                              int64 = 4016
+	ErrCodeAtomIsStopping                                 int64 = 4017
+	ErrCodeAtomInstanceMismatch                           int64 = 4018
+	ErrCodeIDFirstSyncCallDeadlock                        int64 = 4019
+	ErrCodeAtomSpawning                                   int64 = 4020
+	ErrCodeAtomNotRunning                                 int64 = 4021
 
-	// Config
+	// Tasks, mailbox, and asynchronous delivery.
 
-	ErrCodeCosmosConfigInvalid                  = 38
-	ErrCodeCosmosEtcdConnectFailed              = 39
-	ErrCodeCosmosEtcdClusterTLSInvalid          = 40
-	ErrCodeCosmosEtcdClusterVersionsCheckFailed = 41
-	ErrCodeCosmosEtcdClusterVersionLockFailed   = 42
-	ErrCodeCosmosEtcdGRPCServerFailed           = 43
-	ErrCodeCosmosEtcdKeepaliveFailed            = 44
-	ErrCodeCosmosEtcdInvalidKey                 = 45
-	ErrCodeCosmosEtcdUpdateFailed               = 46
-	ErrCodeCosmosEtcdGetFailed                  = 47
-	ErrCodeCosmosEtcdPutFailed                  = 48
-	ErrCodeCosmosEtcdDeleteFailed               = 49
-	ErrCodeCosmosConfigCertInvalid              = 50
-	ErrCodeCosmosIsClosed                       = 51
+	ErrCodeAtomosTaskInvalidFn           int64 = 5001
+	ErrCodeAtomosTaskNotExists           int64 = 5002
+	ErrCodeAtomosTaskAddCrontabFailed    int64 = 5003
+	ErrCodeAtomosTaskRemoveCrontabFailed int64 = 5004
+	ErrCodeAtomosTaskNotCancellable      int64 = 5005
+	ErrCodeAtomosPushTimeoutHandling     int64 = 5006
+	ErrCodeAtomosPushTimeoutReject       int64 = 5007
+	ErrCodeAsyncCallbackCancelledByHalt  int64 = 5008
+	ErrCodeAsyncRetryQueueFull           int64 = 5009
+	ErrCodeAsyncDuplicateMessage         int64 = 5010
+	ErrCodeAsyncRetryUnavailable         int64 = 5011
 
-	// App Env
+	// Cluster and distributed lifecycle.
 
-	ErrCodeAppEnvGetExecutableFailed       = 52
-	ErrCodeAppEnvLaunchedFailed            = 53
-	ErrCodeAppEnvRunPathInvalid            = 54
-	ErrCodeAppEnvRunPathPIDFileInvalid     = 55
-	ErrCodeAppEnvRunPathPIDIsRunning       = 56
-	ErrCodeAppEnvRunPathWritePIDFileFailed = 57
-	ErrCodeAppEnvRunPathRemovePIDFailed    = 58
-	ErrCodeAppEnvLoggingFileOpenFailed     = 59
-	ErrCodeAppEnvLoggingPathInvalid        = 60
-	ErrCodeAppEnvLoggingFileWriteFailed    = 61
-	ErrCodeAppEnvLoggingFileCloseFailed    = 62
+	ErrCodeCosmosNodeDraining      int64 = 6001
+	ErrCodeOwnershipLost           int64 = 6002
+	ErrCodeStaleFence              int64 = 6003
+	ErrCodeOperationRunning        int64 = 6004
+	ErrCodeOperationNotFound       int64 = 6005
+	ErrCodeOperationConflict       int64 = 6006
+	ErrCodeOperationContended      int64 = 6007
+	ErrCodeTakeoverRequired        int64 = 6008
+	ErrCodeOperationOutcomeUnknown int64 = 6009
+	ErrCodeFencingRequired         int64 = 6010
+	ErrCodeOwnershipNotReady       int64 = 6011
 
-	// Global
+	// Storage and persistence.
 
-	ErrCodeCosmosGlobalNoEtcdFailed      = 63
-	ErrCodeCosmosGlobalEtcdConnectFailed = 64
+	ErrCodeStorageUnavailable         int64 = 7001
+	ErrCodeStorageKeyInvalid          int64 = 7002
+	ErrCodeStorageDataCorrupted       int64 = 7003
+	ErrCodeStorageSerializationFailed int64 = 7004
+	ErrCodeStorageConflict            int64 = 7005
 
-	// Unix Domain Socket
+	// Host and administration.
 
-	ErrCodeAppUnixDomainSocketFileInvalid     = 65
-	ErrCodeAppUnixDomainSocketListenFailed    = 66
-	ErrCodeAppUnixDomainSocketDialFailed      = 67
-	ErrCodeAppUnixDomainSocketConnWriteFailed = 68
-
-	// Logging
-
-	ErrCodeAppLoggingPathInvalid    = 69
-	ErrCodeAppLoggingFileOpenFailed = 70
-
-	// Atomos
-
-	ErrCodeAtomosInvalidArguments        = 71
-	ErrCodeAtomosIsStopping              = 72
-	ErrCodeAtomosIsNotRunning            = 73
-	ErrCodeAtomosTaskInvalidFn           = 74
-	ErrCodeAtomosTaskNotExists           = 75
-	ErrCodeAtomosTaskAddCrontabFailed    = 76
-	ErrCodeAtomosTaskRemoveCrontabFailed = 77
-	ErrCodeAtomosNotSupportWormhole      = 78
-	ErrCodeAtomosPushTimeoutHandling     = 79
-	ErrCodeAtomosPushTimeoutReject       = 80
-
-	ErrCodeAtomosTaskCannotCancelCancelledTask = 81
-	ErrCodeAtomosTaskCannotCancelRunningTask   = 82
-	ErrCodeAtomosTaskCannotCancelDoneTask      = 83
-
-	// idFirstSyncCall
-
-	ErrCodeIDFirstSyncCallDeadlock = 84
-
-	// Element
-
-	ErrCodeElementLoaded                  = 85
-	ErrCodeElementMessageHandlerNotExists = 86
-	ErrCodeElementMessageDecoderNotExists = 87
-	ErrCodeElementMessageReplyType        = 88
-	ErrCodeElementCannotKill              = 89
-	ErrCodeElementNoFromID                = 90
-	ErrCodeElementNotImplemented          = 91
-	ErrCodeElementFromIDInvalid           = 92
-	ErrCodeElementToIDInvalid             = 93
-	ErrCodeElementMessageArgType          = 94
-
-	// Atom
-
-	ErrCodeAtomMessageHandlerNotExists                    = 95
-	ErrCodeAtomMessageDecoderNotExists                    = 96
-	ErrCodeAtomKillElementNoImplement                     = 97
-	ErrCodeAtomKillElementNotImplementAutoDataPersistence = 98
-	ErrCodeAtomFromIDInvalid                              = 99
-	ErrCodeAtomToIDInvalid                                = 100
-	ErrCodeAtomDataNotFound                               = 101
-	ErrCodeAtomNotExists                                  = 102
-	ErrCodeAtomIsRunning                                  = 103
-	ErrCodeAtomIsStopping                                 = 104
-	ErrCodeAtomNoFromID                                   = 105
-	ErrCodeAtomNotImplemented                             = 106
-	ErrCodeAtomMessageAtomType                            = 107
-	ErrCodeAtomMessageArgType                             = 108
-	ErrCodeAtomMessageReplyType                           = 109
-	ErrCodeAtomSpawningAnExistedAtom                      = 110
-	ErrCodeAtomInstanceMismatch                           = 111
-
-	// Util File
-
-	ErrCodeUtilOSStatError                      = 112
-	ErrCodeUtilReadDirectoryFailed              = 113
-	ErrCodeUtilNotSupportedOS                   = 114
-	ErrCodeUtilPathShouldBeDirectory            = 115
-	ErrCodeUtilDirectoryNotExist                = 116
-	ErrCodeUtilGetUserGroupIDsFailed            = 117
-	ErrCodeUtilUsersGroupsHaveNotOwnedDirectory = 118
-	ErrCodeUtilFileModePermNotMatch             = 119
-	ErrCodeUtilFileMakeDirectoryFailed          = 120
-	ErrCodeUtilFileChangeOwnerAndModeFailed     = 121
-	ErrCodeUtilFileConfirmOwnerAndModeFailed    = 122
-	ErrCodeUtilCreateFileFailed                 = 123
-	ErrCodeUtilFileEnsureDirectoryFailed        = 124
-	ErrCodeUtilFileFileExistFailed              = 125
-	ErrCodeUtilFileGetDirectorySizeFailed       = 126
-	ErrCodeUtilStringHashSHA256Failed           = 127
-
-	// Cluster / Drain
-	//
-	// Returned when a node in Draining state rejects a new atom spawn. Routing
-	// should steer callers away from draining nodes, but stale routes or pinned
-	// connections can still deliver a spawn — the node must refuse it locally so
-	// the caller can re-resolve and land on a Started node.
-	ErrCodeCosmosNodeDraining = 128
-
-	// 异步回调因 atom 停机被清账终结(回调随实例消亡前以错误跑完,业务可据此降级/补偿)
-	ErrCodeAsyncCallbackCancelledByHalt = 129
-
-	// ErrFrameworkInvalidID marks passing a user-implemented ID (one that does
-	// not carry the framework-internal idInternal extension) into a framework
-	// kernel path. It is a programming error, not a runtime condition.
-	ErrCodeFrameworkInvalidID = 130
-
-	// Distributed atom lifecycle control.
-	ErrCodeOwnershipLost         = 131
-	ErrCodeStaleFence            = 132
-	ErrCodeOperationStillRunning = 133
-	ErrCodeOperationNotFound     = 134
-	ErrCodeOperationConflict     = 135
-	ErrCodeTakeoverRequired      = 136
-	ErrCodeOperationUnknown      = 137
-	ErrCodeFencingRequired       = 138
+	ErrCodeAppEnvGetExecutableFailed            int64 = 8001
+	ErrCodeAppEnvLaunchedFailed                 int64 = 8002
+	ErrCodeAppEnvRunPathInvalid                 int64 = 8003
+	ErrCodeAppEnvRunPathPIDFileInvalid          int64 = 8004
+	ErrCodeAppEnvRunPathPIDIsRunning            int64 = 8005
+	ErrCodeAppEnvRunPathWritePIDFileFailed      int64 = 8006
+	ErrCodeAppEnvRunPathRemovePIDFailed         int64 = 8007
+	ErrCodeAppEnvLoggingFileOpenFailed          int64 = 8008
+	ErrCodeAppEnvLoggingPathInvalid             int64 = 8009
+	ErrCodeAppEnvLoggingFileWriteFailed         int64 = 8010
+	ErrCodeAppEnvLoggingFileCloseFailed         int64 = 8011
+	ErrCodeUtilOSStatError                      int64 = 8012
+	ErrCodeUtilReadDirectoryFailed              int64 = 8013
+	ErrCodeUtilNotSupportedOS                   int64 = 8014
+	ErrCodeUtilPathShouldBeDirectory            int64 = 8015
+	ErrCodeUtilDirectoryNotExist                int64 = 8016
+	ErrCodeUtilGetUserGroupIDsFailed            int64 = 8017
+	ErrCodeUtilUsersGroupsHaveNotOwnedDirectory int64 = 8018
+	ErrCodeUtilFileModePermNotMatch             int64 = 8019
+	ErrCodeUtilFileMakeDirectoryFailed          int64 = 8020
+	ErrCodeUtilFileChangeOwnerAndModeFailed     int64 = 8021
+	ErrCodeUtilFileConfirmOwnerAndModeFailed    int64 = 8022
+	ErrCodeUtilCreateFileFailed                 int64 = 8023
+	ErrCodeUtilFileEnsureDirectoryFailed        int64 = 8024
+	ErrCodeUtilFileExistCheckFailed             int64 = 8025
+	ErrCodeUtilFileGetDirectorySizeFailed       int64 = 8026
 )

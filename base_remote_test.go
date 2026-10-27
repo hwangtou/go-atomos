@@ -185,7 +185,7 @@ func TestBaseRemotePushAsyncMessageTerminatesCallbackOnFailure(t *testing.T) {
 			service: &baseRemoteAsyncTestService{
 				err: status.Error(codes.Unavailable, "transport failure"),
 			},
-			wantCode: ErrCodeCosmosRemoteConnectFailed,
+			wantCode: ErrCodeCosmosRemoteStatusUnavailable,
 		},
 	}
 	for _, tt := range tests {
@@ -288,7 +288,7 @@ func TestBaseRemoteRetryableAsyncMessageExhaustion(t *testing.T) {
 	}
 	select {
 	case err := <-callback:
-		if CodeOf(err) != ErrCodeCosmosRemoteConnectFailed {
+		if CodeOf(err) != ErrCodeCosmosRemoteStatusUnavailable {
 			t.Fatalf("terminal error = %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -308,12 +308,12 @@ func TestBaseRemoteAsyncMessageNotRetriedByDefault(t *testing.T) {
 	callback := make(chan error, 1)
 	if err := remote.PushAsyncMessage(process.local, "ordinary", nil, func(_ proto.Message, err error) {
 		callback <- err
-	}); CodeOf(err) != ErrCodeCosmosRemoteConnectFailed {
+	}); CodeOf(err) != ErrCodeCosmosRemoteStatusUnavailable {
 		t.Fatalf("ordinary async error = %v", err)
 	}
 	select {
 	case err := <-callback:
-		if CodeOf(err) != ErrCodeCosmosRemoteConnectFailed {
+		if CodeOf(err) != ErrCodeCosmosRemoteStatusUnavailable {
 			t.Fatalf("callback error = %v", err)
 		}
 	case <-time.After(2 * time.Second):

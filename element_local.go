@@ -398,7 +398,7 @@ func (e *ElementLocal) SpawnAtom(callerID ID, name string, arg proto.Message, tr
 func (e *ElementLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := e.elemImpl.ElementHandlers[name]
 	if handler == nil {
-		return nil, NewErrorf(ErrCodeElementMessageHandlerNotExists,
+		return nil, NewErrorf(ErrCodeMessageHandlerNotFound,
 			"Element: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e)
 	}
 	return e.atomos.onSyncMessaging(fromID, name, handler, in)
@@ -410,7 +410,7 @@ func (e *ElementLocal) onAsyncMessaging(fromID ID, name string, startupID, async
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
 			e.atomos.log.coreError("Element: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists, "Element: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
+			fromInternal.asyncCallback(e, name, startupID, asyncID, nil, NewErrorf(ErrCodeMessageHandlerNotFound, "Element: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(e))
 		}
 		return
 	}
@@ -442,7 +442,7 @@ func (e *ElementLocal) onFnCallback(callback *atomosCallback) {
 func (e *ElementLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := e.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
+		return NewErrorf(ErrCodeOperationUnsupported, "Element: Not supports wormhole. type=(%T)", e.atomos.instance).AddStack(e)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
 		return asError(err).AddStack(e)
@@ -695,7 +695,7 @@ func (e *ElementLocal) elementAtomSpawnAdmitted(callerID ID, name string, arg pr
 	if op := e.spawnOperations[name]; op != nil {
 		e.lock.Unlock()
 		if spawnOrGet {
-			return nil, nil, NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
+			return nil, nil, NewErrorf(ErrCodeAtomAlreadyExists, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
 		}
 		if op.owner.Load() == getGoID() {
 			return nil, nil, NewErrorf(ErrCodeAtomosIsNotRunning, "Atom: Get cannot wait for its own spawn. name=(%s)", name).AddStack(e)
@@ -720,7 +720,7 @@ func (e *ElementLocal) elementAtomSpawnAdmitted(callerID ID, name string, arg pr
 		switch state {
 		case BaseAtomosSpawning, BaseAtomosWaiting, BaseAtomosBusy:
 			if spawnOrGet {
-				err := NewErrorf(ErrCodeAtomSpawningAnExistedAtom, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
+				err := NewErrorf(ErrCodeAtomAlreadyExists, "Atom: Spawning an existed atom. name=(%s)", name).AddStack(e)
 				e.finishAtomSpawn(name, op, oldAtom, nil)
 				return oldAtom, nil, err
 			}

@@ -38,7 +38,7 @@ func (m *lifecycleManager) persistedOperationResult(operationID, fingerprint str
 		}
 		return proto.Clone(op.Result).(*AtomControlResult), nil
 	}
-	return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: operation result is unknown")
+	return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: operation result is unknown")
 }
 
 func (m *lifecycleManager) persistedSpawnResult(operationID string, claim *lifecycleSpawnClaim) (*AtomControlResult, *Error) {
@@ -74,7 +74,7 @@ func (m *lifecycleManager) recoverSpawnClaim(operationID, fingerprint string, ki
 	}
 	if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
 		if op.Result == nil {
-			return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: terminal operation has no result")
+			return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: terminal operation has no result")
 		}
 		return &lifecycleSpawnClaim{result: proto.Clone(op.Result).(*AtomControlResult)}, nil
 	}
@@ -130,7 +130,7 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 	}
 	leaseID, healthy := m.currentLease()
 	if !healthy {
-		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: cannot claim without a healthy process lease")
+		return nil, lifecycleError(operationID, ErrCodeOwnershipNotReady, "lifecycle: cannot claim without a healthy process lease")
 	}
 	shard, err := m.ensureShardOwnership(ctx, element, atom, takeover)
 	if err != nil {
@@ -147,9 +147,9 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			return nil, err
 		}
 		if !takeover && owner != nil && owner.Ownership != nil && owner.Ownership.State != AtomLifecycleState_AtomLifecycleStateHalted {
-			code := int64(ErrCodeOperationStillRunning)
+			code := lifecycleAtomStateErrorCode(owner.Ownership.State)
 			if owner.Ownership.State == AtomLifecycleState_AtomLifecycleStateRunning {
-				code = ErrCodeAtomSpawningAnExistedAtom
+				code = ErrCodeAtomAlreadyExists
 			}
 			return nil, lifecycleError(operationID, code, "lifecycle: atom %s::%s is %s", element, atom, owner.Ownership.State)
 		}
@@ -213,12 +213,12 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			claim, recoverErr := m.recoverSpawnClaim(operationID, fingerprint, kind)
 			if recoverErr != nil {
 				if CodeOf(recoverErr) == ErrCodeOperationNotFound {
-					return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: claim result is unknown: %v", er)
+					return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: claim result is unknown: %v", er)
 				}
 				return nil, recoverErr
 			}
 			if claim == nil {
-				return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: claim result is unknown: %v", er)
+				return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: claim result is unknown: %v", er)
 			}
 			return claim, nil
 		}
@@ -242,7 +242,7 @@ func (m *lifecycleManager) claimSpawn(ctx context.Context, operationID, fingerpr
 			return &lifecycleSpawnClaim{result: result}, err
 		}
 	}
-	return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: claim contention")
+	return nil, lifecycleError(operationID, ErrCodeOperationContended, "lifecycle: claim contention")
 }
 
 func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawnClaim, businessErr *Error) (*AtomControlResult, *Error) {
@@ -398,7 +398,7 @@ func (m *lifecycleManager) spawn(ctx context.Context, callerID ID, element, atom
 		return result, nil
 	}
 	if claim.result == nil || claim.result.Operation == nil || claim.result.Operation.State != AtomOperationState_AtomOperationStateSucceeded {
-		return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: local spawn returned without a completed operation")
+		return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: local spawn returned without a completed operation")
 	}
 	claim.result.Id = atomID.GetIDInfo()
 	return claim.result, nil
@@ -414,7 +414,7 @@ func (m *lifecycleManager) recoverHaltClaim(operationID, fingerprint string, id 
 	}
 	if op.Operation.State != AtomOperationState_AtomOperationStateRunning {
 		if op.Result == nil {
-			return nil, nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: terminal operation has no result")
+			return nil, nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: terminal operation has no result")
 		}
 		return nil, proto.Clone(op.Result).(*AtomControlResult), nil
 	}
@@ -470,7 +470,7 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		return nil, err
 	}
 	if id == nil {
-		return nil, NewError(ErrCodeCosmosRemoteServerInvalidArgs, "lifecycle: halt missing ID")
+		return nil, NewError(ErrCodeCosmosRemoteRequestInvalid, "lifecycle: halt missing ID")
 	}
 	if operationID == "" {
 		var er error
@@ -556,7 +556,7 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 			recoveredClaim, result, recoverErr := m.recoverHaltClaim(operationID, fingerprint, id)
 			if recoverErr != nil {
 				if CodeOf(recoverErr) == ErrCodeOperationNotFound {
-					return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: halt claim result is unknown: %v", er)
+					return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: halt claim result is unknown: %v", er)
 				}
 				return nil, recoverErr
 			}
@@ -564,7 +564,7 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 				return result, nil
 			}
 			if recoveredClaim == nil {
-				return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: halt claim result is unknown: %v", er)
+				return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: halt claim result is unknown: %v", er)
 			}
 			return m.executeHalt(callerID, id, operationID, recoveredClaim, retain, args...)
 		}
@@ -588,7 +588,7 @@ func (m *lifecycleManager) halt(ctx context.Context, callerID ID, id *IDInfo, op
 		}
 	}
 	if claim == nil {
-		return nil, lifecycleError(operationID, ErrCodeOperationConflict, "lifecycle: halt claim contention")
+		return nil, lifecycleError(operationID, ErrCodeOperationContended, "lifecycle: halt claim contention")
 	}
 	return m.executeHalt(callerID, id, operationID, claim, retain, args...)
 }
@@ -741,7 +741,7 @@ func (m *lifecycleManager) takeover(ctx context.Context, callerID ID, id, previo
 	}
 	defer m.process.endAtomSpawn()
 	if previous == nil {
-		return nil, NewError(ErrCodeCosmosRemoteServerInvalidArgs, "lifecycle: takeover previous_id is required")
+		return nil, NewError(ErrCodeCosmosRemoteRequestInvalid, "lifecycle: takeover previous_id is required")
 	}
 	if operationID == "" {
 		var er error

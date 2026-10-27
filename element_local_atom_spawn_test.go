@@ -49,8 +49,8 @@ func TestElementLocal_AtomSpawn_SpawnTwice(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected error when spawning atom with duplicate name, got nil")
 		}
-		if err.Code != ErrCodeAtomSpawningAnExistedAtom {
-			t.Fatalf("Expected error code %d, got %d", ErrCodeAtomSpawningAnExistedAtom, err.Code)
+		if err.Code != ErrCodeAtomAlreadyExists {
+			t.Fatalf("Expected error code %d, got %d", ErrCodeAtomAlreadyExists, err.Code)
 		}
 
 		// Stop and spawn again

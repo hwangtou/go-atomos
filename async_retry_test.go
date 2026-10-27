@@ -71,7 +71,7 @@ func TestAsyncRetryBackoffFIFOAndIndependentTargets(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := manager.submit("a", "a1", record("duplicate", 0), nil); !errors.Is(err, ErrOperationConflict) {
+	if err := manager.submit("a", "a1", record("duplicate", 0), nil); !errors.Is(err, ErrAsyncDuplicateMessage) {
 		t.Fatalf("duplicate pending message error = %v", err)
 	}
 	clock.next().fn()
@@ -177,4 +177,16 @@ func TestAsyncRetryCloseDuringDelivery(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("running request did not finish")
 	}
+}
+
+func TestAsyncRetryQueueFull(t *testing.T) {
+	manager := newAsyncRetryManager(&retryTestClock{}, nil, nil)
+	manager.maxQueue = 1
+	if err := manager.submit("a", "first", func(int) error { return nil }, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.submit("a", "second", func(int) error { return nil }, nil); !errors.Is(err, ErrAsyncRetryQueueFull) {
+		t.Fatalf("queue full error = %v", err)
+	}
+	manager.close()
 }

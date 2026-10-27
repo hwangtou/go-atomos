@@ -59,7 +59,7 @@ func TestElementLocalSpawnLifecycleSingleConstructorAndGetReady(t *testing.T) {
 
 		for i := 0; i < 8; i++ {
 			_, _, err := elem.SpawnAtom(nil, name, nil, nil)
-			if !errors.Is(err, ErrAtomSpawningAnExistedAtom) {
+			if !errors.Is(err, ErrAtomAlreadyExists) {
 				t.Fatalf("duplicate spawn %d error = %v", i, err)
 			}
 		}
@@ -127,7 +127,7 @@ func TestElementLocalSpawnLifecycleReentrantAndAB(t *testing.T) {
 			case <-time.After(2 * time.Second):
 				t.Fatal("same-name reentry deadlocked")
 			}
-			if !errors.Is(spawnErr, ErrAtomSpawningAnExistedAtom) {
+			if !errors.Is(spawnErr, ErrAtomAlreadyExists) {
 				t.Fatalf("reentrant Spawn error = %v", spawnErr)
 			}
 			if !errors.Is(getErr, ErrAtomosIsNotRunning) {
@@ -175,7 +175,7 @@ func TestElementLocalSpawnLifecycleReentrantAndAB(t *testing.T) {
 				if err := waitSpawnLifecycleResult(t, results).err; err != nil {
 					t.Fatalf("outer A/B spawn: %v", err)
 				}
-				if err := waitSpawnLifecycleError(t, callErrors); !errors.Is(err, ErrAtomSpawningAnExistedAtom) {
+				if err := waitSpawnLifecycleError(t, callErrors); !errors.Is(err, ErrAtomAlreadyExists) {
 					t.Fatalf("cross Spawn error = %v", err)
 				}
 			}
@@ -385,7 +385,7 @@ func TestBaseAtomosAbortSpawnRejectsQueuedWorkWithoutUserHalt(t *testing.T) {
 	if remainingTasks != 0 || !stopping {
 		t.Fatalf("task cleanup remaining=%d stopping=%v", remainingTasks, stopping)
 	}
-	if _, err := ba.task.Add(func(uint64) {}); !errors.Is(err, ErrAtomosIsNotRunning) {
+	if _, err := ba.task.Add(func(uint64) {}); !errors.Is(err, ErrAtomosIsStopping) {
 		t.Fatalf("task admission after abort = %v", err)
 	}
 }

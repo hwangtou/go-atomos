@@ -338,7 +338,7 @@ func (a *BaseRemote) pushRetryableAsyncMessage(callerID ID, name string, arg *an
 	}
 	process := a.rpcProcess()
 	if process == nil || process.retry == nil {
-		err := NewError(ErrCodeCosmosRemoteConnectFailed, "BaseRemote: async retry manager is unavailable").AddStack(nil)
+		err := NewError(ErrCodeAsyncRetryUnavailable, "BaseRemote: async retry manager is unavailable").AddStack(nil)
 		terminate(err)
 		return err
 	}
@@ -376,9 +376,22 @@ func (a *BaseRemote) sendAsyncMessage(callerID ID, name string, arg *anypb.Any, 
 }
 
 func isAsyncRetryableError(err error) bool {
-	switch CodeOf(err) {
-	case ErrCodeCosmosRemoteConnectFailed, ErrCodeAtomosPushTimeoutHandling,
-		ErrCodeAtomosPushTimeoutReject, ErrCodeOperationStillRunning:
+	code := CodeOf(err)
+	if errorRecoveryOf(code) != recoveryBackoff {
+		return false
+	}
+	// RecoveryBackoff is necessary but not sufficient: this call context only
+	// retries delivery and routing temporary failures. Async retries reuse the
+	// message ID, so an unknown outcome remains the same logical delivery.
+	switch code {
+	case ErrCodeCosmosRemoteConnectFailed,
+		ErrCodeCosmosRemoteStatusDeadlineExceeded,
+		ErrCodeCosmosRemoteStatusUnavailable,
+		ErrCodeCosmosRemoteStatusResourceExhausted,
+		ErrCodeAtomosPushTimeoutHandling,
+		ErrCodeAtomosPushTimeoutReject,
+		ErrCodeAtomSpawning,
+		ErrCodeOwnershipNotReady:
 		return true
 	default:
 		return false

@@ -97,7 +97,7 @@
 ## 六、协议演进(与 DESIGN_V3_API.md §8 的关系)
 
 - `CosmosRemoteAsyncMessagingByNameReq` 尾部追加 `message_id`(uint64 或 string),Phase 2 引入;v2/旧 v3 节点按 proto3 未知字段跳过,兼容性同 §10.2 `wait_chain` 先例。
-- 错误码:重试耗尽建议复用现有超时/失败码 + `RetryExhausted` 文案;确需新增码则 append-only(如 `ErrCodeCosmosRemoteRetryExhausted`),照 §10.2 流程评估。
+- 错误码:重试耗尽建议复用现有超时/失败码 + `RetryExhausted` 文案;确需新增码则在 Task/Async 的 5000 号段分配，并在 `error_spec.go` 注册 Outcome、Recovery 和 gRPC 映射。
 
 ## 七、开放问题(实施前需拍板)
 

@@ -54,8 +54,8 @@ func Test_etcdVersionLock_ConcurrentTryLock(t *testing.T) {
 			winners = append(winners, versions[i])
 			continue
 		}
-		if code := CodeOf(err); code != ErrCodeCosmosEtcdClusterVersionLockFailed {
-			t.Errorf("racer v%d: expected ErrCodeCosmosEtcdClusterVersionLockFailed, got code=(%d), err=(%v)", versions[i], code, err)
+		if code := CodeOf(err); code != ErrCodeStorageConflict {
+			t.Errorf("racer v%d: expected ErrCodeStorageConflict, got code=(%d), err=(%v)", versions[i], code, err)
 		}
 	}
 

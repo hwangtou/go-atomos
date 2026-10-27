@@ -44,7 +44,7 @@ func TestBaseAtomosStopTaskCallbacksAndCancelledIDs(t *testing.T) {
 		runningCancelCalls.Add(1)
 	}))
 	<-runningStarted
-	if err := cancelRunning("still running"); CodeOf(err) != ErrCodeAtomosTaskCannotCancelRunningTask {
+	if err := cancelRunning("still running"); CodeOf(err) != ErrCodeAtomosTaskNotCancellable {
 		t.Fatalf("Cancel running task error = %v", err)
 	}
 
@@ -108,11 +108,14 @@ func TestBaseAtomosStopTaskCallbacksAndCancelledIDs(t *testing.T) {
 	}
 	tba.stopHook = func(from ID, ids []uint64) *Error {
 		cancelled = append(cancelled, ids...)
-		if taskID, err := at.Add(rejectedWorker); taskID != 0 || CodeOf(err) != ErrCodeAtomosIsNotRunning {
+		if taskID, err := at.Add(rejectedWorker); taskID != 0 || CodeOf(err) != ErrCodeAtomosIsStopping {
 			recordHaltError(fmt.Errorf("Add in Halt returned id=%d, err=%v", taskID, err))
 		}
-		if taskID, err := at.AddAfter(time.Second, rejectedWorker); taskID != 0 || CodeOf(err) != ErrCodeAtomosIsNotRunning {
+		if taskID, err := at.AddAfter(time.Second, rejectedWorker); taskID != 0 || CodeOf(err) != ErrCodeAtomosIsStopping {
 			recordHaltError(fmt.Errorf("AddAfter in Halt returned id=%d, err=%v", taskID, err))
+		}
+		if entryID, err := at.AddCrontab("@every 1h", rejectedWorker); entryID != 0 || CodeOf(err) != ErrCodeAtomosIsStopping {
+			recordHaltError(fmt.Errorf("AddCrontab in Halt returned id=%d, err=%v", entryID, err))
 		}
 		_ = at.Cancel(afterID)
 		if at.HasMarking("pending") {

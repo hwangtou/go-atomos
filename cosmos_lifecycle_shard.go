@@ -92,7 +92,7 @@ func (m *lifecycleManager) ensureShardOwnership(ctx context.Context, element, at
 	}
 	leaseID, healthy := m.currentLease()
 	if !healthy {
-		return nil, NewError(ErrCodeOwnershipLost, "lifecycle: cannot claim shard without a healthy process lease")
+		return nil, NewError(ErrCodeOwnershipNotReady, "lifecycle: cannot claim shard without a healthy process lease")
 	}
 	shardID := m.shardID(element, atom)
 	for attempt := 0; attempt < 32; attempt++ {
@@ -146,7 +146,7 @@ func (m *lifecycleManager) ensureShardOwnership(ctx context.Context, element, at
 			return newOwner, nil
 		}
 	}
-	return nil, NewErrorf(ErrCodeOperationConflict, "lifecycle: shard %d claim contention", shardID)
+	return nil, NewErrorf(ErrCodeOperationContended, "lifecycle: shard %d claim contention", shardID)
 }
 
 func (m *lifecycleManager) shardWriteGuard(id *IDInfo) (*ShardOwnershipRecord, int64, *Error) {

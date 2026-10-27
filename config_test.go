@@ -231,8 +231,8 @@ func Test_NewCosmosNodeConfigFromYamlPath_Errors(t *testing.T) {
 	clearAtomosEnv(t)
 
 	// Missing file.
-	if _, err := NewCosmosNodeConfigFromYamlPath(filepath.Join(t.TempDir(), "nope.yaml"), &CosmosRunnable{}); CodeOf(err) != ErrCodeCosmosConfigInvalid {
-		t.Errorf("missing file: err=%v, want ErrCodeCosmosConfigInvalid", err)
+	if _, err := NewCosmosNodeConfigFromYamlPath(filepath.Join(t.TempDir(), "nope.yaml"), &CosmosRunnable{}); CodeOf(err) != ErrCodeCosmosConfigReadFailed {
+		t.Errorf("missing file: err=%v, want ErrCodeCosmosConfigReadFailed", err)
 	}
 
 	// Malformed YAML.

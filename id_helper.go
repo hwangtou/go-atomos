@@ -52,14 +52,10 @@ func WithRebind[R any](resolve func() (ID, error), call func(ID) (R, error)) (R,
 	return call(id2)
 }
 
-// shouldRebind reports whether the error code indicates the caller's ID is
-// stale and a re-resolve may yield a usable target.
+// shouldRebind reports whether the registered recovery action is to resolve a
+// fresh ID. OwnershipLost deliberately uses manual recovery and never rebinds.
 func shouldRebind(code int64) bool {
-	switch code {
-	case ErrCodeAtomInstanceMismatch, ErrCodeAtomNotExists, ErrCodeCosmosNodeDraining:
-		return true
-	}
-	return false
+	return errorRecoveryOf(code) == recoveryRebind
 }
 
 // releaseID releases the IDTracker carried by an ID, if any. Generated IDs

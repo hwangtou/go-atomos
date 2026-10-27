@@ -356,7 +356,7 @@ func (c *CosmosRemote) getElement(name string) (*elementRemoteFromSource, *Error
 
 	elem, has := c.elements[name]
 	if !has {
-		return nil, NewErrorf(ErrCodeCosmosRemoteElementNotFound, "CosmosRemote: Element not found. name=(%s)", name).AddStack(nil)
+		return nil, NewErrorf(ErrCodeElementNotFound, "CosmosRemote: Element not found. name=(%s)", name).AddStack(nil)
 	}
 	return elem, nil
 }
@@ -408,11 +408,11 @@ func (c *CosmosRemote) DecoderByName(name string) (MessageDecoder, MessageDecode
 }
 
 func (c *CosmosRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
-	return NewError(ErrCodeCosmosRemoteCannotKill, "CosmosRemote: Cannot kill remote.").AddStack(nil)
+	return NewError(ErrCodeOperationUnsupported, "CosmosRemote: Cannot kill remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
-	return NewError(ErrCodeCosmosRemoteCannotSendWormhole, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
+	return NewError(ErrCodeOperationUnsupported, "CosmosGlobal: Cannot send wormhole remote.").AddStack(nil)
 }
 
 func (c *CosmosRemote) getGoID() uint64 {

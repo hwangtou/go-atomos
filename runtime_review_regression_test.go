@@ -267,14 +267,14 @@ func TestRuntimeReviewRawRPCMissingID(t *testing.T) {
 			}
 			t.Run(name, func(t *testing.T) {
 				bodyErr, transportErr := tc.call(nilRequest)
-				if bodyErr == nil || bodyErr.Code != ErrCodeCosmosRemoteServerInvalidArgs {
-					t.Fatalf("body error = %v, want ErrCodeCosmosRemoteServerInvalidArgs", bodyErr)
+				if bodyErr == nil || bodyErr.Code != ErrCodeCosmosRemoteRequestInvalid {
+					t.Fatalf("body error = %v, want ErrCodeCosmosRemoteRequestInvalid", bodyErr)
 				}
 				if transportErr == nil {
 					t.Fatal("call-class wrapper must also return a non-OK status")
 				}
-				if got := CodeOf(grpcErrorToError(transportErr)); got != ErrCodeCosmosRemoteServerInvalidArgs {
-					t.Fatalf("status error code = %d, want ErrCodeCosmosRemoteServerInvalidArgs", got)
+				if got := CodeOf(grpcErrorToError(transportErr)); got != ErrCodeCosmosRemoteRequestInvalid {
+					t.Fatalf("status error code = %d, want ErrCodeCosmosRemoteRequestInvalid", got)
 				}
 			})
 		}

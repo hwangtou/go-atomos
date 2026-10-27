@@ -97,8 +97,8 @@ func Test_etcdVersionLock_Lifecycle(t *testing.T) {
 	if err == nil {
 		t.Fatal("third lock: expected error, got nil")
 	}
-	if code := CodeOf(err); code != ErrCodeCosmosEtcdClusterVersionLockFailed {
-		t.Errorf("third lock: code=%d, want ErrCodeCosmosEtcdClusterVersionLockFailed", code)
+	if code := CodeOf(err); code != ErrCodeStorageConflict {
+		t.Errorf("third lock: code=%d, want ErrCodeStorageConflict", code)
 	}
 	if lock := readLock(t, ee, cosmos, node); len(lock.Versions) != 2 {
 		t.Fatalf("lock list changed on rejection: %+v", lock)
@@ -170,7 +170,7 @@ func Test_etcdVersionLock_StartedWithForeignVersion(t *testing.T) {
 	}
 
 	foreign, _ := newVersionLockProcess(t, ee, cosmos, node, 999)
-	if err := foreign.etcdStartedVersionNodeLock(); CodeOf(err) != ErrCodeCosmosEtcdClusterVersionLockFailed {
+	if err := foreign.etcdStartedVersionNodeLock(); CodeOf(err) != ErrCodeStorageConflict {
 		t.Fatalf("started with foreign version: err=(%v), want version-lock error", err)
 	}
 	if lock := readLock(t, ee, cosmos, node); lock.Current != 100 {

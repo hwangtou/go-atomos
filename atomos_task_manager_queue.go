@@ -268,7 +268,7 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 
 		switch task.timerState {
 		case TaskCancelled:
-			return NewErrorf(ErrCodeAtomosTaskCannotCancelCancelledTask, "AtomosTask: CancelTaskQueue, USAGE ERROR, task already cancelled. task=(%+v)", task).AddStack(nil)
+			return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: CancelTaskQueue, USAGE ERROR, task already cancelled. task=(%+v)", task).AddStack(nil)
 		case TaskScheduling:
 			// 任务还未加入到Atomos mailbox中，停止定时器。
 			// Task has not been added to Atomos mailbox, stop the timer.
@@ -357,9 +357,9 @@ func (at *atomosTaskManager) cancelTaskQueue(task *atomosTask, mailboxExit bool,
 			at.closeTaskMailboxIfIdleLocked(mailbox)
 
 		case TaskExecuting:
-			return NewErrorf(ErrCodeAtomosTaskCannotCancelRunningTask, "AtomosTask: Cannot cancel a running task. task=(%+v)", task).AddStack(nil)
+			return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: Cannot cancel a running task. task=(%+v)", task).AddStack(nil)
 		case TaskDone:
-			return NewErrorf(ErrCodeAtomosTaskCannotCancelDoneTask, "AtomosTask: Cannot cancel a done task. task=(%+v)", task).AddStack(nil)
+			return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: Cannot cancel a done task. task=(%+v)", task).AddStack(nil)
 		}
 		return nil
 	}()

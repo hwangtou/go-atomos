@@ -30,7 +30,7 @@ func lifecycleOperationArg(args []ArgsForBaseAtomos) string {
 }
 
 func lifecycleTransportError(operationID string, err error) *Error {
-	return lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: transport outcome unknown: %v", err)
+	return lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: transport outcome unknown: %v", err)
 }
 
 func (e *ElementRemote) spawnControlled(callerID ID, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *Error) {
@@ -69,7 +69,7 @@ func (e *ElementRemote) spawnControlled(callerID ID, name string, arg proto.Mess
 		return nil, rsp.Error
 	}
 	if rsp.Result == nil {
-		return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: empty controlled spawn result")
+		return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: empty controlled spawn result")
 	}
 	if rsp.Result.Error != nil {
 		if rsp.Result.Id != nil {
@@ -78,7 +78,7 @@ func (e *ElementRemote) spawnControlled(callerID ID, name string, arg proto.Mess
 		return nil, rsp.Result.Error
 	}
 	if rsp.Result.Id == nil {
-		return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: successful spawn has no ID")
+		return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: successful spawn has no ID")
 	}
 	return newAtomRemoteInSourceProcessWithPinnedConn(e, rsp.Result.Id, conn), nil
 }
@@ -119,7 +119,7 @@ func (e *ElementRemote) takeoverControlled(callerID ID, name string, previous *I
 		return nil, rsp.Error
 	}
 	if rsp.Result == nil {
-		return nil, lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: empty takeover result")
+		return nil, lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: empty takeover result")
 	}
 	if rsp.Result.Error != nil {
 		return nil, rsp.Result.Error
@@ -186,7 +186,7 @@ func (e *ElementRemote) haltControlled(callerID ID, id *IDInfo, args ...ArgsForB
 		return rsp.Error
 	}
 	if rsp.Result == nil {
-		return lifecycleError(operationID, ErrCodeOperationUnknown, "lifecycle: empty halt result")
+		return lifecycleError(operationID, ErrCodeOperationOutcomeUnknown, "lifecycle: empty halt result")
 	}
 	return rsp.Result.Error
 }
@@ -200,13 +200,13 @@ func (c *CosmosLocal) strictSpawn(callerID SelfID, element Element, elemName, na
 			return nil, nil, err
 		}
 		if result == nil {
-			return nil, nil, NewError(ErrCodeOperationUnknown, "lifecycle: empty spawn result")
+			return nil, nil, NewError(ErrCodeOperationOutcomeUnknown, "lifecycle: empty spawn result")
 		}
 		if result.Error != nil {
 			return nil, nil, result.Error
 		}
 		if result.Id == nil {
-			return nil, nil, NewError(ErrCodeOperationUnknown, "lifecycle: successful spawn has no ID")
+			return nil, nil, NewError(ErrCodeOperationOutcomeUnknown, "lifecycle: successful spawn has no ID")
 		}
 		atom, localErr := elem.getAtomFromRemote(name, result.Id.InstanceId)
 		if localErr != nil && result.Error == nil {
@@ -246,7 +246,7 @@ func (c *CosmosLocal) strictGet(elemName, name string, args ...ArgsForBaseAtomos
 		remote := c.process.cluster.remoteCosmos[lookup.Id.Node]
 		c.process.cluster.remoteMutex.RUnlock()
 		if remote == nil {
-			return nil, nil, NewErrorf(ErrCodeCosmosRemoteElementNotFound, "lifecycle: owner node %q not discovered", lookup.Id.Node)
+			return nil, nil, NewErrorf(ErrCodeCosmosRemoteNodeNotFound, "lifecycle: owner node %q not discovered", lookup.Id.Node)
 		}
 		elem, remoteErr := remote.getElement(elemName)
 		if remoteErr != nil {
@@ -263,7 +263,7 @@ func (c *CosmosLocal) strictGet(elemName, name string, args ...ArgsForBaseAtomos
 	case AtomLifecycleState_AtomLifecycleStateAbsent:
 		impl := c.runnable.implements[elemName]
 		if impl == nil {
-			return nil, nil, NewErrorf(ErrCodeMainElementNotFound, "lifecycle: element %q not registered", elemName)
+			return nil, nil, NewErrorf(ErrCodeElementNotFound, "lifecycle: element %q not registered", elemName)
 		}
 		persistence, ok := impl.Developer.(AutoData)
 		if !ok || persistence == nil {
@@ -275,7 +275,7 @@ func (c *CosmosLocal) strictGet(elemName, name string, args ...ArgsForBaseAtomos
 		}
 		return c.strictSpawn(c, element, elemName, name, nil, args...)
 	default:
-		return nil, nil, NewErrorf(ErrCodeOperationStillRunning, "lifecycle: atom is %s", lookup.State)
+		return nil, nil, NewErrorf(lifecycleAtomStateErrorCode(lookup.State), "lifecycle: atom is %s", lookup.State)
 	}
 }
 

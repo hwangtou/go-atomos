@@ -135,7 +135,7 @@ func (a *AtomRemote) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 }
 
 func (a *AtomRemote) SendWormhole(callerID ID, wormhole BaseAtomosWormhole, ext ...ArgsForBaseAtomos) error {
-	return NewErrorf(ErrCodeAtomosNotSupportWormhole, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
+	return NewErrorf(ErrCodeOperationUnsupported, "AtomRemote: Cannot send remote atom wormhole.").AddStack(nil)
 }
 
 func (a *AtomRemote) getGoID() uint64 {

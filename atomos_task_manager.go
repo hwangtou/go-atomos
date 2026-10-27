@@ -206,7 +206,11 @@ func (at *atomosTaskManager) Add(taskClosure TaskFn) (taskID uint64, err error) 
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
 
-	if at.stopping || at.atomos == nil {
+	if at.stopping {
+		return 0, NewErrorf(ErrCodeAtomosIsStopping,
+			"AtomosTask: Atomos is stopping. Add task failed.").AddStack(nil)
+	}
+	if at.atomos == nil {
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
@@ -238,7 +242,11 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
-	if at.stopping || at.atomos == nil {
+	if at.stopping {
+		return 0, NewErrorf(ErrCodeAtomosIsStopping,
+			"AtomosTask: Atomos is stopping. Add task failed.").AddStack(nil)
+	}
+	if at.atomos == nil {
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning,
 			"AtomosTask: Atomos is not running. Add task failed.").AddStack(nil)
 	}
@@ -271,7 +279,10 @@ func (at *atomosTaskManager) AddAfter(after time.Duration, taskClosure TaskFn) (
 func (at *atomosTaskManager) AddCrontab(spec string, taskClosure TaskFn) (entryID uint64, err error) {
 	at.mutex.Lock()
 	defer at.mutex.Unlock()
-	if at.stopping || at.atomos == nil {
+	if at.stopping {
+		return 0, NewErrorf(ErrCodeAtomosIsStopping, "AtomosTask: Atomos is stopping. Add crontab failed.").AddStack(nil)
+	}
+	if at.atomos == nil {
 		return 0, NewErrorf(ErrCodeAtomosIsNotRunning, "AtomosTask: Atomos is not running. Add crontab failed.").AddStack(nil)
 	}
 	c := at.getCronLocked()
@@ -392,11 +403,11 @@ func (at *atomosTaskManager) cancelTask(id uint64, mailboxExit bool, t *atomosTa
 		t.atomosMail = nil
 		return nil
 	case TaskExecuting:
-		return NewErrorf(ErrCodeAtomosTaskCannotCancelRunningTask, "AtomosTask: Cannot cancel a running task. id=(%d)", id).AddStack(nil)
+		return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: Cannot cancel a running task. id=(%d)", id).AddStack(nil)
 	case TaskDone:
-		return NewErrorf(ErrCodeAtomosTaskCannotCancelDoneTask, "AtomosTask: Cannot cancel a done task. id=(%d)", id).AddStack(nil)
+		return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: Cannot cancel a done task. id=(%d)", id).AddStack(nil)
 	case TaskCancelled:
-		return NewErrorf(ErrCodeAtomosTaskCannotCancelCancelledTask, "AtomosTask: Task already cancelled. id=(%d)", id).AddStack(nil)
+		return NewErrorf(ErrCodeAtomosTaskNotCancellable, "AtomosTask: Task already cancelled. id=(%d)", id).AddStack(nil)
 	default:
 		return NewErrorf(ErrCodeAtomosTaskNotExists, "AtomosTask: Task does not exist. id=(%d)", id).AddStack(nil)
 	}

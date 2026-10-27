@@ -33,7 +33,7 @@ type CosmosNode interface {
 	CosmosGetAtomID(elem, name string, args ...ArgsForBaseAtomos) (ID, *IDTracker, error)
 
 	// CosmosSpawnAtom creates a new Atom with the given name and argument.
-	// If an Atom with this name already exists and is running, returns ErrAtomSpawningAnExistedAtom.
+	// If an Atom with this name already exists and is running, returns ErrAtomAlreadyExists.
 	CosmosSpawnAtom(callerID SelfID, elem, name string, arg proto.Message, args ...ArgsForBaseAtomos) (ID, *IDTracker, error)
 
 	// ElementBroadcast sends an asynchronous broadcast to every Element on this

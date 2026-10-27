@@ -21,99 +21,41 @@ import (
 // errors only: their toolchain consumers prefer a always-OK transport, so no
 // status mapping is applied there.
 
-// grpcCodeOfErrCode maps a framework error code to a gRPC status code. The
-// mapping is many-to-one and only meaningful in the forward direction; exact
-// framework codes survive the round trip through the status details, not
-// through the status code.
+// grpcCodeOfErrCode gets the transport classification from the same registry
+// used by recovery policies. Exact framework and application codes survive in
+// status details; the gRPC code is intentionally many-to-one.
 func grpcCodeOfErrCode(code int64) codes.Code {
-	switch code {
-	// Not-exist class.
-	case ErrCodeMainElementNotFound,
-		ErrCodeCosmosRemoteElementNotFound,
-		ErrCodeAtomosTaskNotExists,
-		ErrCodeAtomDataNotFound,
-		ErrCodeAtomNotExists,
-		ErrCodeOperationNotFound:
-		return codes.NotFound
-
-	case ErrCodeOperationConflict:
-		return codes.AlreadyExists
-	case ErrCodeOwnershipLost, ErrCodeStaleFence:
-		return codes.Aborted
-
-	// State-rejection class: draining, stopping, not running, already
-	// running, spawn conflicts and stale-instance mismatches.
-	case ErrCodeCosmosIsClosed,
-		ErrCodeAtomosIsStopping,
-		ErrCodeAtomosIsNotRunning,
-		ErrCodeElementLoaded,
-		ErrCodeAtomIsRunning,
-		ErrCodeAtomIsStopping,
-		ErrCodeAtomSpawningAnExistedAtom,
-		ErrCodeAtomInstanceMismatch,
-		ErrCodeCosmosNodeDraining,
-		ErrCodeAsyncCallbackCancelledByHalt,
-		ErrCodeOperationStillRunning,
-		ErrCodeTakeoverRequired,
-		ErrCodeFencingRequired:
-		return codes.FailedPrecondition
-
-	// Invalid-argument class, including type mismatches and programming
-	// errors surfaced through the ID interface.
-	case ErrCodeFrameworkIncorrectUsage,
-		ErrCodeFrameworkInvalidID,
-		ErrCodeCosmosRemoteRequestInvalid,
-		ErrCodeCosmosRemoteServerInvalidArgs,
-		ErrCodeCosmosRemoteInfoInvalid,
-		ErrCodeAtomosInvalidArguments,
-		ErrCodeAtomosTaskInvalidFn,
-		ErrCodeElementMessageArgType,
-		ErrCodeElementFromIDInvalid,
-		ErrCodeElementToIDInvalid,
-		ErrCodeAtomFromIDInvalid,
-		ErrCodeAtomToIDInvalid,
-		ErrCodeAtomMessageAtomType,
-		ErrCodeAtomMessageArgType,
-		ErrCodeAtomMessageReplyType:
-		return codes.InvalidArgument
-
-	// Timeout class.
-	case ErrCodeAtomosPushTimeoutHandling,
-		ErrCodeAtomosPushTimeoutReject:
-		return codes.DeadlineExceeded
-
-	// Panic / internal-error class.
-	case ErrCodeFrameworkInternalError,
-		ErrCodeFrameworkRecoverFromPanic,
-		ErrCodeCosmosProcessOnStartupPanic,
-		ErrCodeCosmosProcessOnShutdownPanic,
-		ErrCodeMainStartRunningPanic:
-		return codes.Internal
-
-	default:
-		return codes.Unknown
+	if spec, ok := errorSpecOf(code); ok {
+		return spec.grpc
 	}
+	return codes.Unknown
 }
 
-// errCodeOfGRPCCode is the best-effort reverse of grpcCodeOfErrCode, used
-// when a gRPC error carries no *Error detail (transport-level failures,
-// local context deadlines, or non-Atomos servers). It maps to a documented
-// representative code per status code; the original status message is kept
-// in the constructed error.
+// errCodeOfGRPCCode classifies a status that has no Atomos detail. It returns
+// only remote-domain codes: a bare NotFound, for example, carries no evidence
+// that an atom rather than another resource was missing.
 func errCodeOfGRPCCode(c codes.Code) int64 {
 	switch c {
 	case codes.NotFound:
-		return ErrCodeAtomNotExists
+		return ErrCodeCosmosRemoteStatusNotFound
 	case codes.FailedPrecondition:
-		return ErrCodeAtomosIsNotRunning
+		return ErrCodeCosmosRemoteStatusFailedPrecondition
 	case codes.InvalidArgument:
-		return ErrCodeAtomosInvalidArguments
+		return ErrCodeCosmosRemoteStatusInvalidArgument
 	case codes.DeadlineExceeded:
-		return ErrCodeAtomosPushTimeoutHandling
+		return ErrCodeCosmosRemoteStatusDeadlineExceeded
 	case codes.Unavailable:
-		return ErrCodeCosmosRemoteConnectFailed
+		return ErrCodeCosmosRemoteStatusUnavailable
 	case codes.Internal:
-		return ErrCodeFrameworkInternalError
+		return ErrCodeCosmosRemoteStatusInternal
+	case codes.PermissionDenied:
+		return ErrCodeCosmosRemoteStatusPermissionDenied
+	case codes.Canceled:
+		return ErrCodeCosmosRemoteStatusCanceled
+	case codes.ResourceExhausted:
+		return ErrCodeCosmosRemoteStatusResourceExhausted
+	case codes.Unauthenticated:
+		return ErrCodeCosmosRemoteStatusUnauthenticated
 	default:
 		return ErrCodeCosmosRemoteResponseFailed
 	}
@@ -136,10 +78,9 @@ func grpcStatusFromError(err *Error) error {
 }
 
 // grpcErrorToError recovers a framework error from a failed call-class RPC.
-// A *Error carried in the status details (v3 servers) is returned as-is,
-// preserving its code and call stacks. Otherwise the status code is
-// reverse-mapped to a representative framework code with the status message
-// attached. Non-status errors (should not happen with gRPC) become
+// A *Error carried in the status details is returned as-is, preserving any
+// framework or application code and all call stacks. Without details, only
+// remote-domain status errors are synthesized. Non-status errors become
 // ErrCodeCosmosRemoteResponseInvalid.
 func grpcErrorToError(er error) *Error {
 	if er == nil {

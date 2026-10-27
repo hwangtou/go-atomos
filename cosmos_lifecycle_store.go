@@ -180,13 +180,13 @@ func lifecycleGet(cli EtcdClient, key string, out proto.Message) (int64, bool, *
 	defer cancel()
 	rsp, err := cli.Get(ctx, key)
 	if err != nil {
-		return 0, false, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: get %s: %v", key, err)
+		return 0, false, NewErrorf(ErrCodeStorageUnavailable, "lifecycle: get %s: %v", key, err)
 	}
 	if len(rsp.Kvs) == 0 {
 		return 0, false, nil
 	}
 	if err := proto.Unmarshal(rsp.Kvs[0].Value, out); err != nil {
-		return 0, false, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode %s: %v", key, err)
+		return 0, false, NewErrorf(ErrCodeStorageDataCorrupted, "lifecycle: decode %s: %v", key, err)
 	}
 	return rsp.Kvs[0].ModRevision, true, nil
 }
@@ -263,6 +263,17 @@ func lifecycleSameIdentity(id *IDInfo, ownership *AtomOwnershipInfo) bool {
 		id.Fence != 0 && id.Fence == ownership.Fence
 }
 
+func lifecycleAtomStateErrorCode(state AtomLifecycleState) int64 {
+	switch state {
+	case AtomLifecycleState_AtomLifecycleStateSpawning:
+		return ErrCodeAtomSpawning
+	case AtomLifecycleState_AtomLifecycleStateStopping:
+		return ErrCodeAtomIsStopping
+	default:
+		return ErrCodeAtomNotRunning
+	}
+}
+
 func (m *lifecycleManager) authorize(id *IDInfo) *Error {
 	if m == nil || !lifecycleStrictMode(m.process.lifecycleMode) || id == nil || id.Type != IDType_Atom {
 		return nil
@@ -275,7 +286,7 @@ func (m *lifecycleManager) authorize(id *IDInfo) *Error {
 		return NewErrorf(ErrCodeOwnershipLost, "lifecycle: process lease is unhealthy for %s", id.Info())
 	}
 	if !m.watchHealthy.Load() {
-		return NewErrorf(ErrCodeOwnershipLost, "lifecycle: owner snapshot is not synchronized for %s", id.Info())
+		return NewErrorf(ErrCodeOwnershipNotReady, "lifecycle: owner snapshot is not synchronized for %s", id.Info())
 	}
 	owner := m.cachedOwner(id.Element, id.Atom)
 	if owner == nil || !lifecycleSameIdentity(id, owner.Ownership) {
@@ -285,7 +296,7 @@ func (m *lifecycleManager) authorize(id *IDInfo) *Error {
 		return NewErrorf(ErrCodeOwnershipLost, "lifecycle: ownership belongs to another lease for %s", id.Info())
 	}
 	if owner.Ownership.State != AtomLifecycleState_AtomLifecycleStateRunning {
-		return NewErrorf(ErrCodeOperationStillRunning, "lifecycle: atom %s is %s", id.Info(), owner.Ownership.State)
+		return NewErrorf(lifecycleAtomStateErrorCode(owner.Ownership.State), "lifecycle: atom %s is %s", id.Info(), owner.Ownership.State)
 	}
 	if m.perShard() {
 		if id.ShardId != m.shardID(id.Element, id.Atom) {
@@ -370,7 +381,7 @@ func (m *lifecycleManager) waitOperation(ctx context.Context, operationID, finge
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return &AtomControlResult{OperationId: operationID, Operation: op.Operation, Error: NewError(ErrCodeOperationStillRunning, "lifecycle: operation still running")}, nil
+			return &AtomControlResult{OperationId: operationID, Operation: op.Operation, Error: NewError(ErrCodeOperationRunning, "lifecycle: operation still running")}, nil
 		case <-timer.C():
 		}
 	}

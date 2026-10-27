@@ -755,7 +755,12 @@ func (p *CosmosProcess) Drain(deadline time.Duration) error {
 	if p.state != CosmosProcessStateRunning {
 		state := p.state
 		p.mutex.Unlock()
-		return NewErrorf(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", state).AddStack(nil)
+		switch state {
+		case CosmosProcessStatePrepare, CosmosProcessStateStartup, CosmosProcessStateShutdown, CosmosProcessStateOff:
+			return NewErrorf(ErrCodeCosmosProcessInvalidTransition, "CosmosProcess: Drain requires Running state, got=(%v).", state).AddStack(nil)
+		default:
+			return NewErrorf(ErrCodeCosmosProcessInvalidState, "CosmosProcess: Drain requires Running state, got=(%v).", state).AddStack(nil)
+		}
 	}
 	if p.draining {
 		p.mutex.Unlock()
@@ -1139,7 +1144,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	if ip == "" {
 		addrList, er := net.InterfaceAddrs()
 		if er != nil {
-			return NewErrorf(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
+			return NewErrorf(ErrCodeCosmosRemoteAddressNotFound, "CosmosProcess: Failed to get local IP address. err=(%v)", er).AddStack(p.local)
 		}
 		for _, address := range addrList {
 			// check for IPv4 address
@@ -1152,7 +1157,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 		}
 	}
 	if ip == "" {
-		return NewError(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to get local IP address.").AddStack(p.local)
+		return NewError(ErrCodeCosmosRemoteAddressNotFound, "CosmosProcess: Failed to get local IP address.").AddStack(p.local)
 	}
 	p.local.coreLog().coreInfo("CosmosProcess: Using IP. ip=(%s)", ip)
 
@@ -1166,7 +1171,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 			DialTimeout: etcdDialTime * time.Second,
 		})
 		if er != nil {
-			return NewErrorf(ErrCodeCosmosEtcdConnectFailed, "CosmosProcess: Failed to connect etcd. err=(%v)", er).AddStack(p.local)
+			return NewErrorf(ErrCodeStorageUnavailable, "CosmosProcess: Failed to connect etcd. err=(%v)", er).AddStack(p.local)
 		}
 		cli = NewEtcdClientV3(raw)
 		p.cluster.etcdClientOwned = true
@@ -1261,7 +1266,7 @@ func (p *CosmosProcess) prepareClusterLocalNode(endpoints []string, nodeName str
 	// Check if grpc server is available.
 	if grpcServer == nil {
 		p.local.coreLog().coreFatal("CosmosProcess: Failed to start gRPC server. No available port in optionals ports list. ports=(%v)", ports)
-		return NewError(ErrCodeCosmosEtcdGRPCServerFailed, "CosmosProcess: Failed to start etcd grpc server.").AddStack(p.local)
+		return NewError(ErrCodeCosmosRemoteListenFailed, "CosmosProcess: Failed to start etcd grpc server.").AddStack(p.local)
 	}
 
 	p.cluster.grpcServerOption = serverOption

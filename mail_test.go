@@ -1198,13 +1198,13 @@ func TestMailBox_StartLoop(t *testing.T) {
 
 	// Test for starting failed
 	if err := h.mb.start(func() *Error {
-		return NewErrorf(1, "test error in mailboxOnStartUp")
+		return NewErrorf(ErrCodeFrameworkInternalError, "test error in mailboxOnStartUp")
 	}); err == nil {
 		t.Fatalf("TestMailBox_StartLoop: Start did not return error for mailboxOnStartUp failure.")
-	} else if err.Code == 1 && err.Message == "test error in mailboxOnStartUp" {
+	} else if err.Code == ErrCodeFrameworkInternalError && err.Message == "test error in mailboxOnStartUp" {
 		t.Logf("TestMailBox_StartLoop: Start returned expected error for mailboxOnStartUp failure. err=(%v)", err.AddStack(nil))
 	} else {
-		t.Fatalf("TestMailBox_StartLoop: Start returned wrong error for mailboxOnStartUp failure. expect=(code:1 message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", err.Code, err.Message)
+		t.Fatalf("TestMailBox_StartLoop: Start returned wrong error for mailboxOnStartUp failure. expect=(code:%d message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", ErrCodeFrameworkInternalError, err.Code, err.Message)
 	}
 	if h.mb.running {
 		t.Fatalf("TestMailBox_StartLoop: Mailbox is running after Start failed.")
@@ -1235,10 +1235,10 @@ func TestMailBox_StartLoop(t *testing.T) {
 		return nil
 	}); err == nil {
 		t.Fatalf("TestMailBox_StartLoop: Double Start did not return error.")
-	} else if err.Code == ErrCodeFrameworkRecoverFromPanic && err.Message == "Mailbox: Has already run." {
+	} else if err.Code == ErrCodeFrameworkInternalError && err.Message == "Mailbox: Has already run." {
 		t.Logf("TestMailBox_StartLoop: Double Start returned expected error. err=(%v)", err.AddStack(nil))
 	} else {
-		t.Fatalf("TestMailBox_StartLoop: Double Start returned wrong error. expect=(code:%d message:'%s') got=(code:%d message:'%s')", ErrCodeFrameworkRecoverFromPanic, "Mailbox: Has already run.", err.Code, err.Message)
+		t.Fatalf("TestMailBox_StartLoop: Double Start returned wrong error. expect=(code:%d message:'%s') got=(code:%d message:'%s')", ErrCodeFrameworkInternalError, "Mailbox: Has already run.", err.Code, err.Message)
 	}
 	t.Log("TestMailBox_StartLoop: Start double failed cases passed.")
 
@@ -1272,14 +1272,14 @@ func TestMailBox_Loop(t *testing.T) {
 	// Test for loop with exit due to mailboxOnStartUp error
 	wait := make(chan *Error, 1)
 	h.mb.loop(wait, func() *Error {
-		return NewErrorf(1, "test error in mailboxOnStartUp")
+		return NewErrorf(ErrCodeFrameworkInternalError, "test error in mailboxOnStartUp")
 	})
 	err := <-wait
 	if err == nil {
 		t.Fatalf("TestMailBox_Loop: Loop did not return error from mailboxOnStartUp.")
 	}
-	if err.Code != 1 || err.Message != "test error in mailboxOnStartUp" {
-		t.Fatalf("TestMailBox_Loop: Loop returned wrong error from mailboxOnStartUp. expect=(code:1 message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", err.Code, err.Message)
+	if err.Code != ErrCodeFrameworkInternalError || err.Message != "test error in mailboxOnStartUp" {
+		t.Fatalf("TestMailBox_Loop: Loop returned wrong error from mailboxOnStartUp. expect=(code:%d message:'test error in mailboxOnStartUp') got=(code:%d message:'%s')", ErrCodeFrameworkInternalError, err.Code, err.Message)
 	}
 
 	<-time.After(time.Millisecond)

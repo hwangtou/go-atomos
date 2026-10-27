@@ -62,8 +62,10 @@ and intentionally excludes supervisor.
 
 - Public API returns `error` (framework failures are `*atomos.Error`); match
   with `errors.Is` against the sentinels in `error_sentinel.go`, read codes
-  with `atomos.CodeOf`. Error codes are frozen — never change existing
-  numeric values.
+  with `atomos.CodeOf`. Allocate error codes in their domain range in
+  `error_code.go`, register class/outcome/recovery/gRPC metadata in
+  `error_spec.go`, and extend `error_code_snapshot_test.go` in the same change.
+  Numeric ranges identify ownership only; never infer semantics from them.
 - Optional call parameters use variadic marker arguments
   (`ext ...atomos.ArgsForBaseAtomos`), e.g. `atomos.ArgBaseAtomosTimeout(d)`,
   `atomos.ArgBaseAtomosFromLocalOnly()`.

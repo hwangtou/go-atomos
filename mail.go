@@ -231,7 +231,7 @@ func (mb *mailBox) start(fn func() *Error, onReady ...func()) *Error {
 	mb.mutex.Lock()
 	if mb.running {
 		mb.mutex.Unlock()
-		return NewError(ErrCodeFrameworkRecoverFromPanic, "Mailbox: Has already run.").AddStack(nil)
+		return NewError(ErrCodeFrameworkInternalError, "Mailbox: Has already run.").AddStack(nil)
 	}
 	mb.running = true
 	mb.mutex.Unlock()

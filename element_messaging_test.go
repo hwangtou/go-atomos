@@ -179,8 +179,8 @@ func TestElement_UnknownMessageNameRejected(t *testing.T) {
 		}
 		// Element-level: no handler registered under this name.
 		_, err := elem.SyncMessagingByName(p.local, "NoSuchElementMessage", nil, ArgBaseAtomosTimeout(2*time.Second))
-		if CodeOf(err) != ErrCodeElementMessageHandlerNotExists {
-			t.Fatalf("element: want ErrCodeElementMessageHandlerNotExists, got %v", err)
+		if CodeOf(err) != ErrCodeMessageHandlerNotFound {
+			t.Fatalf("element: want ErrCodeMessageHandlerNotFound, got %v", err)
 		}
 
 		// Atom-level: same miss against an atom's handlers.
@@ -192,8 +192,8 @@ func TestElement_UnknownMessageNameRejected(t *testing.T) {
 		}
 		defer tracker.Release()
 		_, err = id.SyncMessagingByName(p.local, "NoSuchAtomMessage", nil, ArgBaseAtomosTimeout(2*time.Second))
-		if CodeOf(err) != ErrCodeAtomMessageHandlerNotExists {
-			t.Fatalf("atom: want ErrCodeAtomMessageHandlerNotExists, got %v", err)
+		if CodeOf(err) != ErrCodeMessageHandlerNotFound {
+			t.Fatalf("atom: want ErrCodeMessageHandlerNotFound, got %v", err)
 		}
 	})
 }

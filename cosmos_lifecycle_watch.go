@@ -61,7 +61,7 @@ func (m *lifecycleManager) syncOwnerSnapshot(ctx context.Context) (int64, *Error
 	defer cancel()
 	rsp, err := m.cli.Get(ctx, m.ownerPrefix(), clientv3.WithPrefix())
 	if err != nil {
-		return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: sync owner snapshot: %v", err)
+		return 0, NewErrorf(ErrCodeStorageUnavailable, "lifecycle: sync owner snapshot: %v", err)
 	}
 	revision := rsp.Header.Revision
 	owners := make(map[string]lifecycleOwnerSnapshot, len(rsp.Kvs))
@@ -75,13 +75,13 @@ func (m *lifecycleManager) syncOwnerSnapshot(ctx context.Context) (int64, *Error
 		case strings.Contains(key, "/lifecycle/atom/"):
 			record := &AtomOwnershipRecord{}
 			if err := proto.Unmarshal(kv.Value, record); err != nil {
-				return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode owner %s: %v", key, err)
+				return 0, NewErrorf(ErrCodeStorageDataCorrupted, "lifecycle: decode owner %s: %v", key, err)
 			}
 			owners[key] = lifecycleOwnerSnapshot{record: record, modRevision: kv.ModRevision}
 		case strings.Contains(key, "/lifecycle/shard/"):
 			record := &ShardOwnershipRecord{}
 			if err := proto.Unmarshal(kv.Value, record); err != nil {
-				return 0, NewErrorf(ErrCodeCosmosEtcdGetFailed, "lifecycle: decode shard owner %s: %v", key, err)
+				return 0, NewErrorf(ErrCodeStorageDataCorrupted, "lifecycle: decode shard owner %s: %v", key, err)
 			}
 			shards[key] = lifecycleShardSnapshot{record: record, modRevision: kv.ModRevision}
 		}

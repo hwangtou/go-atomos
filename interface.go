@@ -167,7 +167,7 @@ type ElementLogLevel interface {
 // AtomosAcceptWormhole enables an actor to receive wormhole messages.
 // Wormholes carry arbitrary typed data (implementing BaseAtomosWormhole)
 // between actors. If not implemented, SendWormhole to this actor returns
-// ErrAtomosNotSupportWormhole.
+// ErrOperationUnsupported.
 type AtomosAcceptWormhole interface {
 	AcceptWormhole(fromID ID, wormhole BaseAtomosWormhole) error
 }

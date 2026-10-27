@@ -147,7 +147,7 @@ func (a *AtomLocal) Kill(callerID ID, ext ...ArgsForBaseAtomos) error {
 			return err
 		}
 		if result == nil {
-			return NewError(ErrCodeOperationUnknown, "lifecycle: empty halt result")
+			return NewError(ErrCodeOperationOutcomeUnknown, "lifecycle: empty halt result")
 		}
 		return errOrNil(result.Error)
 	}
@@ -253,7 +253,7 @@ func (a *AtomLocal) Persistence() AtomAutoData {
 func (a *AtomLocal) onSyncMessaging(fromID ID, name string, in proto.Message) (out proto.Message, err *Error) {
 	handler := a.elemImpl.AtomHandlers[name]
 	if handler == nil {
-		return nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists,
+		return nil, NewErrorf(ErrCodeMessageHandlerNotFound,
 			"Atom: Message handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a)
 	}
 	return a.atomos.onSyncMessaging(fromID, name, handler, in)
@@ -265,7 +265,7 @@ func (a *AtomLocal) onAsyncMessaging(fromID ID, name string, startupID, asyncID 
 		if fromInternal, intErr := asIDInternal(fromID); intErr != nil {
 			a.atomos.log.coreError("Atom: onAsyncMessaging caller ID invalid, error reply dropped. err=(%v)", intErr)
 		} else {
-			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrCodeAtomMessageHandlerNotExists, "Atom: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
+			fromInternal.asyncCallback(a, name, startupID, asyncID, nil, NewErrorf(ErrCodeMessageHandlerNotFound, "Atom: onAsyncMessaging handler not found. from=(%s),name=(%s),in=(%v)", fromID, name, in).AddStack(a))
 		}
 		return
 	}
@@ -297,7 +297,7 @@ func (a *AtomLocal) onFnCallback(callback *atomosCallback) {
 func (a *AtomLocal) onWormhole(from ID, wormhole BaseAtomosWormhole) *Error {
 	holder, ok := a.atomos.instance.(AtomosAcceptWormhole)
 	if !ok || holder == nil {
-		return NewErrorf(ErrCodeAtomosNotSupportWormhole, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
+		return NewErrorf(ErrCodeOperationUnsupported, "Atom: Not supported wormhole. type=(%T)", a.atomos.instance).AddStack(a)
 	}
 	if err := holder.AcceptWormhole(from, wormhole); err != nil {
 		return asError(err).AddStack(a)

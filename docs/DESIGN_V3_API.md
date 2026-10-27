@@ -162,6 +162,20 @@ const (
 - 生成器 `protoc-gen-go-atomos` 模板同步改造，`for_test.proto` fixture 已重新生成；`cmd/atomos-vet` testdata 同步适配。
 - 门禁：`build ./...` + `vet ./...` + `GOOS=windows build ./...` + 全量测试通过。
 
+### 3.4 当前错误码分区与语义注册表（不兼容重构）
+
+旧 `0–138` 连续编号及跨版本错误码兼容承诺已废止，不保留旧数值或别名。当前
+`error_code.go` 按归属分区：1000 Common、2000 Process/Config、3000 Remote、
+4000 Element/Atom/Messaging、5000 Task/Async、6000 Lifecycle、7000 Storage、
+8000 Host/Admin；9000–9999 框架保留，10000–999999 官方扩展，`>=1000000`
+为应用业务码。号段只负责分配，代码不得通过数值大小推断错误性质。
+
+`error_spec.go` 是每个框架错误码的唯一语义来源，集中声明 Class、Outcome、
+Recovery 和 gRPC code。`error_code_snapshot_test.go` 校验名称、显式数值、唯一性、
+号段和注册表完整性。gRPC 正向映射、异步重试和 WithRebind 均从注册表派生；
+无 Atomos details 的 gRPC status 只还原为远程域错误，不再猜测具体 Atom/Element
+错误。应用业务码不要求注册，经 status details 原样往返。
+
 ## 4. 参数与签名统一（P1）
 
 ### 4.1 现状
@@ -248,7 +262,7 @@ const (
 - `DrainNode` 等管理面 RPC 保留内嵌错误（管理面工具链友好优先）。
 - ~~协议加 `version` 握手字段的取舍：v3 暂缓，记录在案。~~ → 已升级为正式设计（2026-10-24，见 §8.1）。
 
-实施状态（v3.0-rc1 已落地前两项，握手字段维持暂缓）：映射表与互转在 `atomos_grpc_status.go`——`grpcCodeOfErrCode`（正向归类：不存在类→NotFound，状态拒绝类→FailedPrecondition，参数类→InvalidArgument，超时类→DeadlineExceeded，panic/内部类→Internal，其余→Unknown）、`grpcStatusFromError`（服务端双写：`*Error` proto 进 status details，响应体 Error 字段照填）、`grpcErrorToError`（客户端读侧：details 优先还原含 CallStacks 的完整 `*Error`，缺失时按 status code 反映射为代表性错误码，如 Unavailable→ErrCodeCosmosRemoteConnectFailed）。服务端接入点为 7 个调用类 RPC 的 wrapper（`callRspWithStatus`）；客户端接入点为 `BaseRemote.PushSyncMessage/PushAsyncMessage/Kill` 与 `ElementRemote.GetAtomID/SpawnAtom`。管理面 RPC（TryKilling/DrainNode/GetElementInfo/ElementBroadcast/AsyncOnMessageCallback）保持仅内嵌，代码注释已写明取舍。Sync handler 同时返回非空 reply 与 error 时是双写例外：gRPC 非 OK status 会丢弃响应体，因此该场景保持 OK status + body error，以保住 `(partial reply, error)` 公共契约；原始 stub 调用方必须兼容。单测 `atomos_grpc_status_test.go` 覆盖映射表、status 往返（Code/CallStacks 不丢失）与反映射回退；`cosmos_remote_test.go` 的 raw-stub 集成测试已改为新契约（非 OK status + details 还原），兼作双写端到端覆盖。
+当前实现：互转在 `atomos_grpc_status.go`，`grpcCodeOfErrCode` 直接从 `error_spec.go` 获取 gRPC 分类，不再维护独立 switch；`grpcStatusFromError` 服务端双写（`*Error` proto 进 status details，响应体 Error 字段照填）；`grpcErrorToError` 客户端优先从 details 原样还原框架或应用业务码及 CallStacks。缺少 details 时只生成 RemoteStatusNotFound、RemoteStatusUnavailable、RemoteStatusDeadlineExceeded 等远程域错误，不再把 bare status 猜成 AtomNotExists 等具体业务错误。服务端接入点为 7 个调用类 RPC 的 wrapper（`callRspWithStatus`）；客户端接入点为 `BaseRemote.PushSyncMessage/PushAsyncMessage/Kill` 与 `ElementRemote.GetAtomID/SpawnAtom`。管理面 RPC（TryKilling/DrainNode/GetElementInfo/ElementBroadcast/AsyncOnMessageCallback）保持仅内嵌。Sync handler 同时返回非空 reply 和 error 时仍保持 OK status + body error，以保住 `(partial reply, error)` 公共契约。单测覆盖注册表映射、框架/应用码 status 往返和无 details 防误判；`cosmos_remote_test.go` 继续覆盖双写端到端行为。
 
 ### 8.1 协议 version 握手设计（已定稿，待实施）
 
@@ -311,9 +325,10 @@ const (
 
 - v3 不保证源码兼容；提供本节各项迁移说明，并在 CHANGELOG 逐条列出。
 - **线协议兼容**：`atomos.proto` 字段编号冻结策略不变；v3 节点与 v2 节点跨版本调用的兼容矩阵在 rc 阶段验证（IDInfo/Error/args 的 wire 格式未变，预期互通，startup_id/instance_id 语义不变）。
+- **错误码例外**：§3.4 的不兼容分区重构废止旧错误码数值和基于旧码的混部兼容承诺；§10.1 第 2 条及引用旧码的后续结论仅作历史记录，不再适用于当前版本。
 - 生成代码：用户需用 v3 版 protoc-gen-go-atomos 重新生成业务代码。
 
-### 10.1 rc1 验证结果
+### 10.1 rc1 历史验证结果
 
 对照基线分支 `preview/20261023`（即 v2 线）：
 

@@ -39,7 +39,7 @@ func TestAsError_PreservesCause(t *testing.T) {
 }
 
 func TestAsError_PlainFrameworkErrorHasNoCause(t *testing.T) {
-	e := NewError(ErrCodeMainElementNotFound, "not found")
+	e := NewError(ErrCodeElementNotFound, "not found")
 	if e.Unwrap() != nil {
 		t.Fatalf("framework-built error should unwrap to nil, got %v", e.Unwrap())
 	}

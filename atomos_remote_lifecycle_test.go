@@ -151,11 +151,11 @@ func TestLookupAtomHasNoSpawnSideEffects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("controlled operation returned transport error: %v", err)
 		}
-		if controlled.Error == nil || controlled.Error.Code != ErrCodeAtomNotImplemented || controlled.Error.OperationId != "controlled-op" || controlled.Result != nil {
+		if controlled.Error == nil || controlled.Error.Code != ErrCodeOperationUnsupported || controlled.Error.OperationId != "controlled-op" || controlled.Result != nil {
 			t.Fatalf("controlled response = %v", controlled)
 		}
 		if got := elem.GetAtomsNum(); got != 0 {
-			t.Fatalf("unimplemented controlled spawn had side effects; atoms = %d", got)
+			t.Fatalf("unsupported controlled spawn had side effects; atoms = %d", got)
 		}
 
 		atomID, err := SpawnForTestAtomosAtom(p.local, p.local, "lookup_only", &ForTestSpawnArg{})
@@ -171,4 +171,96 @@ func TestLookupAtomHasNoSpawnSideEffects(t *testing.T) {
 			t.Fatalf("running lookup = %v", rsp)
 		}
 	})
+}
+
+func TestLifecycleAtomStateErrorClassification(t *testing.T) {
+	for _, test := range []struct {
+		state AtomLifecycleState
+		code  int64
+	}{
+		{state: AtomLifecycleState_AtomLifecycleStateSpawning, code: ErrCodeAtomSpawning},
+		{state: AtomLifecycleState_AtomLifecycleStateStopping, code: ErrCodeAtomIsStopping},
+		{state: AtomLifecycleState_AtomLifecycleStateHalted, code: ErrCodeAtomNotRunning},
+		{state: AtomLifecycleState_AtomLifecycleStateAbsent, code: ErrCodeAtomNotRunning},
+		{state: AtomLifecycleState_AtomLifecycleStateUnknown, code: ErrCodeAtomNotRunning},
+	} {
+		if got := lifecycleAtomStateErrorCode(test.state); got != test.code {
+			t.Errorf("state %s error code = %d, want %d", test.state, got, test.code)
+		}
+	}
+}
+
+func TestLifecycleAuthorizeReadinessStateAndOwnership(t *testing.T) {
+	process, err := newCosmosProcess("authorize", "node", &reproLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	process.lifecycleMode = LifecycleModePerAtomStrict
+	process.local.runnable = &CosmosRunnable{config: &Config{Cosmos: "authorize"}}
+	manager := &lifecycleManager{
+		process: process,
+		owners:  map[string]lifecycleOwnerSnapshot{},
+		shards:  map[string]lifecycleShardSnapshot{},
+	}
+	id := &IDInfo{
+		Type: IDType_Atom, Cosmos: "authorize", Node: process.local.GetNodeName(),
+		Element: "element", Atom: "atom", Incarnation: 1, StartupId: 1, Fence: 1,
+	}
+	if err := manager.authorize(id); CodeOf(err) != ErrCodeOwnershipLost {
+		t.Fatalf("unhealthy lease error = %v, want OwnershipLost", err)
+	}
+	manager.publishLease(7, true)
+	if err := manager.authorize(id); CodeOf(err) != ErrCodeOwnershipNotReady {
+		t.Fatalf("unsynchronized watch error = %v, want OwnershipNotReady", err)
+	}
+	manager.watchHealthy.Store(true)
+	if err := manager.authorize(id); CodeOf(err) != ErrCodeStaleFence {
+		t.Fatalf("missing owner error = %v, want StaleFence", err)
+	}
+	owner := &AtomOwnershipRecord{
+		Ownership: &AtomOwnershipInfo{
+			Id: proto.Clone(id).(*IDInfo), Incarnation: id.Incarnation,
+			StartupId: id.StartupId, Fence: id.Fence, State: AtomLifecycleState_AtomLifecycleStateRunning,
+		},
+		LeaseId: 8,
+	}
+	manager.cacheOwnerPut(manager.ownerKey(id.Element, id.Atom), owner, 1)
+	if err := manager.authorize(id); CodeOf(err) != ErrCodeOwnershipLost {
+		t.Fatalf("changed lease error = %v, want OwnershipLost", err)
+	}
+	owner.LeaseId = 7
+	for i, test := range []struct {
+		state AtomLifecycleState
+		code  int64
+	}{
+		{state: AtomLifecycleState_AtomLifecycleStateSpawning, code: ErrCodeAtomSpawning},
+		{state: AtomLifecycleState_AtomLifecycleStateStopping, code: ErrCodeAtomIsStopping},
+		{state: AtomLifecycleState_AtomLifecycleStateHalted, code: ErrCodeAtomNotRunning},
+		{state: AtomLifecycleState_AtomLifecycleStateRunning},
+	} {
+		owner.Ownership.State = test.state
+		manager.cacheOwnerPut(manager.ownerKey(id.Element, id.Atom), owner, int64(i+2))
+		err := manager.authorize(id)
+		if test.state == AtomLifecycleState_AtomLifecycleStateRunning {
+			if err != nil {
+				t.Errorf("Running authorize error = %v", err)
+			}
+		} else if CodeOf(err) != test.code {
+			t.Errorf("state %s error = %v, want code %d", test.state, err, test.code)
+		}
+	}
+}
+
+func TestLifecycleClaimReadinessAndSelfHaltConflict(t *testing.T) {
+	manager := &lifecycleManager{}
+	if _, err := manager.claimSpawn(
+		context.Background(), "", "fingerprint", AtomOperationKind_AtomOperationKindSpawn, "element", "atom", nil, false,
+	); CodeOf(err) != ErrCodeOwnershipNotReady {
+		t.Fatalf("claim without lease error = %v, want OwnershipNotReady", err)
+	}
+	if _, err := manager.joinStoppingHalt(
+		context.Background(), "halt-operation", "fingerprint", false, &AtomOwnershipRecord{OperationId: "halt-operation"},
+	); CodeOf(err) != ErrCodeOperationConflict {
+		t.Fatalf("self halt join error = %v, want OperationConflict", err)
+	}
 }

@@ -23,7 +23,7 @@ func ExampleCodeOf() {
 	fmt.Println(atomos.CodeOf(nil))
 
 	// Output:
-	// 102
+	// 4015
 	// true
 	// -1
 	// 0

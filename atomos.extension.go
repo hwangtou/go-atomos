@@ -182,11 +182,11 @@ func (x *Error) Error() string {
 	return x.Message
 }
 
-// IsAtomExist reports whether x carries the ErrCodeAtomIsRunning code.
+// IsAtomExist reports whether x carries the ErrCodeAtomAlreadyExists code.
 //
-// Deprecated: use errors.Is(err, ErrAtomIsRunning) instead.
+// Deprecated: use errors.Is(err, ErrAtomAlreadyExists) instead.
 func (x *Error) IsAtomExist() bool {
-	return errors.Is(x, ErrAtomIsRunning)
+	return errors.Is(x, ErrAtomAlreadyExists)
 }
 
 func (x *Error) Scan(value any) error {

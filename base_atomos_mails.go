@@ -324,7 +324,7 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos Message wait invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkInternalError, "Atomos Message wait invalid.").AddStack(nil)
 	}
 	timer := a.process.getClock().NewTimer(timeout)
 	defer timer.Stop()
@@ -349,7 +349,7 @@ func (m *baseAtomosMail) waitReply(a *BaseAtomos, helper *baseAtomosHelper) (res
 	}
 	// Wait channel must be empty before delete a mail.
 	if reply == nil {
-		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos: Message reply is invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkInternalError, "Atomos: Message reply is invalid.").AddStack(nil)
 	}
 	resp = reply.resp
 	err = reply.err
@@ -363,7 +363,7 @@ func (m *baseAtomosMail) waitReplyID(a *BaseAtomos, timeout time.Duration) (id I
 	m.mutex.Unlock()
 	// An empty channel here means the receiver has received. It must be framework problem otherwise it won't happen.
 	if waitCh == nil {
-		return nil, NewErrorf(ErrCodeFrameworkRecoverFromPanic, "Atomos: Message wait invalid.").AddStack(nil)
+		return nil, NewErrorf(ErrCodeFrameworkInternalError, "Atomos: Message wait invalid.").AddStack(nil)
 	}
 
 	if timeout == 0 {

@@ -9,7 +9,7 @@ import (
 )
 
 func lifecycleManagerNotImplemented(operationID string) *Error {
-	return lifecycleError(operationID, ErrCodeAtomNotImplemented, "CosmosRemote: controlled atom lifecycle requires PerAtomStrict")
+	return lifecycleError(operationID, ErrCodeOperationUnsupported, "CosmosRemote: controlled atom lifecycle requires PerAtomStrict")
 }
 
 func lifecycleRequestCaller(a *atomosRemoteService, info *IDInfo) ID {
@@ -29,7 +29,7 @@ func lifecycleUnmarshalArgs(arg *anypb.Any) (proto.Message, *Error) {
 	}
 	msg, err := arg.UnmarshalNew()
 	if err != nil {
-		return nil, NewErrorf(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: controlled spawn args: %v", err)
+		return nil, NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: controlled spawn args: %v", err)
 	}
 	return msg, nil
 }
@@ -38,7 +38,7 @@ func (a *atomosRemoteService) SpawnAtomControlled(_ context.Context, req *Cosmos
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteSpawnAtomControlledRsp{}
 	if req == nil {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: SpawnAtomControlled missing request")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: SpawnAtomControlled missing request")
 		return rsp, nil
 	}
 	if a.process.lifecycle == nil {
@@ -63,7 +63,7 @@ func (a *atomosRemoteService) HaltAtomControlled(_ context.Context, req *CosmosR
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteHaltAtomControlledRsp{}
 	if req == nil || req.Id == nil {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: HaltAtomControlled missing ID")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: HaltAtomControlled missing ID")
 		return rsp, nil
 	}
 	if a.process.lifecycle == nil {
@@ -83,7 +83,7 @@ func (a *atomosRemoteService) TakeoverAtom(_ context.Context, req *CosmosRemoteT
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteTakeoverAtomRsp{}
 	if req == nil || req.Id == nil || req.PreviousId == nil {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: TakeoverAtom requires id and previous_id")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: TakeoverAtom requires id and previous_id")
 		return rsp, nil
 	}
 	if a.process.lifecycle == nil {
@@ -108,7 +108,7 @@ func (a *atomosRemoteService) GetAtomOperation(_ context.Context, req *CosmosRem
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteGetAtomOperationRsp{}
 	if req == nil || req.OperationId == "" {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: GetAtomOperation missing operation ID")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: GetAtomOperation missing operation ID")
 		return rsp, nil
 	}
 	if a.process.lifecycle == nil {
@@ -128,11 +128,11 @@ func (a *atomosRemoteService) LookupAtom(_ context.Context, req *CosmosRemoteLoo
 	defer func() { Recover(a.process.local) }()
 	rsp := &CosmosRemoteLookupAtomRsp{State: AtomLifecycleState_AtomLifecycleStateUnknown}
 	if req == nil || req.Id == nil {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: LookupAtom missing ID")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: LookupAtom missing ID")
 		return rsp, nil
 	}
 	if req.Id.Type != IDType_Atom || req.Id.Element == "" || req.Id.Atom == "" {
-		rsp.Error = NewError(ErrCodeCosmosRemoteServerInvalidArgs, "CosmosRemote: LookupAtom requires an atom ID")
+		rsp.Error = NewError(ErrCodeCosmosRemoteRequestInvalid, "CosmosRemote: LookupAtom requires an atom ID")
 		return rsp, nil
 	}
 	if a.process.lifecycle != nil {

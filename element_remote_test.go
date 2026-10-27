@@ -15,7 +15,7 @@ type elementRemoteSpawnTestServer struct {
 
 func (elementRemoteSpawnTestServer) SpawnAtom(_ context.Context, req *CosmosRemoteSpawnAtomReq) (*CosmosRemoteSpawnAtomRsp, error) {
 	rsp := &CosmosRemoteSpawnAtomRsp{
-		Error: NewError(ErrCodeAtomSpawningAnExistedAtom, "spawn rejected"),
+		Error: NewError(ErrCodeAtomAlreadyExists, "spawn rejected"),
 	}
 	if req.Atom == "with-id" {
 		rsp.Id = &IDInfo{Type: IDType_Atom, Element: req.Element, Atom: req.Atom}
@@ -48,8 +48,8 @@ func TestElementRemoteSpawnAtomReturnsResponseErrorWithOrWithoutID(t *testing.T)
 	for _, name := range []string{"without-id", "with-id"} {
 		t.Run(name, func(t *testing.T) {
 			id, tracker, err := element.SpawnAtom(stubID{}, name, nil, nil)
-			if got := CodeOf(err); got != ErrCodeAtomSpawningAnExistedAtom {
-				t.Fatalf("code = %v, want ErrCodeAtomSpawningAnExistedAtom", got)
+			if got := CodeOf(err); got != ErrCodeAtomAlreadyExists {
+				t.Fatalf("code = %v, want ErrCodeAtomAlreadyExists", got)
 			}
 			if id != nil || tracker != nil {
 				t.Fatalf("id = %v, tracker = %v; want both nil on response error", id, tracker)
