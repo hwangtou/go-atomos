@@ -1,6 +1,6 @@
 # 确定性模拟测试（DST）与 I/O 接口化设计
 
-状态：提案（2026-10-24）。路线图第 5 步的前置设计；实施另立里程碑。
+状态：实施中（2026-10-27）。Clock 接口、`atomostest.VirtualClock` 和 gRPC 故障注入器已落地；生产调用点迁移与内存 etcd 仍待完成。
 
 ## 目标
 
@@ -30,6 +30,10 @@ DST 的缺口是**三个 I/O 接缝**都直连真实实现。
 落地顺序：先 mailbox 超时与任务延时（waitReply/AfterFunc 两类调用点），后
 cron。虚拟时钟实现（手动 advance + 唤醒等待者）放 atomostest。
 
+当前实现：`clock.go` 提供 Clock/Timer/Ticker，`atomostest/clock.go` 提供稳定
+同刻顺序、Reset/Stop、Ticker 和嵌套回调；`CosmosRunnable.SetClock` 与生产
+调用点迁移尚未完成。
+
 ### B. etcd 客户端
 
 `CosmosProcess.cluster.etcdClient` 的使用面已经收敛在少数函数
@@ -44,6 +48,10 @@ cron。虚拟时钟实现（手动 advance + 唤醒等待者）放 atomostest。
 （dial/conn），测试实现为进程内内存管道（带可注入延迟/分区/重排）。
 "多节点"退化为多个 CosmosProcess + 内存互连，`_cluster_advertise_ip`
 经验（loopback 优先）在此不再需要——根本没有 TCP。
+
+当前实现：`atomostest/fault.go` 可通过真实 gRPC client interceptor 注入
+drop-request、执行后 drop-response、delay/hold、duplicate/reorder、blackhole
+和 heal，并记录事件顺序。生产 dial factory 和全节点内存互连尚未完成。
 
 ## 验收样例（设计目标）
 

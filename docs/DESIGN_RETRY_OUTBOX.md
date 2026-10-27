@@ -1,6 +1,6 @@
 # 设计方案:异步投递重试与 WAL Outbox(进程重启不丢)
 
-> 状态:设计提案(基于代码现状分析,未实施)
+> 状态:实施中。远程发送失败的回调终结已落地；进程级 FIFO/退避调度器已实现但尚未接入发送路径。WAL outbox 未实施。
 > 日期:2026-10-24
 > 关联文件:`base_remote.go` / `atomos_remote_service.go` / `element_local.go` / `base_atomos.go` / `cosmos_etcd.go` / `mail.go` / `atomos.proto`
 > 关联文档:`DESIGN_V3_API.md` §8(协议演进)、`DESIGN_DRAIN_GRADUAL.md`(逻辑寻址,见开放问题)、`DEADLOCK.md`
