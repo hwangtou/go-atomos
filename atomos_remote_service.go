@@ -600,19 +600,30 @@ func (a *atomosRemoteService) getRemoteInTargetProcessIDFromIDInfo(idInfo *IDInf
 		return newCosmosRemoteInTargetProcess(cosmosNode, startupID, asyncID)
 	}
 
+	if idInfo.Type != IDType_Element && idInfo.Type != IDType_Atom {
+		return nil
+	}
+
 	// Element
 	elem, err := cosmosNode.getElement(idInfo.Element)
 	if err != nil {
-		return nil
+		if CodeOf(err) != ErrCodeElementNotFound {
+			return nil
+		}
+		// An incoming caller is only a return-route reference; its interface
+		// need not exist locally during a mixed-version deployment.
+		elem = newElementRemoteFromSource(cosmosNode, &IDInfo{
+			Type:    IDType_Element,
+			Cosmos:  idInfo.Cosmos,
+			Node:    idInfo.Node,
+			Element: idInfo.Element,
+		}, nil, "")
 	}
 	if idInfo.Type == IDType_Element {
 		return newElementRemoteInTargetProcess(elem.ElementRemote, startupID, asyncID)
 	}
 
 	// Atom
-	if idInfo.Type != IDType_Atom {
-		return nil
-	}
 	return newAtomRemoteInTargetProcess(elem.ElementRemote, idInfo, startupID, asyncID)
 }
 

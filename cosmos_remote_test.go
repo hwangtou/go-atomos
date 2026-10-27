@@ -143,6 +143,99 @@ func TestCosmosRemote_LifeCycle(t *testing.T) {
 	<-time.After(time.Millisecond)
 }
 
+func TestCosmosRemote_UnknownCallerUsesOpaqueID(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 36300, "test_cosmos", "opaque_node")
+	defer cluster.close()
+
+	client := cluster.sourceProcess.cluster.remoteCosmos["opaque_node_target"].current.client
+	cli := NewAtomosRemoteServiceClient(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	const atomName = "opaque_target"
+	spawnRsp, er := cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
+		CallerId: cluster.sourceProcess.local.GetIDInfo(),
+		Element:  ForTestAtomosName,
+		Atom:     atomName,
+	})
+	if er != nil {
+		t.Fatalf("SpawnAtom failed: %v", er)
+	}
+	if spawnRsp == nil || spawnRsp.Id == nil || spawnRsp.Error != nil {
+		t.Fatalf("SpawnAtom invalid response: %v", spawnRsp)
+	}
+
+	targetElem, err := cluster.targetProcess.local.getLocalElement(ForTestAtomosName)
+	if err != nil {
+		t.Fatalf("getLocalElement failed: %v", err)
+	}
+	targetAtom, tracker, getErr := targetElem.GetAtomID(atomName, nil)
+	if getErr != nil {
+		t.Fatalf("GetAtomID failed: %v", getErr)
+	}
+	defer tracker.Release()
+	greetingNotify := make(chan struct{}, 2)
+	targetAtom.(*AtomLocal).atomos.instance.(*testRunnableAtom).greetingNotify = greetingNotify
+
+	const unknownElement = "V2OnlyElement"
+	targetToSource := cluster.targetProcess.cluster.remoteCosmos["opaque_node_source"]
+	if _, err := targetToSource.getElement(unknownElement); CodeOf(err) != ErrCodeElementNotFound {
+		t.Fatalf("unknown element unexpectedly registered before calls: %v", err)
+	}
+
+	syncRsp, er := cli.SyncMessagingByName(ctx, &CosmosRemoteSyncMessagingByNameReq{
+		CallerId: &IDInfo{
+			Type:       IDType_Atom,
+			Cosmos:     "test_cosmos",
+			Node:       "opaque_node_source",
+			Element:    unknownElement,
+			Atom:       "v2_caller",
+			InstanceId: 1,
+		},
+		To:      spawnRsp.Id,
+		Message: "Greeting",
+		Args:    toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	})
+	if er != nil {
+		t.Fatalf("sync call with unknown atom caller failed: %v", er)
+	}
+	if syncRsp == nil || syncRsp.Reply == nil || syncRsp.Error != nil {
+		t.Fatalf("sync call with unknown atom caller returned invalid response: %v", syncRsp)
+	}
+	select {
+	case <-greetingNotify:
+	case <-time.After(time.Second):
+		t.Fatal("sync message did not reach the target handler")
+	}
+
+	asyncRsp, er := cli.AsyncMessagingByName(ctx, &CosmosRemoteAsyncMessagingByNameReq{
+		CallerId: &IDInfo{
+			Type:    IDType_Element,
+			Cosmos:  "test_cosmos",
+			Node:    "opaque_node_source",
+			Element: unknownElement,
+		},
+		ToId:    spawnRsp.Id,
+		Message: "Greeting",
+		Args:    toAnyPb(t, &ForTestGreetingI{Mode: 1}),
+	})
+	if er != nil {
+		t.Fatalf("async call with unknown element caller failed: %v", er)
+	}
+	if asyncRsp == nil || asyncRsp.Error != nil {
+		t.Fatalf("async call with unknown element caller returned invalid response: %v", asyncRsp)
+	}
+	select {
+	case <-greetingNotify:
+	case <-time.After(time.Second):
+		t.Fatal("async message did not reach the target handler")
+	}
+
+	if _, err := targetToSource.getElement(unknownElement); CodeOf(err) != ErrCodeElementNotFound {
+		t.Fatalf("opaque caller leaked into remote element registry: %v", err)
+	}
+}
+
 func toAnyPb(t *testing.T, msg proto.Message) *anypb.Any {
 	arg, er := anypb.New(msg)
 	if er != nil {
