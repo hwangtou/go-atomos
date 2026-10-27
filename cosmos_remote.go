@@ -455,7 +455,7 @@ func (c *CosmosRemote) CosmosSpawnAtom(callerID SelfID, elem, name string, arg p
 	if err != nil {
 		return nil, nil, err
 	}
-	id, tracker, serr := element.SpawnAtom(callerID, name, arg, nil)
+	id, tracker, serr := element.SpawnAtom(callerID, name, arg, nil, args...)
 	if serr != nil {
 		return nil, nil, asError(serr).AddStack(nil)
 	}

@@ -109,10 +109,10 @@ func (a *atomosRemoteService) getIDState(ctx context.Context, req *CosmosRemoteG
 	case IDType_Atom:
 		atom, err := elem.getAtomFromRemote(req.Id.Atom, req.Id.InstanceId)
 		if err != nil {
-			rsp.State = int32(BaseAtomosHalt)
-		} else {
-			rsp.State = int32(atom.State())
+			rsp.Error = err.AddStack(a.process.local)
+			return rsp, nil
 		}
+		rsp.State = int32(atom.State())
 	case IDType_Element:
 		rsp.State = int32(elem.State())
 	default:
@@ -204,7 +204,7 @@ func (a *atomosRemoteService) spawnAtom(ctx context.Context, req *CosmosRemoteSp
 		}
 	}
 
-	atom, _, serr := elem.SpawnAtom(callerID, req.Atom, in, nil)
+	atom, _, serr := elem.SpawnAtom(callerID, req.Atom, in, nil, createExtForCosmosArgs(req.CosmosArgs)...)
 	if atom != nil {
 		rsp.Id = atom.GetIDInfo()
 	}

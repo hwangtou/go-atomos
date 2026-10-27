@@ -202,6 +202,20 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 	if e.cosmos != nil && e.cosmos.process != nil {
 		defer e.cosmos.process.observeRPC("ElementSpawnAtom", time.Now())
 	}
+	remoteArgs := make([]ArgsForBaseAtomos, 0, len(args))
+	for _, arg := range args {
+		if arg == nil {
+			continue
+		}
+		switch arg.getArgType() {
+		case ArgTypeBaseAtomosTimeout, ArgTypeBaseAtomosAppendToHead:
+			remoteArgs = append(remoteArgs, arg)
+		}
+	}
+	helper := createBaseAtomosHelper(BaseAtomosMailSync, remoteArgs)
+	if helper.hasErrors() {
+		return nil, nil, helper.getError()
+	}
 	cli, conn, ctx, cancel, err := e.remote.getCliWithConn(atomosClientTimeout)
 	if err != nil {
 		return nil, nil, err.AddStack(nil)
@@ -217,10 +231,11 @@ func (e *ElementRemote) SpawnAtom(callerID ID, name string, arg proto.Message, _
 		}
 	}
 	rsp, er := cli.SpawnAtom(ctx, &CosmosRemoteSpawnAtomReq{
-		CallerId: callerID.GetIDInfo(),
-		Element:  e.remote.info.Element,
-		Atom:     name,
-		Args:     anyArg,
+		CallerId:   callerID.GetIDInfo(),
+		Element:    e.remote.info.Element,
+		Atom:       name,
+		Args:       anyArg,
+		CosmosArgs: helper.getRemoteArg(),
 	})
 	if er != nil {
 		return nil, nil, grpcErrorToError(er).AddStack(nil)

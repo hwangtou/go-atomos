@@ -128,18 +128,35 @@ func (a *BaseRemote) getCliWithConn(timeout time.Duration) (AtomosRemoteServiceC
 }
 
 func (a *BaseRemote) State() BaseAtomosState {
+	state, err := a.stateWithError()
+	if err != nil {
+		if p := a.rpcProcess(); p != nil && p.logging != nil {
+			p.logging.pushFrameworkErrorLog("BaseRemote: GetIDState failed. id=(%s),err=(%v)", a.info.Info(), err)
+		}
+		return BaseAtomosInvalidState
+	}
+	return state
+}
+
+func (a *BaseRemote) stateWithError() (BaseAtomosState, error) {
 	cli, ctx, cancel, err := a.getCli(atomosClientTimeout)
 	if err != nil {
-		return BaseAtomosInvalidState
+		return BaseAtomosInvalidState, err.AddStack(nil)
 	}
 	defer cancel()
 
 	rsp, er := cli.GetIDState(ctx, &CosmosRemoteGetIDStateReq{Id: a.info})
 	if er != nil {
-		return BaseAtomosInvalidState
+		return BaseAtomosInvalidState, grpcErrorToError(er).AddStack(nil)
+	}
+	if rsp == nil {
+		return BaseAtomosInvalidState, NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: GetIDState empty response.").AddStack(nil)
+	}
+	if rsp.Error != nil {
+		return BaseAtomosInvalidState, rsp.Error.AddStack(nil)
 	}
 
-	return BaseAtomosState(rsp.State)
+	return BaseAtomosState(rsp.State), nil
 }
 
 func (a *BaseRemote) IdleTime() time.Duration {
@@ -242,12 +259,20 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 	if p := a.rpcProcess(); p != nil {
 		defer p.observeRPC("AsyncMessaging", time.Now())
 	}
+	var asyncID uint64
+	var callerInternal idInternal
+	fail := func(failure error) error {
+		terminalCallback := callback
+		if callerInternal != nil && asyncID != 0 {
+			terminalCallback = callerInternal.asyncPop(asyncID)
+		}
+		a.terminateAsyncMessageCallback(name, terminalCallback, failure)
+		return failure
+	}
+
 	helper := createBaseAtomosHelper(BaseAtomosMailAsync, ext)
 	if helper.hasErrors() {
-		if callback != nil {
-			callback(nil, helper.getError())
-		}
-		return helper.getError()
+		return fail(helper.getError())
 	}
 
 	var er error
@@ -255,26 +280,22 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 	if in != nil {
 		arg, er = anypb.New(in)
 		if er != nil {
-			if callback != nil {
-				callback(nil, NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
-			}
-			return nil
+			return fail(NewErrorf(ErrCodeCosmosRemoteRequestInvalid, "BaseRemote: AsyncMessagingByName arg error. err=(%v)", er).AddStack(nil))
 		}
 	}
 
 	client, ctx, cancel, cerr := a.getCli(helper.timeout)
 	if cerr != nil {
-		return cerr.AddStack(nil)
+		return fail(cerr.AddStack(nil))
 	}
 	defer cancel()
 
-	var startupID, asyncID uint64
-	var callerInternal idInternal
+	var startupID uint64
 	if callback != nil {
 		var intErr *Error
 		callerInternal, intErr = asIDInternal(callerID)
 		if intErr != nil {
-			return intErr.AddStack(nil)
+			return fail(intErr.AddStack(nil))
 		}
 		startupID, asyncID = callerInternal.asyncSet(callback)
 		if asyncID == 0 {
@@ -297,18 +318,29 @@ func (a *BaseRemote) PushAsyncMessage(callerID ID, name string, in proto.Message
 		Args:       arg,
 	})
 	if er != nil {
-		if asyncID != 0 {
-			callerInternal.asyncPop(asyncID)
-		}
-		return grpcErrorToError(er).AddStack(nil)
+		return fail(grpcErrorToError(er).AddStack(nil))
+	}
+	if rsp == nil {
+		return fail(NewError(ErrCodeCosmosRemoteResponseInvalid, "BaseRemote: AsyncMessagingByName empty response.").AddStack(nil))
 	}
 	if rsp.Error != nil {
-		if asyncID != 0 {
-			callerInternal.asyncPop(asyncID)
-		}
-		return rsp.Error.AddStack(nil)
+		return fail(rsp.Error.AddStack(nil))
 	}
 	return nil
+}
+
+func (a *BaseRemote) terminateAsyncMessageCallback(name string, callback func(out proto.Message, err error), err error) {
+	if callback == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			if p := a.rpcProcess(); p != nil && p.logging != nil {
+				p.logging.pushFrameworkErrorLog("BaseRemote: AsyncMessagingByName terminal callback panicked. name=(%s),err=(%v),panic=(%v)", name, err, r)
+			}
+		}
+	}()
+	callback(nil, err)
 }
 
 func (a *BaseRemote) PushAsyncMessageCallback(callbackID, toID ID, name string, startupID, asyncID uint64, reply proto.Message, err error) {

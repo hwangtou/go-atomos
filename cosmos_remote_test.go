@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -361,6 +362,45 @@ func TestWithRebind_NoRetryOnUnrelatedError(t *testing.T) {
 	}
 }
 
+func TestWithRebind_NoRetryOnConnectFailed(t *testing.T) {
+	resolves := 0
+	calls := 0
+	connectErr := NewError(ErrCodeCosmosRemoteConnectFailed, "connection failed").AddStack(nil)
+	_, err := WithRebind(func() (ID, error) {
+		resolves++
+		return stubID{}, nil
+	}, func(id ID) (string, error) {
+		calls++
+		return "", connectErr
+	})
+	if err != connectErr {
+		t.Fatalf("WithRebind error = %v, want original connection error", err)
+	}
+	if resolves != 1 || calls != 1 {
+		t.Fatalf("resolves/calls = %d/%d, want 1/1 without resend", resolves, calls)
+	}
+}
+
+func TestWithRebind_RetriesOnNotFoundAndDraining(t *testing.T) {
+	for _, code := range []int64{ErrCodeAtomNotExists, ErrCodeCosmosNodeDraining} {
+		t.Run(fmt.Sprintf("code_%d", code), func(t *testing.T) {
+			calls := 0
+			out, err := WithRebind(func() (ID, error) {
+				return stubID{}, nil
+			}, func(id ID) (string, error) {
+				calls++
+				if calls == 1 {
+					return "", NewError(code, "retryable").AddStack(nil)
+				}
+				return "ok", nil
+			})
+			if err != nil || out != "ok" || calls != 2 {
+				t.Fatalf("WithRebind = (%q, %v), calls = %d; want (ok, nil), 2", out, err, calls)
+			}
+		})
+	}
+}
+
 // TestWithRebind_ResolveErrorNoCall verifies WithRebind returns the resolve
 // error without invoking call.
 func TestWithRebind_ResolveErrorNoCall(t *testing.T) {
@@ -646,9 +686,32 @@ func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
 	caller := cluster.sourceProcess.local // *CosmosLocal satisfies SelfID
 
 	const atomName = "cosmos_layer_remote_atom"
+	spawnReqCh := make(chan *CosmosRemoteSpawnAtomReq, 1)
+	interceptor := func(ctx context.Context, method string, req, reply any, conn *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if spawnReq, ok := req.(*CosmosRemoteSpawnAtomReq); ok {
+			spawnReqCh <- proto.Clone(spawnReq).(*CosmosRemoteSpawnAtomReq)
+		}
+		return invoker(ctx, method, req, reply, conn, opts...)
+	}
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	conn, err := grpc.DialContext(dialCtx, fmt.Sprintf(":%d", cluster.targetPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithUnaryInterceptor(interceptor),
+	)
+	dialCancel()
+	if err != nil {
+		t.Fatalf("dial instrumented target connection: %v", err)
+	}
+	defer conn.Close()
+	sourceToTarget.current.dialMu.Lock()
+	previousConn := sourceToTarget.current.client
+	sourceToTarget.current.client = conn
+	sourceToTarget.current.dialMu.Unlock()
+	defer previousConn.Close()
 
 	// 1. CosmosSpawnAtom through the cosmos layer (the path M3 touched).
-	id, tracker, err := sourceToTarget.CosmosSpawnAtom(caller, ForTestAtomosName, atomName, &ForTestSpawnArg{})
+	id, tracker, err := sourceToTarget.CosmosSpawnAtom(caller, ForTestAtomosName, atomName, &ForTestSpawnArg{}, ArgBaseAtomosAppendToHead())
 	if err != nil {
 		t.Fatalf("CosmosRemote.CosmosSpawnAtom failed: %v", err)
 	}
@@ -672,6 +735,14 @@ func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
 	targetElem.lock.RUnlock()
 	if !spawned {
 		t.Fatal("atom was not spawned on the target node")
+	}
+	select {
+	case req := <-spawnReqCh:
+		if !req.CosmosArgs.GetBaseAtomosAppendToHead() {
+			t.Fatalf("remote Spawn CosmosArgs = %v, want AppendToHead", req.CosmosArgs)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("remote Spawn request was not intercepted")
 	}
 
 	// 2. RPC through the returned remote ID (validates the ID is usable, not
@@ -700,5 +771,43 @@ func TestCosmosRemote_CosmosLayerSpawnAndGet(t *testing.T) {
 	remoteAtomID2 := &ForTestAtomosAtomID{ID: id2}
 	if _, e := remoteAtomID2.Greeting(caller, &ForTestGreetingI{Mode: 1}); e != nil {
 		t.Fatalf("remote Greeting RPC via re-resolved ID failed: %v", e)
+	}
+}
+
+func TestCosmosRemoteStateResolutionErrorIsInvalid(t *testing.T) {
+	cluster := newTestCosmosProcessSimulateCluster(t, 36200, "state_cosmos", "state_node")
+	defer cluster.close()
+
+	caller := cluster.sourceProcess.local
+	remoteCosmos := cluster.sourceProcess.cluster.remoteCosmos["state_node_target"]
+	id, _, err := remoteCosmos.CosmosSpawnAtom(caller, ForTestAtomosName, "state_atom", &ForTestSpawnArg{})
+	if err != nil {
+		t.Fatalf("CosmosSpawnAtom failed: %v", err)
+	}
+	if state := id.State(); state != BaseAtomosWaiting {
+		t.Fatalf("live remote State = %v, want Waiting", state)
+	}
+	if err := id.Kill(caller, ArgBaseAtomosWaitKilled()); err != nil {
+		t.Fatalf("remote Kill failed: %v", err)
+	}
+	remoteAtom, ok := id.(*atomRemoteInSourceProcess)
+	if !ok {
+		t.Fatalf("remote ID type = %T, want *atomRemoteInSourceProcess", id)
+	}
+	state, detailErr := remoteAtom.remote.stateWithError()
+	if state != BaseAtomosInvalidState || CodeOf(detailErr) != ErrCodeAtomInstanceMismatch {
+		t.Fatalf("stateWithError = (%v, %v), want (Invalid, InstanceMismatch)", state, detailErr)
+	}
+
+	service := &atomosRemoteService{process: cluster.targetProcess}
+	rsp, rpcErr := service.getIDState(context.Background(), &CosmosRemoteGetIDStateReq{Id: id.GetIDInfo()})
+	if rpcErr != nil {
+		t.Fatalf("getIDState transport error: %v", rpcErr)
+	}
+	if rsp.Error == nil || rsp.Error.Code != ErrCodeAtomInstanceMismatch {
+		t.Fatalf("getIDState body error = %v, want InstanceMismatch", rsp.Error)
+	}
+	if BaseAtomosState(rsp.State) == BaseAtomosHalt {
+		t.Fatal("getIDState must not convert target resolution failure to Halt")
 	}
 }

@@ -6,8 +6,11 @@ package atomos
 // usable target:
 //   - ErrAtomInstanceMismatch (M5-0: target respawned under the same name)
 //   - ErrAtomNotExists (target gone, no live instance)
-//   - ErrCosmosRemoteConnectFailed (target node unreachable / moved)
 //   - ErrCosmosNodeDraining (target node is draining; re-resolve to a Started node)
+//
+// Generic connection failures do not trigger rebind: the original request may
+// already have executed, so automatically resending it could duplicate a Kill
+// or another non-idempotent operation.
 //
 // resolve produces a fresh ID (wrap a generated Get<Svc>AtomID/Spawn<Svc>Atom
 // factory). call performs the actual RPC against the resolved ID. At most one
@@ -53,8 +56,7 @@ func WithRebind[R any](resolve func() (ID, error), call func(ID) (R, error)) (R,
 // stale and a re-resolve may yield a usable target.
 func shouldRebind(code int64) bool {
 	switch code {
-	case ErrCodeAtomInstanceMismatch, ErrCodeAtomNotExists,
-		ErrCodeCosmosRemoteConnectFailed, ErrCodeCosmosNodeDraining:
+	case ErrCodeAtomInstanceMismatch, ErrCodeAtomNotExists, ErrCodeCosmosNodeDraining:
 		return true
 	}
 	return false
