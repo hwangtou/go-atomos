@@ -53,6 +53,17 @@ func (m *lifecycleManager) persistedSpawnResult(operationID string, claim *lifec
 	return result, nil
 }
 
+func (m *lifecycleManager) persistedSpawnCompletion(operationID string, claim *lifecycleSpawnClaim) (*AtomControlResult, *Error) {
+	result, err := m.persistedSpawnResult(operationID, claim)
+	if err == nil && result != nil && result.Error != nil {
+		switch CodeOf(result.Error) {
+		case ErrCodeOwnershipLost, ErrCodeStaleFence:
+			return nil, result.Error
+		}
+	}
+	return result, err
+}
+
 func (m *lifecycleManager) recoverSpawnClaim(operationID, fingerprint string, kind AtomOperationKind) (*lifecycleSpawnClaim, *Error) {
 	op, _, err := m.loadOperation(operationID)
 	if err != nil {
@@ -240,7 +251,7 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 		return nil, err
 	}
 	if opRecord.Operation != nil && opRecord.Operation.State != AtomOperationState_AtomOperationStateRunning {
-		return m.persistedSpawnResult(operationID, claim)
+		return m.persistedSpawnCompletion(operationID, claim)
 	}
 	owner, ownerMod, err := m.loadOwner(claim.owner.Ownership.Id.Element, claim.owner.Ownership.Id.Atom)
 	if err != nil {
@@ -307,10 +318,10 @@ func (m *lifecycleManager) finishSpawn(operationID string, claim *lifecycleSpawn
 	}
 	rsp, er := txn.Commit()
 	if er != nil {
-		return m.persistedSpawnResult(operationID, claim)
+		return m.persistedSpawnCompletion(operationID, claim)
 	}
 	if !rsp.Succeeded {
-		if result, resultErr := m.persistedSpawnResult(operationID, claim); resultErr == nil {
+		if result, resultErr := m.persistedSpawnCompletion(operationID, claim); resultErr == nil {
 			return result, nil
 		}
 		return nil, lifecycleError(operationID, ErrCodeOwnershipLost, "lifecycle: spawn completion CAS failed")
